@@ -1,0 +1,1 @@
+/home/ian/Facultad/Taller\ 1/23C2-mips_squad/git/target/debug/libgit.rlib: /home/ian/Facultad/Taller\ 1/23C2-mips_squad/git/src/command.rs /home/ian/Facultad/Taller\ 1/23C2-mips_squad/git/src/error_args.rs /home/ian/Facultad/Taller\ 1/23C2-mips_squad/git/src/hash_object/mod.rs /home/ian/Facultad/Taller\ 1/23C2-mips_squad/git/src/lib.rs
