@@ -5,6 +5,7 @@ enum Args {
     Write,
     StdIn,
     Path(String),
+    StdinPaths
 }
 
 enum TypeValues {
@@ -21,6 +22,7 @@ impl fmt::Display for Args {
             Args::Write => Ok(write!(f, "write")?),
             Args::StdIn => Ok(write!(f, "stdin")?),
             Args::Path(path) => Ok(write!(f, "Type: {path}")?),
+            Args::StdinPaths => Ok(write!(f, "stdin-paths")?),
         }
     }
 }
@@ -43,6 +45,7 @@ impl Args {
             "-w" => create_flag_write(values),
             "--stdin" => create_flag_stdin(values),
             "--path" => create_flag_path(values),
+            "--stdin-paths" => create_flag_stdin_paths(values),
             _ => Err(ErrorArgs::InvalidFlag),
         }
     }
@@ -73,6 +76,13 @@ fn create_flag_stdin(values: Vec<String>) -> Result<Args, ErrorArgs> {
         return Err(ErrorArgs::InvalidFlag);
     }
     Ok(Args::StdIn)
+}
+
+fn create_flag_stdin_paths(values: Vec<String>) -> Result<Args, ErrorArgs> {
+    if values.len() != 0 {
+        return Err(ErrorArgs::InvalidFlag);
+    }
+    Ok(Args::StdinPaths)
 }
 
 fn create_flag_path(values: Vec<String>) -> Result<Args, ErrorArgs> {
@@ -120,6 +130,23 @@ impl Command for HashObject {
         Ok(())
     }
 }
+
+/* 
+    let mut hasher = Sha1::new();
+
+    // Texto que deseas hashear
+    let text = "Hola, mundo";
+
+    // Escribe el texto en el hasher
+    hasher.write(text.as_bytes());
+
+    // Calcula el hash SHA-1 y conviértelo en una cadena hexadecimal
+    let result = hasher.digest().to_string();
+
+    // Imprime el resultado
+    println!("Texto: {}", text);
+    println!("Hash SHA-1: {}", result); 
+    */
 
 // git hash-object -t blob --stdin -w  --path <file>
 // [-t, blob, --stdin, -w, --path, <file>]

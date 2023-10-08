@@ -3,14 +3,14 @@ use std::env;
 use git::{command::Command, error_args::ErrorArgs, hash_object::HashObject};
 
 fn main() {
-    // let args: Vec<String> = env::args().collect();
-    // let Ok((command_name, command_args)) = parse_args(&args) else {
-    //     eprint!("Error");
-    //     return;
-    // };
+    let args: Vec<String> = env::args().collect();
+    let Ok((command_name, command_args)) = parse_args(&args) else {
+        eprint!("Error");
+        return;
+    };
 
-    let command_name = "hash-object";
-    let command_args = &["-t".to_string(), "blob".to_string(), "--stdin".to_string(), "-w".to_string(), "--path".to_string(), "file.txt".to_string()];
+    // let command_name = "hash-object";  // se usa para debuguear
+    // let command_args = &["-t".to_string(), "blob".to_string(), "--stdin".to_string(), "-w".to_string(), "--path".to_string(), "file.txt".to_string()];
 
     _ = ejecutar(command_name, command_args);
 }
