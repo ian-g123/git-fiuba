@@ -1,6 +1,8 @@
 use std::env;
 
-use git::{command::Command, error_args::ErrorArgs, hash_object::HashObject};
+use git::comandos::hash_object::HashObject;
+use git::command::Command;
+use git::error_args::ErrorArgs;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -9,7 +11,7 @@ fn main() {
         return;
     };
 
-    // let command_name = "hash-object";  // se usa para debuguear
+    // let command_name = "hash-object";  // se usa para debuguear !!!NO BORRAR
     // let command_args = &["-t".to_string(), "blob".to_string(), "--stdin".to_string(), "-w".to_string(), "--path".to_string(), "file.txt".to_string()];
 
     _ = ejecutar(command_name, command_args);
