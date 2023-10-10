@@ -1,6 +1,7 @@
 {
     "rust-analyzer.linkedProjects": [
         "./git/Cargo.toml",
+        "./git/Cargo.toml",
         "./git/Cargo.toml"
     ]
 }
