@@ -15,10 +15,6 @@ pub struct HashObject {
     write: bool,
     path: String,
     stdin: bool,
-    //output: &mut dyn Write,
-    // content: Vec<u8>,
-    // header: String,
-    // data: String,
 }
 
 impl Command for HashObject {
@@ -32,15 +28,6 @@ impl Command for HashObject {
         };
         
         instance.run(output)?;
-        // println!("hash_object");
-        // Ok(())
-
-
-        // if self.write {
-        //     let path = format!(".git/objects/{}", &hex_string[..2]);
-        //     let mut file = File::create(path)?;
-        //     file.write_all(&content)?;
-        // }
         Ok(())
     }
 }
@@ -61,10 +48,6 @@ impl HashObject {
             object_type: "blob".to_string(),
             write: false,
             stdin: false,
-            //output: output,
-            /* header: None,
-            content: None,
-            data: None */
         };
 
         Ok(hash_object)
@@ -73,12 +56,12 @@ impl HashObject {
     fn run(&self, output: &mut dyn Write) -> Result<(), ErrorFlags> {
         let content = read_file_contents(&self.path)?;
         let header = self.get_header(&content);
-        //let data =  format!("{}{}", header, content);
         let mut data = Vec::new();
+
         data.extend_from_slice(header.as_bytes());
         data.extend_from_slice(&content);
+        
         let hex_string = self.get_sha1(&data);
-
         write!(output, "{}", hex_string);
         Ok(())
     }
@@ -89,16 +72,10 @@ impl HashObject {
     }
 
     fn get_sha1(&self, data: &[u8]) -> String {
-
-        let header = format!("{} {}\0", self.object_type, data.len());
-        let mut store = Vec::new();
-        store.extend_from_slice(header.as_bytes());
-        store.extend_from_slice(&data);
-    
         let mut sha1 = Sha1::new();
-        sha1.update(&store);
+        sha1.update(&data);
         let hash_result = sha1.finalize();
-        
+
         // Formatea los bytes del hash en una cadena hexadecimal
         let hex_string = hash_result
             .iter()
@@ -119,8 +96,6 @@ fn read_file_contents(path: &str) -> Result<Vec<u8>, ErrorFlags> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{self, Write};
-
     use super::*;
 
     #[test]
@@ -147,10 +122,12 @@ mod tests {
         let mut cursor = io::Cursor::new(&mut output_string);
         let args: &[String] = &["./test/commands/hash_object/codigo1.txt".to_string()];
         assert!(HashObject::run_from("hash-object", args, &mut cursor).is_ok());
+
         let Ok(output) = String::from_utf8(output_string) else {
             panic!("Error");
         };
-        println!("{}",output);
-        assert_eq!(output, "asdfas");
+
+        let hex_git = "e31f3beeeedd1a034c5ce6f1b3b2d03f02541d59"; 
+        assert_eq!(output, hex_git);
     }
 }
