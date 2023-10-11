@@ -1,6 +1,4 @@
-pub mod logger;
-
-use logger::Logger;
+use git::logger::Logger;
 
 fn main() {
     let Ok(mut logger) = Logger::new(".git/logs") else {
