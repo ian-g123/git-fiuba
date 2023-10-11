@@ -20,14 +20,9 @@ impl Logger {
         let (tx, rx) = channel::<String>();
 
         // create writer thread
-        let handle = thread::spawn(move || loop {
-            match rx.recv() {
-                Ok(msg) => {
-                    let _ = file.write_all(msg.as_bytes());
-                }
-                Err(_) => {
-                    break;
-                }
+        let handle = thread::spawn(move || {
+            while let Ok(msg) = rx.recv() {
+                let _ = file.write_all(msg.as_bytes());
             }
         });
 
