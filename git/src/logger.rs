@@ -7,12 +7,12 @@ use std::{
 };
 
 pub struct Logger {
-    logging_channel: Sender<String>,
-    writer_thread: thread::JoinHandle<()>,
+    logs_sender: Option<Sender<String>>,
+    writer_thread_handle: Option<thread::JoinHandle<()>>,
 }
 
 impl Logger {
-    /// Instanciates logger to write in /.git/loggs
+    /// Instancia logger para escribir en el archivo en path. Lo crea si no existe.
     pub fn new(path: &str) -> Result<Self, Error> {
         let path = Path::new(path);
         // If existent, opens file in append mode. If not, it creates it. If path doesnt exist, create it too
@@ -20,26 +20,39 @@ impl Logger {
         let (tx, rx) = channel::<String>();
 
         // create writer thread
-        let handle = thread::spawn(move || {
-            for msg in rx {
-                file.write_all(msg.as_bytes());
+        let handle = thread::spawn(move || loop {
+            match rx.recv() {
+                Ok(msg) => {
+                    let _ = file.write_all(msg.as_bytes());
+                }
+                Err(_) => {
+                    break;
+                }
             }
         });
 
         Ok(Logger {
-            logging_channel: tx,
-            writer_thread: handle,
+            logs_sender: Some(tx),
+            writer_thread_handle: Some(handle),
         })
     }
 
+    /// Escribe msg en el archivo de logs
     pub fn log(&mut self, msg: &str) {
-        self.logging_channel.send(msg.to_string());
-        self.logging_channel.send("\n".to_string());
+        if let Some(sender) = &self.logs_sender {
+            let _ = sender.send(msg.to_string());
+            let _ = sender.send("\n".to_string());
+        }
     }
+}
 
-    pub fn terminate(self) {
-        let writer_thread = self.writer_thread;
-        let _ = writer_thread.join();
+impl Drop for Logger {
+    fn drop(&mut self) {
+        drop(self.logs_sender.take());
+
+        if let Some(writer_thread) = self.writer_thread_handle.take() {
+            let _ = writer_thread.join();
+        }
     }
 }
 
@@ -62,8 +75,8 @@ mod tests {
                 let msg = "Hello, world!";
                 logger.log(msg);
                 assert!(Path::new(&path).exists());
-                // Waits until logger thread has written to file
-                logger.terminate();
+                // Espera a que logger termine de escribir
+                drop(logger);
                 let Ok(output_content) = fs::read_to_string(path) else {
                     panic!("Could not read output file")
                 };
@@ -87,13 +100,12 @@ mod tests {
                 logger.log(msg_1);
                 logger.log(msg_2);
                 assert!(Path::new(&path).exists());
-                // Waits until logger thread has written to file
-                logger.terminate();
+                // Espera a que logger termine de escribir
+                drop(logger);
                 let Ok(output_content) = fs::read_to_string(path) else {
                     panic!("Could not read output file")
                 };
-                assert_eq!("Wrong answer", format!("{}\n{}\n", msg_1, msg_2));
-                //assert_eq!(output_content, format!("{}\n{}\n", msg_1, msg_2));
+                assert_eq!(output_content, format!("{}\n{}\n", msg_1, msg_2));
             }
             Err(error) => panic!("Could not create logger: {}", error),
         };
