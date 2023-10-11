@@ -1,4 +1,3 @@
-
 use super::error_flags::ErrorFlags;
 use std::io::{self, Write};
 

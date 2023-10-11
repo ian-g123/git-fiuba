@@ -4,4 +4,5 @@ pub enum ErrorFlags {
     InvalidArguments,
     FileNotFound,
     FileReadError,
+    ObjectTypeError,
 }
