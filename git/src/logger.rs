@@ -15,11 +15,9 @@ impl Logger {
     /// Instancia logger para escribir en el archivo en path. Lo crea si no existe.
     pub fn new(path: &str) -> Result<Self, Error> {
         let path = Path::new(path);
-        // If existent, opens file in append mode. If not, it creates it. If path doesnt exist, create it too
         let mut file: std::fs::File = OpenOptions::new().create(true).append(true).open(path)?;
         let (tx, rx) = channel::<String>();
 
-        // create writer thread
         let handle = thread::spawn(move || {
             while let Ok(msg) = rx.recv() {
                 let _ = file.write_all(msg.as_bytes());
@@ -58,11 +56,10 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore]
     fn test_logger_single_line() {
-        let test_dir = "test/data/logger/.git/";
+        let test_dir = "test/data/logger/test1/.git/";
         delete_directory_content(test_dir);
-        let path = format!("{test_dir}/logs_test_1");
+        let path = format!("{test_dir}/logs");
 
         let logger_result = Logger::new(&path);
         match logger_result {
@@ -70,22 +67,21 @@ mod tests {
                 let msg = "Hello, world!";
                 logger.log(msg);
                 assert!(Path::new(&path).exists());
-                // Espera a que logger termine de escribir
                 drop(logger);
                 let Ok(output_content) = fs::read_to_string(path) else {
-                    panic!("Could not read output file")
+                    panic!("No se pudo leer archivo de salida")
                 };
-                assert_eq!(output_content, msg);
+                assert_eq!(output_content, format!("{msg}\n"));
             }
-            Err(error) => panic!("Could not create logger: {}", error),
+            Err(error) => panic!("No se pudo crear logger: {}", error),
         };
     }
 
     #[test]
     fn test_logger_two_lines() {
-        let test_dir = "test/data/logger/.git/";
+        let test_dir = "test/data/logger/test2/.git/";
         delete_directory_content(test_dir);
-        let path = format!("{test_dir}/logs_test_2");
+        let path = format!("{test_dir}/logs");
 
         let logger_result = Logger::new(&path);
         match logger_result {
@@ -95,15 +91,50 @@ mod tests {
                 logger.log(msg_1);
                 logger.log(msg_2);
                 assert!(Path::new(&path).exists());
-                // Espera a que logger termine de escribir
                 drop(logger);
                 let Ok(output_content) = fs::read_to_string(path) else {
-                    panic!("Could not read output file")
+                    panic!("No se pudo leer archivo de salida")
                 };
                 assert_eq!(output_content, format!("{}\n{}\n", msg_1, msg_2));
             }
-            Err(error) => panic!("Could not create logger: {}", error),
+            Err(error) => panic!("No se pudo crear logger: {}", error),
         };
+    }
+
+    #[test]
+    fn test_logger_open_existing_log_file() {
+        let test_dir = "test/data/logger/test3/.git/";
+        delete_directory_content(test_dir);
+        let path = format!("{test_dir}/logs");
+
+        let logger_1_result = Logger::new(&path);
+        let Ok(mut logger_1) = logger_1_result else {
+            if let Err(error) = logger_1_result {
+                panic!("No se pudo crear logger 1: {}", error)
+            }
+            panic!("No se pudo crear logger 1")
+        };
+        let msg_1 = "Hello, world 1!";
+        logger_1.log(msg_1);
+        drop(logger_1);
+
+        let logger_2_result = Logger::new(&path);
+        let Ok(mut logger_2) = logger_2_result else {
+            if let Err(error) = logger_2_result {
+                panic!("No se pudo crear logger 2: {}", error)
+            }
+            panic!("No se pudo crear logger 2")
+        };
+        let msg_2 = "Hello, world 2!";
+        logger_2.log(msg_2);
+        drop(logger_2);
+
+        assert!(Path::new(&path).exists());
+        let Ok(output_content) = fs::read_to_string(path) else {
+            panic!("No se pudo leer archivo de salida")
+        };
+
+        assert_eq!(output_content, format!("{}\n{}\n", msg_1, msg_2));
     }
 
     fn delete_directory_content(path: &str) {
