@@ -4,6 +4,7 @@ use std::str;
 
 use crate::commands::command::Command;
 use crate::commands::error_flags::ErrorFlags;
+use crate::logger::Logger;
 
 pub struct Status {
     branch: bool,
@@ -11,12 +12,12 @@ pub struct Status {
 }
 
 impl Command for Status {
-    /// Corre un comando de tipo 'Status'. Devuelve error si falla la ejecución.
     fn run_from(
         name: &str,
         args: &[String],
         _: &mut dyn Read,
         output: &mut dyn Write,
+        logger: &mut Logger,
     ) -> Result<(), ErrorFlags> {
         if name != "status" {
             return Err(ErrorFlags::CommandName);
@@ -27,6 +28,10 @@ impl Command for Status {
         //instance.run(stdin, output)?;
         Ok(())
     }
+
+    fn config_adders(&self) -> Vec<fn(&mut Self, usize, &[String]) -> Result<usize, ErrorFlags>> {
+        vec![Self::add_branch_config, Self::add_short_config]
+    }
 }
 
 impl Status {
@@ -36,100 +41,65 @@ impl Status {
             //status -s -b (máximo)
             return Err(ErrorFlags::InvalidArguments);
         }
-        let mut status = Status {
-            branch: false,
-            short: false,
-        };
+        let mut status = Self::new_default();
 
-        status.config(args, output)?;
+        status.config(args)?;
 
         Ok(status)
     }
 
-    /// Configura los flags del comando. Devuelve error si hay flags o valores inválidos.
-    fn config(&mut self, args: &[String], output: &mut dyn Write) -> Result<(), ErrorFlags> {
-        let mut current_flag = &String::new();
-        let mut values_buffer = Vec::<String>::new();
-        
-        for arg in args {
-            println!("{}", arg);
-            if Self::is_flag(arg) {
-                if !current_flag.is_empty() {
-                    self.add_flag(current_flag, &values_buffer, output)?;
-                }
-                values_buffer = Vec::<String>::new();
-                current_flag = arg;
-            } else {
-                values_buffer.push(arg.to_string());
-            }
+    fn new_default() -> Self {
+        Self {
+            branch: false,
+            short: false,
         }
-        Ok(())
     }
 
-    /// Agrega los flags al comando. Si hay flags o valores inválidos, devuelve error.
-    fn add_flag(
-        &mut self,
-        flag: &str,
-        values: &[String],
-        output: &mut dyn Write,
-    ) -> Result<(), ErrorFlags> {
-        let flags = [Self::set_short_flag, Self::set_branch_flag];
-        for f in flags.iter() {
-            match f(self, flag, values, output) {
-                Ok(_) => return Ok(()),
-                Err(ErrorFlags::WrongFlag) => continue,
-                Err(error) => return Err(error),
-            }
-        }
-        Err(ErrorFlags::WrongFlag)
-    }
-
-    /// Setea el flag 'branch'.
-    fn set_branch_flag(
-        &mut self,
-        flag: &str,
-        values: &[String],
-        output: &mut dyn Write,
-    ) -> Result<(), ErrorFlags> {
+    /// Configura el flag 'branch'. Devuelve error si recibe argumentos o es un flag inválido.
+    /// Caso contrario, devuelve el índice del próximo flag.
+    fn add_branch_config(&mut self, i: usize, args: &[String]) -> Result<usize, ErrorFlags> {
         let options: Vec<String> = ["--branch".to_string(), "-b".to_string()].to_vec();
-        check_errors_flags(flag, values, &options)?;
+        self.check_errors_flags(i, args, &options)?;
         self.branch = true;
-        Ok(())
+        Ok(i + 1)
     }
 
-    /// Setea el flag 'short'.
-    fn set_short_flag(
-        &mut self,
-        flag: &str,
-        values: &[String],
-        output: &mut dyn Write,
-    ) -> Result<(), ErrorFlags> {
+    /// Configura el flag 'short'. Devuelve error si recibe argumentos o es un flag inválido.
+    /// Caso contrario, devuelve el índice del próximo flag.
+    fn add_short_config(&mut self, i: usize, args: &[String]) -> Result<usize, ErrorFlags> {
         let options: Vec<String> = ["--short".to_string(), "-s".to_string()].to_vec();
-        check_errors_flags(flag, values, &options)?;
+        self.check_errors_flags(i, args, &options)?;
         self.short = true;
+        Ok(i + 1)
+    }
+
+    /// Comprueba si el flag es invalido. En ese caso, devuelve error.
+    fn check_errors_flags(
+        &self,
+        i: usize,
+        args: &[String],
+        options: &[String],
+    ) -> Result<(), ErrorFlags> {
+        if !options.contains(&args[i]) {
+            return Err(ErrorFlags::WrongFlag);
+        }
+        if i < args.len() - 1 && Self::is_flag(&args[i + 1]) {
+            return Err(ErrorFlags::WrongFlag);
+        }
         Ok(())
     }
 
-    fn run(&self, stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), ErrorFlags> {
+    /* fn run(&self, stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), ErrorFlags> {
         write!(output, "{}", "");
         Ok(())
-    }
-}
-
-/// Comprueba si el flag es invalido. En ese caso, devuelve error.
-fn check_errors_flags(flag: &str, values: &[String], options: &[String]) -> Result<(), ErrorFlags> {
-    if !options.contains(&flag.to_string()) {
-        return Err(ErrorFlags::WrongFlag);
-    }
-    if !values.is_empty() {
-        return Err(ErrorFlags::InvalidArguments);
-    }
-    Ok(())
+    } */
 }
 
 #[cfg(test)]
 mod tests {
     use std::io::{self, Cursor};
+
+    use crate::logger::Logger;
 
     use super::*;
 
@@ -141,10 +111,11 @@ mod tests {
 
         let input = "prueba1";
         let mut stdin_mock = Cursor::new(input.as_bytes());
+        let mut logger = Logger::new(".git/logs").unwrap();
 
         let args: &[String] = &[];
-        assert!(matches!(
-            Status::run_from("", args, &mut stdin_mock, &mut stdout_mock),
+        let logger = assert!(matches!(
+            Status::run_from("", args, &mut stdin_mock, &mut stdout_mock, &mut logger),
             Err(ErrorFlags::CommandName)
         ));
     }
@@ -157,10 +128,17 @@ mod tests {
 
         let input = "prueba1";
         let mut stdin_mock = Cursor::new(input.as_bytes());
+        let mut logger = Logger::new(".git/logs").unwrap();
 
         let args: &[String] = &[];
         assert!(matches!(
-            Status::run_from("hash-object", args, &mut stdin_mock, &mut stdout_mock),
+            Status::run_from(
+                "hash-object",
+                args,
+                &mut stdin_mock,
+                &mut stdout_mock,
+                &mut logger
+            ),
             Err(ErrorFlags::CommandName)
         ));
     }
@@ -173,6 +151,7 @@ mod tests {
 
         let input = "prueba1";
         let mut stdin_mock = Cursor::new(input.as_bytes());
+        let mut logger = Logger::new(".git/logs").unwrap();
 
         let args: &[String] = &[
             "-b".to_string(),
@@ -180,7 +159,13 @@ mod tests {
             "tercer argumento".to_string(),
         ];
         assert!(matches!(
-            Status::run_from("status", args, &mut stdin_mock, &mut stdout_mock),
+            Status::run_from(
+                "status",
+                args,
+                &mut stdin_mock,
+                &mut stdout_mock,
+                &mut logger
+            ),
             Err(ErrorFlags::InvalidArguments)
         ));
     }
@@ -193,19 +178,35 @@ mod tests {
 
         let input = "prueba1";
         let mut stdin_mock = Cursor::new(input.as_bytes());
+        let mut logger = Logger::new(".git/logs").unwrap();
 
         let args: &[String] = &[];
-        assert!(Status::run_from("status", args, &mut stdin_mock, &mut stdout_mock).is_ok());
+        assert!(Status::run_from(
+            "status",
+            args,
+            &mut stdin_mock,
+            &mut stdout_mock,
+            &mut logger
+        )
+        .is_ok());
     }
 
-    /// Prueba que check_errors_flags() falla si recibe un flag inválido.
+    /// Prueba que check_errors_flags() falla si se recibe un flag inválido.
     #[test]
     fn test_check_error_wrong_flag() {
-        let flag = "no-existe";
-        let values: Vec<String> = Vec::new();
+        let i = 0;
+        let args = ["no-existe".to_string()];
         let options: Vec<String> = ["--short".to_string(), "-s".to_string()].to_vec();
 
-        let result = check_errors_flags(flag, &values, &options);
+        let mut output_string = Vec::new();
+        let mut stdout_mock = io::Cursor::new(&mut output_string);
+
+        let Ok(status_command) = Status::new(&args, &mut stdout_mock) else {
+            assert!(false);
+            return;
+        };
+
+        let result = status_command.check_errors_flags(i, &args, &options);
 
         assert!(matches!(result, Err(ErrorFlags::WrongFlag)));
     }
@@ -213,11 +214,20 @@ mod tests {
     /// Prueba que check_errors_flags() falla si recibe values > 0.
     #[test]
     fn test_check_error_with_values() {
-        let flag = "--short";
+        let i: usize = 0;
+        let args = ["-b".to_string(), "arg".to_string()];
         let values: Vec<String> = ["value".to_string()].to_vec();
         let options: Vec<String> = ["--short".to_string(), "-s".to_string()].to_vec();
 
-        let result = check_errors_flags(flag, &values, &options);
+        let mut output_string = Vec::new();
+        let mut stdout_mock = io::Cursor::new(&mut output_string);
+
+        let Ok(status_command) = Status::new(&args, &mut stdout_mock) else {
+            assert!(false);
+            return;
+        };
+
+        let result = status_command.check_errors_flags(i, &args, &options);
 
         assert!(matches!(result, Err(ErrorFlags::InvalidArguments)));
     }
@@ -225,42 +235,50 @@ mod tests {
     /// Prueba que check_errors_flags() no devuelve error si los argumentos son válidos.
     #[test]
     fn test_check_error() {
-        let flag = "-s";
-        let values: Vec<String> = Vec::new();
+        let i: usize = 0;
+        let args = ["-b".to_string()];
         let options: Vec<String> = ["--short".to_string(), "-s".to_string()].to_vec();
 
-        let result = check_errors_flags(flag, &values, &options);
+        let mut output_string = Vec::new();
+        let mut stdout_mock = io::Cursor::new(&mut output_string);
+
+        let Ok(status_command) = Status::new(&args, &mut stdout_mock) else {
+            assert!(false);
+            return;
+        };
+
+        let result = status_command.check_errors_flags(i, &args, &options);
 
         assert!(result.is_ok());
     }
 
-    /// Prueba que set_short_flag() falle si el flag no es 's' o 'short'.
+    /// Prueba que add_short_config() falle si el flag no es 's' o 'short'.
     #[test]
     fn set_short_fails() {
-        let flag: &str = "-b";
+        let i: usize = 0;
         let values: Vec<String> = Vec::new();
-        let mut output_string = Vec::new();
-        let mut stdout_mock = io::Cursor::new(&mut output_string);
 
         let args: &[String] = &["-b".to_string()];
+
+        let mut output_string = Vec::new();
+        let mut stdout_mock = io::Cursor::new(&mut output_string);
 
         let Ok(mut command_status) = Status::new(args, &mut stdout_mock) else {
             assert!(false);
             return;
         };
 
-        let result = command_status.set_short_flag(flag, &values, &mut stdout_mock);
+        let result = command_status.add_short_config(i, &values);
         assert!(result.is_err());
     }
 
-    /// Prueba que set_short_flag() funciones si el flag es 's'.
+    /// Prueba que add_short_config() funciones si el flag es 's'.
     #[test]
-    fn set_short_flag_s() {
-        let flag: &str = "-s";
+    fn add_short_config_s() {
+        let i = 0;
         let values: Vec<String> = Vec::new();
         let mut output_string = Vec::new();
         let mut stdout_mock = io::Cursor::new(&mut output_string);
-
 
         let args: &[String] = &["-s".to_string()];
 
@@ -269,18 +287,17 @@ mod tests {
             return;
         };
 
-        let result = command_status.set_short_flag(flag, &values, &mut stdout_mock);
+        let result = command_status.add_short_config(i, &values);
         assert!(result.is_ok());
     }
 
-    /// Prueba que set_short_flag() funcione si el flag es 'short'.
+    /// Prueba que add_short_config() funcione si el flag es 'short'.
     #[test]
-    fn set_short_flag_short() {
-        let flag: &str = "--short";
+    fn add_short_config_short() {
+        let i = 0;
         let values: Vec<String> = Vec::new();
         let mut output_string = Vec::new();
         let mut stdout_mock = io::Cursor::new(&mut output_string);
-
 
         let args: &[String] = &["--short".to_string()];
 
@@ -289,18 +306,17 @@ mod tests {
             return;
         };
 
-        let result = command_status.set_short_flag(flag, &values, &mut stdout_mock);
+        let result = command_status.add_short_config(i, &values);
         assert!(result.is_ok());
     }
 
-    /// Prueba que set_branch_flag() falle si el flag no es 'b' o 'branch'.
+    /// Prueba que add_branch_config() falle si el flag no es 'b' o 'branch'.
     #[test]
     fn set_branch_fails() {
-        let flag: &str = "-s";
+        let i = 0;
         let values: Vec<String> = Vec::new();
         let mut output_string = Vec::new();
         let mut stdout_mock = io::Cursor::new(&mut output_string);
-
 
         let args: &[String] = &["-s".to_string()];
 
@@ -309,14 +325,14 @@ mod tests {
             return;
         };
 
-        let result = command_status.set_branch_flag(flag, &values, &mut stdout_mock);
+        let result = command_status.add_branch_config(i, &values);
         assert!(result.is_err());
     }
 
-    /// Prueba que set_branch_flag() funciones si el flag es 'b'.
+    /// Prueba que add_branch_config() funciones si el flag es 'b'.
     #[test]
-    fn set_branch_flag_b() {
-        let flag: &str = "-b";
+    fn add_branch_config_b() {
+        let i = 0;
         let values: Vec<String> = Vec::new();
         let mut output_string = Vec::new();
         let mut stdout_mock = io::Cursor::new(&mut output_string);
@@ -328,18 +344,17 @@ mod tests {
             return;
         };
 
-        let result = command_status.set_branch_flag(flag, &values, &mut stdout_mock);
+        let result = command_status.add_branch_config(i, &values);
         assert!(result.is_ok());
     }
 
-    /// Prueba que set_branch_flag() funcione si el flag es 'branch'.
+    /// Prueba que add_branch_config() funcione si el flag es 'branch'.
     #[test]
-    fn set_branch_flag_branch() {
-        let flag: &str = "--branch";
+    fn add_branch_config_branch() {
+        let i = 0;
         let values: Vec<String> = Vec::new();
         let mut output_string = Vec::new();
         let mut stdout_mock = io::Cursor::new(&mut output_string);
-
 
         let args: &[String] = &["--branch".to_string()];
 
@@ -348,47 +363,7 @@ mod tests {
             return;
         };
 
-        let result = command_status.set_branch_flag(flag, &values, &mut stdout_mock);
-        assert!(result.is_ok());
-    }
-
-    /// Prueba que el método add_flag() devuelva error si el flag es inválido.
-    #[test]
-    fn add_flag_fails() {
-        let flag: &str = "no-existe";
-        let values: Vec<String> = Vec::new();
-
-        let mut output_string = Vec::new();
-        let mut stdout_mock = io::Cursor::new(&mut output_string);
-
-        let args: &[String] = &[flag.to_string()];
-
-        let Ok(mut command_status) = Status::new(args, &mut stdout_mock) else {
-            assert!(false);
-            return;
-        };
-
-        let result = command_status.add_flag(flag, &values, &mut stdout_mock);
-        assert!(result.is_err());
-    }
-
-    /// Prueba que el método add_flag() funcione correctamente si el flag es válido.
-    #[test]
-    fn add_flag() {
-        let flag: &str = "-b";
-        let values: Vec<String> = Vec::new();
-
-        let mut output_string = Vec::new();
-        let mut stdout_mock = io::Cursor::new(&mut output_string);
-
-        let args: &[String] = &[flag.to_string()];
-
-        let Ok(mut command_status) = Status::new(args, &mut stdout_mock) else {
-            assert!(false);
-            return;
-        };
-
-        let result = command_status.add_flag(flag, &values, &mut stdout_mock);
+        let result = command_status.add_branch_config(i, &values);
         assert!(result.is_ok());
     }
 }
