@@ -13,7 +13,7 @@ use crate::commands::error_flags::ErrorFlags;
 pub struct HashObject {
     object_type: String,
     write: bool,
-    path: String,
+    file: Option<String>,
     stdin: bool,
 }
 
@@ -37,46 +37,27 @@ impl Command for HashObject {
 
 impl HashObject {
     fn new(args: &[String], output: &mut dyn Write) -> Result<Self, ErrorFlags> {
-        let Some(path) = args.last() else {
-            return Err(ErrorFlags::InvalidArguments);
-        };
-
-        // let object_type = obtain_object_type(args)?;
-
-        // let stdin = if args.contains(&"--stdin".to_string()) {
-        //     true
-        // } else {
-        //     false
-        // };
-
-        // let arguments = obtain_arguments(args)?;
-
-        let mut hash_object = HashObject {
-            object_type: "blob".to_string(),
-            path: path.to_string(),
-            write: false,
-            stdin: false,
-        };
+        let mut hash_object = Self::new_default();
 
         hash_object.config(args, output)?;
 
         Ok(hash_object)
     }
 
-    fn config(&mut self, args: &[String], output: &mut dyn Write) -> Result<(), ErrorFlags> {
-        let mut current_flag = "";
-        let mut values_buffer = Vec::<String>::new();
+    fn new_default() -> Self {
+        let mut hash_object = Self {
+            object_type: "blob".to_string(),
+            file: None,
+            write: false,
+            stdin: false,
+        };
+        hash_object
+    }
 
-        for arg in args {
-            if Self::is_flag(&arg) {
-                if !current_flag.is_empty() {
-                    self.add_flag(current_flag, &values_buffer, output)?;
-                }
-                values_buffer = Vec::<String>::new();
-                current_flag = arg;
-            } else {
-                values_buffer.push(arg.to_string());
-            }
+    fn config(&mut self, args: &[String], output: &mut dyn Write) -> Result<(), ErrorFlags> {
+        let mut i = 0;
+        while i < args.len() {
+            i = self.add_setting(i, &args, output)?;
         }
         Ok(())
     }
@@ -85,36 +66,37 @@ impl HashObject {
         arg.starts_with("-")
     }
 
-    fn add_flag(
+    fn add_setting(
         &mut self,
-        flag: &str,
-        values: &Vec<String>,
+        i: usize,
+        args: &[String],
         output: &mut dyn Write,
-    ) -> Result<(), ErrorFlags> {
-        let flags = [Self::add_type_flag, Self::add_stdin_flag];
+    ) -> Result<usize, ErrorFlags> {
+        let flags = [
+            Self::add_type_config,
+            Self::add_stdin_config,
+            Self::add_file_config,
+        ];
         for f in flags.iter() {
-            match f(self, flag, values, output) {
-                Ok(_) => return Ok(()),
+            match f(self, i, args, output) {
+                Ok(i) => return Ok(i),
                 Err(ErrorFlags::WrongFlag) => continue,
                 Err(error) => return Err(error),
             }
         }
-        Err(ErrorFlags::WrongFlag)
+        Err(ErrorFlags::InvalidArguments)
     }
 
-    fn add_type_flag(
+    fn add_type_config(
         hash_object: &mut HashObject,
-        flag: &str,
-        values: &Vec<String>,
+        i: usize,
+        args: &[String],
         output: &mut dyn Write,
-    ) -> Result<(), ErrorFlags> {
-        if flag != "-t" {
+    ) -> Result<usize, ErrorFlags> {
+        if args[i] != "-t" {
             return Err(ErrorFlags::WrongFlag);
         }
-        if values.len() != 1 {
-            return Err(ErrorFlags::ObjectTypeError);
-        }
-        let object_type = values[0].clone();
+        let object_type = args[i + 1].clone();
         if ![
             "blob".to_string(),
             "tree".to_string(),
@@ -127,23 +109,36 @@ impl HashObject {
         }
 
         hash_object.object_type.to_string();
-        Ok(())
+        Ok(i + 2)
     }
 
-    fn add_stdin_flag(
+    fn add_stdin_config(
         hash_object: &mut HashObject,
-        flag: &str,
-        values: &Vec<String>,
+        i: usize,
+        args: &[String],
         output: &mut dyn Write,
-    ) -> Result<(), ErrorFlags> {
-        if flag != "--stdin" {
+    ) -> Result<usize, ErrorFlags> {
+        if args[i] != "--stdin" {
             return Err(ErrorFlags::WrongFlag);
         }
-        if values.len() != 0 {
+        hash_object.stdin = true;
+        Ok(i + 1)
+    }
+
+    fn add_file_config(
+        hash_object: &mut HashObject,
+        i: usize,
+        args: &[String],
+        output: &mut dyn Write,
+    ) -> Result<usize, ErrorFlags> {
+        if Self::is_flag(&args[i]) {
+            return Err(ErrorFlags::WrongFlag);
+        }
+        if i < args.len() - 1 {
             return Err(ErrorFlags::InvalidArguments);
         }
-        hash_object.stdin = true;
-        Ok(())
+        hash_object.file = Some(args[i].clone());
+        Ok(i + 1)
     }
 
     fn run(&self, stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), ErrorFlags> {
@@ -165,7 +160,11 @@ impl HashObject {
             stdin.read_to_string(&mut input);
             Ok(input.as_bytes().to_vec())
         } else {
-            read_file_contents(&self.path)
+            let Some(path) = &self.file else {
+                // Return Vec<u8> empty
+                return Ok(Vec::new());
+            };
+            read_file_contents(path)
         }
     }
 
@@ -190,37 +189,6 @@ impl HashObject {
     }
 }
 
-fn obtain_object_type(args: &[String]) -> Result<String, ErrorFlags> {
-    let object_type = if args.contains(&"-t".to_string()) {
-        let index = match args.iter().position(|x| x == "-t") {
-            Some(index) => index,
-            None => return Err(ErrorFlags::InvalidArguments),
-        };
-        if index + 1 >= args.len() {
-            return Err(ErrorFlags::ObjectTypeError);
-        }
-        let arg = args[index + 1].clone();
-        if arg == "blob" || arg == "commit" || arg == "tree" || arg == "tag" {
-            arg
-        } else {
-            return Err(ErrorFlags::ObjectTypeError);
-        }
-    } else {
-        "blob".to_string()
-    };
-    Ok(object_type)
-}
-
-fn obtain_arguments(args: &[String]) -> Result<Vec<String>, ErrorFlags> {
-    let mut arguments = Vec::new();
-    for arg in args {
-        if arg.starts_with("--") {
-            arguments.push(arg.to_string());
-        }
-    }
-    Ok(arguments)
-}
-
 fn read_file_contents(path: &str) -> Result<Vec<u8>, ErrorFlags> {
     let mut file = File::open(path).map_err(|_| ErrorFlags::FileNotFound)?;
     let mut data = Vec::new();
@@ -240,7 +208,7 @@ mod tests {
         let mut output_string = Vec::new();
         let mut stdout_mock = io::Cursor::new(&mut output_string);
 
-        let input = "prueba1";
+        let input = "";
         let mut stdin_mock = Cursor::new(input.as_bytes());
 
         let args: &[String] = &[];
@@ -255,14 +223,13 @@ mod tests {
         let mut output_string = Vec::new();
         let mut stdout_mock = io::Cursor::new(&mut output_string);
 
-        let input = "prueba1";
+        let input = "";
         let mut stdin_mock = Cursor::new(input.as_bytes());
 
         let args: &[String] = &[];
-        assert!(matches!(
-            HashObject::run_from("hash-object", args, &mut stdin_mock, &mut stdout_mock),
-            Err(ErrorFlags::InvalidArguments)
-        ));
+        assert!(
+            HashObject::run_from("hash-object", args, &mut stdin_mock, &mut stdout_mock).is_ok()
+        );
     }
 
     #[test]
@@ -270,7 +237,7 @@ mod tests {
         let mut output_string = Vec::new();
         let mut stdout_mock = io::Cursor::new(&mut output_string);
 
-        let input = "prueba1";
+        let input = "";
         let mut stdin_mock = Cursor::new(input.as_bytes());
         let args: &[String] = &["./test/commands/hash_object/codigo1.txt".to_string()];
         assert!(
@@ -291,7 +258,7 @@ mod tests {
         let mut output_string = Vec::new();
         let mut stdout_mock = io::Cursor::new(&mut output_string);
 
-        let input = "prueba1";
+        let input = "";
         let mut stdin_mock = Cursor::new(input.as_bytes());
         let args: &[String] = &[
             "-t".to_string(),
@@ -316,7 +283,7 @@ mod tests {
         let mut output_string = Vec::new();
         let mut stdout_mock = io::Cursor::new(&mut output_string);
 
-        let input = "prueba1";
+        let input = "";
         let mut stdin_mock = Cursor::new(input.as_bytes());
         let args: &[String] = &[
             "-t".to_string(),
@@ -330,21 +297,39 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
-    fn test_object_type_tree_error() {
+    fn test_value_before_flag() {
         let mut output_string = Vec::new();
         let mut stdout_mock = io::Cursor::new(&mut output_string);
 
-        let input = "prueba1";
+        let input = "";
         let mut stdin_mock = Cursor::new(input.as_bytes());
         let args: &[String] = &[
+            "blob".to_string(),
             "-t".to_string(),
-            "tree".to_string(),
             "./test/commands/hash_object/codigo1.txt".to_string(),
         ];
         assert!(matches!(
             HashObject::run_from("hash-object", args, &mut stdin_mock, &mut stdout_mock),
-            Err(ErrorFlags::ObjectTypeError)
+            Err(ErrorFlags::InvalidArguments)
+        ));
+    }
+
+    #[test]
+    fn test_doubled_value_after_flag() {
+        let mut output_string = Vec::new();
+        let mut stdout_mock = io::Cursor::new(&mut output_string);
+
+        let input = "";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+        let args: &[String] = &[
+            "-t".to_string(),
+            "blob".to_string(),
+            "blob".to_string(),
+            "./test/commands/hash_object/codigo1.txt".to_string(),
+        ];
+        assert!(matches!(
+            HashObject::run_from("hash-object", args, &mut stdin_mock, &mut stdout_mock),
+            Err(ErrorFlags::InvalidArguments)
         ));
     }
 
