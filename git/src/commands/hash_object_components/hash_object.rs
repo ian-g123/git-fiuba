@@ -143,6 +143,9 @@ impl HashObject {
 
     fn run(&self, stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), ErrorFlags> {
         let content: Vec<u8> = self.get_content(stdin)?;
+        if content.is_empty() {
+            return Ok(());
+        }
         let header = self.get_header(&content);
         let mut data = Vec::new();
 
@@ -150,7 +153,7 @@ impl HashObject {
         data.extend_from_slice(&content);
 
         let hex_string = self.get_sha1(&data);
-        write!(output, "{}", hex_string);
+        writeln!(output, "{}", hex_string);
         Ok(())
     }
 
@@ -230,6 +233,11 @@ mod tests {
         assert!(
             HashObject::run_from("hash-object", args, &mut stdin_mock, &mut stdout_mock).is_ok()
         );
+        let Ok(output) = String::from_utf8(output_string) else {
+            panic!("Error");
+        };
+
+        assert_eq!(output, "");
     }
 
     #[test]
@@ -249,7 +257,7 @@ mod tests {
         };
 
         // salida hexadecimal de git hash-object ./test/commands/hash_object/codigo1.txt
-        let hex_git = "e31f3beeeedd1a034c5ce6f1b3b2d03f02541d59";
+        let hex_git = "e31f3beeeedd1a034c5ce6f1b3b2d03f02541d59\n";
         assert_eq!(output, hex_git);
     }
 
@@ -274,7 +282,7 @@ mod tests {
         };
 
         // salida hexadecimal de git hash-object -t blob ./test/commands/hash_object/codigo1.txt
-        let hex_git = "e31f3beeeedd1a034c5ce6f1b3b2d03f02541d59";
+        let hex_git = "e31f3beeeedd1a034c5ce6f1b3b2d03f02541d59\n";
         assert_eq!(output, hex_git);
     }
 
@@ -350,7 +358,7 @@ mod tests {
             panic!("Error");
         };
 
-        let hex_git = "e31f3beeeedd1a034c5ce6f1b3b2d03f02541d59";
+        let hex_git = "e31f3beeeedd1a034c5ce6f1b3b2d03f02541d59\n";
         assert_eq!(output, hex_git);
     }
 }
