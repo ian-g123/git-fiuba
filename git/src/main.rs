@@ -1,5 +1,5 @@
-use git::commands::command::Command;
-use std::env;
+//use git::commands::command::Command;
+//use std::env;
 // use git::commands::hash_object_components::hash_object::HashObject;
 // use git::error_args::ErrorFlags;
 //use git::commands::hash_object_components::hash_object::HashObject;
@@ -11,7 +11,7 @@ fn main() {
     //     return;
     // };
 
-    let command_name = "hash-object"; // se usa para debuguear !!!NO BORRAR
+    /* let command_name = "hash-object"; // se usa para debuguear !!!NO BORRAR
     let command_args = &[
         "-t".to_string(),
         "blob".to_string(),
@@ -19,7 +19,7 @@ fn main() {
         "-w".to_string(),
         "--path".to_string(),
         "file.txt".to_string(),
-    ];
+    ]; */
 
     // _ = ejecutar(command_name, command_args);
 }

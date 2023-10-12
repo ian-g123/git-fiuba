@@ -1,5 +1,5 @@
 use super::error_flags::ErrorFlags;
-use std::io::{self, Read, Stdin, Write};
+use std::io::{Read, Write};
 
 pub trait Command {
     fn run_from(
