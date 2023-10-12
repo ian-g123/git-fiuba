@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 sha1 = "0.10.6"
+libflate = "2"
