@@ -5,10 +5,12 @@ use std::str;
 
 extern crate sha1;
 
+use sha1::digest::typenum::Log2;
 use sha1::{Digest, Sha1};
 
 use crate::commands::command::Command;
 use crate::commands::error_flags::ErrorFlags;
+use crate::logger::Logger;
 
 /// Commando hash-object
 pub struct HashObject {
@@ -24,6 +26,7 @@ impl Command for HashObject {
         args: &[String],
         stdin: &mut dyn Read,
         output: &mut dyn Write,
+        logger: &mut Logger,
     ) -> Result<(), ErrorFlags> {
         if name != "hash-object" {
             return Err(ErrorFlags::CommandName);
@@ -218,6 +221,7 @@ mod tests {
 
     #[test]
     fn test_nombre_incorrecto() {
+        let mut logger = Logger::new(".git/logs").unwrap();
         let mut output_string = Vec::new();
         let mut stdout_mock = io::Cursor::new(&mut output_string);
 
@@ -226,13 +230,14 @@ mod tests {
 
         let args: &[String] = &[];
         assert!(matches!(
-            HashObject::run_from("", args, &mut stdin_mock, &mut stdout_mock),
+            HashObject::run_from("", args, &mut stdin_mock, &mut stdout_mock, &mut logger),
             Err(ErrorFlags::CommandName)
         ));
     }
 
     #[test]
     fn test_path_null() {
+        let mut logger = Logger::new(".git/logs").unwrap();
         let mut output_string = Vec::new();
         let mut stdout_mock = io::Cursor::new(&mut output_string);
 
@@ -240,9 +245,14 @@ mod tests {
         let mut stdin_mock = Cursor::new(input.as_bytes());
 
         let args: &[String] = &[];
-        assert!(
-            HashObject::run_from("hash-object", args, &mut stdin_mock, &mut stdout_mock).is_ok()
-        );
+        assert!(HashObject::run_from(
+            "hash-object",
+            args,
+            &mut stdin_mock,
+            &mut stdout_mock,
+            &mut logger
+        )
+        .is_ok());
         let Ok(output) = String::from_utf8(output_string) else {
             panic!("Error");
         };
@@ -252,15 +262,21 @@ mod tests {
 
     #[test]
     fn test_path() {
+        let mut logger = Logger::new(".git/logs").unwrap();
         let mut output_string = Vec::new();
         let mut stdout_mock = io::Cursor::new(&mut output_string);
 
         let input = "";
         let mut stdin_mock = Cursor::new(input.as_bytes());
         let args: &[String] = &["./test/commands/hash_object/codigo1.txt".to_string()];
-        assert!(
-            HashObject::run_from("hash-object", args, &mut stdin_mock, &mut stdout_mock).is_ok()
-        );
+        assert!(HashObject::run_from(
+            "hash-object",
+            args,
+            &mut stdin_mock,
+            &mut stdout_mock,
+            &mut logger
+        )
+        .is_ok());
 
         let Ok(output) = String::from_utf8(output_string) else {
             panic!("Error");
@@ -273,6 +289,7 @@ mod tests {
 
     #[test]
     fn test_object_type() {
+        let mut logger = Logger::new(".git/logs").unwrap();
         let mut output_string = Vec::new();
         let mut stdout_mock = io::Cursor::new(&mut output_string);
 
@@ -283,9 +300,14 @@ mod tests {
             "blob".to_string(),
             "./test/commands/hash_object/codigo1.txt".to_string(),
         ];
-        assert!(
-            HashObject::run_from("hash-object", args, &mut stdin_mock, &mut stdout_mock).is_ok()
-        );
+        assert!(HashObject::run_from(
+            "hash-object",
+            args,
+            &mut stdin_mock,
+            &mut stdout_mock,
+            &mut logger
+        )
+        .is_ok());
 
         let Ok(output) = String::from_utf8(output_string) else {
             panic!("Error");
@@ -298,6 +320,7 @@ mod tests {
 
     #[test]
     fn test_object_type_error() {
+        let mut logger = Logger::new(".git/logs").unwrap();
         let mut output_string = Vec::new();
         let mut stdout_mock = io::Cursor::new(&mut output_string);
 
@@ -309,13 +332,20 @@ mod tests {
             "./test/commands/hash_object/codigo1.txt".to_string(),
         ];
         assert!(matches!(
-            HashObject::run_from("hash-object", args, &mut stdin_mock, &mut stdout_mock),
+            HashObject::run_from(
+                "hash-object",
+                args,
+                &mut stdin_mock,
+                &mut stdout_mock,
+                &mut logger
+            ),
             Err(ErrorFlags::ObjectTypeError)
         ));
     }
 
     #[test]
     fn test_value_before_flag() {
+        let mut logger = Logger::new(".git/logs").unwrap();
         let mut output_string = Vec::new();
         let mut stdout_mock = io::Cursor::new(&mut output_string);
 
@@ -327,13 +357,20 @@ mod tests {
             "./test/commands/hash_object/codigo1.txt".to_string(),
         ];
         assert!(matches!(
-            HashObject::run_from("hash-object", args, &mut stdin_mock, &mut stdout_mock),
+            HashObject::run_from(
+                "hash-object",
+                args,
+                &mut stdin_mock,
+                &mut stdout_mock,
+                &mut logger
+            ),
             Err(ErrorFlags::InvalidArguments)
         ));
     }
 
     #[test]
     fn test_doubled_value_after_flag() {
+        let mut logger = Logger::new(".git/logs").unwrap();
         let mut output_string = Vec::new();
         let mut stdout_mock = io::Cursor::new(&mut output_string);
 
@@ -346,13 +383,20 @@ mod tests {
             "./test/commands/hash_object/codigo1.txt".to_string(),
         ];
         assert!(matches!(
-            HashObject::run_from("hash-object", args, &mut stdin_mock, &mut stdout_mock),
+            HashObject::run_from(
+                "hash-object",
+                args,
+                &mut stdin_mock,
+                &mut stdout_mock,
+                &mut logger
+            ),
             Err(ErrorFlags::InvalidArguments)
         ));
     }
 
     #[test]
     fn test_stdin() {
+        let mut logger = Logger::new(".git/logs").unwrap();
         let mut output_string = Vec::new();
         let mut stdout_mock = io::Cursor::new(&mut output_string);
 
@@ -360,9 +404,14 @@ mod tests {
         let mut stdin_mock = Cursor::new(input.as_bytes());
 
         let args: &[String] = &["--stdin".to_string()];
-        assert!(
-            HashObject::run_from("hash-object", args, &mut stdin_mock, &mut stdout_mock).is_ok()
-        );
+        assert!(HashObject::run_from(
+            "hash-object",
+            args,
+            &mut stdin_mock,
+            &mut stdout_mock,
+            &mut logger
+        )
+        .is_ok());
 
         let Ok(output) = String::from_utf8(output_string) else {
             panic!("Error");

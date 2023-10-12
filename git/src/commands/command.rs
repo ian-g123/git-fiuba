@@ -1,3 +1,5 @@
+use crate::logger::Logger;
+
 use super::error_flags::ErrorFlags;
 use std::io::{Read, Write};
 
@@ -19,6 +21,7 @@ pub trait Command {
         args: &[String],
         stdin: &mut dyn Read,
         output: &mut dyn Write,
+        logger: &mut Logger,
     ) -> Result<(), ErrorFlags>;
 
     /// Método para diferenciar flags de valores
