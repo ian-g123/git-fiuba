@@ -1,5 +1,5 @@
 use std::{
-    fs::OpenOptions,
+    fs::{self, File},
     io::{Error, Write},
     path::Path,
     sync::mpsc::{channel, Sender},
@@ -15,7 +15,13 @@ impl Logger {
     /// Instancia logger para escribir en el archivo en path. Lo crea si no existe.
     pub fn new(path: &str) -> Result<Self, Error> {
         let path = Path::new(path);
-        let mut file: std::fs::File = OpenOptions::new().create(true).append(true).open(path)?;
+        if let Some(dir) = path.parent() {
+            let _ = fs::create_dir_all(dir);
+        }
+        let mut file: File = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)?;
         let (tx, rx) = channel::<String>();
 
         let handle = thread::spawn(move || {
@@ -57,9 +63,9 @@ mod tests {
 
     #[test]
     fn test_logger_single_line() {
-        let test_dir = "test/data/logger/test1/.git/";
+        let test_dir = "test/data/logger/test1/";
         delete_directory_content(test_dir);
-        let path = format!("{test_dir}/logs");
+        let path = format!("{test_dir}.git/logs");
 
         let logger_result = Logger::new(&path);
         match logger_result {
@@ -79,9 +85,9 @@ mod tests {
 
     #[test]
     fn test_logger_two_lines() {
-        let test_dir = "test/data/logger/test2/.git/";
+        let test_dir = "test/data/logger/test2/";
         delete_directory_content(test_dir);
-        let path = format!("{test_dir}/logs");
+        let path = format!("{test_dir}.git/logs");
 
         let logger_result = Logger::new(&path);
         match logger_result {
@@ -103,9 +109,9 @@ mod tests {
 
     #[test]
     fn test_logger_open_existing_log_file() {
-        let test_dir = "test/data/logger/test3/.git/";
+        let test_dir = "test/data/logger/test3/";
         delete_directory_content(test_dir);
-        let path = format!("{test_dir}/logs");
+        let path = format!("{test_dir}.git/logs");
 
         let logger_1_result = Logger::new(&path);
         let Ok(mut logger_1) = logger_1_result else {
