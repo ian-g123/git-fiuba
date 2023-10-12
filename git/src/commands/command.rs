@@ -1,8 +1,13 @@
 use super::error_flags::ErrorFlags;
-use std::io::{self, Write};
+use std::io::{self, Read, Stdin, Write};
 
 pub trait Command {
-    fn run_from(name: &str, args: &[String], output: &mut dyn Write) -> Result<(), ErrorFlags>;
+    fn run_from(
+        name: &str,
+        args: &[String],
+        stdin: &mut dyn Read,
+        output: &mut dyn Write,
+    ) -> Result<(), ErrorFlags>;
 
     fn is_flag(arg: &str) -> bool {
         arg.starts_with('-')
