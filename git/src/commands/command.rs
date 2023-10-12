@@ -28,4 +28,28 @@ pub trait Command {
     fn is_flag(arg: &str) -> bool {
         arg.starts_with('-')
     }
+
+    /// Configura el comando a partir de los argumentos
+    fn config(&mut self, args: &[String]) -> Result<(), ErrorFlags> {
+        let mut i = 0;
+        while i < args.len() {
+            i = self.add_config(i, args)?;
+        }
+        Ok(())
+    }
+
+    /// Configura el valor en i a partir de los argumentos
+    fn add_config(&mut self, i: usize, args: &[String]) -> Result<usize, ErrorFlags> {
+        for f in self.config_adders().iter() {
+            match f(self, i, args) {
+                Ok(i) => return Ok(i),
+                Err(ErrorFlags::WrongFlag) => continue,
+                Err(error) => return Err(error),
+            }
+        }
+        Err(ErrorFlags::InvalidArguments)
+    }
+
+    /// Devuelve un vector de funciones que parsean flags
+    fn config_adders(&self) -> Vec<fn(&mut Self, usize, &[String]) -> Result<usize, ErrorFlags>>;
 }

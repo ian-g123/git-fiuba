@@ -1,11 +1,8 @@
 use std::fs::File;
-use std::io::{self, Write};
-use std::io::{Read, Stdin};
+use std::io::{Read, Write};
 use std::str;
 
 extern crate sha1;
-
-use sha1::digest::typenum::Log2;
 use sha1::{Digest, Sha1};
 
 use crate::commands::command::Command;
@@ -32,66 +29,41 @@ impl Command for HashObject {
             return Err(ErrorFlags::CommandName);
         }
 
-        let instance = Self::new(args, output)?;
+        let instance = Self::new(args)?;
 
         instance.run(stdin, output)?;
         Ok(())
     }
+
+    fn config_adders(&self) -> Vec<fn(&mut Self, usize, &[String]) -> Result<usize, ErrorFlags>> {
+        vec![
+            Self::add_type_config,
+            Self::add_stdin_config,
+            Self::add_file_config,
+        ]
+    }
 }
 
 impl HashObject {
-    fn new(args: &[String], output: &mut dyn Write) -> Result<Self, ErrorFlags> {
+    fn new(args: &[String]) -> Result<Self, ErrorFlags> {
         let mut hash_object = Self::new_default();
-
-        hash_object.config(args, output)?;
-
+        hash_object.config(args)?;
         Ok(hash_object)
     }
 
     fn new_default() -> Self {
-        let mut hash_object = Self {
+        Self {
             object_type: "blob".to_string(),
             files: Vec::<String>::new(),
             write: false,
             stdin: false,
-        };
-        hash_object
-    }
-
-    fn config(&mut self, args: &[String], output: &mut dyn Write) -> Result<(), ErrorFlags> {
-        let mut i = 0;
-        while i < args.len() {
-            i = self.add_setting(i, &args, output)?;
         }
-        Ok(())
-    }
-
-    fn add_setting(
-        &mut self,
-        i: usize,
-        args: &[String],
-        output: &mut dyn Write,
-    ) -> Result<usize, ErrorFlags> {
-        let flags = [
-            Self::add_type_config,
-            Self::add_stdin_config,
-            Self::add_file_config,
-        ];
-        for f in flags.iter() {
-            match f(self, i, args, output) {
-                Ok(i) => return Ok(i),
-                Err(ErrorFlags::WrongFlag) => continue,
-                Err(error) => return Err(error),
-            }
-        }
-        Err(ErrorFlags::InvalidArguments)
     }
 
     fn add_type_config(
         hash_object: &mut HashObject,
         i: usize,
         args: &[String],
-        output: &mut dyn Write,
     ) -> Result<usize, ErrorFlags> {
         if args[i] != "-t" {
             return Err(ErrorFlags::WrongFlag);
@@ -116,7 +88,6 @@ impl HashObject {
         hash_object: &mut HashObject,
         i: usize,
         args: &[String],
-        output: &mut dyn Write,
     ) -> Result<usize, ErrorFlags> {
         if args[i] != "-w" {
             return Err(ErrorFlags::WrongFlag);
@@ -129,7 +100,6 @@ impl HashObject {
         hash_object: &mut HashObject,
         i: usize,
         args: &[String],
-        output: &mut dyn Write,
     ) -> Result<usize, ErrorFlags> {
         if args[i] != "--stdin" {
             return Err(ErrorFlags::WrongFlag);
@@ -142,14 +112,10 @@ impl HashObject {
         hash_object: &mut HashObject,
         i: usize,
         args: &[String],
-        output: &mut dyn Write,
     ) -> Result<usize, ErrorFlags> {
         if Self::is_flag(&args[i]) {
             return Err(ErrorFlags::WrongFlag);
         }
-        // if i < args.len() - 1 {
-        //     return Err(ErrorFlags::InvalidArguments);
-        // }
         hash_object.files.push(args[i].clone());
         Ok(i + 1)
     }
@@ -162,7 +128,7 @@ impl HashObject {
             };
         }
         for file in &self.files {
-            let content = read_file_contents(&file)?;
+            let content = read_file_contents(file)?;
             self.run_for_content(content, output);
         }
         Ok(())
@@ -186,7 +152,7 @@ impl HashObject {
 
     fn get_sha1(&self, data: &[u8]) -> String {
         let mut sha1 = Sha1::new();
-        sha1.update(&data);
+        sha1.update(data);
         let hash_result = sha1.finalize();
 
         // Formatea los bytes del hash en una cadena hexadecimal
@@ -218,7 +184,7 @@ mod tests {
     fn test_nombre_incorrecto() {
         let mut logger = Logger::new(".git/logs").unwrap();
         let mut output_string = Vec::new();
-        let mut stdout_mock = io::Cursor::new(&mut output_string);
+        let mut stdout_mock = Cursor::new(&mut output_string);
 
         let input = "";
         let mut stdin_mock = Cursor::new(input.as_bytes());
@@ -234,7 +200,7 @@ mod tests {
     fn test_path_null() {
         let mut logger = Logger::new(".git/logs").unwrap();
         let mut output_string = Vec::new();
-        let mut stdout_mock = io::Cursor::new(&mut output_string);
+        let mut stdout_mock = Cursor::new(&mut output_string);
 
         let input = "";
         let mut stdin_mock = Cursor::new(input.as_bytes());
@@ -259,7 +225,7 @@ mod tests {
     fn test_path() {
         let mut logger = Logger::new(".git/logs").unwrap();
         let mut output_string = Vec::new();
-        let mut stdout_mock = io::Cursor::new(&mut output_string);
+        let mut stdout_mock = Cursor::new(&mut output_string);
 
         let input = "";
         let mut stdin_mock = Cursor::new(input.as_bytes());
@@ -286,7 +252,7 @@ mod tests {
     fn test_object_type() {
         let mut logger = Logger::new(".git/logs").unwrap();
         let mut output_string = Vec::new();
-        let mut stdout_mock = io::Cursor::new(&mut output_string);
+        let mut stdout_mock = Cursor::new(&mut output_string);
 
         let input = "";
         let mut stdin_mock = Cursor::new(input.as_bytes());
@@ -317,7 +283,7 @@ mod tests {
     fn test_object_type_error() {
         let mut logger = Logger::new(".git/logs").unwrap();
         let mut output_string = Vec::new();
-        let mut stdout_mock = io::Cursor::new(&mut output_string);
+        let mut stdout_mock = Cursor::new(&mut output_string);
 
         let input = "";
         let mut stdin_mock = Cursor::new(input.as_bytes());
@@ -342,7 +308,7 @@ mod tests {
     fn test_value_before_flag() {
         let mut logger = Logger::new(".git/logs").unwrap();
         let mut output_string = Vec::new();
-        let mut stdout_mock = io::Cursor::new(&mut output_string);
+        let mut stdout_mock = Cursor::new(&mut output_string);
 
         let input = "";
         let mut stdin_mock = Cursor::new(input.as_bytes());
@@ -367,7 +333,7 @@ mod tests {
     fn test_doubled_value_after_flag() {
         let mut logger = Logger::new(".git/logs").unwrap();
         let mut output_string = Vec::new();
-        let mut stdout_mock = io::Cursor::new(&mut output_string);
+        let mut stdout_mock = Cursor::new(&mut output_string);
 
         let input = "";
         let mut stdin_mock = Cursor::new(input.as_bytes());
@@ -393,7 +359,7 @@ mod tests {
     fn test_stdin() {
         let mut logger = Logger::new(".git/logs").unwrap();
         let mut output_string = Vec::new();
-        let mut stdout_mock = io::Cursor::new(&mut output_string);
+        let mut stdout_mock = Cursor::new(&mut output_string);
 
         let input = "prueba1";
         let mut stdin_mock = Cursor::new(input.as_bytes());
@@ -420,7 +386,7 @@ mod tests {
     fn test_file_before_type() {
         let mut logger = Logger::new(".git/logs").unwrap();
         let mut output_string = Vec::new();
-        let mut stdout_mock = io::Cursor::new(&mut output_string);
+        let mut stdout_mock = Cursor::new(&mut output_string);
 
         let input = "";
         let mut stdin_mock = Cursor::new(input.as_bytes());
@@ -455,7 +421,7 @@ mod tests {
     fn test_two_files() {
         let mut logger = Logger::new(".git/logs").unwrap();
         let mut output_string = Vec::new();
-        let mut stdout_mock = io::Cursor::new(&mut output_string);
+        let mut stdout_mock = Cursor::new(&mut output_string);
 
         let input = "";
         let mut stdin_mock = Cursor::new(input.as_bytes());
@@ -490,7 +456,7 @@ mod tests {
     fn test_two_files_and_stdin() {
         let mut logger = Logger::new(".git/logs").unwrap();
         let mut output_string = Vec::new();
-        let mut stdout_mock = io::Cursor::new(&mut output_string);
+        let mut stdout_mock = Cursor::new(&mut output_string);
 
         let input = "prueba1";
         let mut stdin_mock = Cursor::new(input.as_bytes());
