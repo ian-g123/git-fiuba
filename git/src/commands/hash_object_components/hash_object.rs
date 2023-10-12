@@ -1,4 +1,5 @@
-use std::fs::File;
+use std::error::Error;
+use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::str;
 
@@ -6,7 +7,7 @@ extern crate sha1;
 use sha1::{Digest, Sha1};
 
 use crate::commands::command::Command;
-use crate::commands::error_flags::ErrorFlags;
+use crate::commands::command_errors::CommandError;
 use crate::logger::Logger;
 
 /// Commando hash-object
@@ -24,9 +25,9 @@ impl Command for HashObject {
         stdin: &mut dyn Read,
         output: &mut dyn Write,
         logger: &mut Logger,
-    ) -> Result<(), ErrorFlags> {
+    ) -> Result<(), CommandError> {
         if name != "hash-object" {
-            return Err(ErrorFlags::CommandName);
+            return Err(CommandError::Name.into());
         }
 
         let instance = Self::new(args)?;
@@ -35,17 +36,18 @@ impl Command for HashObject {
         Ok(())
     }
 
-    fn config_adders(&self) -> Vec<fn(&mut Self, usize, &[String]) -> Result<usize, ErrorFlags>> {
+    fn config_adders(&self) -> Vec<fn(&mut Self, usize, &[String]) -> Result<usize, CommandError>> {
         vec![
             Self::add_type_config,
             Self::add_stdin_config,
             Self::add_file_config,
+            Self::add_write_config,
         ]
     }
 }
 
 impl HashObject {
-    fn new(args: &[String]) -> Result<Self, ErrorFlags> {
+    fn new(args: &[String]) -> Result<Self, CommandError> {
         let mut hash_object = Self::new_default();
         hash_object.config(args)?;
         Ok(hash_object)
@@ -64,9 +66,9 @@ impl HashObject {
         hash_object: &mut HashObject,
         i: usize,
         args: &[String],
-    ) -> Result<usize, ErrorFlags> {
+    ) -> Result<usize, CommandError> {
         if args[i] != "-t" {
-            return Err(ErrorFlags::WrongFlag);
+            return Err(CommandError::WrongFlag);
         }
         let object_type = args[i + 1].clone();
         if ![
@@ -77,7 +79,7 @@ impl HashObject {
         ]
         .contains(&object_type)
         {
-            return Err(ErrorFlags::ObjectTypeError);
+            return Err(CommandError::ObjectTypeError);
         }
 
         hash_object.object_type.to_string();
@@ -88,9 +90,9 @@ impl HashObject {
         hash_object: &mut HashObject,
         i: usize,
         args: &[String],
-    ) -> Result<usize, ErrorFlags> {
+    ) -> Result<usize, CommandError> {
         if args[i] != "-w" {
-            return Err(ErrorFlags::WrongFlag);
+            return Err(CommandError::WrongFlag);
         }
         hash_object.write = true;
         Ok(i + 1)
@@ -100,9 +102,9 @@ impl HashObject {
         hash_object: &mut HashObject,
         i: usize,
         args: &[String],
-    ) -> Result<usize, ErrorFlags> {
+    ) -> Result<usize, CommandError> {
         if args[i] != "--stdin" {
-            return Err(ErrorFlags::WrongFlag);
+            return Err(CommandError::WrongFlag);
         }
         hash_object.stdin = true;
         Ok(i + 1)
@@ -112,29 +114,33 @@ impl HashObject {
         hash_object: &mut HashObject,
         i: usize,
         args: &[String],
-    ) -> Result<usize, ErrorFlags> {
+    ) -> Result<usize, CommandError> {
         if Self::is_flag(&args[i]) {
-            return Err(ErrorFlags::WrongFlag);
+            return Err(CommandError::WrongFlag);
         }
         hash_object.files.push(args[i].clone());
         Ok(i + 1)
     }
 
-    fn run(&self, stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), ErrorFlags> {
+    fn run(&self, stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), CommandError> {
         if self.stdin {
             let mut input = String::new();
             if stdin.read_to_string(&mut input).is_ok() {
-                self.run_for_content(input.as_bytes().to_vec(), output);
+                self.run_for_content(input.as_bytes().to_vec(), output)?;
             };
         }
         for file in &self.files {
             let content = read_file_contents(file)?;
-            self.run_for_content(content, output);
+            self.run_for_content(content, output)?;
         }
         Ok(())
     }
 
-    fn run_for_content(&self, content: Vec<u8>, output: &mut dyn Write) {
+    fn run_for_content(
+        &self,
+        content: Vec<u8>,
+        output: &mut dyn Write,
+    ) -> Result<(), CommandError> {
         let header = self.get_header(&content);
         let mut data = Vec::new();
 
@@ -143,6 +149,23 @@ impl HashObject {
 
         let hex_string = self.get_sha1(&data);
         let _ = writeln!(output, "{}", hex_string);
+        if self.write {
+            let folder_name = &hex_string[0..2];
+            let file_name = &hex_string[2..];
+
+            let parent_path = format!(".git/objects/{}", folder_name);
+            let path = format!("{}/{}", parent_path, file_name);
+            if let Err(error) = fs::create_dir_all(parent_path) {
+                return Err(CommandError::FileOpenError(error.to_string()));
+            };
+            let Ok(mut file) = File::create(path) else {
+                return Err(CommandError::FileOpenError(
+                    "Error al abrir archivo para escritura".to_string(),
+                ));
+            };
+            file.write_all(&data);
+        }
+        Ok(())
     }
 
     fn get_header(&self, data: &Vec<u8>) -> String {
@@ -166,23 +189,23 @@ impl HashObject {
     }
 }
 
-fn read_file_contents(path: &str) -> Result<Vec<u8>, ErrorFlags> {
-    let mut file = File::open(path).map_err(|_| ErrorFlags::FileNotFound)?;
+fn read_file_contents(path: &str) -> Result<Vec<u8>, CommandError> {
+    let mut file = File::open(path).map_err(|_| CommandError::FileNotFound(path.to_string()))?;
     let mut data = Vec::new();
     file.read_to_end(&mut data)
-        .map_err(|_| ErrorFlags::FileReadError)?;
+        .map_err(|_| CommandError::FileReadError(path.to_string()))?;
     Ok(data)
 }
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
+    use std::{env, fs, io::Cursor, path::Path};
 
     use super::*;
 
     #[test]
     fn test_nombre_incorrecto() {
-        let mut logger = Logger::new(".git/logs").unwrap();
+        let mut logger = Logger::new("./test/commands/hash_object/codigo1/.git/logs").unwrap();
         let mut output_string = Vec::new();
         let mut stdout_mock = Cursor::new(&mut output_string);
 
@@ -190,15 +213,16 @@ mod tests {
         let mut stdin_mock = Cursor::new(input.as_bytes());
 
         let args: &[String] = &[];
+        // test of returns error ErrorFlags::CommandName
         assert!(matches!(
             HashObject::run_from("", args, &mut stdin_mock, &mut stdout_mock, &mut logger),
-            Err(ErrorFlags::CommandName)
+            Err(CommandError::Name)
         ));
     }
 
     #[test]
     fn test_path_null() {
-        let mut logger = Logger::new(".git/logs").unwrap();
+        let mut logger = Logger::new("./test/commands/hash_object/codigo1/.git/logs").unwrap();
         let mut output_string = Vec::new();
         let mut stdout_mock = Cursor::new(&mut output_string);
 
@@ -223,7 +247,7 @@ mod tests {
 
     #[test]
     fn test_path() {
-        let mut logger = Logger::new(".git/logs").unwrap();
+        let mut logger = Logger::new("./test/commands/hash_object/codigo1/.git/logs").unwrap();
         let mut output_string = Vec::new();
         let mut stdout_mock = Cursor::new(&mut output_string);
 
@@ -250,7 +274,7 @@ mod tests {
 
     #[test]
     fn test_object_type() {
-        let mut logger = Logger::new(".git/logs").unwrap();
+        let mut logger = Logger::new("./test/commands/hash_object/codigo1/.git/logs").unwrap();
         let mut output_string = Vec::new();
         let mut stdout_mock = Cursor::new(&mut output_string);
 
@@ -281,7 +305,7 @@ mod tests {
 
     #[test]
     fn test_object_type_error() {
-        let mut logger = Logger::new(".git/logs").unwrap();
+        let mut logger = Logger::new("./test/commands/hash_object/codigo1/.git/logs").unwrap();
         let mut output_string = Vec::new();
         let mut stdout_mock = Cursor::new(&mut output_string);
 
@@ -300,13 +324,13 @@ mod tests {
                 &mut stdout_mock,
                 &mut logger
             ),
-            Err(ErrorFlags::ObjectTypeError)
+            Err(CommandError::ObjectTypeError)
         ));
     }
 
     #[test]
     fn test_value_before_flag() {
-        let mut logger = Logger::new(".git/logs").unwrap();
+        let mut logger = Logger::new("./test/commands/hash_object/codigo1/.git/logs").unwrap();
         let mut output_string = Vec::new();
         let mut stdout_mock = Cursor::new(&mut output_string);
 
@@ -325,13 +349,13 @@ mod tests {
                 &mut stdout_mock,
                 &mut logger
             ),
-            Err(ErrorFlags::ObjectTypeError)
+            Err(CommandError::ObjectTypeError)
         ));
     }
 
     #[test]
     fn test_doubled_value_after_flag() {
-        let mut logger = Logger::new(".git/logs").unwrap();
+        let mut logger = Logger::new("./test/commands/hash_object/codigo1/.git/logs").unwrap();
         let mut output_string = Vec::new();
         let mut stdout_mock = Cursor::new(&mut output_string);
 
@@ -343,6 +367,7 @@ mod tests {
             "blob".to_string(),
             "./test/commands/hash_object/codigo1.txt".to_string(),
         ];
+
         assert!(matches!(
             HashObject::run_from(
                 "hash-object",
@@ -351,13 +376,13 @@ mod tests {
                 &mut stdout_mock,
                 &mut logger
             ),
-            Err(ErrorFlags::FileNotFound)
+            Err(CommandError::FileNotFound(_))
         ));
     }
 
     #[test]
     fn test_stdin() {
-        let mut logger = Logger::new(".git/logs").unwrap();
+        let mut logger = Logger::new("./test/commands/hash_object/codigo1/.git/logs").unwrap();
         let mut output_string = Vec::new();
         let mut stdout_mock = Cursor::new(&mut output_string);
 
@@ -384,7 +409,7 @@ mod tests {
 
     #[test]
     fn test_file_before_type() {
-        let mut logger = Logger::new(".git/logs").unwrap();
+        let mut logger = Logger::new("./test/commands/hash_object/codigo1/.git/logs").unwrap();
         let mut output_string = Vec::new();
         let mut stdout_mock = Cursor::new(&mut output_string);
 
@@ -419,7 +444,7 @@ mod tests {
 
     #[test]
     fn test_two_files() {
-        let mut logger = Logger::new(".git/logs").unwrap();
+        let mut logger = Logger::new("./test/commands/hash_object/codigo1/.git/logs").unwrap();
         let mut output_string = Vec::new();
         let mut stdout_mock = Cursor::new(&mut output_string);
 
@@ -454,7 +479,7 @@ mod tests {
 
     #[test]
     fn test_two_files_and_stdin() {
-        let mut logger = Logger::new(".git/logs").unwrap();
+        let mut logger = Logger::new("./test/commands/hash_object/codigo1/.git/logs").unwrap();
         let mut output_string = Vec::new();
         let mut stdout_mock = Cursor::new(&mut output_string);
 
@@ -486,5 +511,70 @@ mod tests {
         let hex_git =
             "e31f3beeeedd1a034c5ce6f1b3b2d03f02541d59\ne31f3beeeedd1a034c5ce6f1b3b2d03f02541d59\ne31f3beeeedd1a034c5ce6f1b3b2d03f02541d59\n";
         assert_eq!(output, hex_git);
+    }
+
+    #[test]
+    fn test_write_blob() {
+        let test_dir = "./test/commands/hash_object/write/";
+        delete_directory_content(&format!("{test_dir}.git/objects"));
+
+        let mut logger = Logger::new(&format!("{test_dir}.git/logs")).unwrap();
+        let mut output_string = Vec::new();
+        let mut stdout_mock = Cursor::new(&mut output_string);
+
+        let input = "";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+        let args: &[String] = &[
+            "-w".to_string(),
+            "./test/commands/hash_object/write/testfile.txt".to_string(),
+        ];
+        // assert!(env::set_current_dir("./test/commands/hash_object/write").is_ok());
+        if let Err(error) = HashObject::run_from(
+            "hash-object",
+            args,
+            &mut stdin_mock,
+            &mut stdout_mock,
+            &mut logger,
+        ) {
+            panic!("{error}")
+        };
+
+        let Ok(output) = String::from_utf8(output_string) else {
+            panic!("Error");
+        };
+
+        // salida hexadecimal de git hash-object -t blob ./test/commands/hash_object/write/testfile.txt
+        let hex_git = "30d74d258442c7c65512eafab474568dd706c430\n";
+        assert_eq!(output, hex_git);
+
+        // Chequear si archivo fue creado
+        match File::open(format!(
+            "{test_dir}.git/objects/30/d74d258442c7c65512eafab474568dd706c430"
+        )) {
+            Err(error) => {
+                panic!("{error}")
+            }
+            Ok(mut file) => {
+                // Archivo creado con git hash-object -w testfile.txt -w deste ./test/commands/hash_object/write
+                let Ok(expected_content) =
+                    read_file_contents(&format!("{test_dir}expected_output"))
+                else {
+                    panic!("Error al abrir resultado esperado");
+                };
+                let mut actual_content = Vec::new();
+                file.read_to_end(&mut actual_content)
+                    .expect("Error al leer archivo");
+
+                assert_eq!(actual_content, expected_content);
+            }
+        }
+    }
+
+    fn delete_directory_content(path: &str) {
+        let dir = Path::new(path);
+        if dir.exists() {
+            let _ = fs::remove_dir_all(dir);
+        }
+        let _ = fs::create_dir_all(dir);
     }
 }
