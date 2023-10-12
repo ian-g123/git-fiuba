@@ -109,6 +109,19 @@ impl HashObject {
         Ok(i + 2)
     }
 
+    fn add_write_config(
+        hash_object: &mut HashObject,
+        i: usize,
+        args: &[String],
+        output: &mut dyn Write,
+    ) -> Result<usize, ErrorFlags> {
+        if args[i] != "-w" {
+            return Err(ErrorFlags::WrongFlag);
+        }
+        hash_object.write = true;
+        Ok(i + 1)
+    }
+
     fn add_stdin_config(
         hash_object: &mut HashObject,
         i: usize,
