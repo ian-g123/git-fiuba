@@ -1,27 +1,48 @@
-//use git::commands::command::Command;
-//use std::env;
-// use git::commands::hash_object_components::hash_object::HashObject;
-// use git::error_args::ErrorFlags;
-//use git::commands::hash_object_components::hash_object::HashObject;
+use git::commands::hash_object_components::hash_object::HashObject;
+use git::commands::{command::Command, error_flags::ErrorFlags};
+use git::logger::Logger;
+use std::{env, io};
 
 fn main() {
-    // let args: Vec<String> = env::args().collect();
-    // let Ok((command_name, command_args)) = parse_args(&args) else {
-    //     eprint!("Error");
-    //     return;
-    // };
+    let args: Vec<String> = env::args().collect();
+    let Ok((command_name, command_args)) = parse_args(&args) else {
+        eprint!("Error");
+        return;
+    };
 
-    /* let command_name = "hash-object"; // se usa para debuguear !!!NO BORRAR
-    let command_args = &[
-        "-t".to_string(),
-        "blob".to_string(),
-        "--stdin".to_string(),
-        "-w".to_string(),
-        "--path".to_string(),
-        "file.txt".to_string(),
-    ]; */
+    let Ok(mut logger) = Logger::new(".git/logs") else {
+        return;
+    };
 
-    // _ = ejecutar(command_name, command_args);
+    if let Err(error) = run(command_name, command_args, &mut logger) {
+        eprintln!("{error}")
+    }
+}
+
+fn parse_args(args: &[String]) -> Result<(&str, &[String]), ErrorFlags> {
+    let command = &args[1];
+    let command_args = args.split_at(2).1;
+
+    Ok((command, command_args))
+}
+
+fn run(command_name: &str, command_args: &[String], logger: &mut Logger) -> Result<(), ErrorFlags> {
+    let commands = [HashObject::run_from];
+
+    for command in &commands {
+        match command(
+            command_name,
+            command_args,
+            &mut io::stdin(),
+            &mut io::stdout(),
+            logger,
+        ) {
+            Ok(()) => return Ok(()),
+            Err(ErrorFlags::CommandName) => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Err(ErrorFlags::CommandName)
 }
 
 // fn parse_args(args: &[String]) -> Result<(&str, &[String]), ErrorFlags> {
