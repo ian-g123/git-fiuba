@@ -11,6 +11,7 @@ pub struct Logger {
     writer_thread_handle: Option<thread::JoinHandle<()>>,
 }
 
+/// Guarda mensajes en un archivo de texto
 impl Logger {
     /// Instancia logger para escribir en el archivo en path. Lo crea si no existe.
     pub fn new(path: &str) -> Result<Self, Error> {
