@@ -1,12 +1,19 @@
 use std::fmt;
 
+/// Enumeración de errores de flags
 #[derive(Debug)]
 pub enum ErrorFlags {
+    /// El nombre del comando no es válido
     CommandName,
+    /// La flag no es válida
     WrongFlag,
+    /// Argumentos inválidos
     InvalidArguments,
+    /// Archivo no encontrado
     FileNotFound,
+    /// Error leyendo archivo
     FileReadError,
+    /// Tipo de objeto no válido
     ObjectTypeError,
 }
 

@@ -1,6 +1,6 @@
 use git::commands::hash_object_components::hash_object::HashObject;
 use git::commands::{command::Command, error_flags::ErrorFlags};
-use git::logger::{self, Logger};
+use git::logger::Logger;
 use std::{env, io};
 
 fn main() {
@@ -14,10 +14,9 @@ fn main() {
         return;
     };
 
-    match run(command_name, command_args, &mut logger) {
-        Err(error) => eprintln!("{error}"),
-        _ => {}
-    };
+    if let Err(error) = run(command_name, command_args, &mut logger) {
+        eprintln!("{error}")
+    }
 }
 
 fn parse_args(args: &[String]) -> Result<(&str, &[String]), ErrorFlags> {
