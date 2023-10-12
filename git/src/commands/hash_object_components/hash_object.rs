@@ -10,6 +10,7 @@ use sha1::{Digest, Sha1};
 use crate::commands::command::Command;
 use crate::commands::error_flags::ErrorFlags;
 
+/// Commando hash-object
 pub struct HashObject {
     object_type: String,
     write: bool,
@@ -60,10 +61,6 @@ impl HashObject {
             i = self.add_setting(i, &args, output)?;
         }
         Ok(())
-    }
-
-    fn is_flag(arg: &str) -> bool {
-        arg.starts_with("-")
     }
 
     fn add_setting(
