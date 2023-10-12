@@ -16,7 +16,7 @@ use crate::logger::Logger;
 pub struct HashObject {
     object_type: String,
     write: bool,
-    file: Option<String>,
+    files: Vec<String>,
     stdin: bool,
 }
 
@@ -51,7 +51,7 @@ impl HashObject {
     fn new_default() -> Self {
         let mut hash_object = Self {
             object_type: "blob".to_string(),
-            file: None,
+            files: Vec::<String>::new(),
             write: false,
             stdin: false,
         };
@@ -147,18 +147,28 @@ impl HashObject {
         if Self::is_flag(&args[i]) {
             return Err(ErrorFlags::WrongFlag);
         }
-        if i < args.len() - 1 {
-            return Err(ErrorFlags::InvalidArguments);
-        }
-        hash_object.file = Some(args[i].clone());
+        // if i < args.len() - 1 {
+        //     return Err(ErrorFlags::InvalidArguments);
+        // }
+        hash_object.files.push(args[i].clone());
         Ok(i + 1)
     }
 
     fn run(&self, stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), ErrorFlags> {
-        let content: Vec<u8> = self.get_content(stdin)?;
-        if content.is_empty() {
-            return Ok(());
+        if self.stdin {
+            let mut input = String::new();
+            if stdin.read_to_string(&mut input).is_ok() {
+                self.run_for_content(input.as_bytes().to_vec(), output);
+            };
         }
+        for file in &self.files {
+            let content = read_file_contents(&file)?;
+            self.run_for_content(content, output);
+        }
+        Ok(())
+    }
+
+    fn run_for_content(&self, content: Vec<u8>, output: &mut dyn Write) {
         let header = self.get_header(&content);
         let mut data = Vec::new();
 
@@ -166,22 +176,7 @@ impl HashObject {
         data.extend_from_slice(&content);
 
         let hex_string = self.get_sha1(&data);
-        writeln!(output, "{}", hex_string);
-        Ok(())
-    }
-
-    fn get_content(&self, mut stdin: &mut dyn Read) -> Result<Vec<u8>, ErrorFlags> {
-        if self.stdin {
-            let mut input = String::new();
-            stdin.read_to_string(&mut input);
-            Ok(input.as_bytes().to_vec())
-        } else {
-            let Some(path) = &self.file else {
-                // Return Vec<u8> empty
-                return Ok(Vec::new());
-            };
-            read_file_contents(path)
-        }
+        let _ = writeln!(output, "{}", hex_string);
     }
 
     fn get_header(&self, data: &Vec<u8>) -> String {
@@ -364,7 +359,7 @@ mod tests {
                 &mut stdout_mock,
                 &mut logger
             ),
-            Err(ErrorFlags::InvalidArguments)
+            Err(ErrorFlags::ObjectTypeError)
         ));
     }
 
@@ -390,7 +385,7 @@ mod tests {
                 &mut stdout_mock,
                 &mut logger
             ),
-            Err(ErrorFlags::InvalidArguments)
+            Err(ErrorFlags::FileNotFound)
         ));
     }
 
@@ -418,6 +413,112 @@ mod tests {
         };
 
         let hex_git = "e31f3beeeedd1a034c5ce6f1b3b2d03f02541d59\n";
+        assert_eq!(output, hex_git);
+    }
+
+    #[test]
+    fn test_file_before_type() {
+        let mut logger = Logger::new(".git/logs").unwrap();
+        let mut output_string = Vec::new();
+        let mut stdout_mock = io::Cursor::new(&mut output_string);
+
+        let input = "";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+        let args: &[String] = &[
+            "./test/commands/hash_object/codigo1.txt".to_string(),
+            "-t".to_string(),
+            "blob".to_string(),
+        ];
+        match HashObject::run_from(
+            "hash-object",
+            args,
+            &mut stdin_mock,
+            &mut stdout_mock,
+            &mut logger,
+        ) {
+            Err(error) => {
+                panic!("{error}")
+            }
+            Ok(_) => (),
+        };
+
+        let Ok(output) = String::from_utf8(output_string) else {
+            panic!("Error");
+        };
+
+        // salida hexadecimal de git hash-object -t blob ./test/commands/hash_object/codigo1.txt
+        let hex_git = "e31f3beeeedd1a034c5ce6f1b3b2d03f02541d59\n";
+        assert_eq!(output, hex_git);
+    }
+
+    #[test]
+    fn test_two_files() {
+        let mut logger = Logger::new(".git/logs").unwrap();
+        let mut output_string = Vec::new();
+        let mut stdout_mock = io::Cursor::new(&mut output_string);
+
+        let input = "";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+        let args: &[String] = &[
+            "./test/commands/hash_object/codigo1.txt".to_string(),
+            "./test/commands/hash_object/codigo1.txt".to_string(),
+        ];
+        match HashObject::run_from(
+            "hash-object",
+            args,
+            &mut stdin_mock,
+            &mut stdout_mock,
+            &mut logger,
+        ) {
+            Err(error) => {
+                panic!("{error}")
+            }
+            Ok(_) => (),
+        };
+
+        let Ok(output) = String::from_utf8(output_string) else {
+            panic!("Error");
+        };
+
+        // salida hexadecimal de git hash-object -t blob ./test/commands/hash_object/codigo1.txt
+        let hex_git =
+            "e31f3beeeedd1a034c5ce6f1b3b2d03f02541d59\ne31f3beeeedd1a034c5ce6f1b3b2d03f02541d59\n";
+        assert_eq!(output, hex_git);
+    }
+
+    #[test]
+    fn test_two_files_and_stdin() {
+        let mut logger = Logger::new(".git/logs").unwrap();
+        let mut output_string = Vec::new();
+        let mut stdout_mock = io::Cursor::new(&mut output_string);
+
+        let input = "prueba1";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+        let args: &[String] = &[
+            "./test/commands/hash_object/codigo1.txt".to_string(),
+            "./test/commands/hash_object/codigo1.txt".to_string(),
+            "--stdin".to_string(),
+        ];
+        match HashObject::run_from(
+            "hash-object",
+            args,
+            &mut stdin_mock,
+            &mut stdout_mock,
+            &mut logger,
+        ) {
+            Err(error) => {
+                panic!("{error}")
+            }
+            Ok(_) => (),
+        };
+
+        let Ok(output) = String::from_utf8(output_string) else {
+            panic!("Error");
+        };
+
+        // salida hexadecimal de git hash-object -t blob ./test/commands/hash_object/codigo1.txt
+        let hex_git =
+            "e31f3beeeedd1a034c5ce6f1b3b2d03f02541d59\ne31f3beeeedd1a034c5ce6f1b3b2d03f02541d59\ne31f3beeeedd1a034c5ce6f1b3b2d03f02541d59\n";
         assert_eq!(output, hex_git);
     }
 }
