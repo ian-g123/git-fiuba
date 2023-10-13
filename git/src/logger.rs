@@ -58,8 +58,8 @@ impl Drop for Logger {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
     use super::*;
+    use std::fs;
 
     #[test]
     fn test_logger_single_line() {

@@ -11,6 +11,8 @@ pub enum CommandError {
     InvalidArguments,
     /// Tipo de objeto no válido
     ObjectTypeError,
+    /// Nombre de archivo inválido
+    InvalidFileName,
     /// No se encuentra el archivo
     FileNotFound(String),
     /// Hay un error leyendo el archivo
@@ -21,6 +23,10 @@ pub enum CommandError {
     FileOpenError(String),
     /// Error de compresión
     CompressionError,
+    /// No se proporcionaron suficientes argumentos para este comando
+    NotEnoughArguments,
+    /// El flag -e no se utiliza comúnmente junto con otros flags en el comando
+    OptionCombinationError,
 }
 
 impl Error for CommandError {}
@@ -32,6 +38,7 @@ impl fmt::Display for CommandError {
             CommandError::WrongFlag => write!(f, "La flag no es válida"),
             CommandError::InvalidArguments => write!(f, "Argumentos inválidos"),
             CommandError::ObjectTypeError => write!(f, "Tipo de objeto no válido"),
+            CommandError::InvalidFileName => write!(f, "Nombre de archivo inválido"),
             CommandError::FileNotFound(path) => write!(f, "No se encuentra el archivo: {path}"),
             CommandError::FileReadError(path) => {
                 write!(f, "Hay un error leyendo el archivo: {path}")
@@ -43,6 +50,14 @@ impl fmt::Display for CommandError {
                 write!(f, "Hay un error abriendo el archivo: {path}")
             }
             CommandError::CompressionError => write!(f, "Error de compresión"),
+            CommandError::NotEnoughArguments => write!(
+                f,
+                "No se proporcionaron suficientes argumentos para este comando"
+            ),
+            CommandError::OptionCombinationError => write!(
+                f,
+                "El flag -e no se utiliza comúnmente junto con otros flags en el comando"
+            ),
         }
     }
 }

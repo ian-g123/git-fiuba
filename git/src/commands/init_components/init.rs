@@ -91,7 +91,7 @@ impl Init {
         if Self::is_flag(&args[i]) {
             return Err(CommandError::WrongFlag);
         }
-        if init.paths.len() >= 1 {
+        if !init.paths.is_empty() {
             return Err(CommandError::InvalidArguments);
         }
         let path_aux = args[i].clone();
