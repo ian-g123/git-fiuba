@@ -15,8 +15,12 @@ pub enum CommandError {
     FileNotFound(String),
     /// Hay un error leyendo el archivo
     FileReadError(String),
+    /// Hay un error escribiendo el archivo
+    FileWriteError(String),
     /// Hay un error abriendo el archivo
     FileOpenError(String),
+    /// Error de compresión
+    CompressionError,
 }
 
 impl Error for CommandError {}
@@ -32,9 +36,13 @@ impl fmt::Display for CommandError {
             CommandError::FileReadError(path) => {
                 write!(f, "Hay un error leyendo el archivo: {path}")
             }
+            CommandError::FileWriteError(path) => {
+                write!(f, "Hay un error escribiendo el archivo: {path}")
+            }
             CommandError::FileOpenError(path) => {
                 write!(f, "Hay un error abriendo el archivo: {path}")
             }
+            CommandError::CompressionError => write!(f, "Error de compresión"),
         }
     }
 }
