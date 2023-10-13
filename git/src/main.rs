@@ -1,5 +1,8 @@
-use git::commands::hash_object_components::hash_object::HashObject;
-use git::commands::{command::Command, error_flags::ErrorFlags};
+use git::commands::{
+    command::Command,
+    command_errors::CommandError,
+    hash_object_components::hash_object::HashObject
+};
 use git::logger::Logger;
 use std::{env, io};
 
@@ -19,14 +22,18 @@ fn main() {
     }
 }
 
-fn parse_args(args: &[String]) -> Result<(&str, &[String]), ErrorFlags> {
+fn parse_args(args: &[String]) -> Result<(&str, &[String]), CommandError> {
     let command = &args[1];
     let command_args = args.split_at(2).1;
 
     Ok((command, command_args))
 }
 
-fn run(command_name: &str, command_args: &[String], logger: &mut Logger) -> Result<(), ErrorFlags> {
+fn run(
+    command_name: &str,
+    command_args: &[String],
+    logger: &mut Logger,
+) -> Result<(), CommandError> {
     let commands = [HashObject::run_from];
 
     for command in &commands {
@@ -38,9 +45,9 @@ fn run(command_name: &str, command_args: &[String], logger: &mut Logger) -> Resu
             logger,
         ) {
             Ok(()) => return Ok(()),
-            Err(ErrorFlags::CommandName) => {}
+            Err(CommandError::Name) => {}
             Err(error) => return Err(error),
         }
     }
-    Err(ErrorFlags::CommandName)
+    Err(CommandError::Name)
 }
