@@ -46,7 +46,7 @@ impl ChangesNotStaged{
             /* let file_name = 
             return Err(CommandError::FileReadError(())) */
         }
-        Ok(())
+        usar sha1. si diferen, cambio el contenido
     }
 
 } */
