@@ -1,11 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use walkdir::WalkDir;
 
-/// Se obtiene el nombre de los archivos y directorios del workspace
+/// Se obtiene el nombre de los archivos y directorios del workspace\
 /// Útil para cuando tengamos que hacer la interfaz de Stage Area
-fn get_file_system_names() -> (HashSet<String>, HashSet<String>) { // TODO: remover los unwrap
+fn get_files_names() -> HashSet<String> { // TODO: remover los unwrap
     let mut files_names = HashSet::new();
-    let mut directory_names = HashSet::new();
 
     for entry in WalkDir::new(".") {
         let entry = entry.unwrap();
@@ -14,41 +13,40 @@ fn get_file_system_names() -> (HashSet<String>, HashSet<String>) { // TODO: remo
         let directory_name = entry.path().to_str().unwrap().to_string();
 
         files_names.insert(file_name);
-        directory_names.insert(directory_name);
     }
-    (files_names, directory_names)
+    files_names
 }
 
 pub struct StagingArea {
-    stagin_area: WorkingTree,
+    stagin_area: Tree,
     pointers: HashMap<String, String>,
 }
 
-pub struct WorkingTree {
+pub struct Tree {
     file_system: HashMap<String, SavedObjects>,
 }
 
 enum SavedObjects {
     Blob(String),
-    Tree(WorkingTree),
+    Tree(Tree),
 }
 
 impl StagingArea {
-    pub fn new() -> Self {
-        StagingArea {
-            stagin_area: WorkingTree::new(),
-            pointers: HashMap::new(),
-        }
-    }
-
     pub fn add(&mut self, file_name: String) {
         self.stagin_area.add_file(file_name);
     }
+
+    pub fn new() -> Self {
+        StagingArea {
+            stagin_area: Tree::new(),
+            pointers: HashMap::new(),
+        }
+    }
 }
 
-impl WorkingTree {
+impl Tree {
     pub fn new() -> Self {
-        WorkingTree {
+        Tree {
             file_system: HashMap::new(),
         }
     }
@@ -59,7 +57,7 @@ impl WorkingTree {
     }
 
     pub fn add_tree(&mut self, folder_name: String) {
-        let tree = SavedObjects::Tree(WorkingTree::new());
+        let tree = SavedObjects::Tree(Tree::new());
         self.file_system.insert(folder_name, tree);
     }
 
