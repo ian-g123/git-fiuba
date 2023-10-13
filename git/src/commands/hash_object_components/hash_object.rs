@@ -47,8 +47,8 @@ impl Command for HashObject {
         vec![
             Self::add_type_config,
             Self::add_stdin_config,
-            Self::add_file_config,
             Self::add_write_config,
+            Self::add_file_config,
         ]
     }
 }
@@ -122,9 +122,6 @@ impl HashObject {
         i: usize,
         args: &[String],
     ) -> Result<usize, CommandError> {
-        if Self::is_flag(&args[i]) {
-            return Err(CommandError::WrongFlag);
-        }
         hash_object.files.push(args[i].clone());
         Ok(i + 1)
     }
