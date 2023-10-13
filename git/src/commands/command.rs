@@ -1,7 +1,10 @@
 use crate::logger::Logger;
 
-use super::error_flags::ErrorFlags;
+use super::command_errors::CommandError;
 use std::io::{Read, Write};
+
+/// Función que agrega un valor a partir de los argumentos
+pub type ConfigAdderFunction<T> = Vec<fn(&mut T, usize, &[String]) -> Result<usize, CommandError>>;
 
 /// Característico de todos los comandos de git
 pub trait Command {
@@ -9,20 +12,20 @@ pub trait Command {
     ///
     /// # Errors:
     ///
-    /// - `ErrorFlags::CommandName` si el nombre del comando no es válido
-    /// - `ErrorFlags::InvalidArgument` si se encuentra un argumento inválido
-    /// - `ErrorFlags::WrongFlag` si se encuentra una flag inválida
-    /// - `ErrorFlags::InvalidArguments` si se encuentra un argumento inválido
-    /// - `ErrorFlags::FileNotFound` si no se encuentra el archivo
-    /// - `ErrorFlags::FileReadError` si hay un error leyendo el archivo
-    /// - `ErrorFlags::ObjectTypeError` si el tipo de objeto de -t no es válido
+    /// - `CommandError::CommandName` si el nombre del comando no es válido
+    /// - `CommandError::InvalidArgument` si se encuentra un argumento inválido
+    /// - `CommandError::WrongFlag` si se encuentra una flag inválida
+    /// - `CommandError::InvalidArguments` si se encuentra un argumento inválido
+    /// - `CommandError::FileNotFound` si no se encuentra el archivo
+    /// - `CommandError::FileReadError` si hay un error leyendo el archivo
+    /// - `CommandError::ObjectTypeError` si el tipo de objeto de -t no es válido
     fn run_from(
         name: &str,
         args: &[String],
         stdin: &mut dyn Read,
         output: &mut dyn Write,
         logger: &mut Logger,
-    ) -> Result<(), ErrorFlags>;
+    ) -> Result<(), CommandError>;
 
     /// Método para diferenciar flags de valores
     fn is_flag(arg: &str) -> bool {
@@ -30,7 +33,7 @@ pub trait Command {
     }
 
     /// Configura el comando a partir de los argumentos
-    fn config(&mut self, args: &[String]) -> Result<(), ErrorFlags> {
+    fn config(&mut self, args: &[String]) -> Result<(), CommandError> {
         let mut i = 0;
         while i < args.len() {
             i = self.add_config(i, args)?;
@@ -39,17 +42,17 @@ pub trait Command {
     }
 
     /// Configura el valor en i a partir de los argumentos
-    fn add_config(&mut self, i: usize, args: &[String]) -> Result<usize, ErrorFlags> {
+    fn add_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         for f in self.config_adders().iter() {
             match f(self, i, args) {
                 Ok(i) => return Ok(i),
-                Err(ErrorFlags::WrongFlag) => continue,
+                Err(CommandError::WrongFlag) => continue,
                 Err(error) => return Err(error),
             }
         }
-        Err(ErrorFlags::InvalidArguments)
+        Err(CommandError::InvalidArguments)
     }
 
     /// Devuelve un vector de funciones que parsean flags
-    fn config_adders(&self) -> Vec<fn(&mut Self, usize, &[String]) -> Result<usize, ErrorFlags>>;
+    fn config_adders(&self) -> ConfigAdderFunction<Self>;
 }
