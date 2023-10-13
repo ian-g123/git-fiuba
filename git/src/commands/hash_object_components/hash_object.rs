@@ -4,7 +4,7 @@ use std::str;
 extern crate sha1;
 use sha1::{Digest, Sha1};
 
-use crate::commands::command::Command;
+use crate::commands::command::{Command, ConfigAdderFunction};
 use crate::commands::command_errors::CommandError;
 use crate::commands::file_compressor::compress;
 use crate::logger::Logger;
@@ -26,7 +26,7 @@ impl Command for HashObject {
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
         if name != "hash-object" {
-            return Err(CommandError::Name.into());
+            return Err(CommandError::Name);
         }
 
         let instance = Self::new(args)?;
@@ -36,7 +36,7 @@ impl Command for HashObject {
         Ok(())
     }
 
-    fn config_adders(&self) -> Vec<fn(&mut Self, usize, &[String]) -> Result<usize, CommandError>> {
+    fn config_adders(&self) -> ConfigAdderFunction<Self> {
         vec![
             Self::add_type_config,
             Self::add_stdin_config,

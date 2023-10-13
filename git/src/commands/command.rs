@@ -3,6 +3,9 @@ use crate::logger::Logger;
 use super::command_errors::CommandError;
 use std::io::{Read, Write};
 
+/// Función que agrega un valor a partir de los argumentos
+pub type ConfigAdderFunction<T> = Vec<fn(&mut T, usize, &[String]) -> Result<usize, CommandError>>;
+
 /// Característico de todos los comandos de git
 pub trait Command {
     /// Instancia y corre el comando a partir del nombre y sus argumentos
@@ -51,5 +54,5 @@ pub trait Command {
     }
 
     /// Devuelve un vector de funciones que parsean flags
-    fn config_adders(&self) -> Vec<fn(&mut Self, usize, &[String]) -> Result<usize, CommandError>>;
+    fn config_adders(&self) -> ConfigAdderFunction<Self>;
 }
