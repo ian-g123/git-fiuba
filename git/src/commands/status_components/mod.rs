@@ -7,3 +7,5 @@ mod short_format;
 mod long_format;
 mod working_tree;
 mod merge_conflicts;
+mod changes_not_staged;
+mod change;

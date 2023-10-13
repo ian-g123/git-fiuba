@@ -9,6 +9,7 @@ const COPIED: &str = "C";
 const UPDATED: &str = "U";
 const UNTRACKED: &str = "??";
 
+#[derive(Clone)]
 pub enum ChangeTypes{
     Modified,
     Unmodified,
