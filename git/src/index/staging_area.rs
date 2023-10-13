@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
+use super::change::Change;
+
 #[derive(Default)]
 pub struct Index {
-    changes: HashMap<String, String>, 
+    changes: HashMap<String, Change>, 
 }
 
 impl Index {
@@ -12,16 +14,16 @@ impl Index {
         }
     }
 
-    pub fn add_change(&mut self, path: &str, hash: &str) {
-        self.changes.insert(path.to_string(), hash.to_string());
+    pub fn add_change(&mut self, path: &str, change: Change) {
+        self.changes.insert(path.to_string(), change);
     }
 
     pub fn remove_change(&mut self, path: &str) {
         self.changes.remove(path);
     }
 
-    pub fn get_changes(&self) -> HashMap<String, String>{
-        self.changes.clone()
+    pub fn get_changes(&self) -> Vec<Change>{
+        self.changes.values().cloned().collect()
     }
 }
 

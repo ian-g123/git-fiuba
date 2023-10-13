@@ -1,6 +1,8 @@
-use std::{path::PathBuf, collections::HashMap};
+use std::{path::PathBuf, collections::HashMap, fs::{File, self}, io::Read};
 
-use super::{staging_area::Index, changes_types::ChangeTypes};
+use crate::{commands::command_errors::CommandError, index::staging_area::Index};
+
+use super::{changes_types::ChangeTypes};
 
 pub struct ChangesNotStaged{
     working_tree: PathBuf,
@@ -18,11 +20,36 @@ impl ChangesNotStaged{
         self.changes.clone()
     }
 
-    pub fn run(&self){
+    pub fn run(&mut self)-> Result<(), CommandError>{
         let staged_changes = self.staging_area.get_changes();
-        for (path, hash) in staged_changes.iter() {
-            
+        for change in staged_changes.iter() {
+            let content_staged = change.get_content()?;
+            let path = change.get_path();
+            if let Some(file) = self.compare_file_name(path.clone()){
+                self.compare_content(content_staged, file, path);
+            } 
         }
+        Ok(())
+    }
+
+    fn compare_file_name(&mut self, path: String) -> Option<File>{
+        let Ok(file) = File::open(path.clone()) else{
+            _ = self.changes.insert(path, ChangeTypes::Deleted); // falta: check Renamed
+            return None;
+        };
+        Some(file)
+    }
+
+    fn compare_content(&self, content_staged: Vec<u8>, mut file: File, path: String)->Result<(), CommandError>{
+        let mut content_working_tree: Vec<u8> = Vec::new();
+        if file.read_to_end(&mut content_working_tree).is_err(){
+            /* let file_name = 
+            return Err(CommandError::FileReadError(())) */
+        }
+        Ok(())
     }
 
 }
+
+    
+
