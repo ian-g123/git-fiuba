@@ -1,5 +1,6 @@
-use std::fs::{self, File};
+use std::fs::{self, create_dir_all, File};
 use std::io::{Read, Write};
+use std::path::Path;
 use std::{env, str};
 
 use crate::commands::command::{Command, ConfigAdderFunction};
@@ -9,7 +10,7 @@ use crate::logger::Logger;
 /// Commando init
 pub struct Init {
     branch_main: String,
-    working_directory: bool,
+    bare: bool,
     paths: Vec<String>,
 }
 
@@ -56,7 +57,7 @@ impl Init {
     fn new_default() -> Self {
         Self {
             branch_main: "main".to_string(),
-            working_directory: true,
+            bare: true,
             paths: Vec::<String>::new(),
         }
     }
@@ -65,7 +66,7 @@ impl Init {
         if args[i] != "--bare" {
             return Err(CommandError::WrongFlag);
         }
-        init.working_directory = false;
+        init.bare = false;
         Ok(i + 1)
     }
 
@@ -94,14 +95,17 @@ impl Init {
             return Err(CommandError::InvalidArguments);
         }
         let path_aux = args[i].clone();
-        let root = if path_aux.starts_with('/') {
-            path_aux
-        } else {
-            let current_dir = env::current_dir().map_err(|_| CommandError::InvalidArguments)?;
-            let current_dir_display = current_dir.display();
-            format!("{}/{}", current_dir_display, path_aux)
+        let _ = create_dir_all(&path_aux)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()));
+        let absolute_path_res = Path::new(&path_aux)
+            .canonicalize()
+            .map_err(|error| CommandError::FileNotFound(error.to_string()))?;
+
+        let Some(absolute_path) = absolute_path_res.to_str() else {
+            return Err(CommandError::InvalidArguments);
         };
-        init.paths.push(root);
+
+        init.paths.push(absolute_path.to_string());
 
         Ok(i + 1)
     }
@@ -125,23 +129,23 @@ impl Init {
         if fs::create_dir_all(path).is_err() {
             return Err(CommandError::InvalidArguments);
         }
-        let path_aux = if !self.working_directory {
+        let git_path = if !self.bare {
             path.clone()
         } else {
             format!("{}/.git", path)
         };
-        self.create_dir(&path_aux, "objects".to_string())?;
-        self.create_dir(&path_aux, "objects/info".to_string())?;
-        self.create_dir(&path_aux, "objects/pack".to_string())?;
-        self.create_dir(&path_aux, "refs".to_string())?;
-        self.create_dir(&path_aux, "refs/tags".to_string())?;
-        self.create_dir(&path_aux, "refs/heads".to_string())?;
-        self.create_dir(&path_aux, "branches".to_string())?;
+        self.create_dir(&git_path, "objects".to_string())?;
+        self.create_dir(&git_path, "objects/info".to_string())?;
+        self.create_dir(&git_path, "objects/pack".to_string())?;
+        self.create_dir(&git_path, "refs".to_string())?;
+        self.create_dir(&git_path, "refs/tags".to_string())?;
+        self.create_dir(&git_path, "refs/heads".to_string())?;
+        self.create_dir(&git_path, "branches".to_string())?;
         Ok(())
     }
 
-    fn create_dir(&self, file: &String, name: String) -> Result<(), CommandError> {
-        if fs::create_dir_all(format!("{}/{}", file, name)).is_ok() {
+    fn create_dir(&self, path: &String, name: String) -> Result<(), CommandError> {
+        if fs::create_dir_all(format!("{}/{}", path, name)).is_ok() {
             Ok(())
         } else {
             Err(CommandError::InvalidArguments)
@@ -152,7 +156,7 @@ impl Init {
         if fs::create_dir_all(path).is_err() {
             return Err(CommandError::InvalidArguments);
         }
-        let path_aux = if !self.working_directory {
+        let path_aux = if !self.bare {
             path.clone()
         } else {
             format!("{}/.git", path)
