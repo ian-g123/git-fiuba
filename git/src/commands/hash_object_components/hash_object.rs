@@ -1,13 +1,20 @@
-use std::fs::{self, File};
-use std::io::{Read, Write};
-use std::str;
+use std::{
+    fs::{self, File},
+    io::{Read, Write},
+    str,
+};
+
+use crate::{
+    commands::{
+        command::{Command, ConfigAdderFunction},
+        command_errors::CommandError,
+        file_compressor::compress,
+    },
+    logger::Logger,
+};
+
 extern crate sha1;
 use sha1::{Digest, Sha1};
-
-use crate::commands::command::{Command, ConfigAdderFunction};
-use crate::commands::command_errors::CommandError;
-use crate::commands::file_compressor::compress;
-use crate::logger::Logger;
 
 /// Commando hash-object
 pub struct HashObject {

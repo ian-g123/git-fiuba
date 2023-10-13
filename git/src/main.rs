@@ -1,5 +1,8 @@
-use git::commands::hash_object_components::hash_object::HashObject;
-use git::commands::{command::Command, command_errors::CommandError};
+use git::commands::{
+    command::Command,
+    command_errors::CommandError,
+    hash_object_components::hash_object::HashObject
+};
 use git::logger::Logger;
 use std::{env, io};
 

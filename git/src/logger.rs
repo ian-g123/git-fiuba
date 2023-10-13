@@ -59,7 +59,6 @@ impl Drop for Logger {
 #[cfg(test)]
 mod tests {
     use std::fs;
-
     use super::*;
 
     #[test]
@@ -68,20 +67,17 @@ mod tests {
         delete_directory_content(test_dir);
         let path = format!("{test_dir}.git/logs");
 
-        let logger_result = Logger::new(&path);
-        match logger_result {
-            Ok(mut logger) => {
-                let msg = "Hello, world!";
-                logger.log(msg);
-                assert!(Path::new(&path).exists());
-                drop(logger);
-                let Ok(output_content) = fs::read_to_string(path) else {
-                    panic!("No se pudo leer archivo de salida")
-                };
-                assert_eq!(output_content, format!("{msg}\n"));
-            }
-            Err(error) => panic!("No se pudo crear logger: {}", error),
+        let mut logger = Logger::new(&path).unwrap();
+
+        let msg = "Hello, world!";
+        logger.log(msg);
+        assert!(Path::new(&path).exists());
+
+        drop(logger);
+        let Ok(output_content) = fs::read_to_string(path) else {
+            panic!("No se pudo leer archivo de salida")
         };
+        assert_eq!(output_content, format!("{msg}\n"));
     }
 
     #[test]
@@ -90,22 +86,19 @@ mod tests {
         delete_directory_content(test_dir);
         let path = format!("{test_dir}.git/logs");
 
-        let logger_result = Logger::new(&path);
-        match logger_result {
-            Ok(mut logger) => {
-                let msg_1 = "Hello, world 1!";
-                let msg_2 = "Hello, world 2!";
-                logger.log(msg_1);
-                logger.log(msg_2);
-                assert!(Path::new(&path).exists());
-                drop(logger);
-                let Ok(output_content) = fs::read_to_string(path) else {
-                    panic!("No se pudo leer archivo de salida")
-                };
-                assert_eq!(output_content, format!("{}\n{}\n", msg_1, msg_2));
-            }
-            Err(error) => panic!("No se pudo crear logger: {}", error),
+        let mut logger = Logger::new(&path).unwrap();
+
+        let msg_1 = "Hello, world 1!";
+        let msg_2 = "Hello, world 2!";
+        logger.log(msg_1);
+        logger.log(msg_2);
+        assert!(Path::new(&path).exists());
+
+        drop(logger);
+        let Ok(output_content) = fs::read_to_string(path) else {
+            panic!("No se pudo leer archivo de salida")
         };
+        assert_eq!(output_content, format!("{}\n{}\n", msg_1, msg_2));
     }
 
     #[test]
@@ -114,24 +107,12 @@ mod tests {
         delete_directory_content(test_dir);
         let path = format!("{test_dir}.git/logs");
 
-        let logger_1_result = Logger::new(&path);
-        let Ok(mut logger_1) = logger_1_result else {
-            if let Err(error) = logger_1_result {
-                panic!("No se pudo crear logger 1: {}", error)
-            }
-            panic!("No se pudo crear logger 1")
-        };
+        let mut logger_1 = Logger::new(&path).unwrap();
         let msg_1 = "Hello, world 1!";
         logger_1.log(msg_1);
         drop(logger_1);
 
-        let logger_2_result = Logger::new(&path);
-        let Ok(mut logger_2) = logger_2_result else {
-            if let Err(error) = logger_2_result {
-                panic!("No se pudo crear logger 2: {}", error)
-            }
-            panic!("No se pudo crear logger 2")
-        };
+        let mut logger_2 = Logger::new(&path).unwrap();
         let msg_2 = "Hello, world 2!";
         logger_2.log(msg_2);
         drop(logger_2);

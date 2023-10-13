@@ -1,9 +1,12 @@
 use std::{fs, path::Path, process::Command};
 
 #[test]
-fn test_test() {
+fn test_hash_object_integration() {
     let path = "./tests/data/commands/hash_object/repo1";
-    emtpy_directory(path);
+
+    _ = fs::remove_dir_all(format!("{}", path));
+    let Ok(_) = fs::create_dir_all(path.clone()) else {panic!("No se pudo crear el directorio")};
+
     assert!(Command::new("git")
         .arg("init")
         .current_dir(path)
@@ -34,12 +37,5 @@ fn test_test() {
     )
     .exists());
 
-    emtpy_directory(path);
-}
-
-fn emtpy_directory(path: &str) {
-    let paths = fs::read_dir(path).unwrap();
-    for path in paths {
-        fs::remove_dir_all(path.unwrap().path()).unwrap();
-    }
+    _ = fs::remove_dir_all(format!("{}", path));
 }
