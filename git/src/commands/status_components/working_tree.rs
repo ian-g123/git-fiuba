@@ -4,7 +4,7 @@ use std::fs;
 use std::hash::Hash;
 use std::path::{Path, PathBuf};
 
-use crate::commands::error_flags::ErrorFlags;
+use crate::commands::command_errors::CommandError;
 
 use super::changes_types::ChangeTypes;
 
@@ -22,18 +22,18 @@ impl WorkingTreeStatus{
         WorkingTreeStatus { path: PathBuf::from(path) , changes: changes, current_paths: Vec::new()}
     }
 
-    pub fn compare(&mut self)-> Result<(), ErrorFlags>{
-        let Ok(entries) = fs::read_dir(self.path.clone()) else{
-            return Err(ErrorFlags::FileNotFound);
+    pub fn compare(&mut self)-> Result<(), CommandError>{
+        /* let Ok(entries) = fs::read_dir(self.path.clone()) else{
+            return Err(CommandError::FileNotFound(path));
         };
         for entry in entries {
             let Ok(entry) = entry else{
-                return Err(ErrorFlags::FileNotFound);
+                return Err(CommandError::FileNotFound(entry));
             };
             let entry_path = entry.path();
             let entry_copy = entry_path.clone();
             let Some(entry_name) = entry_copy.to_str() else{
-                return Err(ErrorFlags::FileNotFound);
+                return Err(CommandError::FileNotFound);
             };
             self.current_paths.push(entry_name.to_string());
             if entry_path.is_dir() {
@@ -43,7 +43,7 @@ impl WorkingTreeStatus{
             }
             
             self.compare_entry(entry_path, entry_name);
-        }
+        } */
         Ok(())
     }
 

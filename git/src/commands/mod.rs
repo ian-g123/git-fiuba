@@ -1,5 +1,6 @@
 pub mod command;
-pub mod ErrorFlags;
+pub mod command_errors;
+pub mod file_compressor;
 pub mod hash_object_components;
-pub mod HashObject;
 pub mod status_components;
+

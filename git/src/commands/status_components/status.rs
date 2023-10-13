@@ -3,7 +3,7 @@ use std::io::Write;
 use std::str;
 
 use crate::commands::command::Command;
-use crate::commands::error_flags::ErrorFlags;
+use crate::commands::command_errors::CommandError;
 use crate::logger::Logger;
 
 pub struct Status {
@@ -18,9 +18,9 @@ impl Command for Status {
         _: &mut dyn Read,
         output: &mut dyn Write,
         logger: &mut Logger,
-    ) -> Result<(), ErrorFlags> {
+    ) -> Result<(), CommandError> {
         if name != "status" {
-            return Err(ErrorFlags::CommandName);
+            return Err(CommandError::Name);
         }
 
         let instance = Self::new(args, output)?;
@@ -29,17 +29,17 @@ impl Command for Status {
         Ok(())
     }
 
-    fn config_adders(&self) -> Vec<fn(&mut Self, usize, &[String]) -> Result<usize, ErrorFlags>> {
+    fn config_adders(&self) -> Vec<fn(&mut Self, usize, &[String]) -> Result<usize, CommandError>> {
         vec![Self::add_branch_config, Self::add_short_config]
     }
 }
 
 impl Status {
     /// Crea un comando Status. Devuelve error si el proceso de creación falla.
-    fn new(args: &[String], output: &mut dyn Write) -> Result<Self, ErrorFlags> {
+    fn new(args: &[String], output: &mut dyn Write) -> Result<Self, CommandError> {
         if args.len() > 2 {
             //status -s -b (máximo)
-            return Err(ErrorFlags::InvalidArguments);
+            return Err(CommandError::InvalidArguments);
         }
         let mut status = Self::new_default();
 
@@ -57,7 +57,7 @@ impl Status {
 
     /// Configura el flag 'branch'. Devuelve error si recibe argumentos o es un flag inválido.
     /// Caso contrario, devuelve el índice del próximo flag.
-    fn add_branch_config(&mut self, i: usize, args: &[String]) -> Result<usize, ErrorFlags> {
+    fn add_branch_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options: Vec<String> = ["--branch".to_string(), "-b".to_string()].to_vec();
         self.check_errors_flags(i, args, &options)?;
         self.branch = true;
@@ -66,7 +66,7 @@ impl Status {
 
     /// Configura el flag 'short'. Devuelve error si recibe argumentos o es un flag inválido.
     /// Caso contrario, devuelve el índice del próximo flag.
-    fn add_short_config(&mut self, i: usize, args: &[String]) -> Result<usize, ErrorFlags> {
+    fn add_short_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options: Vec<String> = ["--short".to_string(), "-s".to_string()].to_vec();
         self.check_errors_flags(i, args, &options)?;
         self.short = true;
@@ -79,17 +79,17 @@ impl Status {
         i: usize,
         args: &[String],
         options: &[String],
-    ) -> Result<(), ErrorFlags> {
+    ) -> Result<(), CommandError> {
         if !options.contains(&args[i]) {
-            return Err(ErrorFlags::WrongFlag);
+            return Err(CommandError::WrongFlag);
         }
         if i < args.len() - 1 && Self::is_flag(&args[i + 1]) {
-            return Err(ErrorFlags::WrongFlag);
+            return Err(CommandError::WrongFlag);
         }
         Ok(())
     }
 
-    /* fn run(&self, stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), ErrorFlags> {
+    /* fn run(&self, stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), CommandError> {
         write!(output, "{}", "");
         Ok(())
     } */
@@ -116,7 +116,7 @@ mod tests {
         let args: &[String] = &[];
         let logger = assert!(matches!(
             Status::run_from("", args, &mut stdin_mock, &mut stdout_mock, &mut logger),
-            Err(ErrorFlags::CommandName)
+            Err(CommandError::Name)
         ));
     }
 
@@ -139,7 +139,7 @@ mod tests {
                 &mut stdout_mock,
                 &mut logger
             ),
-            Err(ErrorFlags::CommandName)
+            Err(CommandError::Name)
         ));
     }
 
@@ -166,7 +166,7 @@ mod tests {
                 &mut stdout_mock,
                 &mut logger
             ),
-            Err(ErrorFlags::InvalidArguments)
+            Err(CommandError::InvalidArguments)
         ));
     }
 
@@ -208,7 +208,7 @@ mod tests {
 
         let result = status_command.check_errors_flags(i, &args, &options);
 
-        assert!(matches!(result, Err(ErrorFlags::WrongFlag)));
+        assert!(matches!(result, Err(CommandError::WrongFlag)));
     }
 
     /// Prueba que check_errors_flags() falla si recibe values > 0.
@@ -229,7 +229,7 @@ mod tests {
 
         let result = status_command.check_errors_flags(i, &args, &options);
 
-        assert!(matches!(result, Err(ErrorFlags::InvalidArguments)));
+        assert!(matches!(result, Err(CommandError::InvalidArguments)));
     }
 
     /// Prueba que check_errors_flags() no devuelve error si los argumentos son válidos.
