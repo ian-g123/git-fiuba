@@ -1,28 +1,27 @@
 use libflate::deflate::{Decoder, Encoder};
-use std::{
-    io::{Read, Write},
-    process::Command,
-};
+use std::io::{Read, Write};
 
 use super::command_errors::CommandError;
 
+/// Comprime un vector de bytes
 pub fn compress(data: &[u8]) -> Result<Vec<u8>, CommandError> {
     let mut encoder = Encoder::new(Vec::new());
-    encoder
+    let _ = encoder
         .write_all(data)
-        .map_err(|error| CommandError::CompressionError);
+        .map_err(|_error| CommandError::CompressionError);
     encoder
         .finish()
         .into_result()
         .map_err(|_| CommandError::CompressionError)
 }
 
+/// Descomprime un vector de bytes
 pub fn extract(data: &[u8]) -> Result<Vec<u8>, CommandError> {
     let mut decoder = Decoder::new(data);
     let mut decompressed_data = Vec::new();
-    decoder
+    let _ = decoder
         .read_to_end(&mut decompressed_data)
-        .map_err(|error| CommandError::CompressionError);
+        .map_err(|_error| CommandError::CompressionError);
     Ok(decompressed_data)
 }
 
