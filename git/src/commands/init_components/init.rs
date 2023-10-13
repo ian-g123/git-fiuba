@@ -1,18 +1,17 @@
-use std::fs::File;
-use std::io::{Read, Write};
-use std::str;
+use std::fs::{File, self};
+use std::io::{Read, Write, self};
+use std::{str, env};
 
-extern crate sha1;
-
-use sha1::{Digest, Sha1};
 
 use crate::commands::command::Command;
 use crate::commands::error_flags::ErrorFlags;
+use crate::logger::Logger;
 
+/// Commando init
 pub struct Init {
-    root : String,
     branch_main: String,
     working_directory: bool,
+    files: Vec<String>,
 }
 
 impl Command for Init {
@@ -21,179 +20,175 @@ impl Command for Init {
         args: &[String],
         stdin: &mut dyn Read,
         output: &mut dyn Write,
+        logger: &mut Logger,
     ) -> Result<(), ErrorFlags> {
         if name != "init" {
             return Err(ErrorFlags::CommandName);
         }
 
-        let instance = Self::new(args)?;
+        let mut instance = Self::new(args)?;
 
-        instance.run(stdin, output)?;
+        if instance.files.len() == 0 {
+            let current_dir = env::current_dir().map_err(|_| ErrorFlags::InvalidArguments)?;
+            let current_dir_display = current_dir.display();
+            instance.files.push(current_dir_display.to_string());
+        }
+
+        instance.run(output)?;
         Ok(())
+    }
+
+    fn config_adders(&self) -> Vec<fn(&mut Self, usize, &[String]) -> Result<usize, ErrorFlags>> {
+        vec![
+            Self::add_bare_config,
+            Self::add_branch_config,
+            Self::add_file_config,
+        ]
     }
 }
 
 impl Init {
     fn new(args: &[String]) -> Result<Self, ErrorFlags> {
-        let aux = args
-            .first()
-            .map_or("".to_string(), |first_arg| {
-        if !Self::is_flag(first_arg) {
-            first_arg.to_string()
-        } else {
-            "".to_string()
-        }
-    });
-
-
-        let mut init = Init {
-            root : "".to_string(),
-            branch_main: "main".to_string(),
-            working_directory : true,
-        };
-
+        let mut init = Self::new_default();
         init.config(args)?;
-
         Ok(init)
     }
 
-    fn config(&mut self, args: &[String]) -> Result<(), ErrorFlags> {
-        let mut current_flag = "";
-        let mut values_buffer = Vec::<String>::new();
-
-        for arg in args {
-            if Self::is_flag(&arg) {
-                if !current_flag.is_empty() {
-                    self.add_flag(current_flag, &values_buffer)?;
-                }
-                values_buffer = Vec::<String>::new();
-                current_flag = arg;
-            } else {
-                values_buffer.push(arg.to_string());
-            }
+    fn new_default() -> Self {
+        Self {
+            branch_main: "main".to_string(),
+            working_directory : true,
+            files: Vec::<String>::new(),
         }
-        Ok(())
     }
 
-    fn is_flag(arg: &str) -> bool {
-        arg.starts_with("-")
-    }
-
-    fn add_flag(
-        &mut self,
-        flag: &str,
-        values: &Vec<String>
-    ) -> Result<(), ErrorFlags> {
-        let flags = [Self::add_bare_flag];
-        for f in flags.iter() {
-            match f(self, flag, values) {
-                Ok(_) => return Ok(()),
-                Err(ErrorFlags::WrongFlag) => continue,
-                Err(error) => return Err(error),
-            }
-        }
-        Err(ErrorFlags::WrongFlag)
-    }
-
-    fn add_bare_flag(
+    fn add_bare_config(
         init: &mut Init,
-        flag: &str,
-        values: &Vec<String>,
-    ) -> Result<(), ErrorFlags> {
-        if flag != "--bare" {
+        i: usize,
+        args: &[String],
+    ) -> Result<usize, ErrorFlags> {
+        if args[i] != "--bare" {
             return Err(ErrorFlags::WrongFlag);
         }
-        if values.len() > 1 {
-            return Err(ErrorFlags::ObjectTypeError);
-        }
-        if values.len() == 1 {
-            init.root = values[0]
-        }
         init.working_directory = false;
-        Ok(())
+        Ok(i + 1)
     }
 
-    fn run(&self, stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), ErrorFlags> {
-        let content: Vec<u8> = self.get_content(stdin)?;
-        let header = self.get_header(&content);
-        let mut data = Vec::new();
-
-        data.extend_from_slice(header.as_bytes());
-        data.extend_from_slice(&content);
-
-        let hex_string = self.get_sha1(&data);
-        write!(output, "{}", hex_string);
-        Ok(())
-    }
-
-    fn get_content(&self, mut stdin: &mut dyn Read) -> Result<Vec<u8>, ErrorFlags> {
-        if self.stdin {
-            let mut input = String::new();
-            stdin.read_to_string(&mut input);
-            Ok(input.as_bytes().to_vec())
-        } else {
-            read_file_contents(&self.path)
+    fn add_branch_config(
+        init: &mut Init,
+        i: usize,
+        args: &[String],
+    ) -> Result<usize, ErrorFlags> {
+        if args[i] != "-b" {
+            return Err(ErrorFlags::WrongFlag);
         }
+        if args.len()<= i+1 {
+            return Err(ErrorFlags::InvalidArguments);
+        }
+
+        init.branch_main = args[i + 1].clone();
+
+        Ok(i + 2)
     }
 
-    fn get_header(&self, data: &Vec<u8>) -> String {
-        let length = data.len();
-        format!("{} {}\0", self.object_type, length)
-    }
-
-    fn get_sha1(&self, data: &[u8]) -> String {
-        let mut sha1 = Sha1::new();
-        sha1.update(&data);
-        let hash_result = sha1.finalize();
-
-        // Formatea los bytes del hash en una cadena hexadecimal
-        let hex_string = hash_result
-            .iter()
-            .map(|byte| format!("{:02x}", byte))
-            .collect::<Vec<_>>()
-            .join("");
-
-        hex_string
-    }
-}
-
-fn obtain_object_type(args: &[String]) -> Result<String, ErrorFlags> {
-    let object_type = if args.contains(&"-t".to_string()) {
-        let index = match args.iter().position(|x| x == "-t") {
-            Some(index) => index,
-            None => return Err(ErrorFlags::InvalidArguments),
+    fn add_file_config(
+        init: &mut Init,
+        i: usize,
+        args: &[String],
+    ) -> Result<usize, ErrorFlags> {
+        if Self::is_flag(&args[i]) {
+            return Err(ErrorFlags::WrongFlag);
+        }
+        if init.files .len() > 1 {
+            return Err(ErrorFlags::InvalidArguments);
+        }
+        let path_aux = args[i].clone();
+        let root = if path_aux.starts_with('/') {
+            path_aux
+        } else {
+            let current_dir = env::current_dir().map_err(|_| ErrorFlags::InvalidArguments)?;
+            let current_dir_display = current_dir.display();
+            format!("{}/{}", current_dir_display, path_aux)
         };
-        if index + 1 >= args.len() {
-            return Err(ErrorFlags::ObjectTypeError);
-        }
-        let arg = args[index + 1].clone();
-        if arg == "blob" || arg == "commit" || arg == "tree" || arg == "tag" {
-            arg
-        } else {
-            return Err(ErrorFlags::ObjectTypeError);
-        }
-    } else {
-        "blob".to_string()
-    };
-    Ok(object_type)
-}
+        init.files.push(root);
 
-fn obtain_arguments(args: &[String]) -> Result<Vec<String>, ErrorFlags> {
-    let mut arguments = Vec::new();
-    for arg in args {
-        if arg.starts_with("--") {
-            arguments.push(arg.to_string());
+        Ok(i + 1)
+    }
+
+    fn run(&self, output: &mut dyn Write) -> Result<(), ErrorFlags> {
+        for path in &self.files {
+            self.run_for_content(path, output)?;
+        }
+        Ok(())
+    }
+
+    fn run_for_content(&self, file : &String, output: &mut dyn Write) -> Result<(), ErrorFlags> {
+        self.create_dirs(file)?;
+        self.create_files(file)?;
+        let output_text = format!("Initialized empty Git repository in {}", file);
+        let _ = writeln!(output, "{}", output_text );
+        Ok(())
+    }
+
+    fn create_dirs(&self, file : &String) -> Result<(), ErrorFlags> {
+        if fs::create_dir_all(file).is_err(){
+            return Err(ErrorFlags::InvalidArguments);
+        }
+        let file_aux = if !self.working_directory {
+            file.clone()
+        } else {
+            format!("{}/.git", file)
+        };
+        self.create_dir(&file_aux,"objects".to_string())?;
+        self.create_dir(&file_aux,"objects/info".to_string())?;
+        self.create_dir(&file_aux,"objects/pack".to_string())?;
+        self.create_dir(&file_aux,"refs".to_string())?;
+        self.create_dir(&file_aux,"refs/tags".to_string())?;
+        self.create_dir(&file_aux,"refs/heads".to_string())?;
+        self.create_dir(&file_aux,"branches".to_string())?;
+        Ok(())     
+    }
+
+    fn create_dir(&self, file: &String , name : String) -> Result<(), ErrorFlags> {
+        if fs::create_dir_all(format!("{}/{}", file, name)).is_ok(){
+            Ok(())
+        } else {
+            return Err(ErrorFlags::InvalidArguments);
         }
     }
-    Ok(arguments)
-}
 
-fn read_file_contents(path: &str) -> Result<Vec<u8>, ErrorFlags> {
-    let mut file = File::open(path).map_err(|_| ErrorFlags::FileNotFound)?;
-    let mut data = Vec::new();
-    file.read_to_end(&mut data)
-        .map_err(|_| ErrorFlags::FileReadError)?;
-    Ok(data)
+
+    fn create_files(&self, file : &String) -> Result<(), ErrorFlags> {
+        if fs::create_dir_all(file).is_err(){
+            return Err(ErrorFlags::InvalidArguments);
+        }
+        let file_aux = if !self.working_directory {
+            file.clone()
+        } else {
+            format!("{}/.git", file)
+        };
+        self.create_file(&file_aux,"HEAD".to_string())?;
+        Ok(())     
+    }
+
+    fn create_file(&self, file: &String, name: String) -> Result<(), ErrorFlags> {
+        if fs::create_dir_all(file).is_ok() {
+            let mut archivo = match File::create(format!("{}/{}",file, name)) {
+                Ok(mut archivo) => {
+                    let texto = format!("ref: refs/heads/{}", self.branch_main);
+                    let _: Result<(), ErrorFlags> = match archivo.write_all(texto.as_bytes()) {
+                        Ok(_) => Ok(()),
+                        Err(_) => Err(ErrorFlags::InvalidArguments),
+                    };
+                }
+                Err(_) => return Err(ErrorFlags::InvalidArguments),
+            };
+        } else {
+            return Err(ErrorFlags::InvalidArguments);
+        }
+    
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -204,135 +199,73 @@ mod tests {
 
     #[test]
     fn test_nombre_incorrecto() {
+        let mut logger = Logger::new(".git/logs").unwrap();
         let mut output_string = Vec::new();
-        let mut stdout_mock = io::Cursor::new(&mut output_string);
+        let mut stdout_mock = Cursor::new(&mut output_string);
 
-        let input = "prueba1";
+        let input = "";
         let mut stdin_mock = Cursor::new(input.as_bytes());
 
         let args: &[String] = &[];
         assert!(matches!(
-            HashObject::run_from("", args, &mut stdin_mock, &mut stdout_mock),
+            Init::run_from("", args, &mut stdin_mock, &mut stdout_mock, &mut logger),
             Err(ErrorFlags::CommandName)
         ));
     }
 
     #[test]
+    fn test_path_not_null() {
+        let mut logger = Logger::new(".git/logs").unwrap();
+        let mut output_string = Vec::new();
+        let mut stdout_mock = Cursor::new(&mut output_string);
+
+        let input = "";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+        let relative_path = "/home/melina/Documents/mica".to_string();
+        let absolute_path = "/home/melina/Documents/mica".to_string();
+        let args: &[String] = &[relative_path];
+        assert!(Init::run_from(
+            "init",
+            args,
+            &mut stdin_mock,
+            &mut stdout_mock,
+            &mut logger
+        )
+        .is_ok());
+        let Ok(output) = String::from_utf8(output_string) else {
+            panic!("Error");
+        };
+        let aux = format!("Initialized empty Git repository in {}\n",absolute_path);
+        assert_eq!(output, aux);
+        _ = fs::remove_dir_all(format!("{}/.git", absolute_path));
+
+    }
+
+    #[test]
     fn test_path_null() {
+        let mut logger = Logger::new(".git/logs").unwrap();
         let mut output_string = Vec::new();
-        let mut stdout_mock = io::Cursor::new(&mut output_string);
+        let mut stdout_mock = Cursor::new(&mut output_string);
 
-        let input = "prueba1";
+        let input = "";
         let mut stdin_mock = Cursor::new(input.as_bytes());
-
-        let args: &[String] = &[];
-        assert!(matches!(
-            HashObject::run_from("hash-object", args, &mut stdin_mock, &mut stdout_mock),
-            Err(ErrorFlags::InvalidArguments)
-        ));
-    }
-
-    #[test]
-    fn test_path() {
-        let mut output_string = Vec::new();
-        let mut stdout_mock = io::Cursor::new(&mut output_string);
-
-        let input = "prueba1";
-        let mut stdin_mock = Cursor::new(input.as_bytes());
-        let args: &[String] = &["./test/commands/hash_object/codigo1.txt".to_string()];
-        assert!(
-            HashObject::run_from("hash-object", args, &mut stdin_mock, &mut stdout_mock).is_ok()
-        );
-
+        let relative_path = "/home/melina/Documents/cami".to_string();
+        let absolute_path = "/home/melina/Documents/cami".to_string();
+        let args: &[String] = &[relative_path];
+        assert!(Init::run_from(
+            "init",
+            args,
+            &mut stdin_mock,
+            &mut stdout_mock,
+            &mut logger
+        )
+        .is_ok());
         let Ok(output) = String::from_utf8(output_string) else {
             panic!("Error");
         };
+        let aux = format!("Initialized empty Git repository in {}\n",absolute_path);
+        assert_eq!(output, aux);
+        _ = fs::remove_dir_all(format!("{}/.git", absolute_path));
 
-        // salida hexadecimal de git hash-object ./test/commands/hash_object/codigo1.txt
-        let hex_git = "e31f3beeeedd1a034c5ce6f1b3b2d03f02541d59";
-        assert_eq!(output, hex_git);
-    }
-
-    #[test]
-    fn test_object_type() {
-        let mut output_string = Vec::new();
-        let mut stdout_mock = io::Cursor::new(&mut output_string);
-
-        let input = "prueba1";
-        let mut stdin_mock = Cursor::new(input.as_bytes());
-        let args: &[String] = &[
-            "-t".to_string(),
-            "blob".to_string(),
-            "./test/commands/hash_object/codigo1.txt".to_string(),
-        ];
-        assert!(
-            HashObject::run_from("hash-object", args, &mut stdin_mock, &mut stdout_mock).is_ok()
-        );
-
-        let Ok(output) = String::from_utf8(output_string) else {
-            panic!("Error");
-        };
-
-        // salida hexadecimal de git hash-object -t blob ./test/commands/hash_object/codigo1.txt
-        let hex_git = "e31f3beeeedd1a034c5ce6f1b3b2d03f02541d59";
-        assert_eq!(output, hex_git);
-    }
-
-    #[test]
-    fn test_object_type_error() {
-        let mut output_string = Vec::new();
-        let mut stdout_mock = io::Cursor::new(&mut output_string);
-
-        let input = "prueba1";
-        let mut stdin_mock = Cursor::new(input.as_bytes());
-        let args: &[String] = &[
-            "-t".to_string(),
-            "blob2".to_string(),
-            "./test/commands/hash_object/codigo1.txt".to_string(),
-        ];
-        assert!(matches!(
-            HashObject::run_from("hash-object", args, &mut stdin_mock, &mut stdout_mock),
-            Err(ErrorFlags::ObjectTypeError)
-        ));
-    }
-
-    #[test]
-    #[ignore]
-    fn test_object_type_tree_error() {
-        let mut output_string = Vec::new();
-        let mut stdout_mock = io::Cursor::new(&mut output_string);
-
-        let input = "prueba1";
-        let mut stdin_mock = Cursor::new(input.as_bytes());
-        let args: &[String] = &[
-            "-t".to_string(),
-            "tree".to_string(),
-            "./test/commands/hash_object/codigo1.txt".to_string(),
-        ];
-        assert!(matches!(
-            HashObject::run_from("hash-object", args, &mut stdin_mock, &mut stdout_mock),
-            Err(ErrorFlags::ObjectTypeError)
-        ));
-    }
-
-    #[test]
-    fn test_stdin() {
-        let mut output_string = Vec::new();
-        let mut stdout_mock = io::Cursor::new(&mut output_string);
-
-        let input = "prueba1";
-        let mut stdin_mock = Cursor::new(input.as_bytes());
-
-        let args: &[String] = &["--stdin".to_string()];
-        assert!(
-            HashObject::run_from("hash-object", args, &mut stdin_mock, &mut stdout_mock).is_ok()
-        );
-
-        let Ok(output) = String::from_utf8(output_string) else {
-            panic!("Error");
-        };
-
-        let hex_git = "e31f3beeeedd1a034c5ce6f1b3b2d03f02541d59";
-        assert_eq!(output, hex_git);
     }
 }

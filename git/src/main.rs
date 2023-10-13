@@ -1,4 +1,5 @@
 use git::commands::hash_object_components::hash_object::HashObject;
+use git::commands::init_components::init::Init;
 use git::commands::{command::Command, error_flags::ErrorFlags};
 use git::logger::Logger;
 use std::{env, io};
@@ -27,7 +28,7 @@ fn parse_args(args: &[String]) -> Result<(&str, &[String]), ErrorFlags> {
 }
 
 fn run(command_name: &str, command_args: &[String], logger: &mut Logger) -> Result<(), ErrorFlags> {
-    let commands = [HashObject::run_from];
+    let commands = [HashObject::run_from, Init::run_from];
 
     for command in &commands {
         match command(
