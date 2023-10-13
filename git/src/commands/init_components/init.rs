@@ -90,6 +90,9 @@ impl Init {
         if Self::is_flag(&args[i]) {
             return Err(CommandError::WrongFlag);
         }
+        if init.paths.len() >= 1 {
+            return Err(CommandError::InvalidArguments);
+        }
         let path_aux = args[i].clone();
         let root = if path_aux.starts_with('/') {
             path_aux
