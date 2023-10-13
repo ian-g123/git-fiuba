@@ -173,7 +173,7 @@ impl Init {
 
     fn create_file(&self, file: &String, name: String) -> Result<(), ErrorFlags> {
         if fs::create_dir_all(file).is_ok() {
-            let mut archivo = match File::create(format!("{}/{}",file, name)) {
+            let mut _archivo = match File::create(format!("{}/{}",file, name)) {
                 Ok(mut archivo) => {
                     let texto = format!("ref: refs/heads/{}", self.branch_main);
                     let _: Result<(), ErrorFlags> = match archivo.write_all(texto.as_bytes()) {
