@@ -1,37 +1,19 @@
 use std::fmt::Write;
 
-trait Format{
+pub trait Format{
     fn get_status(output: &mut dyn Write);
 }
 
-struct ShortFormat;
-struct LongFormat;
-
-impl Format for ShortFormat{
-  fn get_status(output: &mut dyn Write) {
-      
-  }
-}
-
-enum ChangesTypes {
-    
-}
 
 /* 
-Path untracked --> ?? 
-Ignored files --> !! --> are not listed unless --ignored is used
-' ' = unmodified
-M = modified
-T = file type changed (regular file, symbolic link or submodule)
-A = added
-D = deleted
-R = renamed
-C = copied (if config option status.renames is set to "copies")
-U = updated but unmerged
+
+Short:
+
+status of the index and Y shows the status of the working tree.
 
 X          Y     Meaning
 -------------------------------------------------
-	 [AMD]   not updated
+	        [AMD]   not updated
 M        [ MTD]  updated in index
 T        [ MTD]  type changed in index
 A        [ MTD]  added to index
@@ -42,8 +24,8 @@ C        [ MTD]  copied in index
 [ MTARC]    M    work tree changed since index
 [ MTARC]    T    type changed in work tree since index
 [ MTARC]    D    deleted in work tree
-	    R    renamed in work tree
-	    C    copied in work tree
+            R    renamed in work tree
+            C    copied in work tree
 -------------------------------------------------
 D           D    unmerged, both deleted
 A           U    unmerged, added by us
@@ -58,6 +40,9 @@ U           U    unmerged, both modified
 */
 
 /* 
+
+Long:
+
 On branch status
 Your branch is up to date with 'origin/status'.
 
@@ -70,5 +55,30 @@ Changes not staged for commit:
   (use "git restore <file>..." to discard changes in working directory)
 	modified:   src/commands/status_components/status.rs
 
+----ej2---
+
+
+On branch status
+Your branch is up to date with 'origin/status'.
+
+Changes to be committed:
+  (use "git restore --staged <file>..." to unstage)
+	modified:   src/main.rs
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   src/commands/status_components/format.rs
+	modified:   src/commands/status_components/mod.rs
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	src/commands/status_components/changes_types.rs
+	src/commands/status_components/long_format.rs
+	src/commands/status_components/merge_conflicts.rs
+	src/commands/status_components/short_code.rs
+	src/commands/status_components/short_format.rs
+	src/commands/status_components/staging_area.rs
+	src/commands/status_components/working_tree.rs
 
 */
