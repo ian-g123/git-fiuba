@@ -1,6 +1,6 @@
 use std::{path::PathBuf, collections::HashMap, fs::{File, self}, io::Read};
 
-use crate::{commands::command_errors::CommandError, index::staging_area::Index};
+/* use crate::{commands::command_errors::CommandError, index::staging_area::Index};
 
 use super::{changes_types::ChangeTypes};
 
@@ -49,7 +49,7 @@ impl ChangesNotStaged{
         Ok(())
     }
 
-}
+} */
 
     
 
