@@ -25,3 +25,16 @@ pub fn extract(data: &[u8]) -> Result<Vec<u8>, CommandError> {
         .map_err(|error| CommandError::CompressionError);
     Ok(decompressed_data)
 }
+
+#[cfg(test)]
+mod test_compress_and_extract {
+    use super::*;
+
+    #[test]
+    fn test_compress_and_extract() {
+        let data = b"Hello, world!";
+        let compressed_data = compress(data).unwrap();
+        let extracted_data = extract(&compressed_data).unwrap();
+        assert_eq!(extracted_data, b"Hello, world!");
+    }
+}
