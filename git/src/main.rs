@@ -1,3 +1,4 @@
+use git::commands::cat_file_components::cat_file::CatFile;
 use git::commands::{
     command::Command, command_errors::CommandError,
     hash_object_components::hash_object::HashObject, init_components::init::Init,
@@ -33,7 +34,7 @@ fn run(
     command_args: &[String],
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let commands = [HashObject::run_from, Init::run_from];
+    let commands = [HashObject::run_from, Init::run_from, CatFile::run_from];
 
     for command in &commands {
         match command(

@@ -1,4 +1,5 @@
 pub mod commands {
+    pub mod cat_file_components;
     pub mod command;
     pub mod command_errors;
     pub mod file_compressor;
