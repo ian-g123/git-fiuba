@@ -3,7 +3,7 @@ use std::{
     io::{Read, Write},
 };
 
-use super::command_errors::CommandError;
+use super::{command::Command, command_errors::CommandError};
 
 #[derive(Debug)]
 pub struct StagingArea {
@@ -34,7 +34,7 @@ impl StagingArea {
     }
 
     pub fn read_from(stream: &mut dyn Read) -> Result<StagingArea, CommandError> {
-        let mut files = HashMap::new();
+        let mut files = HashMap::<String, String>::new();
         loop {
             let mut size_be = [0; 4];
             match stream.read(&mut size_be) {
@@ -43,18 +43,27 @@ impl StagingArea {
                 Err(error) => return Err(CommandError::FailToOpenSatginArea(error.to_string())),
             }
             let size = u32::from_be_bytes(size_be) as usize;
-            let mut path = vec![0; size];
+            let mut path_be = vec![0; size];
             stream
-                .read(&mut path)
+                .read(&mut path_be)
                 .map_err(|error| CommandError::FailToOpenSatginArea(error.to_string()))?;
-            let mut hash = vec![0; 40];
+            let mut hash_be = vec![0; 40];
             stream
-                .read(&mut hash)
+                .read(&mut hash_be)
                 .map_err(|error| CommandError::FailToOpenSatginArea(error.to_string()))?;
-            files.insert(
-                String::from_utf8(path).unwrap(),
-                String::from_utf8(hash).unwrap(),
-            );
+            let path = String::from_utf8(path_be).map_err(|error| {
+                CommandError::FileReadError(format!(
+                    "Error convirtiendo path a string{}",
+                    error.to_string()
+                ))
+            })?;
+            let hash = String::from_utf8(hash_be).map_err(|error| {
+                CommandError::FileReadError(format!(
+                    "Error convirtiendo hash a string{}",
+                    error.to_string()
+                ))
+            })?;
+            files.insert(path, hash);
         }
         Ok(Self { files })
     }

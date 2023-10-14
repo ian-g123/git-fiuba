@@ -1,7 +1,6 @@
 use std::{
-    collections::{HashMap, HashSet},
-    env, error,
-    fs::{self, DirEntry},
+    env,
+    fs::{self},
     io::{Read, Write},
     path::Path,
 };
@@ -15,23 +14,6 @@ use crate::{
     },
     logger::Logger,
 };
-
-/// Se obtiene el nombre de los archivos y directorios del workspace\
-/// Útil para cuando tengamos que hacer la interfaz de Stage Area
-// fn get_files_names(path: &str) -> HashSet<String> {
-//     // TODO: remover los unwrap
-//     let mut files_names = HashSet::new();
-
-//     for entry in WalkDir::new(path) {
-//         let entry = entry.unwrap();
-
-//         let file_name = entry.file_name().to_str().unwrap().to_string();
-//         let directory_name = entry.path().to_str().unwrap().to_string();
-
-//         files_names.insert(file_name);
-//     }
-//     files_names
-// }
 
 /// Commando Add
 pub struct Add {
@@ -83,7 +65,7 @@ impl Add {
 
     fn run(
         &self,
-        stdin: &mut dyn Read,
+        _stdin: &mut dyn Read,
         output: &mut dyn Write,
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
@@ -109,14 +91,14 @@ impl Add {
     ) -> Result<(), CommandError> {
         logger.log(&format!("run: {:?}", &path));
         let path = Path::new(path);
-        match fs::read_dir(path.to_str().unwrap()) {
+        let Some(path_str) = path.to_str() else {
+            return Err(CommandError::FileOpenError(
+                "No se pudo convertir el path a str".to_string(),
+            ));
+        };
+        match fs::read_dir(path_str) {
             Err(error) => {
                 if path.is_file() {
-                    let Some(path_str) = path.to_str() else {
-                        return Err(CommandError::FileOpenError(
-                            "No se pudo convertir el path a str".to_string(),
-                        ));
-                    };
                     run_for_file(path_str, logger)?;
                     return Ok(());
                 }
@@ -132,7 +114,11 @@ impl Add {
                     match entry {
                         Ok(entry) => {
                             let path = entry.path();
-                            let path_str = path.to_str().unwrap();
+                            let Some(path_str) = path.to_str() else {
+                                return Err(CommandError::FileOpenError(
+                                    "No se pudo convertir el path a str".to_string(),
+                                ));
+                            };
                             if path_str == "./.git" {
                                 continue;
                             }
@@ -152,9 +138,15 @@ impl Add {
 }
 
 fn run_for_file(path: &str, logger: &mut Logger) -> Result<(), CommandError> {
-    let mut file = fs::File::open(path).unwrap();
+    let mut file = fs::File::open(path).map_err(|error| {
+        logger.log(&format!("Error al abrir el archivo: {:?}", error));
+        CommandError::FileOpenError(error.to_string())
+    })?;
     let mut content = Vec::<u8>::new();
-    file.read_to_end(&mut content).unwrap();
+    file.read_to_end(&mut content).map_err(|error| {
+        logger.log(&format!("Error al leer el archivo: {:?}", error));
+        CommandError::FileOpenError(error.to_string())
+    })?;
     logger.log(&format!("content: {:?}", content));
     let hash_object = HashObject::new("blob".to_string(), vec![], true, false);
     let (hash_hex, _) = hash_object.run_for_content(content)?;

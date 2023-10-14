@@ -1,4 +1,4 @@
-use std::{fmt::format, fs, path::Path, process::Command};
+use std::{fs, path::Path, process::Command};
 
 use git::commands::stagin_area::StagingArea;
 
@@ -25,7 +25,7 @@ fn test_single_file() {
 
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "test\n");
 
-    match std::fs::File::open(format!("{}/.git/index", path)) {
+    match fs::File::open(format!("{}/.git/index", path)) {
         Err(error) => panic!("No se pudo abrir el archivo: {:?}", error),
         Ok(mut file) => match StagingArea::read_from(&mut file) {
             Ok(stagin_area) => assert_eq!(
@@ -62,7 +62,7 @@ fn test_single_file_in_root() {
 
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "test\n");
 
-    match std::fs::File::open(format!("{}/.git/index", path)) {
+    match fs::File::open(format!("{}/.git/index", path)) {
         Err(error) => panic!("No se pudo abrir el archivo: {:?}", error),
         Ok(mut file) => match StagingArea::read_from(&mut file) {
             Ok(stagin_area) => assert_eq!(
@@ -99,7 +99,7 @@ fn test_two_files_in_dir() {
 
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "test\n");
 
-    match std::fs::File::open(format!("{}/.git/index", path)) {
+    match fs::File::open(format!("{}/.git/index", path)) {
         Err(error) => panic!("No se pudo abrir el archivo: {:?}", error),
         Ok(mut file) => match StagingArea::read_from(&mut file) {
             Ok(stagin_area) => {
@@ -143,7 +143,7 @@ fn test_two_files_sep_arguments() {
 
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "test\n");
 
-    match std::fs::File::open(format!("{}/.git/index", path)) {
+    match fs::File::open(format!("{}/.git/index", path)) {
         Err(error) => panic!("No se pudo abrir el archivo: {:?}", error),
         Ok(mut file) => match StagingArea::read_from(&mut file) {
             Ok(stagin_area) => {
@@ -237,6 +237,7 @@ fn create_base_scene(path: &str) {
     assert!(
         Command::new("git")
             .arg("init")
+            .arg("-q")
             .current_dir(path)
             .status()
             .is_ok(),

@@ -10,25 +10,21 @@ use std::{env, io};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let Ok((command_name, command_args)) = parse_args(&args) else {
-        eprint!("Error");
-        return;
-    };
+    let (command_name, command_args) = parse_args(&args);
 
     let Ok(mut logger) = Logger::new(".git/logs") else {
         return;
     };
 
     if let Err(error) = run(command_name, command_args, &mut logger) {
-        eprintln!("{error}")
+        eprintln!("{error}");
     }
 }
 
-fn parse_args(args: &[String]) -> Result<(&str, &[String]), CommandError> {
+fn parse_args(args: &[String]) -> (&str, &[String]) {
     let command = &args[1];
     let command_args = args.split_at(2).1;
-
-    Ok((command, command_args))
+    (command, command_args)
 }
 
 fn run(
