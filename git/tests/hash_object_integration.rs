@@ -5,10 +5,13 @@ fn test_hash_object_integration() {
     let path = "./tests/data/commands/hash_object/repo1";
 
     _ = fs::remove_dir_all(format!("{}", path));
-    let Ok(_) = fs::create_dir_all(path.clone()) else {panic!("No se pudo crear el directorio")};
+    let Ok(_) = fs::create_dir_all(path.clone()) else {
+        panic!("No se pudo crear el directorio")
+    };
 
     assert!(Command::new("git")
         .arg("init")
+        .arg("-q")
         .current_dir(path)
         .status()
         .is_ok());
