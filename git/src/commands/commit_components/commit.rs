@@ -1,4 +1,4 @@
-use std::{io::Read, io::Write};
+use std::{io::Read, io::Write, fs::File};
 
 use crate::{commands::{command::{Command, ConfigAdderFunction}, command_errors::CommandError, init_components::init::Init}, logger::Logger};
 
@@ -232,8 +232,13 @@ impl Commit {
     
     }
 
-    fn get_head_branch(){
+    fn get_head_branch()-> Result<(), CommandError>{
+        let Ok(data_base) = File::open(".git") else{
+            
+            return Err(CommandError::NotGitRepository);
+        };
         //.git/HEAD --> ref: refs/heads/<current_branch>
+        Ok(())
     }
 
     fn get_status_output(&self, output: &mut dyn Write)->Result<(), CommandError>{
@@ -246,4 +251,14 @@ impl Commit {
         status.get_output(output)?; */
        Ok(())
     }
+}
+
+#[cfg(test)]
+mod tests{
+    use super::*;
+
+    /* #[test]
+    fn get_current_branch(){
+        assert!(Commit::get_head_branch().is_ok())
+    }  */
 }

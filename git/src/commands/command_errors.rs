@@ -27,6 +27,8 @@ pub enum CommandError {
     NotEnoughArguments,
     /// El flag -e no se utiliza comúnmente junto con otros flags en el comando
     OptionCombinationError,
+    /// No es un repositorio de Git.
+    NotGitRepository,
 
     // Commit Errors
 
@@ -72,6 +74,7 @@ impl fmt::Display for CommandError {
             CommandError::CommitMessageEmptyValue => write!(f, "Aborting commit due to empty commit message."),
             CommandError::ReuseMessageNoValue => write!(f, "error: switch `C' requires a value"),
             CommandError::CommitLookUp(hash) => write!(f, "fatal: could not lookup commit {hash}"),
+            CommandError::NotGitRepository => write!(f, "fatal: not a git repository (or any of the parent directories): .git"),
         }
     }
 }
