@@ -36,7 +36,7 @@ impl Command for HashObject {
             return Err(CommandError::Name);
         }
 
-        let instance = Self::new(args)?;
+        let instance = Self::new_from(args)?;
 
         logger.log(&format!("hash-object {:?}", args));
         instance.run(stdin, output, logger)?;
@@ -47,25 +47,30 @@ impl Command for HashObject {
         vec![
             Self::add_type_config,
             Self::add_stdin_config,
-            Self::add_file_config,
             Self::add_write_config,
+            Self::add_file_config,
         ]
     }
 }
 
 impl HashObject {
-    fn new(args: &[String]) -> Result<Self, CommandError> {
+    fn new_from(args: &[String]) -> Result<Self, CommandError> {
         let mut hash_object = Self::new_default();
         hash_object.config(args)?;
         Ok(hash_object)
     }
 
     fn new_default() -> Self {
+        Self::new("blob".to_string(), Vec::<String>::new(), false, false)
+    }
+
+    /// Instancia un nuevo HashObject
+    pub fn new(object_type: String, files: Vec<String>, write: bool, stdin: bool) -> Self {
         Self {
-            object_type: "blob".to_string(),
-            files: Vec::<String>::new(),
-            write: false,
-            stdin: false,
+            object_type,
+            files,
+            write,
+            stdin,
         }
     }
 
@@ -122,9 +127,6 @@ impl HashObject {
         i: usize,
         args: &[String],
     ) -> Result<usize, CommandError> {
-        if Self::is_flag(&args[i]) {
-            return Err(CommandError::WrongFlag);
-        }
         hash_object.files.push(args[i].clone());
         Ok(i + 1)
     }
@@ -138,22 +140,30 @@ impl HashObject {
         if self.stdin {
             let mut input = String::new();
             if stdin.read_to_string(&mut input).is_ok() {
-                self.run_for_content(input.as_bytes().to_vec(), output, logger)?;
+                let (hex_string, path) = self.run_for_content(input.as_bytes().to_vec())?;
+                let _ = writeln!(output, "{}", hex_string);
+                if path.is_some() {
+                    logger.log(&format!("Writen object to database in {:?}", path));
+                }
             };
         }
         for file in &self.files {
             let content = read_file_contents(file)?;
-            self.run_for_content(content, output, logger)?;
+            let (hex_string, path) = self.run_for_content(content)?;
+            let _ = writeln!(output, "{}", hex_string);
+            if path.is_some() {
+                logger.log(&format!("Writen object to database in {:?}", path));
+            }
         }
         Ok(())
     }
 
-    fn run_for_content(
+    /// Ejecuta el comando hash-object para el contenido de un archivo y devuelve el hash
+    /// hexadecimal del contenido
+    pub fn run_for_content(
         &self,
         content: Vec<u8>,
-        output: &mut dyn Write,
-        logger: &mut Logger,
-    ) -> Result<(), CommandError> {
+    ) -> Result<(String, Option<String>), CommandError> {
         let header = self.get_header(&content);
         let mut data = Vec::new();
 
@@ -161,7 +171,6 @@ impl HashObject {
         data.extend_from_slice(&content);
 
         let hex_string = self.get_sha1(&data);
-        let _ = writeln!(output, "{}", hex_string);
         if self.write {
             let folder_name = &hex_string[0..2];
             let file_name = &hex_string[2..];
@@ -180,9 +189,9 @@ impl HashObject {
             if let Err(error) = file.write_all(&compressed_data) {
                 return Err(CommandError::FileWriteError(error.to_string()));
             };
-            logger.log(&format!("Writen object to database in {:?}", path));
+            return Ok((hex_string, Some(path)));
         }
-        Ok(())
+        Ok((hex_string, None))
     }
 
     fn get_header(&self, data: &Vec<u8>) -> String {
