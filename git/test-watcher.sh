@@ -1,4 +1,4 @@
 #!/bin/bash
 
 # Watch for changes and run tests on save
-cargo watch -c -i *.txt -i tests/data -x "test -q --tests"
+cargo watch -c -i *.txt -i tests/data -i test-watcher.sh -i clippy-watcher.sh -x "test -q --tests"
