@@ -4,6 +4,9 @@ pub trait Format{
     fn get_status(output: &mut dyn Write);
 }
 
+/* 
+-Short o Lonf
+*/
 
 /* 
 

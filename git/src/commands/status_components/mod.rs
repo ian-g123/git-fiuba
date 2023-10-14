@@ -1,9 +1,7 @@
 mod status;
 mod format;
 mod changes_types;
-mod short_code;
 mod short_format;
 mod long_format;
-mod working_tree;
 mod merge_conflicts;
-mod changes_not_staged;
+mod changes;

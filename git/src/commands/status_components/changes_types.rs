@@ -10,7 +10,7 @@ const UPDATED: &str = "U";
 const UNTRACKED: &str = "??";
 
 #[derive(Clone)]
-pub enum ChangeTypes{
+pub enum ChangeType{
     Modified,
     Unmodified,
     TypeChanged,
