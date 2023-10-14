@@ -38,6 +38,10 @@ pub enum CommandError {
     CommitMessageNoValue,
     ReuseMessageNoValue,
     CommitLookUp(String),
+    /// Error al abrir el staging area
+    FailToOpenSatginArea(String),
+    /// Error al guardar el staging area
+    FailToSaveStaginArea(String),
 }
 
 impl Error for CommandError {}
@@ -75,6 +79,12 @@ impl fmt::Display for CommandError {
             CommandError::ReuseMessageNoValue => write!(f, "error: switch `C' requires a value"),
             CommandError::CommitLookUp(hash) => write!(f, "fatal: could not lookup commit {hash}"),
             CommandError::NotGitRepository => write!(f, "fatal: not a git repository (or any of the parent directories): .git"),
+            CommandError::FailToOpenSatginArea(error) => {
+                write!(f, "Error al abrir el staging area: {error}")
+            }
+            CommandError::FailToSaveStaginArea(error) => {
+                write!(f, "Error al guardar el staging area: {error}")
+            }
         }
     }
 }
