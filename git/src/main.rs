@@ -1,8 +1,10 @@
-use git::commands::{
-    command::Command, command_errors::CommandError,
-    hash_object_components::hash_object::HashObject, init_components::init::Init,
+use git::{
+    commands::{
+        add_components::add::Add, command::Command, command_errors::CommandError,
+        hash_object_components::hash_object::HashObject, init_components::init::Init,
+    },
+    logger::Logger,
 };
-use git::logger::Logger;
 use std::{env, io};
 
 fn main() {
@@ -33,7 +35,7 @@ fn run(
     command_args: &[String],
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let commands = [HashObject::run_from, Init::run_from];
+    let commands = [HashObject::run_from, Init::run_from, Add::run_from];
 
     for command in &commands {
         match command(
