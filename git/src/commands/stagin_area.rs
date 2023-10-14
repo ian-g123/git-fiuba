@@ -3,7 +3,7 @@ use std::{
     io::{Read, Write},
 };
 
-use super::{command::Command, command_errors::CommandError};
+use super::command_errors::CommandError;
 
 #[derive(Debug)]
 pub struct StagingArea {
@@ -40,17 +40,17 @@ impl StagingArea {
             match stream.read(&mut size_be) {
                 Ok(0) => break,
                 Ok(_) => (),
-                Err(error) => return Err(CommandError::FailToOpenSatginArea(error.to_string())),
+                Err(error) => return Err(CommandError::FailToOpenStaginArea(error.to_string())),
             }
             let size = u32::from_be_bytes(size_be) as usize;
             let mut path_be = vec![0; size];
             stream
                 .read(&mut path_be)
-                .map_err(|error| CommandError::FailToOpenSatginArea(error.to_string()))?;
+                .map_err(|error| CommandError::FailToOpenStaginArea(error.to_string()))?;
             let mut hash_be = vec![0; 40];
             stream
                 .read(&mut hash_be)
-                .map_err(|error| CommandError::FailToOpenSatginArea(error.to_string()))?;
+                .map_err(|error| CommandError::FailToOpenStaginArea(error.to_string()))?;
             let path = String::from_utf8(path_be).map_err(|error| {
                 CommandError::FileReadError(format!(
                     "Error convirtiendo path a string{}",

@@ -115,7 +115,6 @@ fn test_two_files_in_dir() {
             Err(error) => panic!("No se pudo leer el staging area: {:?}", error),
         },
     }
-
     _ = fs::remove_dir_all(format!("{}", path));
 }
 

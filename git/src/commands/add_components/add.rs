@@ -89,13 +89,8 @@ impl Add {
         _output: &mut dyn Write,
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
-        logger.log(&format!("run: {:?}", &path));
         let path = Path::new(path);
-        let Some(path_str) = path.to_str() else {
-            return Err(CommandError::FileOpenError(
-                "No se pudo convertir el path a str".to_string(),
-            ));
-        };
+        let path_str = &get_path_str(path)?;
         match fs::read_dir(path_str) {
             Err(error) => {
                 if path.is_file() {
@@ -103,8 +98,7 @@ impl Add {
                     return Ok(());
                 }
                 logger.log(&format!(
-                    "Error en read_dir: {:?} desde {:?}",
-                    error,
+                    "Error en read_dir: {error} desde {:?}",
                     env::current_dir()
                 ));
                 return Err(CommandError::FileOpenError(error.to_string()));
@@ -119,7 +113,7 @@ impl Add {
                                     "No se pudo convertir el path a str".to_string(),
                                 ));
                             };
-                            if path_str == "./.git" {
+                            if self.should_ignore(path_str) {
                                 continue;
                             }
                             logger.log(&format!("entry: {:?}", path_str));
@@ -135,6 +129,19 @@ impl Add {
         };
         Ok(())
     }
+
+    fn should_ignore(&self, path_str: &str) -> bool {
+        path_str == "./.git"
+    }
+}
+
+fn get_path_str(path: &Path) -> Result<String, CommandError> {
+    let Some(path_str) = path.to_str() else {
+        return Err(CommandError::FileOpenError(
+            "No se pudo convertir el path a str".to_string(),
+        ));
+    };
+    Ok(path_str.to_string())
 }
 
 fn run_for_file(path: &str, logger: &mut Logger) -> Result<(), CommandError> {
@@ -158,7 +165,7 @@ fn run_for_file(path: &str, logger: &mut Logger) -> Result<(), CommandError> {
         }
         Err(error) => {
             logger.log(&format!("Error al abrir el staging area: {:?}", error));
-            return Err(CommandError::FailToOpenSatginArea(error.to_string()));
+            return Err(CommandError::FailToOpenStaginArea(error.to_string()));
         }
     }
     Ok(())
