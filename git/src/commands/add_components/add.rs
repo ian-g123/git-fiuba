@@ -3,7 +3,6 @@ use std::{
     fs::{self, DirEntry},
     io::{Read, Write},
 };
-use walkdir::WalkDir;
 
 use crate::{
     commands::{
@@ -16,20 +15,20 @@ use crate::{
 
 /// Se obtiene el nombre de los archivos y directorios del workspace\
 /// Útil para cuando tengamos que hacer la interfaz de Stage Area
-fn get_files_names(path: &str) -> HashSet<String> {
-    // TODO: remover los unwrap
-    let mut files_names = HashSet::new();
+// fn get_files_names(path: &str) -> HashSet<String> {
+//     // TODO: remover los unwrap
+//     let mut files_names = HashSet::new();
 
-    for entry in WalkDir::new(path) {
-        let entry = entry.unwrap();
+//     for entry in WalkDir::new(path) {
+//         let entry = entry.unwrap();
 
-        let file_name = entry.file_name().to_str().unwrap().to_string();
-        let directory_name = entry.path().to_str().unwrap().to_string();
+//         let file_name = entry.file_name().to_str().unwrap().to_string();
+//         let directory_name = entry.path().to_str().unwrap().to_string();
 
-        files_names.insert(file_name);
-    }
-    files_names
-}
+//         files_names.insert(file_name);
+//     }
+//     files_names
+// }
 
 /// Commando hash-object
 pub struct Add {
@@ -85,15 +84,15 @@ impl Add {
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
         for pathspec in &self.pathspecs {
-            match fs::read_dir(pathspec) {
-                Ok(it) => it.for_each(|entry| match entry {
-                    Ok(entry) => {
-                        self.run_for_entry(entry, output, logger)?;
-                    }
-                    Err(error) => return Err(CommandError::FileOpenError(error.to_string())),
-                }),
-                Err(error) => return Err(CommandError::FileOpenError(error.to_string())),
-            }
+            // match fs::read_dir(pathspec) {
+            //     Ok(it) => it.for_each(|entry| match entry {
+            //         Ok(entry) => {
+            //             self.run_for_entry(entry, output, logger)?;
+            //         }
+            //         Err(error) => return Err(CommandError::FileOpenError(error.to_string())),
+            //     }),
+            //     Err(error) => return Err(CommandError::FileOpenError(error.to_string())),
+            // }
         }
         Ok(())
     }
@@ -116,13 +115,13 @@ impl Add {
         let mut content = String::new();
         file.read_to_string(&mut content).unwrap();
 
-        let hash = HashObject {
-            object_type: String,
-            write: bool,
-            files: Vec<String>,
-            stdin: bool,
+        // let hash = HashObject {
+        //     object_type: String,
+        //     write: bool,
+        //     files: Vec<String>,
+        //     stdin: bool,
 
-        }
+        // }
         Ok(())
     }
 }
