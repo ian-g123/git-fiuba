@@ -64,7 +64,7 @@ impl Commit {
         args: &[String],
     ) -> Result<usize, CommandError>{
         let options = ["-C".to_string(), "--reuse-message".to_string()].to_vec();
-        self.check_errors_flags(i, args, &options)?;
+        Self::check_errors_flags(i, args, &options)?;
         self.check_next_arg(i, args)?;
         self.reuse_message = Some(args[i+1].clone());
         Ok(i+2)
@@ -75,7 +75,7 @@ impl Commit {
         args: &[String],
     ) -> Result<usize, CommandError>{
         let options = ["-m".to_string()].to_vec();
-        self.check_errors_flags(i, args, &options)?;
+        Self::check_errors_flags(i, args, &options)?;
         self.check_next_arg(i, args)?;
         self.message = Some(args[i+1].clone());
         Ok(i+2)
@@ -86,7 +86,7 @@ impl Commit {
         args: &[String],
     ) -> Result<usize, CommandError>{
         let options = ["--dry-run".to_string()].to_vec();
-        self.check_errors_flags(i, args, &options)?;
+        Self::check_errors_flags(i, args, &options)?;
         self.dry_run = true;
         Ok(i+1)
     }
@@ -97,7 +97,7 @@ impl Commit {
         args: &[String],
     ) -> Result<usize, CommandError>{
         let options = ["-q".to_string(), "--quiet".to_string()].to_vec();
-        self.check_errors_flags(i, args, &options)?;
+        Self::check_errors_flags(i, args, &options)?;
         self.quiet = true;
         Ok(i+1)
     }
@@ -107,14 +107,13 @@ impl Commit {
         args: &[String],
     ) -> Result<usize, CommandError>{
         let options = ["-a".to_string(), "--all".to_string()].to_vec();
-        self.check_errors_flags(i, args, &options)?;
+        Self::check_errors_flags(i, args, &options)?;
         self.all = true;
         Ok(i+1)
     }
 
     /// Comprueba si el flag es invalido. En ese caso, devuelve error.
     fn check_errors_flags(
-        &self,
         i: usize,
         args: &[String],
         options: &[String],
