@@ -137,6 +137,21 @@ impl Commit {
         Ok(())
     }
 
+    fn get_enter_message_text()-> String{
+        let mensaje = "# Please enter the commit message for your changes. Lines starting\n# with '#' will be ignored, and an empty message aborts the commit.\n\n";
+        //mensaje  = format!("{}{}", mensaje, get_status_output);
+        mensaje.to_string()
+    }
+
+    fn run_enter_message(&self){
+        let stdout = Self::get_enter_message_text();
+            /* 
+            1) read from stdin
+            2) Ignore # lines
+            3) message
+             */
+    }
+
     fn run(&self, output: &mut dyn Write)->Result<(), CommandError>{
 
         if self.message.is_some() && self.reuse_message.is_some(){
@@ -156,13 +171,17 @@ impl Commit {
              */
         }
 
-        /* paths, C, m, dry-run, reuse-message, q, all */
-
-        //Crear Commit Object con la info necesaria --> Commit::new()
+        if self.message.is_none(){
+            self.run_enter_message();
+        }
 
         if let Some(commit_hash) = self.reuse_message.clone(){
 
         }
+
+        //Crear Commit Object con la info necesaria --> Commit::new()
+
+
         
         if self.dry_run{
             self.get_status_output(output)?;
@@ -175,6 +194,10 @@ impl Commit {
         }
 
         Ok(())
+    }
+
+    fn get_commit_reuse()->String{
+        "".to_string()
     }
 
     fn get_commit_output(&self, commit: Commit){
