@@ -27,6 +27,10 @@ pub enum CommandError {
     NotEnoughArguments,
     /// El flag -e no se utiliza comúnmente junto con otros flags en el comando
     OptionCombinationError,
+    /// Error al abrir el staging area
+    FailToOpenSatginArea(String),
+    /// Error al guardar el staging area
+    FailToSaveStaginArea(String),
 }
 
 impl Error for CommandError {}
@@ -58,6 +62,12 @@ impl fmt::Display for CommandError {
                 f,
                 "El flag -e no se utiliza comúnmente junto con otros flags en el comando"
             ),
+            CommandError::FailToOpenSatginArea(error) => {
+                write!(f, "Error al abrir el staging area: {error}")
+            }
+            CommandError::FailToSaveStaginArea(error) => {
+                write!(f, "Error al guardar el staging area: {error}")
+            }
         }
     }
 }
