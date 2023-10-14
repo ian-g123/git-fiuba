@@ -88,6 +88,14 @@ impl Add {
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
         for pathspec in &self.pathspecs {
+            if !Path::new(pathspec).exists() {
+                return Err(CommandError::FileOpenError(format!(
+                    "No existe el archivo o directorio: {:?}",
+                    pathspec
+                )));
+            }
+        }
+        for pathspec in &self.pathspecs {
             self.run_for_path(pathspec, output, logger)?
         }
         Ok(())
