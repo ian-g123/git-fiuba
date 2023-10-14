@@ -1,13 +1,14 @@
 use std::{io::Read, io::Write};
 
-use crate::{commands::{command::{Command, ConfigAdderFunction}, command_errors::CommandError}, logger::Logger};
+use crate::{commands::{command::{Command, ConfigAdderFunction}, command_errors::CommandError, init_components::init::Init}, logger::Logger};
 
 pub struct Commit {
     all: bool,
     reuse_message: Option<String>,
     dry_run: bool,
     message: Option<String>,
-    quiet: bool
+    quiet: bool,
+    files: Vec<String>
 }
 
 impl Command for Commit {
@@ -25,7 +26,7 @@ impl Command for Commit {
         let instance = Self::new_from(args)?;
 
         logger.log(&format!("commit {:?}", args));
-        //instance.run()?;
+        instance.run(output)?;
         Ok(())
     }
 
@@ -35,7 +36,8 @@ impl Command for Commit {
             Self::add_dry_run_config,
             Self::add_message_config,
             Self::add_quiet_config,
-            Self::add_reuse_message_config
+            Self::add_reuse_message_config,
+            Self::add_pathspec_config,
         ]
     }
 }
@@ -48,7 +50,7 @@ impl Commit {
     }
 
     fn new_default() -> Self {
-        Commit { all: false, reuse_message: None, dry_run: false, message: None, quiet: false}
+        Commit { all: false, reuse_message: None, dry_run: false, message: None, quiet: false, files: Vec::new()}
     }
 
     fn check_next_arg(&mut self, i: usize,
@@ -112,6 +114,17 @@ impl Commit {
         Ok(i+1)
     }
 
+    fn add_pathspec_config(&mut self,
+        i: usize,
+        args: &[String],
+    ) -> Result<usize, CommandError>{
+        if Self::is_flag(&args[i]){
+            return Err(CommandError::InvalidArguments);
+        }
+        self.files.push(args[i].clone());
+        Ok(i+1)
+    }
+
     /// Comprueba si el flag es invalido. En ese caso, devuelve error.
     fn check_errors_flags(
         i: usize,
@@ -122,5 +135,36 @@ impl Commit {
             return Err(CommandError::WrongFlag);
         }
         Ok(())
+    }
+
+    fn run(&self, output: &mut dyn Write)->Result<(), CommandError>{
+
+        /* 
+        if staging_area.is_empty() && self.files.is_empty(){
+            self.set_nothing_to_commit_output(output)?;
+        }
+        */
+
+
+
+
+        Ok(())
+    }
+
+    //error: pathspec '<path>>' did not match any file(s) known to git
+
+    fn add_files_to_index(){
+
+    }
+
+    fn set_nothing_to_commit_output(&self, output: &mut dyn Write)->Result<(), CommandError>{
+
+        /* 
+        si el staging area está vacía, se usa el output de status.
+         */
+
+        /* let mut status = Status::new_default();
+        status.get_output(output)?; */
+       Ok(())
     }
 }
