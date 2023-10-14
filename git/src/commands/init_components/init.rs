@@ -96,13 +96,13 @@ impl Init {
         }
         let path_aux = args[i].clone();
         let _ = create_dir_all(&path_aux)
-            .map_err(|error| CommandError::FileWriteError(error.to_string()));
+            .map_err(|error| CommandError::DirectoryCreationError(error.to_string()));
         let absolute_path_res = Path::new(&path_aux)
             .canonicalize()
-            .map_err(|error| CommandError::FileNotFound(error.to_string()))?;
+            .map_err(|error| CommandError::DirNotFound(error.to_string()))?;
 
         let Some(absolute_path) = absolute_path_res.to_str() else {
-            return Err(CommandError::InvalidArguments);
+            return Err(CommandError::DirNotFound(path_aux));
         };
 
         init.paths.push(absolute_path.to_string());
@@ -127,7 +127,7 @@ impl Init {
 
     fn create_dirs(&self, path: &String) -> Result<(), CommandError> {
         if fs::create_dir_all(path).is_err() {
-            return Err(CommandError::InvalidArguments);
+            return Err(CommandError::DirectoryCreationError(path.clone()));
         }
         let git_path = if !self.bare {
             path.clone()
@@ -145,16 +145,17 @@ impl Init {
     }
 
     fn create_dir(&self, path: &String, name: String) -> Result<(), CommandError> {
-        if fs::create_dir_all(format!("{}/{}", path, name)).is_ok() {
+        let path_complete = format!("{}/{}", path, name);
+        if fs::create_dir_all(&path_complete).is_ok() {
             Ok(())
         } else {
-            Err(CommandError::InvalidArguments)
+            Err(CommandError::DirectoryCreationError(path_complete))
         }
     }
 
     fn create_files(&self, path: &String) -> Result<(), CommandError> {
         if fs::create_dir_all(path).is_err() {
-            return Err(CommandError::InvalidArguments);
+            return Err(CommandError::DirectoryCreationError(path.clone()));
         }
         let path_aux = if !self.bare {
             path.clone()
@@ -167,20 +168,20 @@ impl Init {
 
     fn create_file(&self, path: &String, name: String) -> Result<(), CommandError> {
         if fs::create_dir_all(path).is_ok() {
-            match File::create(format!("{}/{}", path, name)) {
+            let path_complete = format!("{}/{}", path, name);
+            match File::create(&path_complete) {
                 Ok(mut archivo) => {
                     let texto = format!("ref: refs/heads/{}", self.branch_main);
                     let _: Result<(), CommandError> = match archivo.write_all(texto.as_bytes()) {
                         Ok(_) => Ok(()),
-                        Err(_) => Err(CommandError::InvalidArguments),
+                        Err(err) => Err(CommandError::FileWriteError(err.to_string())),
                     };
                 }
-                Err(_) => return Err(CommandError::InvalidArguments),
+                Err(err) => return Err(CommandError::FileCreationError(err.to_string())),
             };
         } else {
-            return Err(CommandError::InvalidArguments);
+            return Err(CommandError::DirectoryCreationError(path.clone()));
         }
-
         Ok(())
     }
 }

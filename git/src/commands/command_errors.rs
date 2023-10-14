@@ -23,6 +23,12 @@ pub enum CommandError {
     FileOpenError(String),
     /// Error de compresión
     CompressionError,
+    /// No se encuentra el directorio
+    DirNotFound(String),
+    /// No se pudo crear el directorio
+    DirectoryCreationError(String),
+    /// No se pudo crear el archivo
+    FileCreationError(String),
     /// No se proporcionaron suficientes argumentos para este comando
     NotEnoughArguments,
     /// El flag -e no se utiliza comúnmente junto con otros flags en el comando
@@ -54,6 +60,14 @@ impl fmt::Display for CommandError {
                 write!(f, "Hay un error abriendo el archivo: {path}")
             }
             CommandError::CompressionError => write!(f, "Error de compresión"),
+            CommandError::DirNotFound(path) => write!(f, "No se encuentra el directorio: {path}"),
+            CommandError::DirectoryCreationError(path) => {
+                write!(f, "No se pudo crear el directorio: {path}")
+            }
+            CommandError::FileCreationError(path) => {
+                write!(f, "No se pudo crear el archivo: {path}")
+            }
+
             CommandError::NotEnoughArguments => write!(
                 f,
                 "No se proporcionaron suficientes argumentos para este comando"
