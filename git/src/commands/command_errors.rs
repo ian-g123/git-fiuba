@@ -1,4 +1,4 @@
-use std::{error::Error, fmt};
+use std::{error::Error, fmt::{self, write}};
 
 /// Enumeración de errores de flags
 #[derive(Debug)]
@@ -27,6 +27,15 @@ pub enum CommandError {
     NotEnoughArguments,
     /// El flag -e no se utiliza comúnmente junto con otros flags en el comando
     OptionCombinationError,
+
+    // Commit Errors
+
+    /// El flag -m de Commit no se puede combinar con -C.
+    MessageAndReuseError,
+    CommitMessageEmptyValue,
+    CommitMessageNoValue,
+    ReuseMessageNoValue,
+    CommitLookUp(String),
 }
 
 impl Error for CommandError {}
@@ -58,6 +67,11 @@ impl fmt::Display for CommandError {
                 f,
                 "El flag -e no se utiliza comúnmente junto con otros flags en el comando"
             ),
+            CommandError::MessageAndReuseError => write!(f, "fatal: Option -m cannot be combined with -C"),
+            CommandError::CommitMessageNoValue => write!(f,"error: switch `m' requires a value"),
+            CommandError::CommitMessageEmptyValue => write!(f, "Aborting commit due to empty commit message."),
+            CommandError::ReuseMessageNoValue => write!(f, "error: switch `C' requires a value"),
+            CommandError::CommitLookUp(hash) => write!(f, "fatal: could not lookup commit {hash}"),
         }
     }
 }

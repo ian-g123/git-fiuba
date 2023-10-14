@@ -54,9 +54,9 @@ impl Commit {
     }
 
     fn check_next_arg(&mut self, i: usize,
-        args: &[String])-> Result<(), CommandError>{
+        args: &[String], error: CommandError)-> Result<(), CommandError>{
             if i < args.len() - 1 && Self::is_flag(&args[i+1]){
-                return Err(CommandError::InvalidArguments);
+                return Err(error);
             }
             Ok(())
     }
@@ -67,7 +67,7 @@ impl Commit {
     ) -> Result<usize, CommandError>{
         let options = ["-C".to_string(), "--reuse-message".to_string()].to_vec();
         Self::check_errors_flags(i, args, &options)?;
-        self.check_next_arg(i, args)?;
+        self.check_next_arg(i, args, CommandError::ReuseMessageNoValue)?;
         self.reuse_message = Some(args[i+1].clone());
         Ok(i+2)
     }
@@ -78,7 +78,7 @@ impl Commit {
     ) -> Result<usize, CommandError>{
         let options = ["-m".to_string()].to_vec();
         Self::check_errors_flags(i, args, &options)?;
-        self.check_next_arg(i, args)?;
+        self.check_next_arg(i, args, CommandError::CommitMessageNoValue)?;
         self.message = Some(args[i+1].clone());
         Ok(i+2)
     }
@@ -139,12 +139,17 @@ impl Commit {
 
     fn run(&self, output: &mut dyn Write)->Result<(), CommandError>{
 
+        if self.message.is_some() && self.reuse_message.is_some(){
+            return Err(CommandError::MessageAndReuseError)
+        }
+
         /* 
         if staging_area.is_empty() && self.files.is_empty(){
             self.set_nothing_to_commit_output(output)?;
         }
         */
 
+        /* paths, C, m, dry-run, reuse-message, q, all */
 
 
 
