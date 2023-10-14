@@ -34,27 +34,36 @@ impl StagingArea {
     }
 
     pub fn read_from(stream: &mut dyn Read) -> Result<StagingArea, CommandError> {
-        let mut files = HashMap::new();
+        let mut files = HashMap::<String, String>::new();
         loop {
             let mut size_be = [0; 4];
             match stream.read(&mut size_be) {
                 Ok(0) => break,
                 Ok(_) => (),
-                Err(error) => return Err(CommandError::FailToOpenSatginArea(error.to_string())),
+                Err(error) => return Err(CommandError::FailToOpenStaginArea(error.to_string())),
             }
             let size = u32::from_be_bytes(size_be) as usize;
-            let mut path = vec![0; size];
+            let mut path_be = vec![0; size];
             stream
-                .read(&mut path)
-                .map_err(|error| CommandError::FailToOpenSatginArea(error.to_string()))?;
-            let mut hash = vec![0; 40];
+                .read(&mut path_be)
+                .map_err(|error| CommandError::FailToOpenStaginArea(error.to_string()))?;
+            let mut hash_be = vec![0; 40];
             stream
-                .read(&mut hash)
-                .map_err(|error| CommandError::FailToOpenSatginArea(error.to_string()))?;
-            files.insert(
-                String::from_utf8(path).unwrap(),
-                String::from_utf8(hash).unwrap(),
-            );
+                .read(&mut hash_be)
+                .map_err(|error| CommandError::FailToOpenStaginArea(error.to_string()))?;
+            let path = String::from_utf8(path_be).map_err(|error| {
+                CommandError::FileReadError(format!(
+                    "Error convirtiendo path a string{}",
+                    error.to_string()
+                ))
+            })?;
+            let hash = String::from_utf8(hash_be).map_err(|error| {
+                CommandError::FileReadError(format!(
+                    "Error convirtiendo hash a string{}",
+                    error.to_string()
+                ))
+            })?;
+            files.insert(path, hash);
         }
         Ok(Self { files })
     }

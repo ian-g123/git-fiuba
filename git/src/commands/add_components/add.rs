@@ -1,8 +1,7 @@
 use std::{
-    collections::{HashMap, HashSet},
-    env, error,
-    fs::{self, DirEntry},
-    io::{Read, Write},
+    env,
+    fs::{self, DirEntry, ReadDir},
+    io::{Error, Read, Write},
     path::Path,
 };
 
@@ -15,23 +14,6 @@ use crate::{
     },
     logger::Logger,
 };
-
-/// Se obtiene el nombre de los archivos y directorios del workspace\
-/// Útil para cuando tengamos que hacer la interfaz de Stage Area
-// fn get_files_names(path: &str) -> HashSet<String> {
-//     // TODO: remover los unwrap
-//     let mut files_names = HashSet::new();
-
-//     for entry in WalkDir::new(path) {
-//         let entry = entry.unwrap();
-
-//         let file_name = entry.file_name().to_str().unwrap().to_string();
-//         let directory_name = entry.path().to_str().unwrap().to_string();
-
-//         files_names.insert(file_name);
-//     }
-//     files_names
-// }
 
 /// Commando Add
 pub struct Add {
@@ -83,83 +65,140 @@ impl Add {
 
     fn run(
         &self,
-        stdin: &mut dyn Read,
+        _stdin: &mut dyn Read,
         output: &mut dyn Write,
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
         for pathspec in &self.pathspecs {
-            self.run_for_path(pathspec, output, logger)?
+            if !Path::new(pathspec).exists() {
+                return Err(CommandError::FileOpenError(format!(
+                    "No existe el archivo o directorio: {:?}",
+                    pathspec
+                )));
+            }
         }
+        let mut staging_area = StagingArea::open()?;
+        for pathspec in &self.pathspecs {
+            self.run_for_path(pathspec, &mut staging_area, output, logger)?
+        }
+        staging_area.save()?;
         Ok(())
     }
 
     fn run_for_path(
         &self,
         path: &str,
+        staging_area: &mut StagingArea,
         _output: &mut dyn Write,
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
-        logger.log(&format!("run: {:?}", &path));
         let path = Path::new(path);
-        match fs::read_dir(path.to_str().unwrap()) {
-            Err(error) => {
-                if path.is_file() {
-                    let Some(path_str) = path.to_str() else {
-                        return Err(CommandError::FileOpenError(
-                            "No se pudo convertir el path a str".to_string(),
-                        ));
-                    };
-                    run_for_file(path_str, logger)?;
-                    return Ok(());
+        let path_str = &get_path_str(path)?;
+
+        if path.is_file() {
+            run_for_file(path_str, staging_area, logger)?;
+            return Ok(());
+        } else {
+            self.run_for_dir(path_str, staging_area, logger, _output)?;
+        }
+        Ok(())
+    }
+
+    fn run_for_dir(
+        &self,
+        path_str: &String,
+        staging_area: &mut StagingArea,
+        logger: &mut Logger,
+        _output: &mut dyn Write,
+    ) -> Result<(), CommandError> {
+        let read_dir = self.read_dir(logger, path_str)?;
+        for entry in read_dir {
+            match entry {
+                Ok(entry) => self.try_run_for_path(entry, staging_area, _output, logger)?,
+                Err(error) => {
+                    logger.log(&format!("Error en entry: {:?}", error));
+                    return Err(CommandError::FileOpenError(error.to_string()));
                 }
+            }
+        }
+        Ok(())
+    }
+
+    fn should_ignore(&self, path_str: &str) -> bool {
+        path_str == "./.git"
+    }
+
+    fn try_run_for_path(
+        &self,
+        entry: DirEntry,
+        staging_area: &mut StagingArea,
+        _output: &mut dyn Write,
+        logger: &mut Logger,
+    ) -> Result<(), CommandError> {
+        let path = entry.path();
+        let Some(path_str) = path.to_str() else {
+            return Err(CommandError::FileOpenError(
+                "No se pudo convertir el path a str".to_string(),
+            ));
+        };
+        if self.should_ignore(path_str) {
+            return Ok(());
+        }
+        logger.log(&format!("entry: {:?}", path_str));
+        self.run_for_path(path_str, staging_area, _output, logger)?;
+        Ok(())
+    }
+
+    fn read_dir(&self, logger: &mut Logger, path_str: &String) -> Result<ReadDir, CommandError> {
+        match fs::read_dir(path_str) {
+            Ok(read_dir) => Ok(read_dir),
+            Err(error) => {
                 logger.log(&format!(
-                    "Error en read_dir: {:?} desde {:?}",
-                    error,
+                    "Error en read_dir: {error} desde {:?}",
                     env::current_dir()
                 ));
-                return Err(CommandError::FileOpenError(error.to_string()));
+                Err(CommandError::FileOpenError(error.to_string()))
             }
-            Ok(read_dir) => {
-                for entry in read_dir {
-                    match entry {
-                        Ok(entry) => {
-                            let path = entry.path();
-                            let path_str = path.to_str().unwrap();
-                            if path_str == "./.git" {
-                                continue;
-                            }
-                            logger.log(&format!("entry: {:?}", path_str));
-                            self.run_for_path(path_str, _output, logger)?;
-                        }
-                        Err(error) => {
-                            logger.log(&format!("Error en entry: {:?}", error));
-                            return Err(CommandError::FileOpenError(error.to_string()));
-                        }
-                    }
-                }
-            }
-        };
-        Ok(())
+        }
     }
 }
 
-fn run_for_file(path: &str, logger: &mut Logger) -> Result<(), CommandError> {
-    let mut file = fs::File::open(path).unwrap();
+fn get_path_str(path: &Path) -> Result<String, CommandError> {
+    let Some(path_str) = path.to_str() else {
+        return Err(CommandError::FileOpenError(
+            "No se pudo convertir el path a str".to_string(),
+        ));
+    };
+    Ok(path_str.to_string())
+}
+
+fn run_for_file(
+    path: &str,
+    staging_area: &mut StagingArea,
+    logger: &mut Logger,
+) -> Result<(), CommandError> {
+    let mut file = fs::File::open(path).map_err(|error| file_open_error_maper(error, logger))?;
     let mut content = Vec::<u8>::new();
-    file.read_to_end(&mut content).unwrap();
-    logger.log(&format!("content: {:?}", content));
+    file.read_to_end(&mut content)
+        .map_err(|error| file_open_error_maper(error, logger))?;
+
     let hash_object = HashObject::new("blob".to_string(), vec![], true, false);
     let (hash_hex, _) = hash_object.run_for_content(content)?;
-    match StagingArea::open() {
-        Ok(mut staging_area) => {
-            staging_area.add(path, &hash_hex);
-            logger.log(&format!("staging_area.add({},{})", path, &hash_hex));
-            staging_area.save()?;
-        }
-        Err(error) => {
-            logger.log(&format!("Error al abrir el staging area: {:?}", error));
-            return Err(CommandError::FailToOpenSatginArea(error.to_string()));
-        }
-    }
+    insert_in_stagin_area(path, hash_hex, staging_area, logger);
     Ok(())
+}
+
+fn insert_in_stagin_area(
+    path: &str,
+    hash_hex: String,
+    staging_area: &mut StagingArea,
+    logger: &mut Logger,
+) {
+    staging_area.add(path, &hash_hex);
+    logger.log(&format!("staging_area.add({},{})", path, &hash_hex));
+}
+
+fn file_open_error_maper(error: Error, logger: &mut Logger) -> CommandError {
+    logger.log(&format!("Error al abrir el archivo: {:?}", error));
+    CommandError::FileOpenError(error.to_string())
 }
