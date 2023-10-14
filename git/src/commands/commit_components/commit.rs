@@ -31,7 +31,11 @@ impl Command for Commit {
 
     fn config_adders(&self) -> ConfigAdderFunction<Self> {
         vec![
-            
+            Self::add_all_config,
+            Self::add_dry_run_config,
+            Self::add_message_config,
+            Self::add_quiet_config,
+            Self::add_reuse_message_config
         ]
     }
 }
@@ -47,12 +51,42 @@ impl Commit {
         Commit { all: false, reuse_message: None, dry_run: false, message: None, quiet: false}
     }
 
+    fn check_next_arg(&mut self, i: usize,
+        args: &[String])-> Result<(), CommandError>{
+            if i < args.len() - 1 && Self::is_flag(&args[i+1]){
+                return Err(CommandError::InvalidArguments);
+            }
+            Ok(())
+    }
+
+    fn add_reuse_message_config(&mut self,
+        i: usize,
+        args: &[String],
+    ) -> Result<usize, CommandError>{
+        let options = ["-C".to_string(), "--reuse-message".to_string()].to_vec();
+        self.check_errors_flags(i, args, &options)?;
+        self.check_next_arg(i, args)?;
+        self.reuse_message = Some(args[i+1].clone());
+        Ok(i+2)
+    }
+
+    fn add_message_config(&mut self,
+        i: usize,
+        args: &[String],
+    ) -> Result<usize, CommandError>{
+        let options = ["-m".to_string()].to_vec();
+        self.check_errors_flags(i, args, &options)?;
+        self.check_next_arg(i, args)?;
+        self.message = Some(args[i+1].clone());
+        Ok(i+2)
+    }
+
     fn add_dry_run_config(&mut self,
         i: usize,
         args: &[String],
     ) -> Result<usize, CommandError>{
         let options = ["--dry-run".to_string()].to_vec();
-        self.check_errors_flags(i, args, &options, i+1)?;
+        self.check_errors_flags(i, args, &options)?;
         self.dry_run = true;
         Ok(i+1)
     }
@@ -63,7 +97,7 @@ impl Commit {
         args: &[String],
     ) -> Result<usize, CommandError>{
         let options = ["-q".to_string(), "--quiet".to_string()].to_vec();
-        self.check_errors_flags(i, args, &options, i+1)?;
+        self.check_errors_flags(i, args, &options)?;
         self.quiet = true;
         Ok(i+1)
     }
@@ -73,7 +107,7 @@ impl Commit {
         args: &[String],
     ) -> Result<usize, CommandError>{
         let options = ["-a".to_string(), "--all".to_string()].to_vec();
-        self.check_errors_flags(i, args, &options, i+1)?;
+        self.check_errors_flags(i, args, &options)?;
         self.all = true;
         Ok(i+1)
     }
@@ -84,12 +118,8 @@ impl Commit {
         i: usize,
         args: &[String],
         options: &[String],
-        next_flag: usize
     ) -> Result<(), CommandError> {
         if !options.contains(&args[i]) {
-            return Err(CommandError::WrongFlag);
-        }
-        if i < args.len() - 1 && Self::is_flag(&args[next_flag]) {
             return Err(CommandError::WrongFlag);
         }
         Ok(())
