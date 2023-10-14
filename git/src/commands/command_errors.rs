@@ -42,6 +42,9 @@ pub enum CommandError {
     FailToOpenSatginArea(String),
     /// Error al guardar el staging area
     FailToSaveStaginArea(String),
+
+    CurrentDirectoryError,
+    HeadError,
 }
 
 impl Error for CommandError {}
@@ -84,6 +87,12 @@ impl fmt::Display for CommandError {
             }
             CommandError::FailToSaveStaginArea(error) => {
                 write!(f, "Error al guardar el staging area: {error}")
+            },
+            CommandError::CurrentDirectoryError => {
+                write!(f, "Current directory does not existo or there are insufficient permissions to access the current directory")
+            },
+            CommandError::HeadError => {
+                write!(f, "El archivo .git/HEAD tiene formato inválido")
             }
         }
     }

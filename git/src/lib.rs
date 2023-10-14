@@ -8,5 +8,6 @@ pub mod commands {
     pub mod init_components;
     pub mod commit_components;
     pub mod stagin_area;
+    pub mod objects;
 }
 pub mod logger;
