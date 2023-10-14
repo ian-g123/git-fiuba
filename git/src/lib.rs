@@ -6,5 +6,6 @@ pub mod commands {
     pub mod file_compressor;
     pub mod hash_object_components;
     pub mod init_components;
+    pub mod stagin_area;
 }
 pub mod logger;

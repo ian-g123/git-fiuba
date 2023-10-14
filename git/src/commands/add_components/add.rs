@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    error,
     fs::{self, DirEntry},
     io::{Read, Write},
 };
@@ -30,7 +31,7 @@ use crate::{
 //     files_names
 // }
 
-/// Commando hash-object
+/// Commando Add
 pub struct Add {
     pathspecs: Vec<String>,
 }
@@ -49,25 +50,25 @@ impl Command for Add {
 
         let instance = Self::new(args)?;
 
-        logger.log(&format!("add {:?}", args));
         instance.run(stdin, output, logger)?;
+        logger.log(&format!("add {:?}", args));
         Ok(())
     }
 
-    fn config_adders(&self) -> ConfigAdderFunction<Self> {
-        vec![Self::add_file_config]
+    fn config_adders(&self) -> ConfigAdderFunction<Add> {
+        vec![Add::add_file_config]
     }
 }
 
 impl Add {
-    fn new(args: &[String]) -> Result<Self, CommandError> {
-        let mut add = Self::new_default();
+    fn new(args: &[String]) -> Result<Add, CommandError> {
+        let mut add = Add::new_default();
         add.config(args)?;
         Ok(add)
     }
 
-    fn new_default() -> Self {
-        Self {
+    fn new_default() -> Add {
+        Add {
             pathspecs: Vec::<String>::new(),
         }
     }
@@ -84,15 +85,16 @@ impl Add {
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
         for pathspec in &self.pathspecs {
-            // match fs::read_dir(pathspec) {
-            //     Ok(it) => it.for_each(|entry| match entry {
-            //         Ok(entry) => {
-            //             self.run_for_entry(entry, output, logger)?;
-            //         }
-            //         Err(error) => return Err(CommandError::FileOpenError(error.to_string())),
-            //     }),
-            //     Err(error) => return Err(CommandError::FileOpenError(error.to_string())),
-            // }
+            match fs::read_dir(pathspec) {
+                Ok(mut it) => it.try_for_each(|entry| match entry {
+                    Ok(entry) => {
+                        self.run_for_entry(entry, output, logger)?;
+                        Ok(())
+                    }
+                    Err(error) => return Err(CommandError::FileOpenError(error.to_string())),
+                })?,
+                Err(error) => return Err(CommandError::FileOpenError(error.to_string())),
+            }
         }
         Ok(())
     }
@@ -112,16 +114,12 @@ impl Add {
         }
 
         let mut file = fs::File::open(path_str.clone()).unwrap();
-        let mut content = String::new();
-        file.read_to_string(&mut content).unwrap();
+        let mut content = Vec::<u8>::new();
+        file.read(&mut content)
+            .map_err(|error| CommandError::FileOpenError(error.to_string()))?;
 
-        // let hash = HashObject {
-        //     object_type: String,
-        //     write: bool,
-        //     files: Vec<String>,
-        //     stdin: bool,
-
-        // }
+        let hash_object = HashObject::new("blob".to_string(), vec![], true, false);
+        hash_object.run_for_content(content)?;
         Ok(())
     }
 }
