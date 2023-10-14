@@ -47,5 +47,51 @@ impl Commit {
         Commit { all: false, reuse_message: None, dry_run: false, message: None, quiet: false}
     }
 
+    fn add_dry_run_config(&mut self,
+        i: usize,
+        args: &[String],
+    ) -> Result<usize, CommandError>{
+        let options = ["--dry-run".to_string()].to_vec();
+        self.check_errors_flags(i, args, &options, i+1)?;
+        self.dry_run = true;
+        Ok(i+1)
+    }
 
+
+    fn add_quiet_config(&mut self,
+        i: usize,
+        args: &[String],
+    ) -> Result<usize, CommandError>{
+        let options = ["-q".to_string(), "--quiet".to_string()].to_vec();
+        self.check_errors_flags(i, args, &options, i+1)?;
+        self.quiet = true;
+        Ok(i+1)
+    }
+
+    fn add_all_config(&mut self,
+        i: usize,
+        args: &[String],
+    ) -> Result<usize, CommandError>{
+        let options = ["-a".to_string(), "--all".to_string()].to_vec();
+        self.check_errors_flags(i, args, &options, i+1)?;
+        self.all = true;
+        Ok(i+1)
+    }
+
+    /// Comprueba si el flag es invalido. En ese caso, devuelve error.
+    fn check_errors_flags(
+        &self,
+        i: usize,
+        args: &[String],
+        options: &[String],
+        next_flag: usize
+    ) -> Result<(), CommandError> {
+        if !options.contains(&args[i]) {
+            return Err(CommandError::WrongFlag);
+        }
+        if i < args.len() - 1 && Self::is_flag(&args[next_flag]) {
+            return Err(CommandError::WrongFlag);
+        }
+        Ok(())
+    }
 }
