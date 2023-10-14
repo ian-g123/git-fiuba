@@ -77,15 +77,18 @@ impl Add {
                 )));
             }
         }
+        let mut staging_area = StagingArea::open()?;
         for pathspec in &self.pathspecs {
-            self.run_for_path(pathspec, output, logger)?
+            self.run_for_path(pathspec, &mut staging_area, output, logger)?
         }
+        staging_area.save()?;
         Ok(())
     }
 
     fn run_for_path(
         &self,
         path: &str,
+        staging_area: &mut StagingArea,
         _output: &mut dyn Write,
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
@@ -93,10 +96,10 @@ impl Add {
         let path_str = &get_path_str(path)?;
 
         if path.is_file() {
-            run_for_file(path_str, logger)?;
+            run_for_file(path_str, staging_area, logger)?;
             return Ok(());
         } else {
-            self.run_for_dir(path_str, logger, _output)?;
+            self.run_for_dir(path_str, staging_area, logger, _output)?;
         }
         Ok(())
     }
@@ -104,13 +107,14 @@ impl Add {
     fn run_for_dir(
         &self,
         path_str: &String,
+        staging_area: &mut StagingArea,
         logger: &mut Logger,
         _output: &mut dyn Write,
     ) -> Result<(), CommandError> {
         let read_dir = self.read_dir(logger, path_str)?;
         for entry in read_dir {
             match entry {
-                Ok(entry) => self.try_run_for_path(entry, _output, logger)?,
+                Ok(entry) => self.try_run_for_path(entry, staging_area, _output, logger)?,
                 Err(error) => {
                     logger.log(&format!("Error en entry: {:?}", error));
                     return Err(CommandError::FileOpenError(error.to_string()));
@@ -127,6 +131,7 @@ impl Add {
     fn try_run_for_path(
         &self,
         entry: DirEntry,
+        staging_area: &mut StagingArea,
         _output: &mut dyn Write,
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
@@ -140,7 +145,7 @@ impl Add {
             return Ok(());
         }
         logger.log(&format!("entry: {:?}", path_str));
-        self.run_for_path(path_str, _output, logger)?;
+        self.run_for_path(path_str, staging_area, _output, logger)?;
         Ok(())
     }
 
@@ -167,7 +172,11 @@ fn get_path_str(path: &Path) -> Result<String, CommandError> {
     Ok(path_str.to_string())
 }
 
-fn run_for_file(path: &str, logger: &mut Logger) -> Result<(), CommandError> {
+fn run_for_file(
+    path: &str,
+    staging_area: &mut StagingArea,
+    logger: &mut Logger,
+) -> Result<(), CommandError> {
     let mut file = fs::File::open(path).map_err(|error| file_open_error_maper(error, logger))?;
     let mut content = Vec::<u8>::new();
     file.read_to_end(&mut content)
@@ -175,26 +184,18 @@ fn run_for_file(path: &str, logger: &mut Logger) -> Result<(), CommandError> {
 
     let hash_object = HashObject::new("blob".to_string(), vec![], true, false);
     let (hash_hex, _) = hash_object.run_for_content(content)?;
-    save_to_stagin_area(path, hash_hex, logger)?;
+    insert_in_stagin_area(path, hash_hex, staging_area, logger);
     Ok(())
 }
 
-fn save_to_stagin_area(
+fn insert_in_stagin_area(
     path: &str,
     hash_hex: String,
+    staging_area: &mut StagingArea,
     logger: &mut Logger,
-) -> Result<(), CommandError> {
-    Ok(match StagingArea::open() {
-        Ok(mut staging_area) => {
-            staging_area.add(path, &hash_hex);
-            logger.log(&format!("staging_area.add({},{})", path, &hash_hex));
-            staging_area.save()?;
-        }
-        Err(error) => {
-            logger.log(&format!("Error al abrir el staging area: {:?}", error));
-            return Err(CommandError::FailToOpenStaginArea(error.to_string()));
-        }
-    })
+) {
+    staging_area.add(path, &hash_hex);
+    logger.log(&format!("staging_area.add({},{})", path, &hash_hex));
 }
 
 fn file_open_error_maper(error: Error, logger: &mut Logger) -> CommandError {
