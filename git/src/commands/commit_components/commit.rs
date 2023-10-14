@@ -149,11 +149,48 @@ impl Commit {
         }
         */
 
+        for path in self.files.iter(){
+            /* 
+            1) vaciar StagingArea o crear una nueva
+            2) Agregar al stagingArea. Manejar error si no está en la base de datos o no existe
+             */
+        }
+
         /* paths, C, m, dry-run, reuse-message, q, all */
 
+        //Crear Commit Object con la info necesaria --> Commit::new()
 
+        if let Some(commit_hash) = self.reuse_message.clone(){
+
+        }
+        
+        if self.dry_run{
+            self.get_status_output(output)?;
+        } else{
+            //self.add_commit(commit)
+        }
+
+        if !self.quiet{
+            //self.get_commit_output(commit)
+        }
 
         Ok(())
+    }
+
+    fn get_commit_output(&self, commit: Commit){
+        /* 
+            [<branch name> <commit hash[0:6]>] <message>
+             # file changed, # insertions(+), # deletions(-)
+            delete mode <modo> <file_name>
+            created mode <modo> <file_name>
+
+            info necesaria: current_branch (get_head_branch), hash, message, etc
+            
+            let output_string = ...;
+
+             */
+
+            //let _ = write!(output, "{}", output_string)
     }
 
     //error: pathspec '<path>>' did not match any file(s) known to git
@@ -162,7 +199,21 @@ impl Commit {
 
     }
 
-    fn set_nothing_to_commit_output(&self, output: &mut dyn Write)->Result<(), CommandError>{
+    fn add_commit(&mut self, commit: Commit){
+        /* 
+        1) commit.get_hash() -> guardar en la base de datos
+        2) Actualizar current branch en .git para que apunte al nuevo commit -->
+            a- .git/HEAD --> ref: refs/heads/<current_branch> --> get_head_branch
+            b- refs/heads/<current_branch> --> write commit hash
+         */
+    
+    }
+
+    fn get_head_branch(){
+        //.git/HEAD --> ref: refs/heads/<current_branch>
+    }
+
+    fn get_status_output(&self, output: &mut dyn Write)->Result<(), CommandError>{
 
         /* 
         si el staging area está vacía, se usa el output de status.
