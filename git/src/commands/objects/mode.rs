@@ -59,7 +59,7 @@ mod test{
     /// Mode::ExecutableFile.
     #[test]
     fn get_mode_exe_file(){
-        let path = String::from("");
+        let path = String::from("/usr/bin");
         assert!(matches!(Mode::get_mode(path), Ok(Mode::RegularFile)))
     } */
 
