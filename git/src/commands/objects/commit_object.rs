@@ -99,8 +99,16 @@ impl CommitTree{
         let path_name = Self::get_path_name(path)?;
         let mut objects:HashMap<String, TreeOrBlob> = HashMap::new();
         Self::compare(path_name.clone(), &index, &mut objects, &parent)?;
-        let tree = Self::create_tree(&path_name, objects)?;
+        let mut tree = Self::create_tree(&path_name, objects)?;
+        Self::add_new_files(&index, &mut tree)?;
         Ok(tree)
+    }
+
+    fn add_new_files(index: &HashMap<String, String>, tree: &mut Tree)-> Result<(), CommandError>{
+        for (path, hash) in  index{
+            tree.add_blob(path, hash)?;
+        }
+        Ok(())
     }
 
     fn get_current_dir()-> Result<PathBuf, CommandError>{

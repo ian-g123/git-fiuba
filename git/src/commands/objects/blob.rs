@@ -1,3 +1,5 @@
+use std::os::unix::prelude::PermissionsExt;
+
 use crate::commands::command_errors::CommandError;
 
 use super::{mode::Mode, aux::*};
@@ -13,7 +15,7 @@ pub struct Blob{
 impl Blob{
     pub fn new(path: String)-> Result<Self, CommandError>{
         let object_type = "blob";
-        let mode = set_mode(path.clone())?;
+        let mode = Mode::get_mode(path.clone())?;
         let sha1 = get_sha1(path.clone(), object_type.to_string(), false)?;
         Ok(Blob{
             mode: mode, path: path.clone(), hash:sha1,
@@ -22,7 +24,7 @@ impl Blob{
     }
 
     pub fn new_from_hash(hash:String, path:String)-> Result<Self, CommandError>{
-        let mode = set_mode(path.clone())?;
+        let mode = Mode::get_mode(path.clone())?;
         Ok(Blob{
             mode: mode, path: path.clone(), hash:hash,
             name: get_name(&path)?
