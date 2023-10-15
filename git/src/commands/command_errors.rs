@@ -1,7 +1,7 @@
 use std::{error::Error, fmt::{self, write}, path::PathBuf};
 
 /// Enumeración de errores de flags
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum CommandError {
     /// El nombre del comando no es válido
     Name,
