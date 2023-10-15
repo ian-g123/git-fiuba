@@ -94,6 +94,16 @@ impl StagingArea {
     pub fn remove(&mut self, path: &str) {
         self.files.remove(path);
     }
+
+    pub fn is_in_staging_area(&mut self, path: &str, hash: String) -> Result<(), CommandError> {
+        if !(self.files.contains_key(path) && self.files[path] == hash) {
+            return Err(CommandError::NotInStagingArea(
+                path.to_string(),
+                hash.to_string(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 // Unit tests

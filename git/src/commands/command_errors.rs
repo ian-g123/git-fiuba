@@ -37,6 +37,12 @@ pub enum CommandError {
     FailToOpenStaginArea(String),
     /// Error al guardar el staging area
     FailToSaveStaginArea(String),
+    /// Error de recursividad de comando
+    NotRecursive(String),
+    /// El objeto no se encunetra en el staging area
+    NotInStagingArea(String, String),
+    /// Error al eliminar un archivo
+    FileRemovingError(String),
 }
 
 impl Error for CommandError {}
@@ -81,6 +87,18 @@ impl fmt::Display for CommandError {
             }
             CommandError::FailToSaveStaginArea(error) => {
                 write!(f, "Error al guardar el staging area: {error}")
+            }
+            CommandError::NotRecursive(path) => {
+                write!(f, "No se remueve {path} recursivamente sin el flag -r")
+            }
+            CommandError::NotInStagingArea(path, hash) => {
+                write!(
+                    f,
+                    "El path {path} con hash {hash} no se encuentra en el staging area"
+                )
+            }
+            CommandError::FileRemovingError(path) => {
+                write!(f, "Hay un error cerrando el archivo: {path}")
             }
         }
     }
