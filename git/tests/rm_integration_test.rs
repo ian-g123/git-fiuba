@@ -4,11 +4,11 @@ use git::commands::stagin_area::StagingArea;
 
 #[test]
 fn test_single_file() {
-    let path = "./tests/data/commands/add/repo1";
+    let path = "./tests/data/commands/rm/repo1";
     create_test_scene_1(path.clone());
 
     let result = Command::new("../../../../../target/debug/git")
-        .arg("add")
+        .arg("rm")
         .arg("testfile.txt")
         .current_dir(path)
         .output()

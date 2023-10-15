@@ -215,17 +215,18 @@ impl Rm {
         let mut file =
             fs::File::open(path).map_err(|error| file_open_error_maper(error, logger))?;
         let mut content = Vec::<u8>::new();
+
         file.read_to_end(&mut content)
             .map_err(|error| file_open_error_maper(error, logger))?;
 
         let hash_object = HashObject::new("blob".to_string(), vec![], true, false);
         let (hash_hex, _) = hash_object.run_for_content(content)?;
 
-        self.verifies_version_of_index(); //IMPLEMENTAR!
-
-        if !self.force{
-            self.remove_from_stagin_area(path, hash_hex, staging_area, logger)?;
+        if !self.force {
+            self.verifies_version_of_index(); //IMPLEMENTAR!
         }
+        
+        self.remove_from_stagin_area(path, hash_hex, staging_area, logger)?;
 
         if !self.cached {
             fs::remove_file(path).map_err(|error| file_removing_error_maper(error, logger))?;
