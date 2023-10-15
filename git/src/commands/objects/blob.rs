@@ -7,17 +7,25 @@ pub struct Blob{
     mode: Mode,
     path: String,
     hash: String,
-    name: String
+    name: String,
 }
 
 impl Blob{
-    fn new(path: String)-> Result<Self, CommandError>{
+    pub fn new(path: String)-> Result<Self, CommandError>{
         let object_type = "blob";
         let mode = set_mode(path.clone())?;
-        let sha1 = get_sha1(path.clone(), object_type.to_string())?;
+        let sha1 = get_sha1(path.clone(), object_type.to_string(), false)?;
         Ok(Blob{
-            mode: mode, path: path.clone(),
-            name: get_name(path), hash:sha1
+            mode: mode, path: path.clone(), hash:sha1,
+            name: get_name(&path)?
+        })
+    }
+
+    pub fn new_from_hash(hash:String, path:String)-> Result<Self, CommandError>{
+        let mode = set_mode(path.clone())?;
+        Ok(Blob{
+            mode: mode, path: path.clone(), hash:hash,
+            name: get_name(&path)?
         })
     }
 

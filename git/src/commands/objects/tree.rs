@@ -15,16 +15,16 @@ pub struct Tree{
 
 
 impl Tree{
-    pub fn new(path: String)-> Result<Self, CommandError>{
+    pub fn new(path: String, objects: HashMap<String, TreeOrBlob>)-> Result<Self, CommandError>{
         let object_type = "tree";
         let mode = set_mode(path.clone())?;
-        let sha1 = get_sha1(path.clone(), object_type.to_string())?;
+        let sha1 = get_sha1(path.clone(), object_type.to_string(), true)?;
         let objects: HashMap<String, TreeOrBlob> = HashMap::new();
         Ok(Tree{
             hash: sha1,
             mode: mode,
             path: path.clone(),
-            name: get_name(path),
+            name: get_name(&path)?,
             objects: objects,
         })
     }

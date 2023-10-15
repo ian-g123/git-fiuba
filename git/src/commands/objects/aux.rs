@@ -1,4 +1,5 @@
 use std::io::Read;
+use std::path::Path;
 use std::os::unix::prelude::PermissionsExt;
 use std::fs::{self as _fs, File};
 
@@ -7,15 +8,24 @@ use crate::commands::hash_object_components::hash_object::HashObject;
 
 use super::mode::Mode;
 
-pub fn get_name(path: String)-> String{
-    let parts: Vec<&str> = path.split('/').collect();
-    parts[parts.len()-1].to_string()
+pub fn get_name(path_string: &String)-> Result<String, CommandError>{
+
+    let path = Path::new(path_string);
+    if !path.exists(){
+        return Err(CommandError::FileNotFound(path_string.to_string()));
+    }
+    if let Some(file_name) = path.file_name() {
+        if let Some(name_str) = file_name.to_str() {
+            return Ok(name_str.to_string());
+        }
+    } 
+    Err(CommandError::FileNotFound(path_string.to_owned()))
 }
 
-pub fn get_sha1(path: String, object_type: String) -> Result<String, CommandError> {
+pub fn get_sha1(path: String, object_type: String, write: bool) -> Result<String, CommandError> {
     let content = read_file_contents(&path)?;
     let files = [path].to_vec();
-    let hash_object = HashObject::new(object_type, files, false, false);
+    let hash_object = HashObject::new(object_type, files, write, false);
     let (hash, _) = hash_object.run_for_content(content)?;
     Ok(hash)
 }
@@ -45,4 +55,11 @@ pub fn set_mode(path: String)->Result<Mode, CommandError>{
         mode = Mode::RegularFile;
     }
     Ok(mode)
+}
+
+#[cfg(test)]
+mod test{
+    use std::{env::current_dir, path::PathBuf, io};
+    use super::*;
+
 }

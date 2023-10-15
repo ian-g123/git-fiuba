@@ -1,4 +1,4 @@
-use std::{error::Error, fmt::{self, write}};
+use std::{error::Error, fmt::{self, write}, path::PathBuf};
 
 /// Enumeración de errores de flags
 #[derive(Debug)]
@@ -45,6 +45,8 @@ pub enum CommandError {
 
     CurrentDirectoryError,
     HeadError,
+    InvalidDirectory,
+    InvalidDirectoryEntry,
 }
 
 impl Error for CommandError {}
@@ -93,7 +95,13 @@ impl fmt::Display for CommandError {
             },
             CommandError::HeadError => {
                 write!(f, "El archivo .git/HEAD tiene formato inválido")
-            }
+            },
+            CommandError::InvalidDirectoryEntry => {
+                write!(f, "Entrada de directorio inválida")
+            },
+            CommandError::InvalidDirectory => {
+                write!(f, "Directorio inválido")
+            },
         }
     }
 }
