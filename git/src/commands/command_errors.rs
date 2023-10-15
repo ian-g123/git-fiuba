@@ -39,6 +39,7 @@ pub enum CommandError {
     MessageAndReuseError,
     CommitMessageEmptyValue,
     CommitMessageNoValue,
+    InvalidAuthor,
     ReuseMessageNoValue,
     CommitLookUp(String),
     /// Error al abrir el staging area
@@ -51,6 +52,7 @@ pub enum CommandError {
     InvalidDirectory,
     InvalidDirectoryEntry,
     InvalidCommit,
+    NotYourFather,
 }
 
 impl Error for CommandError {}
@@ -115,6 +117,12 @@ impl fmt::Display for CommandError {
             }
             CommandError::InvalidCommit => {
                 write!(f, "Commit inválido")
+            }
+            CommandError::InvalidAuthor => {
+                write!(f, "Autor inválido")
+            }
+            CommandError::NotYourFather => {
+                write!(f, "No es tu padre")
             }
         }
     }

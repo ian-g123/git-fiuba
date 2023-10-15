@@ -1,4 +1,4 @@
-use std::{fmt::format, fs, path::Path, process::Command};
+use std::{fs, path::Path, process::Command};
 
 use git::commands::stagin_area::StagingArea;
 

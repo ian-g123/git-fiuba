@@ -6,7 +6,7 @@ use super::{
     aux::*,
     mode::Mode,
     tree::Tree,
-    tree_or_blob::{TreeLike, TreeOrBlobTrait},
+    tree_or_blob::{GitObject, GitObjectTree},
 };
 
 #[derive(Clone, Debug)]
@@ -23,6 +23,7 @@ impl Blob {
         let object_type = "blob";
         let mode = Mode::get_mode(path.clone())?;
         let sha1 = get_sha1(path.clone(), object_type.to_string(), false)?;
+
         Ok(Blob {
             mode: mode,
             path: path.clone(),
@@ -34,6 +35,7 @@ impl Blob {
     /// Crea un Blob a partir de su hash. Si la ruta no existe, devuelve Error.
     pub fn new_from_hash(hash: String, path: String) -> Result<Self, CommandError> {
         let mode = Mode::get_mode(path.clone())?;
+
         Ok(Blob {
             mode: mode,
             path: path.clone(),
@@ -42,22 +44,28 @@ impl Blob {
         })
     }
 
-    // Devuelve el hash del Blob.
-    // pub fn get_hash(&self)->String{
-    //     self.hash.clone()
-    // }
-}
-
-impl TreeOrBlobTrait for Blob {
-    fn get_hash(&self) -> String {
+    /// Devuelve el hash del Blob.
+    pub fn get_hash(&self) -> String {
         self.hash.clone()
     }
+}
 
+impl GitObjectTree for Blob {
     fn as_mut_tree(&mut self) -> Option<&mut Tree> {
         None
     }
 
-    fn clone_object(&self) -> TreeLike {
+    fn clone_object(&self) -> GitObject {
         Box::new(self.clone())
+    }
+
+    fn type_str(&self) -> String {
+        "blob".to_string()
+    }
+
+    fn content(&self) -> Vec<u8> {
+        // open file in self.path
+        // read file
+        // return file content
     }
 }

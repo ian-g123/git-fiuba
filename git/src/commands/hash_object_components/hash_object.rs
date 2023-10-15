@@ -8,7 +8,9 @@ use crate::{
     commands::{
         command::{Command, ConfigAdderFunction},
         command_errors::CommandError,
+        database,
         file_compressor::compress,
+        objects::blob::Blob,
     },
     logger::Logger,
 };
@@ -149,11 +151,11 @@ impl HashObject {
         }
         for file in &self.files {
             let content = read_file_contents(file)?;
-            let (hex_string, path) = self.run_for_content(content)?;
+            let git_object = Blob::new(file.to_string())?;
+            let hex_string = database::write_object(Box::new(git_object))?;
+            //let (hex_string, path) = self.run_for_content(content)?;
             let _ = writeln!(output, "{}", hex_string);
-            if path.is_some() {
-                logger.log(&format!("Writen object to database in {:?}", path));
-            }
+            logger.log(&format!("Writen object to database in {:?}", hex_string));
         }
         Ok(())
     }

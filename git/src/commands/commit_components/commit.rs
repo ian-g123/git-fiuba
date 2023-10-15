@@ -5,6 +5,8 @@ use crate::{
         command::{Command, ConfigAdderFunction},
         command_errors::CommandError,
         init_components::init::Init,
+        objects::tree::Tree,
+        stagin_area::{self, StagingArea},
     },
     logger::Logger,
 };
@@ -160,18 +162,22 @@ impl Commit {
             return Err(CommandError::MessageAndReuseError);
         }
 
+        let mut stagin_area = StagingArea::open()?;
+
+        let mut working_dir = stagin_area.write_tree()?;
+
         /*
         if staging_area.is_empty() && self.files.is_empty(){
             self.set_nothing_to_commit_output(output)?;
         }
         */
 
-        for path in self.files.iter() {
-            /*
-            1) vaciar StagingArea o crear una nueva
-            2) Agregar al stagingArea. Manejar error si no está en la base de datos o no existe
-             */
-        }
+        // for path in self.files.iter() {
+        //     /*
+        //     1) vaciar StagingArea o crear una nueva
+        //     2) Agregar al stagingArea. Manejar error si no está en la base de datos o no existe
+        //      */
+        // }
 
         if self.message.is_none() {
             self.run_enter_message();
@@ -181,15 +187,15 @@ impl Commit {
 
         //Crear Commit Object con la info necesaria --> Commit::new()
 
-        if self.dry_run {
-            self.get_status_output(output)?;
-        } else {
-            //self.add_commit(commit)
-        }
+        // if self.dry_run {
+        //     self.get_status_output(output)?;
+        // } else {
+        //     //self.add_commit(commit)
+        // }
 
-        if !self.quiet {
-            //self.get_commit_output(commit)
-        }
+        // if !self.quiet {
+        //     //self.get_commit_output(commit)
+        // }
 
         Ok(())
     }

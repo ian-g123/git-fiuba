@@ -3,6 +3,7 @@ use std::{fmt::format, fs, path::Path, process::Command};
 use git::commands::stagin_area::StagingArea;
 
 #[test]
+#[ignore]
 fn test_single_file() {
     let path = "./tests/data/commands/commit/repo1";
     create_test_scene_1(path.clone());

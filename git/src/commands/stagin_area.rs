@@ -3,7 +3,11 @@ use std::{
     io::{Read, Write},
 };
 
-use super::command_errors::CommandError;
+use super::{
+    command_errors::CommandError,
+    hash_object_components::hash_object::{self, HashObject},
+    objects::tree::Tree,
+};
 
 #[derive(Debug)]
 pub struct StagingArea {
@@ -84,6 +88,15 @@ impl StagingArea {
 
     pub fn remove(&mut self, path: &str) {
         self.files.remove(path);
+    }
+
+    pub(crate) fn write_tree(&self) -> Result<(), CommandError> {
+        let mut tree = Tree::new_from_path("");
+        for (path, hash) in &self.files {
+            tree.add_blob(&path, &hash)?;
+        }
+        Ok(())
+        //HashObject;
     }
 }
 
