@@ -10,11 +10,10 @@ use crate::commands::{stagin_area::StagingArea, command_errors::CommandError};
 use super::aux::get_sha1;
 use super::blob::Blob;
 use super::tree_or_blob::TreeOrBlob;
-use super::{author::Author, mode::Mode, tree::Tree};
+use super::{author::Author, tree::Tree};
 
 extern crate chrono;
 use chrono::{prelude::*, TimeZone};
-use sha1::digest::block_buffer::Error;
 
 #[derive(Clone)]
 pub struct Commit{
@@ -27,49 +26,34 @@ pub struct Commit{
 }
 
 impl Commit{
+    /// Crea un Commit a partir de los cambios del Staging Area.
     pub fn new(index: StagingArea,message: String, author: Author)-> Result<(), CommandError>{
         let mut parent: Option<String> = None;
         let parent_hash = Commit::get_parent()?;
         if !parent_hash.is_empty(){
             parent = Some(parent_hash)
         }
-        let timestamp = Commit::get_timestamp();
+        let timestamp = get_timestamp();
 
         let tree = CommitTree::new(index.files, parent)?;
 
-        // falta hash
+        // falta hash y author
         
         Ok(())
     }
 
+    /// Cambia la fecha y hora del Commit.
     pub fn change_date(&mut self, date: String){
         self.date = date;
     }
 
-    fn get_timestamp(){
-        let timestamp: DateTime<Local> = Local::now();
-        // formateo para que se vea como el de git.
-        timestamp.format("%a %b %e %H:%M:%S %Y %z").to_string();
-    }
-
+    /// Obtiene el hash del Commit padre. Si no tiene p
     fn get_parent()-> Result<String, CommandError>{
-        let mut branch = String::new();
         let mut parent = String::new();
-        let path = ".git/HEAD";
-        let Ok(mut head) = File::open(path) else{
-            return Err(CommandError::NotGitRepository);
-        };
-
-        if head.read_to_string(&mut branch).is_err(){
-            return Err(CommandError::FileReadError(path.to_string()));
-        }
-        let branch = branch.trim();
-        let Some(branch) = branch.split(" ").last() else{
-            return Err(CommandError::HeadError);
-        };
+        let branch = get_current_branch()?;
         let branch_path = format!(".git/{}", branch);
-        let Ok(mut branch_file) = File::open(path) else{
-            return Err(CommandError::FileOpenError(branch_path));
+        let Ok(mut branch_file) = File::open(branch_path.clone()) else{
+            return Ok(parent);
         };
         if branch_file.read_to_string(&mut parent).is_err(){
             return Err(CommandError::FileReadError(branch_path.to_string()));
@@ -77,10 +61,29 @@ impl Commit{
         let parent = parent.trim();
         Ok(parent.to_string())
     }
-
     
 }
 
+/// Obtiene la rama actual. Si no se puede leer de ".git/HEAD", se devuelve error.
+fn get_current_branch()-> Result<String, CommandError>{
+    let mut branch = String::new();
+    let mut parent = String::new();
+    let path = ".git/HEAD";
+    let Ok(mut head) = File::open(path) else{
+        return Err(CommandError::NotGitRepository);
+    };
+
+    if head.read_to_string(&mut branch).is_err(){
+        return Err(CommandError::FileReadError(path.to_string()));
+    }
+    let branch = branch.trim();
+    let Some(branch) = branch.split(" ").last() else{
+        return Err(CommandError::HeadError);
+    };
+    Ok(branch.to_string())
+}
+
+/// Obtiene el directorio actual.
 fn get_current_dir()-> Result<PathBuf, CommandError>{
     let Ok(current_dir) = current_dir() else{
         return Err(CommandError::NotGitRepository);
@@ -93,10 +96,11 @@ struct CommitTree{
 }
 
 impl CommitTree{
+    /// Crea un Tree que contiene los cambios del Staging Area, así como los archivos del working tree
+    /// que se encuentran en el commit anterior. Devuelve error si la operación falla.
     fn new(index: HashMap<String, String>, parent: Option<String>)-> Result<Tree, CommandError>{
         let path = get_current_dir()?;
-        //let tree = Tree::new(path)?;
-        let path_name = Self::get_path_name(path)?;
+        let path_name = get_path_name(path)?;
         let mut objects:HashMap<String, TreeOrBlob> = HashMap::new();
         Self::compare(path_name.clone(), &index, &mut objects, &parent)?;
         let mut tree = Self::create_tree(&path_name, objects)?;
@@ -104,6 +108,7 @@ impl CommitTree{
         Ok(tree)
     }
 
+    /// Agrega los archivos nuevos que están en el Staging Area, pero no en el Working Tree.
     fn add_new_files(index: &HashMap<String, String>, tree: &mut Tree)-> Result<(), CommandError>{
         for (path, hash) in  index{
             tree.add_blob(path, hash)?;
@@ -111,14 +116,8 @@ impl CommitTree{
         Ok(())
     }
 
-    fn get_current_dir()-> Result<PathBuf, CommandError>{
-        let Ok(current_dir) = current_dir() else{
-            return Err(CommandError::NotGitRepository);
-        };
-        Ok(current_dir)
-    }
-
-    pub fn compare(path_name: String, index: &HashMap<String, String>, objects:&mut HashMap<String, TreeOrBlob>, parent:&Option<String>)-> Result<(), CommandError>{
+    /// Compara las carpetas y archivos del Working Tree y el Staging Area. (falta refactor)
+    fn compare(path_name: String, index: &HashMap<String, String>, objects:&mut HashMap<String, TreeOrBlob>, parent:&Option<String>)-> Result<(), CommandError>{
         let path = Path::new(&path_name); 
 
         let Ok(entries) = fs::read_dir(path.clone()) else{
@@ -129,7 +128,7 @@ impl CommitTree{
                 return Err(CommandError::InvalidDirectoryEntry);
             };
             let entry_path = entry.path();
-            let entry_name = Self::get_path_name(entry_path.clone())?;
+            let entry_name = get_path_name(entry_path.clone())?;
 
             if entry_path.is_dir() {
 
@@ -153,10 +152,15 @@ impl CommitTree{
         Ok(())
     }
 
+    /// Crea un Tree.
     fn create_tree(path:&String, objects:HashMap<String, TreeOrBlob>)-> Result<Tree, CommandError>{
         Ok(Tree::new(path.to_owned(),objects)?)      
     }
 
+    /// Compara un archivo del WorkingTree con el Índex. Si el archivo está en la Staging Area,
+    /// se guardan las modificaciones presentes en la misma al Tree. Si el archivo no está en 
+    /// la Staging Area, pero fue registrado en el commit anterior, se agrega el archivo sin
+    /// modificaciones al Tree.
     fn compare_entry(path: &String, index: &HashMap<String, String>, parent: &Option<String>)->Result<Option<Blob>, CommandError>{
         let mut blob:Blob;
         if index.contains_key(path){
@@ -180,6 +184,7 @@ impl CommitTree{
         
     }
 
+    /// Busca el contenido de un archivo en la Base de Datos y lo devuelve. Si no existe, devuelve error.
     fn read_content(hash: String)-> Result<Vec<u8>, CommandError>{
         let mut data :Vec<u8> = Vec::new();
         let path = format!(".git/objects/{}/{}", hash[..2].to_string(), hash[2..].to_string() );
@@ -192,6 +197,8 @@ impl CommitTree{
         Ok(data)
     }
 
+    /// Busca en el Commit padre el 'blob_hash'. Si lo encuentra, devuelve true. Si el contenido
+    /// del 'parent_hash' no se puede leer o descomprimir, devuelve error.
     fn search_parent_commit(parent_hash:String, blob_hash: String)-> Result<bool, CommandError>{
         let path = format!(".git/objects/{}/{}", parent_hash[..2].to_string(), parent_hash[2..].to_string() );
         let data = Self::read_content(parent_hash)?;
@@ -214,12 +221,20 @@ impl CommitTree{
         Ok(false)
     }
 
-    fn get_path_name(path: PathBuf)->Result<String, CommandError>{
-        let Some(path_name) = path.to_str() else{
-            return Err(CommandError::InvalidDirectoryEntry);
-        };
-        Ok(path_name.to_string())
-    }
+}
+/// Devuelve el nombre de un archivo o directorio dado un PathBuf.
+fn get_path_name(path: PathBuf)->Result<String, CommandError>{
+    let Some(path_name) = path.to_str() else{
+        return Err(CommandError::InvalidDirectoryEntry);
+    };
+    Ok(path_name.to_string())
+}
+
+/// Obtiene la fecha y hora actuales.
+fn get_timestamp(){
+    let timestamp: DateTime<Local> = Local::now();
+    // formateo para que se vea como el de git.
+    timestamp.format("%a %b %e %H:%M:%S %Y %z").to_string();
 }
 
 #[cfg(test)]

@@ -13,6 +13,8 @@ pub struct Blob{
 }
 
 impl Blob{
+
+    /// Crea un Blob a partir de su ruta. Si la ruta no existe, devuelve Error.
     pub fn new(path: String)-> Result<Self, CommandError>{
         let object_type = "blob";
         let mode = Mode::get_mode(path.clone())?;
@@ -23,6 +25,7 @@ impl Blob{
         })
     }
 
+    /// Crea un Blob a partir de su hash. Si la ruta no existe, devuelve Error.
     pub fn new_from_hash(hash:String, path:String)-> Result<Self, CommandError>{
         let mode = Mode::get_mode(path.clone())?;
         Ok(Blob{
@@ -31,6 +34,7 @@ impl Blob{
         })
     }
 
+    /// Devuelve el hash del Blob.
     pub fn get_hash(&self)->String{
         self.hash.clone()
     }

@@ -15,6 +15,8 @@ pub struct Tree{
 
 
 impl Tree{
+    /// Crea un Tree a partir de su ruta y los objetos alos que referencia. Si la ruta no existe,
+    ///  devuelve Error.
     pub fn new(path: String, objects: HashMap<String, TreeOrBlob>)-> Result<Self, CommandError>{
         let object_type = "tree";
         let mode = Mode::get_mode(path.clone())?;
@@ -29,32 +31,36 @@ impl Tree{
         })
     }
 
+    /// Devuelve el hash del Tree.
     pub fn get_hash(&self)->String{
         self.hash.clone()
     }
 
+        /// Crea un Blob a partir de su hash y lo añade al Tree.
+        pub fn add_blob(&mut self, path_name: &String, hash: &String)-> Result<(), CommandError>{
+            let path = PathBuf::from(path_name.clone());
+            let Some(parent_path) = path.parent() else{
+                return Err(CommandError::FileNotFound(path_name.to_owned()))
+            };
+            let Some(parent_path) = parent_path.to_str()else{
+                return Err(CommandError::FileNotFound(path_name.to_owned()))
+            };
+            if self.path == parent_path{
+                let blob = Blob::new_from_hash(hash.to_owned(), path_name.to_owned())?;
+                _ = self.objects.insert(blob.get_hash(), TreeOrBlob::BlobObject(blob));
+            } else{
+                self.add_blob_aux(path_name, &hash)?;
+            }
+            Ok(())
+        }
+
+    /// Agrega un Objeto Blob o Tree al Tree.
     fn add_object(&mut self, object: TreeOrBlob){
         let hash_object = object.get_hash();
         _ = self.objects.insert(hash_object, object);
     }
 
-    pub fn add_blob(&mut self, path_name: &String, hash: &String)-> Result<(), CommandError>{
-        let path = PathBuf::from(path_name.clone());
-        let Some(parent_path) = path.parent() else{
-            return Err(CommandError::FileNotFound(path_name.to_owned()))
-        };
-        let Some(parent_path) = parent_path.to_str()else{
-            return Err(CommandError::FileNotFound(path_name.to_owned()))
-        };
-        if self.path == parent_path{
-            let blob = Blob::new_from_hash(hash.to_owned(), path_name.to_owned())?;
-            _ = self.objects.insert(blob.get_hash(), TreeOrBlob::BlobObject(blob));
-        } else{
-            self.add_blob_aux(path_name, &hash)?;
-        }
-        Ok(())
-    }
-
+    /// Busca el Tree donde debe guardarse el Blob.
     fn add_blob_aux(&mut self, path_name: &String, hash: &String)-> Result<(), CommandError>{
         for (_, object) in self.objects.iter_mut(){
             if let TreeOrBlob::TreeObject(mut tree) = object.clone(){
