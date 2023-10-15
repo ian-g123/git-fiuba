@@ -1,4 +1,8 @@
-use std::{error::Error, fmt::{self, write}, path::PathBuf};
+use std::{
+    error::Error,
+    fmt::{self, write},
+    path::PathBuf,
+};
 
 /// Enumeración de errores de flags
 #[derive(Debug, PartialEq)]
@@ -31,7 +35,6 @@ pub enum CommandError {
     NotGitRepository,
 
     // Commit Errors
-
     /// El flag -m de Commit no se puede combinar con -C.
     MessageAndReuseError,
     CommitMessageEmptyValue,
@@ -47,6 +50,7 @@ pub enum CommandError {
     HeadError,
     InvalidDirectory,
     InvalidDirectoryEntry,
+    InvalidCommit,
 }
 
 impl Error for CommandError {}
@@ -78,30 +82,40 @@ impl fmt::Display for CommandError {
                 f,
                 "El flag -e no se utiliza comúnmente junto con otros flags en el comando"
             ),
-            CommandError::MessageAndReuseError => write!(f, "fatal: Option -m cannot be combined with -C"),
-            CommandError::CommitMessageNoValue => write!(f,"error: switch `m' requires a value"),
-            CommandError::CommitMessageEmptyValue => write!(f, "Aborting commit due to empty commit message."),
+            CommandError::MessageAndReuseError => {
+                write!(f, "fatal: Option -m cannot be combined with -C")
+            }
+            CommandError::CommitMessageNoValue => write!(f, "error: switch `m' requires a value"),
+            CommandError::CommitMessageEmptyValue => {
+                write!(f, "Aborting commit due to empty commit message.")
+            }
             CommandError::ReuseMessageNoValue => write!(f, "error: switch `C' requires a value"),
             CommandError::CommitLookUp(hash) => write!(f, "fatal: could not lookup commit {hash}"),
-            CommandError::NotGitRepository => write!(f, "fatal: not a git repository (or any of the parent directories): .git"),
+            CommandError::NotGitRepository => write!(
+                f,
+                "fatal: not a git repository (or any of the parent directories): .git"
+            ),
             CommandError::FailToOpenSatginArea(error) => {
                 write!(f, "Error al abrir el staging area: {error}")
             }
             CommandError::FailToSaveStaginArea(error) => {
                 write!(f, "Error al guardar el staging area: {error}")
-            },
+            }
             CommandError::CurrentDirectoryError => {
                 write!(f, "Current directory does not existo or there are insufficient permissions to access the current directory")
-            },
+            }
             CommandError::HeadError => {
                 write!(f, "El archivo .git/HEAD tiene formato inválido")
-            },
+            }
             CommandError::InvalidDirectoryEntry => {
                 write!(f, "Entrada de directorio inválida")
-            },
+            }
             CommandError::InvalidDirectory => {
                 write!(f, "Directorio inválido")
-            },
+            }
+            CommandError::InvalidCommit => {
+                write!(f, "Commit inválido")
+            }
         }
     }
 }
