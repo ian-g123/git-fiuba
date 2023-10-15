@@ -28,21 +28,39 @@ pub struct Commit {
 
 impl Commit {
     /// Crea un Commit a partir de los cambios del Staging Area.
-    pub fn new(index: StagingArea, message: String, author: Author) -> Result<(), CommandError> {
-        let mut parent: Option<String> = None;
-        let parent_hash = Commit::get_parent()?;
+    // pub fn new(index: StagingArea, message: String, author: Author) -> Result<(), CommandError> {
+    //     let mut parent: Option<String> = None;
+    //     let parent_hash = Commit::get_parent()?;
 
-        if !parent_hash.is_empty() {
-            parent = Some(parent_hash)
-        }
+    //     if !parent_hash.is_empty() {
+    //         parent = Some(parent_hash)
+    //     }
 
-        let timestamp = get_timestamp();
+    //     let timestamp = get_timestamp();
 
-        let tree = CommitTree::new(index.files, parent)?;
+    //     let tree = CommitTree::new(index.files, parent)?;
 
-        // falta hash y author
+    //     // falta hash y author
 
-        Ok(())
+    //     Ok(())
+    // }
+
+    pub fn new(
+        parent: Option<String>, //cambiar en Merge (puede tener varios padres),
+        message: String,
+        author: Author,
+        committer: Author,
+        date: DateTime<Local>,
+        tree: Tree,
+    ) -> Result<Self, CommandError> {
+        Ok(Self {
+            parent,
+            message,
+            author,
+            committer,
+            date,
+            tree,
+        })
     }
 
     /// Cambia la fecha y hora del Commit.

@@ -23,6 +23,8 @@ fn test_single_file() {
         .output()
         .unwrap();
 
+    assert!(result.status.success());
+
     let result = Command::new("../../../../../target/debug/git")
         .arg("cat-file")
         .arg("30d74d258442c7c65512eafab474568dd706c430")
@@ -32,6 +34,19 @@ fn test_single_file() {
         .unwrap();
 
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "test\n");
+
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("cat-file")
+        .arg("202f25a8a5c0ae1ff0b94f88348be65402f6dced")
+        .arg("-p")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    assert_eq!(
+        String::from_utf8(result.stdout).unwrap(),
+        "100644 blob 30d74d258442c7c65512eafab474568dd706c430    testfile.txt\0\n"
+    );
 
     panic!();
 
@@ -83,6 +98,7 @@ fn create_base_scene(path: &str) {
     assert!(
         Command::new("git")
             .arg("init")
+            .arg("-q")
             .current_dir(path)
             .status()
             .is_ok(),

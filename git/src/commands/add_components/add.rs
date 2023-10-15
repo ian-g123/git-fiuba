@@ -52,9 +52,7 @@ impl Command for Add {
 
         let instance = Self::new(args)?;
 
-        logger.log(&format!("adding {:?}", args));
         instance.run(stdin, output, logger)?;
-        logger.log(&format!("add {:?}", args));
         Ok(())
     }
 
@@ -110,6 +108,7 @@ impl Add {
                         ));
                     };
                     run_for_file(path_str, logger)?;
+                    logger.log(&format!("Add: {:?}", path_str));
                     return Ok(());
                 }
                 logger.log(&format!(
@@ -147,13 +146,11 @@ fn run_for_file(path: &str, logger: &mut Logger) -> Result<(), CommandError> {
     let mut file = fs::File::open(path).unwrap();
     let mut content = Vec::<u8>::new();
     file.read_to_end(&mut content).unwrap();
-    logger.log(&format!("content: {:?}", content));
     let hash_object = HashObject::new("blob".to_string(), vec![], true, false);
     let (hash_hex, _) = hash_object.run_for_content(content)?;
     match StagingArea::open() {
         Ok(mut staging_area) => {
             staging_area.add(path, &hash_hex);
-            logger.log(&format!("staging_area.add({},{})", path, &hash_hex));
             staging_area.save()?;
         }
         Err(error) => {

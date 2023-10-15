@@ -6,6 +6,7 @@ use crate::{
         command_errors::CommandError,
         init_components::init::Init,
         objects::tree::Tree,
+        objects_database,
         stagin_area::{self, StagingArea},
     },
     logger::Logger,
@@ -31,11 +32,12 @@ impl Command for Commit {
         if name != "commit" {
             return Err(CommandError::Name);
         }
+        logger.log(&format!("committing {:?}", args));
 
         let instance = Self::new_from(args)?;
 
+        instance.run(output, logger)?;
         logger.log(&format!("commit {:?}", args));
-        instance.run(output)?;
         Ok(())
     }
 
@@ -157,15 +159,17 @@ impl Commit {
          */
     }
 
-    fn run(&self, output: &mut dyn Write) -> Result<(), CommandError> {
+    fn run(&self, output: &mut dyn Write, logger: &mut Logger) -> Result<(), CommandError> {
         if self.message.is_some() && self.reuse_message.is_some() {
             return Err(CommandError::MessageAndReuseError);
         }
 
         let mut stagin_area = StagingArea::open()?;
 
-        let mut working_dir = stagin_area.write_tree()?;
+        let mut working_dir = stagin_area.write_tree(logger)?;
 
+        let head_ref = get_head_ref()?;
+        //Commit
         /*
         if staging_area.is_empty() && self.files.is_empty(){
             self.set_nothing_to_commit_output(output)?;
@@ -250,6 +254,29 @@ impl Commit {
         status.get_output(output)?; */
         Ok(())
     }
+}
+
+/// Opens file in .git/HEAD and returns the branch name
+fn get_head_ref() -> Result<String, CommandError> {
+    let Ok(mut head_file) = File::open(".git/HEAD") else {
+        return Err(CommandError::FileOpenError(".git/HEAD".to_string()));
+    };
+    let mut head_content = String::new();
+    head_file
+        .read_to_string(&mut head_content)
+        .map_err(|error| {
+            CommandError::FileReadError(format!(
+                "Error abriendo .git/HEAD: {:?}",
+                error.to_string()
+            ))
+        })?;
+
+    let Some((_, head_ref)) = head_content.split_once(" ") else {
+        return Err(CommandError::FileReadError(
+            "Error leyendo .git/HEAD".to_string(),
+        ));
+    };
+    Ok(head_ref.to_string())
 }
 
 #[cfg(test)]

@@ -1,4 +1,4 @@
-use std::{fs, os::unix::prelude::PermissionsExt};
+use std::{fmt, fs, os::unix::prelude::PermissionsExt};
 
 use crate::commands::command_errors::CommandError;
 
@@ -32,6 +32,19 @@ impl Mode {
         }
 
         Ok(mode)
+    }
+}
+
+impl fmt::Display for Mode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mode_str = match self {
+            Mode::RegularFile => "100644",
+            Mode::ExecutableFile => "100755",
+            Mode::SymbolicLink => "120000",
+            Mode::Submodule => "160000",
+            Mode::Tree => "040000",
+        };
+        write!(f, "{}", mode_str)
     }
 }
 

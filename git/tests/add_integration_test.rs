@@ -164,6 +164,7 @@ fn create_base_scene(path: &str) {
     assert!(
         Command::new("git")
             .arg("init")
+            .arg("-q")
             .current_dir(path)
             .status()
             .is_ok(),

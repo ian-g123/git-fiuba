@@ -1,6 +1,6 @@
 use crate::commands::{command::Command, command_errors::CommandError};
 
-use super::tree::Tree;
+use super::{mode::Mode, tree::Tree};
 use std::fmt;
 pub type GitObject = Box<dyn GitObjectTree>;
 
@@ -16,14 +16,16 @@ pub trait GitObjectTree {
         let header = format!("{} {}\0", type_str, len);
         stream
             .write(header.as_bytes())
-            .map_err(|error| CommandError::FileWriteError(error.to_string()));
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
         stream
             .write(content.as_slice())
-            .map_err(|error| CommandError::FileWriteError(error.to_string()));
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
         Ok(())
     }
 
     fn type_str(&self) -> String;
+
+    fn mode(&self) -> Mode;
 
     fn content(&self) -> Result<Vec<u8>, CommandError>;
 }

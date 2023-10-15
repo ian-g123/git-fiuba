@@ -66,6 +66,11 @@ impl GitObjectTree for Blob {
     fn content(&self) -> Result<Vec<u8>, CommandError> {
         read_file_contents(&self.path)
     }
+
+    // TODO: implementar otros modos para blobs
+    fn mode(&self) -> Mode {
+        Mode::RegularFile
+    }
 }
 
 fn read_file_contents(path: &str) -> Result<Vec<u8>, CommandError> {

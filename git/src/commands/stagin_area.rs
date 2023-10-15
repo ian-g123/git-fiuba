@@ -3,10 +3,13 @@ use std::{
     io::{Read, Write},
 };
 
+use crate::logger::{self, Logger};
+
 use super::{
     command_errors::CommandError,
     hash_object_components::hash_object::{self, HashObject},
     objects::tree::Tree,
+    objects_database,
 };
 
 #[derive(Debug)]
@@ -90,11 +93,13 @@ impl StagingArea {
         self.files.remove(path);
     }
 
-    pub(crate) fn write_tree(&self) -> Result<(), CommandError> {
-        let mut tree = Tree::new_from_path("");
+    pub(crate) fn write_tree(&self, logger: &mut Logger) -> Result<(), CommandError> {
+        let mut working_dir = Tree::new_from_path("")?;
         for (path, hash) in &self.files {
-            tree.add_blob(&path, &hash)?;
+            working_dir.add_blob(&path, &hash)?;
         }
+
+        objects_database::write(Box::new(working_dir))?;
         Ok(())
         //HashObject;
     }

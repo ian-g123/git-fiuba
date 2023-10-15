@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::commands::command_errors::CommandError;
+use crate::commands::{command::Command, command_errors::CommandError, objects_database};
 
 use super::{
     aux::*,
@@ -38,15 +38,17 @@ impl Tree {
         })
     }
 
-    pub fn new_from_path(path: &str) -> Self {
+    pub fn new_from_path(path: &str) -> Result<Self, CommandError> {
         let objects: HashMap<String, GitObject> = HashMap::new();
 
-        Tree {
-            mode: Mode::get_mode(path.to_string()).unwrap(),
+        // let mode = Mode::get_mode(path.to_string())?;
+        let mode = Mode::Tree;
+        Ok(Tree {
+            mode,
             path: path.to_string(),
             // name: get_name(path).unwrap(),
             objects: objects,
-        }
+        })
     }
 
     /// Devuelve el hash del Tree.
@@ -98,7 +100,7 @@ impl Tree {
     fn add_new_blob_in_new_tree(&self, path_name: &str, hash: &str) -> Result<Tree, CommandError> {
         let parent_path = get_parent(path_name)?;
         let blob = Blob::new_from_hash(hash.to_string(), path_name.to_string())?;
-        let mut tree = Tree::new_from_path(&parent_path);
+        let mut tree = Tree::new_from_path(&parent_path)?;
         tree.insert(path_name, Box::new(blob));
         self.add_tree_in_new_tree(&parent_path, tree)
     }
@@ -108,7 +110,7 @@ impl Tree {
         if parent_path == self.path {
             return Ok(tree);
         }
-        let mut parent_tree = Tree::new_from_path(&parent_path);
+        let mut parent_tree = Tree::new_from_path(&parent_path)?;
         parent_tree.insert(path_name, Box::new(tree));
         self.add_tree_in_new_tree(&parent_path, parent_tree)
     }
@@ -139,6 +141,25 @@ impl GitObjectTree for Tree {
     }
 
     fn content(&self) -> Result<Vec<u8>, CommandError> {
-        todo!()
+        let mut content = Vec::new();
+        for (path, object) in self.objects.iter() {
+            let hash_str = objects_database::write(object.to_owned())?;
+            let filename = get_name(path)?;
+            content.extend_from_slice(
+                format!(
+                    "{} {} {}    {}\0",
+                    object.mode(),
+                    object.type_str(),
+                    hash_str,
+                    filename
+                )
+                .as_bytes(),
+            );
+        }
+        Ok(content)
+    }
+
+    fn mode(&self) -> Mode {
+        Mode::Tree
     }
 }
