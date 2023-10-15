@@ -11,7 +11,7 @@ pub trait GitObjectTree {
 
     fn write_to(&self, stream: &mut dyn std::io::Write) -> Result<(), CommandError> {
         let type_str = self.type_str();
-        let content = self.content();
+        let content = self.content()?;
         let len = content.len();
         let header = format!("{} {}\0", type_str, len);
         stream
@@ -25,7 +25,7 @@ pub trait GitObjectTree {
 
     fn type_str(&self) -> String;
 
-    fn content(&self) -> Vec<u8>;
+    fn content(&self) -> Result<Vec<u8>, CommandError>;
 }
 
 impl fmt::Display for GitObject {

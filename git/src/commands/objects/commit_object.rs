@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use super::aux::get_sha1;
 use super::blob::Blob;
-use super::tree_or_blob::{GitObject, GitObjectTree};
+use super::git_object::{GitObject, GitObjectTree};
 use super::{author::Author, tree::Tree};
 use crate::commands::file_compressor::extract;
 use crate::commands::{command_errors::CommandError, stagin_area::StagingArea};

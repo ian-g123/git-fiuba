@@ -8,8 +8,8 @@ use crate::commands::command_errors::CommandError;
 use super::{
     aux::*,
     blob::Blob,
+    git_object::{GitObject, GitObjectTree},
     mode::Mode,
-    tree_or_blob::{GitObject, GitObjectTree},
 };
 
 //#[derive(Debug, Clone)]
@@ -132,5 +132,13 @@ impl GitObjectTree for Tree {
 
     fn clone_object(&self) -> GitObject {
         Box::new(self.clone())
+    }
+
+    fn type_str(&self) -> String {
+        "tree".to_string()
+    }
+
+    fn content(&self) -> Result<Vec<u8>, CommandError> {
+        todo!()
     }
 }

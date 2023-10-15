@@ -1,12 +1,12 @@
-use std::os::unix::prelude::PermissionsExt;
+use std::{fs::File, io::Read, os::unix::prelude::PermissionsExt};
 
 use crate::commands::command_errors::CommandError;
 
 use super::{
     aux::*,
+    git_object::{GitObject, GitObjectTree},
     mode::Mode,
     tree::Tree,
-    tree_or_blob::{GitObject, GitObjectTree},
 };
 
 #[derive(Clone, Debug)]
@@ -63,9 +63,15 @@ impl GitObjectTree for Blob {
         "blob".to_string()
     }
 
-    fn content(&self) -> Vec<u8> {
-        // open file in self.path
-        // read file
-        // return file content
+    fn content(&self) -> Result<Vec<u8>, CommandError> {
+        read_file_contents(&self.path)
     }
+}
+
+fn read_file_contents(path: &str) -> Result<Vec<u8>, CommandError> {
+    let mut file = File::open(path).map_err(|_| CommandError::FileNotFound(path.to_string()))?;
+    let mut data = Vec::new();
+    file.read_to_end(&mut data)
+        .map_err(|_| CommandError::FileReadError(path.to_string()))?;
+    Ok(data)
 }
