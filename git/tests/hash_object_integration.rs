@@ -11,6 +11,7 @@ fn test_hash_object_integration() {
 
     assert!(Command::new("git")
         .arg("init")
+        .arg("-q")
         .current_dir(path)
         .status()
         .is_ok());
