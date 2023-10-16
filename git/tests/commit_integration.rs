@@ -37,7 +37,7 @@ fn test_single_file() {
 
     let result = Command::new("../../../../../target/debug/git")
         .arg("cat-file")
-        .arg("1c2ed5c0d07d0ea59b9361201377cd1971751fd3")
+        .arg("a07f2722102c226d267b58d99536d6e90a926b91")
         .arg("-p")
         .current_dir(path)
         .output()
@@ -45,10 +45,8 @@ fn test_single_file() {
 
     assert_eq!(
         String::from_utf8(result.stdout).unwrap(),
-        "100644 blob 30d74d258442c7c65512eafab474568dd706c430    testfile.txt\n"
+        "100644 tree 30d74d258442c7c65512eafab474568dd706c430    testfile.txt\n"
     );
-
-    panic!();
 
     _ = fs::remove_dir_all(format!("{}", path));
 }

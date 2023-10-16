@@ -17,8 +17,8 @@ fn test_single_file() {
 
     let result = Command::new("../../../../../target/debug/git")
         .arg("cat-file")
-        .arg("30d74d258442c7c65512eafab474568dd706c430")
         .arg("-p")
+        .arg("30d74d258442c7c65512eafab474568dd706c430")
         .current_dir(path)
         .output()
         .unwrap();

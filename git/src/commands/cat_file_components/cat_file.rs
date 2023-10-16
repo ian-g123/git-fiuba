@@ -1,7 +1,12 @@
+use chrono::format;
+
 use crate::{
     commands::{
-        command::Command, command_errors::CommandError, file_compressor::extract,
-        objects::git_object::GitObject, objects_database,
+        command::Command,
+        command_errors::CommandError,
+        file_compressor::extract,
+        objects::git_object::{self, GitObject},
+        objects_database,
     },
     logger::Logger,
 };
@@ -17,6 +22,7 @@ extern crate libflate;
 
 pub struct CatFile {
     path: String,
+    hash: String,
     exists: bool,
     pretty: bool,
     type_object: bool,
@@ -48,8 +54,10 @@ impl Command for CatFile {
         if name != "cat-file" {
             return Err(CommandError::Name);
         }
+        logger.log(&format!("cat-file args: {:?}", args));
 
-        let cat_file = CatFile::new_default(args)?;
+        let mut cat_file = CatFile::new_default(args)?;
+        cat_file.config(args)?;
         cat_file.run(output, logger)
     }
 
@@ -66,8 +74,8 @@ impl CatFile {
             pretty: false,
             type_object: false,
             size: false,
+            hash: "".to_string(),
         };
-        cat_file.config(args)?;
 
         Ok(cat_file)
     }
@@ -95,13 +103,15 @@ impl CatFile {
         }
 
         self.path = format!(".git/objects/{}/{}", &flag[..2], &flag[2..]);
-
+        self.hash = flag.to_string();
         Ok(i + 1)
     }
 
     fn run(&self, output: &mut dyn Write, logger: &mut Logger) -> Result<(), CommandError> {
-        let object = objects_database::read(&self.path, logger)?;
-
+        // let object = objects_database::read_from_path(&self.path, logger)?;
+        // let object: GitObject = objects_database::read(&self.hash, logger)?;
+        // logger.log("got object");
+        // logger.log(&format!("object: {:?}", object));
         // let path = Path::new(&self.path);
 
         // if !path.exists() {
@@ -119,7 +129,7 @@ impl CatFile {
         //     Some((object_type, size)) => (object_type, size),
         //     None => return Err(CommandError::ObjectTypeError),
         // };
-        self.show_in_output_bis(output, object)
+        self.show_in_output_bis(output, logger)
         // match self.show_in_output(output, object_type, size, content) {
         //     Ok(()) => {}
         //     Err(error) => return Err(error),
@@ -127,61 +137,66 @@ impl CatFile {
         // Ok(())
     }
 
-    fn show_in_output(
-        &self,
-        output: &mut dyn Write,
-        object_type: &str,
-        size: &str,
-        content: &str,
-    ) -> Result<(), CommandError> {
-        if self.exists {
-            if self.pretty || self.size || self.type_object {
-                return Err(CommandError::InvalidArguments);
-            }
-        } else if self.type_object {
-            if self.pretty || self.size {
-                return Err(CommandError::InvalidArguments);
-            } else {
-                _ = writeln!(output, "{}", object_type);
-            }
-        } else if self.size {
-            if self.pretty {
-                return Err(CommandError::InvalidArguments);
-            } else {
-                _ = writeln!(output, "{}", size);
-            }
-        } else if self.pretty {
-            _ = writeln!(output, "{}", content);
-        }
+    // fn show_in_output(
+    //     &self,
+    //     output: &mut dyn Write,
+    //     object_type: &str,
+    //     size: &str,
+    //     content: &str,
+    // ) -> Result<(), CommandError> {
+    //     if self.exists {
+    //         if self.pretty || self.size || self.type_object {
+    //             return Err(CommandError::InvalidArguments);
+    //         }
+    //     } else if self.type_object {
+    //         if self.pretty || self.size {
+    //             return Err(CommandError::InvalidArguments);
+    //         } else {
+    //             _ = writeln!(output, "{}", object_type);
+    //         }
+    //     } else if self.size {
+    //         if self.pretty {
+    //             return Err(CommandError::InvalidArguments);
+    //         } else {
+    //             _ = writeln!(output, "{}", size);
+    //         }
+    //     } else if self.pretty {
+    //         _ = writeln!(output, "{}", content);
+    //     }
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
     fn show_in_output_bis(
         &self,
         output: &mut dyn Write,
-        object: GitObject,
+        logger: &mut Logger,
     ) -> Result<(), CommandError> {
         if self.exists {
             if self.pretty || self.size || self.type_object {
                 return Err(CommandError::InvalidArguments);
-            } else {
-                _ = writeln!(output);
             }
         } else if self.type_object {
             if self.pretty || self.size {
                 return Err(CommandError::InvalidArguments);
             } else {
-                _ = writeln!(output, "{}", object.type_str());
+                git_object::display_type_from_hash(output, &self.hash, logger)?;
+                // _ = writeln!(output, "{}", object.type_str());
             }
         } else if self.size {
             if self.pretty {
                 return Err(CommandError::InvalidArguments);
             } else {
-                _ = writeln!(output, "{}", object.size()?);
+                git_object::display_size_from_hash(output, &self.hash, logger)?;
+                // _ = writeln!(output, "{}", object.size()?);
             }
         } else if self.pretty {
-            _ = writeln!(output, "{}", object);
+            git_object::display_from_hash(output, &self.hash, logger)?;
+            // logger.log("pretty");
+            // logger.log(&object.to_string());
+            // _ = writeln!(output, "{}", object);
+        } else {
+            logger.log("wtf");
         }
 
         Ok(())

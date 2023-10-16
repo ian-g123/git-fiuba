@@ -1,3 +1,4 @@
+use chrono::format;
 use git::{
     commands::{
         add_components::add::Add, cat_file_components::cat_file::CatFile, command::Command,
@@ -20,6 +21,7 @@ fn main() {
     };
 
     if let Err(error) = run(command_name, command_args, &mut logger) {
+        logger.log(&format!("Error: {}", error));
         eprintln!("{error}")
     }
 }

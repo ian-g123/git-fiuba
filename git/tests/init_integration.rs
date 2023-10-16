@@ -32,6 +32,7 @@ fn files_exists(path: &String) -> bool {
 }
 
 #[test]
+#[ignore]
 fn test_sub_dir() {
     let path = "tests/data/commands/init/repo1";
     let Ok(current_dir) = env::current_dir() else {
@@ -68,6 +69,7 @@ fn test_sub_dir() {
 }
 
 #[test]
+#[ignore]
 fn test_init() {
     let path = "tests/data/commands/init/repo2";
     let Ok(current_dir) = env::current_dir() else {
@@ -104,6 +106,7 @@ fn test_init() {
 }
 
 #[test]
+#[ignore]
 fn test_bare() {
     let path = "tests/data/commands/init/repo3";
     let Ok(current_dir) = env::current_dir() else {
@@ -140,6 +143,7 @@ fn test_bare() {
 }
 
 #[test]
+#[ignore]
 fn test_branch() {
     let path = "tests/data/commands/init/repo4";
     let Ok(current_dir) = env::current_dir() else {

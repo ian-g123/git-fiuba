@@ -1,7 +1,10 @@
 use std::{
+    fmt,
     fs::File,
-    io::{Bytes, Read},
+    io::{Bytes, Read, Write},
 };
+
+use chrono::format;
 
 use crate::{commands::command_errors::CommandError, logger::Logger};
 
@@ -74,68 +77,48 @@ impl Blob {
 
     pub fn read_from(
         stream: &mut dyn Read,
+        len: usize,
         path: &str,
         hash: &str,
         logger: &mut Logger,
     ) -> Result<GitObject, CommandError> {
         // read until encountering \0
-        logger.log("read_from");
-
-        let mut bytes = stream.bytes();
-        let type_str = {
-            let end = ' ' as u8;
-            let mut result = String::new();
-            let Some(Ok(mut byte)) = bytes.next() else {
-                return Err(CommandError::FileReadError(
-                    "Error leyendo bytes".to_string(),
-                ));
-            };
-            while byte != end {
-                logger.log(&format!("byte: {}", byte));
-                result.push(byte as char);
-                let Some(Ok(byte_h)) = bytes.next() else {
-                    return Err(CommandError::FileReadError(
-                        "Error leyendo bytes".to_string(),
-                    ));
-                };
-                byte = byte_h;
-            }
-            Ok(result)
-        }?;
-        if type_str != "blob" {
-            return Err(CommandError::ObjectTypeError);
-        }
-        logger.log("Ping");
-        let len_str = {
-            let mut result = String::new();
-            let Some(Ok(mut byte)) = bytes.next() else {
-                return Err(CommandError::FileReadError(
-                    "Error leyendo bytes".to_string(),
-                ));
-            };
-            while byte != 0 {
-                result.push(byte as char);
-                let Some(Ok(byte_h)) = bytes.next() else {
-                    return Err(CommandError::FileReadError(
-                        "Error leyendo bytes".to_string(),
-                    ));
-                };
-                byte = byte_h;
-            }
-            Ok(result)
-        }?;
-        let len: usize = len_str
-            .parse()
-            .map_err(|_| CommandError::ObjectLengthParsingError)?;
 
         let mut content = vec![0; len as usize];
 
         stream
             .read_exact(&mut content)
             .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+        logger.log(&format!(
+            "content: {}",
+            String::from_utf8(content.clone()).unwrap()
+        ));
 
         let blob = Blob::new_from_hash_and_content(hash, path, content)?;
+        logger.log("blob created");
+        logger.log(&format!("blob: {}", blob.to_string()));
         Ok(Box::new(blob))
+    }
+
+    pub(crate) fn display_from_hash(
+        stream: &mut dyn Read,
+        len: usize,
+        path: String,
+        hash: &str,
+        output: &mut dyn Write,
+        logger: &mut Logger,
+    ) -> Result<(), CommandError> {
+        let mut content = vec![0; len as usize];
+        stream
+            .read_exact(&mut content)
+            .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+        let output_str = String::from_utf8(content).map_err(|error| {
+            logger.log("AAAA");
+            CommandError::FileReadError(error.to_string())
+        })?;
+        writeln!(output, "{}", output_str)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        Ok(())
     }
 }
 
@@ -161,13 +144,18 @@ impl GitObjectTrait for Blob {
         Mode::RegularFile
     }
 
-    fn to_string(&self) -> &str {
-        self.content
-            .iter()
-            .map(|byte| format!("{:02x}", byte))
-            .collect::<Vec<_>>()
-            .join("")
-            .as_str()
+    fn to_string_priv(&self) -> String {
+        //map content to utf8
+        let Ok(string) = String::from_utf8(self.content.clone()) else {
+            return "Error convierttiendo a utf8".to_string();
+        };
+        string
+    }
+}
+
+impl fmt::Display for Blob {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.to_string_priv())
     }
 }
 

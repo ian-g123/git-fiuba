@@ -62,6 +62,8 @@ pub enum CommandError {
     ObjectHashNotKnown,
     /// Modo de archivo inválido.
     InvalidMode,
+    /// No se pudo obtener el nombre del objeto.
+    FileNameError,
 }
 
 impl Error for CommandError {}
@@ -147,6 +149,9 @@ impl fmt::Display for CommandError {
             }
             CommandError::InvalidMode => {
                 write!(f, "Modo de archivo inválido.")
+            }
+            CommandError::FileNameError => {
+                write!(f, "No se pudo obtener el nombre del objeto.")
             }
         }
     }

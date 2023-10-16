@@ -53,8 +53,35 @@ fn get_sha1_str(data: &[u8]) -> String {
 
     hex_string
 }
+pub(crate) fn read_object(hash_str: &str, logger: &mut Logger) -> Result<GitObject, CommandError> {
+    let (path, decompressed_data) = read_file(hash_str)?;
+    let mut stream = Cursor::new(decompressed_data);
 
-pub(crate) fn read(path: &str, logger: &mut Logger) -> Result<GitObject, CommandError> {
+    read_git_object_from(&mut stream, &path, &hash_str, logger)
+}
+
+pub(crate) fn read_file(hash_str: &str) -> Result<(String, Vec<u8>), CommandError> {
+    let path = format!(".git/objects/{}/{}", &hash_str[0..2], &hash_str[2..]);
+    let mut file = File::open(&path).map_err(|error| {
+        CommandError::FileOpenError(format!(
+            "Error al abrir archivo {}: {}",
+            path,
+            error.to_string()
+        ))
+    })?;
+    let mut data = Vec::new();
+    file.read_to_end(&mut data).map_err(|error| {
+        CommandError::FileReadError(format!(
+            "Error al leer archivo {}: {}",
+            path,
+            error.to_string()
+        ))
+    })?;
+    let decompressed_data = extract(&data)?;
+    Ok((path, decompressed_data))
+}
+
+pub(crate) fn read_from_path(path: &str, logger: &mut Logger) -> Result<GitObject, CommandError> {
     let mut file = File::open(path).map_err(|error| {
         CommandError::FileOpenError(format!(
             "Error al abrir archivo {}: {}",

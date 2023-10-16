@@ -1,4 +1,8 @@
-use std::{fmt, fs, io::Read, os::unix::prelude::PermissionsExt};
+use std::{
+    fmt, fs,
+    io::{Read, Write},
+    os::unix::prelude::PermissionsExt,
+};
 
 use crate::commands::command_errors::CommandError;
 
@@ -36,8 +40,10 @@ impl Mode {
 
     pub fn read_from(stream: &mut dyn Read) -> Result<Self, CommandError> {
         let mut buf = [0; 6];
-        stream.read_exact(&mut buf).unwrap();
-        let mode = std::str::from_utf8(&buf).unwrap();
+        stream
+            .read_exact(&mut buf)
+            .map_err(|error| CommandError::InvalidMode)?;
+        let mode = std::str::from_utf8(&buf).map_err(|error| CommandError::InvalidMode)?;
         match mode {
             "100644" => Ok(Mode::RegularFile),
             "100755" => Ok(Mode::ExecutableFile),
@@ -46,6 +52,20 @@ impl Mode {
             "040000" => Ok(Mode::Tree),
             _ => Err(CommandError::InvalidMode),
         }
+    }
+
+    pub(crate) fn write_to(&self, stream: &mut dyn Write) -> Result<(), CommandError> {
+        let mode_str = match self {
+            Mode::RegularFile => "100644",
+            Mode::ExecutableFile => "100755",
+            Mode::SymbolicLink => "120000",
+            Mode::Submodule => "160000",
+            Mode::Tree => "040000",
+        };
+        stream.write(mode_str.as_bytes()).map_err(|error| {
+            CommandError::FileWriteError(format!("Error al escribir el mode: {}", error))
+        })?;
+        Ok(())
     }
 }
 
