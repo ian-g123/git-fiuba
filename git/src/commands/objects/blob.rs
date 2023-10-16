@@ -1,10 +1,8 @@
 use std::{
     fmt,
     fs::File,
-    io::{Bytes, Read, Write},
+    io::{Read, Write},
 };
-
-use chrono::format;
 
 use crate::{commands::command_errors::CommandError, logger::Logger};
 
@@ -103,8 +101,8 @@ impl Blob {
     pub(crate) fn display_from_hash(
         stream: &mut dyn Read,
         len: usize,
-        path: String,
-        hash: &str,
+        _: String,
+        _: &str,
         output: &mut dyn Write,
         logger: &mut Logger,
     ) -> Result<(), CommandError> {

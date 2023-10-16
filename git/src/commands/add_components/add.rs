@@ -1,7 +1,6 @@
 use std::{
-    collections::{HashMap, HashSet},
-    env, error,
-    fs::{self, DirEntry},
+    env,
+    fs::{self},
     io::{Read, Write},
     path::Path,
 };
@@ -81,7 +80,7 @@ impl Add {
 
     fn run(
         &self,
-        stdin: &mut dyn Read,
+        _stdin: &mut dyn Read,
         output: &mut dyn Write,
         logger: &mut Logger,
     ) -> Result<(), CommandError> {

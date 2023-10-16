@@ -1,8 +1,5 @@
 use crate::{
-    commands::{
-        command::Command, command_errors::CommandError, commit_components::commit::Commit,
-        objects_database,
-    },
+    commands::{command_errors::CommandError, objects_database},
     logger::Logger,
 };
 

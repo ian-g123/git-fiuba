@@ -1,15 +1,12 @@
 use std::{
     collections::HashMap,
     fmt,
-    hash::Hash,
     io::{Read, Write},
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
-use chrono::format;
-
 use crate::{
-    commands::{command::Command, command_errors::CommandError, objects_database},
+    commands::{command_errors::CommandError, objects_database},
     logger::Logger,
 };
 
@@ -51,7 +48,6 @@ impl Tree {
     pub fn new_from_path(path: &str) -> Result<Self, CommandError> {
         let objects: HashMap<String, GitObject> = HashMap::new();
 
-        // let mode = Mode::get_mode(path.to_string())?;
         let mode = Mode::Tree;
         Ok(Tree {
             mode,
@@ -140,7 +136,6 @@ impl Tree {
         let mut objects = HashMap::<String, GitObject>::new();
 
         while let Ok(mode) = Mode::read_from(stream) {
-            logger.log(&format!("mode: {:?}", mode));
             let type_src = {
                 let mut type_buf = [0; 1];
                 stream
@@ -174,9 +169,7 @@ impl Tree {
                 .read_exact(&mut name)
                 .map_err(|error| CommandError::FailToOpenSatginArea(error.to_string()))?;
 
-            logger.log(&format!("objects_database::read : {:?}", hash_str));
             let object = objects_database::read_object(&hash_str, logger)?;
-            logger.log(&format!("Success! : {:?}", object));
             objects.insert(hash_str, object);
         }
         Ok(Box::new(Self {
@@ -192,16 +185,15 @@ impl Tree {
     }
     pub(crate) fn display_from_hash(
         stream: &mut dyn Read,
-        len: usize,
-        path: String,
-        hash: &str,
+        _: usize,
+        _: String,
+        _: &str,
         output: &mut dyn Write,
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
         let mut objects = Vec::<(Mode, String, String, String)>::new();
 
         while let Ok(mode) = Mode::read_from(stream) {
-            logger.log(&format!("mode: {:?}", mode));
             let type_src = {
                 let mut type_buf = [0; 1];
                 stream
@@ -235,9 +227,7 @@ impl Tree {
                 .read_exact(&mut name)
                 .map_err(|error| CommandError::FailToOpenSatginArea(error.to_string()))?;
 
-            logger.log(&format!("objects_database::read : {:?}", hash_str));
             let object = objects_database::read_object(&hash_str, logger)?;
-            logger.log(&format!("Success! : {:?}", object));
             let name_str = String::from_utf8(name).map_err(|_| CommandError::FileNameError)?;
             objects.push((mode, type_src.to_string(), hash_str, name_str));
         }

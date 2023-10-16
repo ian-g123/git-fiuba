@@ -1,4 +1,3 @@
-use chrono::format;
 use git::{
     commands::{
         add_components::add::Add, cat_file_components::cat_file::CatFile, command::Command,

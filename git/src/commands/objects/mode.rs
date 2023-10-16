@@ -24,7 +24,6 @@ impl Mode {
         };
 
         let permissions_mode = metadata.permissions().mode();
-
         if metadata.is_dir() {
             mode = Mode::Tree;
         } else if metadata.is_symlink() {
@@ -42,8 +41,8 @@ impl Mode {
         let mut buf = [0; 6];
         stream
             .read_exact(&mut buf)
-            .map_err(|error| CommandError::InvalidMode)?;
-        let mode = std::str::from_utf8(&buf).map_err(|error| CommandError::InvalidMode)?;
+            .map_err(|_| CommandError::InvalidMode)?;
+        let mode = std::str::from_utf8(&buf).map_err(|_| CommandError::InvalidMode)?;
         match mode {
             "100644" => Ok(Mode::RegularFile),
             "100755" => Ok(Mode::ExecutableFile),
@@ -100,9 +99,8 @@ mod test {
     /// Si el `<path>` pasado a `get_mode()` corresponde a un archivo regular, la función devuelve
     /// Mode::RegularFile.
     #[test]
-    #[ignore]
     fn get_mode_regular_file() {
-        let path = String::from("../.gitignore");
+        let path = String::from("tests/data/mode/blob.txt");
         assert!(matches!(Mode::get_mode(path), Ok(Mode::RegularFile)))
     }
 
@@ -117,9 +115,17 @@ mod test {
     /// Si el <path> pasado a get_mode() corresponde a un directorio, la función devuelve
     /// Mode::Tree.
     #[test]
-    #[ignore]
     fn get_mode_tree() {
-        let path = String::from("../git");
+        let path = String::from("tests/data/mode/folder");
         assert!(matches!(Mode::get_mode(path), Ok(Mode::Tree)))
+    }
+
+    /// Si el <path> pasado a get_mode() corresponde a un link simbólico, la función devuelve
+    /// Mode::SymbolicLink.
+    #[test]
+    #[ignore = "No estamos seguro de como funcionan los symlink"]
+    fn get_mode_sym_link() {
+        let path = String::from("tests/data/mode/link");
+        assert!(matches!(Mode::get_mode(path), Ok(Mode::SymbolicLink)))
     }
 }
