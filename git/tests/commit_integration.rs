@@ -37,7 +37,7 @@ fn test_single_file() {
 
     let result = Command::new("../../../../../target/debug/git")
         .arg("cat-file")
-        .arg("202f25a8a5c0ae1ff0b94f88348be65402f6dced")
+        .arg("1c2ed5c0d07d0ea59b9361201377cd1971751fd3")
         .arg("-p")
         .current_dir(path)
         .output()
@@ -45,7 +45,7 @@ fn test_single_file() {
 
     assert_eq!(
         String::from_utf8(result.stdout).unwrap(),
-        "100644 blob 30d74d258442c7c65512eafab474568dd706c430    testfile.txt\0\n"
+        "100644 blob 30d74d258442c7c65512eafab474568dd706c430    testfile.txt\n"
     );
 
     panic!();

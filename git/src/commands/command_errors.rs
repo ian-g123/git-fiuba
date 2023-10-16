@@ -52,7 +52,16 @@ pub enum CommandError {
     InvalidDirectory,
     InvalidDirectoryEntry,
     InvalidCommit,
+    /// Error al intentar agregar a un arbol un blob cuyo path no es subdirectorio del arbol
     NotYourFather,
+    /// Error al intentar parsear la longitud en el header de un objeto
+    ObjectLengthParsingError,
+    /// Error al intentar calcular el tamaño de un objeto
+    FailToCalculateObjectSize,
+    /// Error al intentar buscar el hash de un objeto
+    ObjectHashNotKnown,
+    /// Modo de archivo inválido.
+    InvalidMode,
 }
 
 impl Error for CommandError {}
@@ -122,7 +131,22 @@ impl fmt::Display for CommandError {
                 write!(f, "Autor inválido")
             }
             CommandError::NotYourFather => {
-                write!(f, "No es tu padre")
+                write!(f, "Error al intentar agregar a un arbol un blob cuyo path no es subdirectorio del arbol")
+            }
+            CommandError::ObjectLengthParsingError => {
+                write!(
+                    f,
+                    "Error al intentar parsear la longitud en el header de un objeto"
+                )
+            }
+            CommandError::FailToCalculateObjectSize => {
+                write!(f, "Error al intentar calcular el tamaño de un objeto")
+            }
+            CommandError::ObjectHashNotKnown => {
+                write!(f, "Error al intentar buscar el hash de un objeto")
+            }
+            CommandError::InvalidMode => {
+                write!(f, "Modo de archivo inválido.")
             }
         }
     }

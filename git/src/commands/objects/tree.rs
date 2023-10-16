@@ -1,14 +1,19 @@
 use std::{
     collections::HashMap,
+    hash::Hash,
+    io::Read,
     path::{Path, PathBuf},
 };
 
-use crate::commands::{command::Command, command_errors::CommandError, objects_database};
+use crate::{
+    commands::{command::Command, command_errors::CommandError, objects_database},
+    logger::Logger,
+};
 
 use super::{
     aux::*,
     blob::Blob,
-    git_object::{GitObject, GitObjectTree},
+    git_object::{GitObject, GitObjectTrait},
     mode::Mode,
 };
 
@@ -17,6 +22,7 @@ use super::{
 pub struct Tree {
     mode: Mode,
     path: String,
+    hash: Option<String>,
     // name: String,
     objects: HashMap<String, GitObject>,
 }
@@ -27,12 +33,13 @@ impl Tree {
     pub fn new(path: String, objects: HashMap<String, GitObject>) -> Result<Self, CommandError> {
         let object_type = "tree";
         let mode = Mode::get_mode(path.clone())?;
-        // let sha1 = get_sha1(path.clone(), object_type.to_string(), true)?;
+        // let sha1 = get_sha1(path.clone(), object_type.to_string(), false)?;
         let objects: HashMap<String, GitObject> = HashMap::new();
 
         Ok(Tree {
             mode: mode,
             path: path.clone(),
+            hash: None,
             // name: get_name(&path)?,
             objects: objects,
         })
@@ -46,6 +53,7 @@ impl Tree {
         Ok(Tree {
             mode,
             path: path.to_string(),
+            hash: None,
             // name: get_name(path).unwrap(),
             objects: objects,
         })
@@ -114,6 +122,106 @@ impl Tree {
         parent_tree.insert(path_name, Box::new(tree));
         self.add_tree_in_new_tree(&parent_path, parent_tree)
     }
+
+    fn hash(&self) -> Result<String, CommandError> {
+        self.hash.clone().ok_or(CommandError::ObjectHashNotKnown)
+    }
+
+    pub fn read_from(
+        stream: &mut dyn Read,
+        path: &str,
+        hash: &str,
+        logger: &mut Logger,
+    ) -> Result<GitObject, CommandError> {
+        let mut bytes = stream.bytes();
+        let type_str = {
+            let end = ' ' as u8;
+            let mut result = String::new();
+            let Some(Ok(mut byte)) = bytes.next() else {
+                return Err(CommandError::FileReadError(
+                    "Error leyendo bytes".to_string(),
+                ));
+            };
+            while byte != end {
+                result.push(byte as char);
+                let Some(Ok(byte_h)) = bytes.next() else {
+                    return Err(CommandError::FileReadError(
+                        "Error leyendo bytes".to_string(),
+                    ));
+                };
+                byte = byte_h;
+            }
+            Ok(result)
+        }?;
+        if type_str != "tree" {
+            return Err(CommandError::ObjectTypeError);
+        }
+        let len_str = {
+            let mut result = String::new();
+            let Some(Ok(mut byte)) = bytes.next() else {
+                return Err(CommandError::FileReadError(
+                    "Error leyendo bytes".to_string(),
+                ));
+            };
+            while byte != 0 {
+                result.push(byte as char);
+                let Some(Ok(byte_h)) = bytes.next() else {
+                    return Err(CommandError::FileReadError(
+                        "Error leyendo bytes".to_string(),
+                    ));
+                };
+                byte = byte_h;
+            }
+            Ok(result)
+        }?;
+        let len: usize = len_str
+            .parse()
+            .map_err(|_| CommandError::ObjectLengthParsingError)?;
+
+        let mut objects = HashMap::<String, GitObject>::new();
+
+        loop {
+            let mode = Mode::read_from(stream)?;
+            let type_src = {
+                let mut type_buf = [0; 1];
+                stream
+                    .read_exact(&mut type_buf)
+                    .map_err(|error| return Err(CommandError::InvalidMode));
+                match type_buf {
+                    [0] => "blob",
+                    [1] => "tree",
+                    [2] => "commit",
+                    [3] => "tag",
+                    _ => return Err(CommandError::ObjectTypeError),
+                }
+            };
+            let mut hash = vec![0; 20];
+            stream
+                .read_exact(&mut hash)
+                .map_err(|error| CommandError::ObjectHashNotKnown)?;
+            let hash_str = hash
+                .iter()
+                .map(|byte| format!("{:02x}", byte))
+                .collect::<Vec<_>>()
+                .join("");
+
+            let mut size_be = [0; 4];
+            stream
+                .read_exact(&mut size_be)
+                .map_err(|error| return Err(CommandError::FailToCalculateObjectSize));
+            let size = u32::from_be_bytes(size_be) as usize;
+            let mut name = vec![0; size];
+            stream
+                .read_exact(&mut name)
+                .map_err(|error| CommandError::FailToOpenSatginArea(error.to_string()))?;
+
+            //let
+            objects.insert(hash_str, object);
+        }
+
+        let blob = Blob::new_from_hash_and_content(hash, path, content)?;
+        Ok(Box::new(blob))
+    }
 }
 
 fn get_parent(path_name: &str) -> Result<String, CommandError> {
@@ -127,7 +235,7 @@ fn get_parent(path_name: &str) -> Result<String, CommandError> {
     }
 }
 
-impl GitObjectTree for Tree {
+impl GitObjectTrait for Tree {
     fn as_mut_tree(&mut self) -> Option<&mut Tree> {
         Some(self)
     }
@@ -147,7 +255,7 @@ impl GitObjectTree for Tree {
             let filename = get_name(path)?;
             content.extend_from_slice(
                 format!(
-                    "{} {} {}    {}\0",
+                    "{} {} {}    {}\n",
                     object.mode(),
                     object.type_str(),
                     hash_str,
@@ -161,5 +269,15 @@ impl GitObjectTree for Tree {
 
     fn mode(&self) -> Mode {
         Mode::Tree
+    }
+
+    fn to_string(&self) -> &str {
+        &format!(
+            "{} {} {}    {}\n",
+            self.mode(),
+            self.type_str(),
+            self.hash(),
+            self.filename()
+        )
     }
 }

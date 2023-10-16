@@ -1,4 +1,4 @@
-use std::{fmt, fs, os::unix::prelude::PermissionsExt};
+use std::{fmt, fs, io::Read, os::unix::prelude::PermissionsExt};
 
 use crate::commands::command_errors::CommandError;
 
@@ -32,6 +32,20 @@ impl Mode {
         }
 
         Ok(mode)
+    }
+
+    pub fn read_from(stream: &mut dyn Read) -> Result<Self, CommandError> {
+        let mut buf = [0; 6];
+        stream.read_exact(&mut buf).unwrap();
+        let mode = std::str::from_utf8(&buf).unwrap();
+        match mode {
+            "100644" => Ok(Mode::RegularFile),
+            "100755" => Ok(Mode::ExecutableFile),
+            "120000" => Ok(Mode::SymbolicLink),
+            "160000" => Ok(Mode::Submodule),
+            "040000" => Ok(Mode::Tree),
+            _ => Err(CommandError::InvalidMode),
+        }
     }
 }
 
