@@ -38,49 +38,6 @@ impl Changes{
         self.changes.clone()
     }
 
-    pub fn run(&mut self)-> Result<(), CommandError>{
-        self.run_changes_not_staged()?;
-        // falta: changes_staged, untracked
-        Ok(())
-    }
-
-    fn run_changes_not_staged(&mut self)-> Result<(), CommandError>{
-        /* let staged_changes = self.staging_area.get_changes();
-        for change in staged_changes.iter() {
-            let content_staged = change.get_content()?;
-            let path = change.get_path();
-            if let Some(file) = self.compare_file_name(path.clone()){
-                //self.compare_content(content_staged, file, path);
-            } 
-        } */
-        Ok(())
-    }
-
-    /* 
-    M    work tree changed since index
-    T    type changed in work tree since index
-    D    deleted in work tree
-	R    renamed in work tree
-	C    copied in work tree
-     */
-
-    fn compare_file_name(&mut self, path: String) -> Option<File>{
-        let Ok(file) = File::open(path.clone()) else{
-            //_ = self.changes.insert(path, ChangeType::Deleted); // falta: check Renamed
-            return None;
-        };
-        Some(file)
-    }
-
-    /* fn compare_content(&self, content_staged: Vec<u8>, mut file: File, path: String)->Result<(), CommandError>{
-        let mut content_working_tree: Vec<u8> = Vec::new();
-        if file.read_to_end(&mut content_working_tree).is_err(){
-             
-            return Err(CommandError::FileReadError(())) 
-        }
-        usar sha1. si diferen, cambio el contenido
-    } */
-
     /// Compara las carpetas y archivos del Working Tree y el Staging Area. (falta refactor)
     fn compare(
         path_name: String,
@@ -101,12 +58,7 @@ impl Changes{
             let entry_name = get_path_name(entry_path.clone())?;
 
             if entry_path.is_dir() {
-                //let mut channges = HashMap::<String, ChangeObject>::new();
                 Self::compare(entry_name.clone(), index, changes, parent)?;
-                /* if !index.is_empty() {
-                    _ = channges.insert(entry_name, Box::new(tree));
-                    return Ok(());
-                } */
                 return Ok(());
             } else {
                 let current_hash = get_sha1(entry_name.clone(), "blob".to_string())?;
@@ -114,10 +66,6 @@ impl Changes{
                     Self::compare_entry(&entry_name, index, parent_hash.to_string(), current_hash)?;
 
                 }
-                /* let result = Self::compare_entry(&path_name, index, parent)?;
-                if let Some(blob) = result {
-                    _ = channges.insert(blob.get_hash(), Box::new(blob));
-                } */
             }
         }
         Ok(())
