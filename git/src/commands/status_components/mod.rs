@@ -5,3 +5,4 @@ mod short_format;
 mod long_format;
 mod merge_conflicts;
 mod changes;
+mod change_object;
