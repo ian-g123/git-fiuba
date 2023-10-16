@@ -1,133 +1,78 @@
-use std::{
-    collections::HashMap,
-    fmt,
-    hash::Hash,
-    io::{Read, Write},
-    path::{Path, PathBuf},
-};
-
-use chrono::format;
-
-use crate::{
-    commands::{command::Command, command_errors::CommandError, objects_database},
-    logger::Logger,
-};
-
 use super::{
-    aux::{self, *},
+    aux::*,
     blob::Blob,
     git_object::{GitObject, GitObjectTrait},
     mode::Mode,
 };
+use crate::{
+    commands::{command_errors::CommandError, objects_database},
+    logger::Logger,
+};
+use std::{
+    collections::HashMap,
+    fmt,
+    io::{Read, Write},
+    path::Path,
+};
 
-//#[derive(Debug, Clone)]
 #[derive(Clone)]
 pub struct Tree {
-    mode: Mode,
     path: String,
-    hash: Option<String>,
-    // name: String,
     objects: HashMap<String, GitObject>,
 }
 
 impl Tree {
     /// Crea un Tree a partir de su ruta y los objetos a los que referencia. Si la ruta no existe,
     /// devuelve Error.
-    pub fn new(path: String, objects: HashMap<String, GitObject>) -> Result<Self, CommandError> {
-        let object_type = "tree";
-        let mode = Mode::get_mode(path.clone())?;
-        // let sha1 = get_sha1(path.clone(), object_type.to_string(), false)?;
-        let objects: HashMap<String, GitObject> = HashMap::new();
-
+    pub fn new(path: String) -> Result<Self, CommandError> {
         Ok(Tree {
-            mode: mode,
             path: path.clone(),
-            hash: None,
-            // name: get_name(&path)?,
-            objects: objects,
+            objects: HashMap::new(),
         })
-    }
-
-    pub fn new_from_path(path: &str) -> Result<Self, CommandError> {
-        let objects: HashMap<String, GitObject> = HashMap::new();
-
-        // let mode = Mode::get_mode(path.to_string())?;
-        let mode = Mode::Tree;
-        Ok(Tree {
-            mode,
-            path: path.to_string(),
-            hash: None,
-            // name: get_name(path).unwrap(),
-            objects: objects,
-        })
-    }
-
-    /// Devuelve el hash del Tree.
-    pub fn get_hash_interno(&self) -> String {
-        todo!()
     }
 
     /// Crea un Blob a partir de su hash y lo añade al Tree.
     pub fn add_blob(&mut self, path_name: &String, hash: &String) -> Result<(), CommandError> {
-        let parent_path = get_parent(path_name)?;
-
-        if self.path == parent_path {
-            let blob = Blob::new_from_hash(hash.to_owned(), path_name.to_owned())?;
-            _ = self.objects.insert(path_name.to_string(), Box::new(blob));
-            return Ok(());
-        }
-        if parent_path.starts_with(&self.path) {
-            return self.add_blob_to_subtree(path_name, &hash);
-        }
-        Err(CommandError::NotYourFather)
-    }
-
-    /// Agrega un Objeto Blob o Tree al Tree.
-    fn insert(&mut self, path: &str, object: GitObject) {
-        _ = self.objects.insert(path.to_string(), object);
-    }
-
-    /// Busca el Tree donde debe guardarse el Blob.
-    fn add_blob_to_subtree(
-        &mut self,
-        path_name: &String,
-        hash: &String,
-    ) -> Result<(), CommandError> {
-        for (_, object) in self.objects.iter_mut() {
-            let Some(mut tree) = object.as_mut_tree() else {
-                continue;
-            };
-            match tree.add_blob(path_name, hash) {
-                Ok(()) => return Ok(()),
-                Err(CommandError::NotYourFather) => continue,
-                Err(error) => return Err(error),
-            };
-        }
-        let child_tree = self.add_new_blob_in_new_tree(path_name, &hash)?;
-        self.insert(path_name, Box::new(child_tree));
+        let blob = Blob::new_from_hash(hash.to_owned(), path_name.to_owned())?;
+        _ = self.objects.insert(path_name.to_string(), Box::new(blob));
         Ok(())
     }
 
-    fn add_new_blob_in_new_tree(&self, path_name: &str, hash: &str) -> Result<Tree, CommandError> {
-        let parent_path = get_parent(path_name)?;
-        let blob = Blob::new_from_hash(hash.to_string(), path_name.to_string())?;
-        let mut tree = Tree::new_from_path(&parent_path)?;
-        tree.insert(path_name, Box::new(blob));
-        self.add_tree_in_new_tree(&parent_path, tree)
+    pub fn add_tree(&mut self, path_str: &String) -> Result<(), CommandError> {
+        let path_name = get_name(path_str)?;
+        if self.objects.contains_key(&path_name) {
+            return Ok(());
+        };
+        let tree = Tree::new(path_name.to_owned())?;
+        _ = self.objects.insert(path_name.to_string(), Box::new(tree));
+        Ok(())
     }
 
-    fn add_tree_in_new_tree(&self, path_name: &str, tree: Tree) -> Result<Tree, CommandError> {
-        let parent_path = get_parent(path_name)?;
-        if parent_path == self.path {
-            return Ok(tree);
+    pub fn add_path(&mut self, path_name: &String, hash: &String) -> Result<(), CommandError> {
+        let part_path = path_name.split("/").collect::<Vec<_>>();
+
+        let mut current_path_str = "".to_string();
+        for part in part_path {
+            current_path_str = format!("{}/{}", current_path_str, part);
+            let current_path = Path::new(&current_path_str);
+
+            if current_path.is_dir() {
+                self.add_tree(&current_path_str)?;
+            } else {
+                self.add_blob(&current_path_str, hash)?;
+            }
         }
-        let mut parent_tree = Tree::new_from_path(&parent_path)?;
-        parent_tree.insert(path_name, Box::new(tree));
-        self.add_tree_in_new_tree(&parent_path, parent_tree)
+        Ok(())
     }
 
-    fn hash(&self) -> Result<String, CommandError> {
-        self.hash.clone().ok_or(CommandError::ObjectHashNotKnown)
+    fn get_data(&self) -> Result<Vec<u8>, CommandError> {
+        let header = format!("1 {}\0", self.size()?);
+        let content = self.content()?;
+        Ok([header.as_bytes(), content.as_slice()].concat())
+    }
+
+    fn get_mode(&self) -> Result<Mode, CommandError> {
+        Ok(Mode::get_mode(self.path.clone())?)
     }
 
     pub fn read_from(
@@ -180,16 +125,11 @@ impl Tree {
             objects.insert(hash_str, object);
         }
         Ok(Box::new(Self {
-            mode: Mode::get_mode(path.to_string())?,
             path: path.to_string(),
-            hash: None,
             objects,
         }))
     }
 
-    pub fn filename(&self) -> Result<String, CommandError> {
-        aux::get_name(&self.path)
-    }
     pub(crate) fn display_from_hash(
         stream: &mut dyn Read,
         len: usize,
@@ -246,17 +186,6 @@ impl Tree {
                 .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
         }
         Ok(())
-    }
-}
-
-fn get_parent(path_name: &str) -> Result<String, CommandError> {
-    let path: PathBuf = PathBuf::from(path_name);
-    match path.parent() {
-        Some(parent_path) => match parent_path.to_str() {
-            Some(parent_path) => Ok(parent_path.to_owned()),
-            None => return Err(CommandError::FileNotFound(path_name.to_owned())),
-        },
-        None => return Err(CommandError::FileNotFound(path_name.to_owned())),
     }
 }
 

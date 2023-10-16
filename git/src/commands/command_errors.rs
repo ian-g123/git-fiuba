@@ -64,6 +64,12 @@ pub enum CommandError {
     InvalidMode,
     /// No se pudo obtener el nombre del objeto.
     FileNameError,
+    DirNotFound(String),
+    /// No se pudo crear el directorio
+    DirectoryCreationError(String),
+    /// No se pudo crear el archivo
+    FileCreationError(String),
+    FailToRecreateStagingArea,
 }
 
 impl Error for CommandError {}
@@ -152,6 +158,16 @@ impl fmt::Display for CommandError {
             }
             CommandError::FileNameError => {
                 write!(f, "No se pudo obtener el nombre del objeto.")
+            }
+            CommandError::DirNotFound(path) => write!(f, "No se encuentra el directorio: {path}"),
+            CommandError::DirectoryCreationError(path) => {
+                write!(f, "No se pudo crear el directorio: {path}")
+            }
+            CommandError::FileCreationError(path) => {
+                write!(f, "No se pudo crear el archivo: {path}")
+            }
+            CommandError::FailToRecreateStagingArea => {
+                write!(f, "Error al intentar recrear el staging area")
             }
         }
     }

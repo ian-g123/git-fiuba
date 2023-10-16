@@ -34,21 +34,21 @@ impl Command for Commit {
         }
         logger.log(&format!("committing {:?}", args));
 
-        let instance = Self::new_from(args)?;
+        let instance = Commit::new_from(args)?;
 
         instance.run(output, logger)?;
         logger.log(&format!("commit {:?}", args));
         Ok(())
     }
 
-    fn config_adders(&self) -> ConfigAdderFunction<Self> {
+    fn config_adders(&self) -> ConfigAdderFunction<Commit> {
         vec![
-            Self::add_all_config,
-            Self::add_dry_run_config,
-            Self::add_message_config,
-            Self::add_quiet_config,
-            Self::add_reuse_message_config,
-            Self::add_pathspec_config,
+            Commit::add_all_config,
+            Commit::add_dry_run_config,
+            Commit::add_message_config,
+            Commit::add_quiet_config,
+            Commit::add_reuse_message_config,
+            Commit::add_pathspec_config,
         ]
     }
 }
@@ -164,9 +164,13 @@ impl Commit {
             return Err(CommandError::MessageAndReuseError);
         }
 
-        let mut stagin_area = StagingArea::open()?;
+        if self.message.is_none() {
+            self.run_enter_message();
+        }
 
-        let mut working_dir = stagin_area.write_tree(logger)?;
+        let stagin_area = StagingArea::open()?;
+
+        _ = stagin_area.write_tree(logger)?;
 
         let head_ref = get_head_ref()?;
         //Commit
@@ -182,11 +186,7 @@ impl Commit {
         //     2) Agregar al stagingArea. Manejar error si no está en la base de datos o no existe
         //      */
         // }
-
-        if self.message.is_none() {
-            self.run_enter_message();
-        }
-
+        
         if let Some(commit_hash) = self.reuse_message.clone() {}
 
         //Crear Commit Object con la info necesaria --> Commit::new()

@@ -1,19 +1,18 @@
 use std::collections::HashMap;
 use std::env::current_dir;
-use std::f32::consts::E;
 use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use super::aux::get_sha1;
 use super::blob::Blob;
-use super::git_object::{GitObject, GitObjectTrait};
+use super::git_object::GitObject;
 use super::{author::Author, tree::Tree};
+use crate::commands::command_errors::CommandError;
 use crate::commands::file_compressor::extract;
-use crate::commands::{command_errors::CommandError, stagin_area::StagingArea};
 
 extern crate chrono;
-use chrono::{prelude::*, DateTime, Offset, TimeZone};
+use chrono::{prelude::*, DateTime};
 
 #[derive(Clone)]
 pub struct Commit {
@@ -142,7 +141,7 @@ impl Commit {
         lines.next();
         let message = lines.collect::<Vec<&str>>().join("\n");
         // let tree = Tree::from_hash(tree_hash.to_string())?;
-        let tree = Tree::new("path".to_string(), HashMap::<String, GitObject>::new())?;
+        let tree = Tree::new("path".to_string())?;
         Ok(Commit {
             parent: parents.first().map(|x| x.to_string()),
             author,
@@ -271,7 +270,7 @@ impl CommitTree {
         path: &String,
         objects: HashMap<String, GitObject>,
     ) -> Result<Tree, CommandError> {
-        Ok(Tree::new(path.to_owned(), objects)?)
+        Ok(Tree::new(path.to_owned())?)
     }
 
     /// Compara un archivo del WorkingTree con el Índex. Si el archivo está en la Staging Area,
