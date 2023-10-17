@@ -60,6 +60,8 @@ pub enum CommandError {
     InvalidMode,
     /// No se pudo obtener el nombre del objeto.
     FileNameError,
+    /// No existe configuración de ususario.
+    UserConfigurationError,
 }
 
 impl Error for CommandError {}
@@ -148,6 +150,9 @@ impl fmt::Display for CommandError {
             }
             CommandError::FileNameError => {
                 write!(f, "No se pudo obtener el nombre del objeto.")
+            }
+            CommandError::UserConfigurationError => {
+                write!(f, "No existe configuración de ususario.")
             }
         }
     }

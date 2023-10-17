@@ -88,14 +88,14 @@ impl StagingArea {
         self.files.remove(path);
     }
 
-    pub(crate) fn write_tree(&self, logger: &mut Logger) -> Result<(), CommandError> {
+    pub(crate) fn write_tree(&self, logger: &mut Logger) -> Result<String, CommandError> {
         let mut working_dir = Tree::new_from_path("")?;
         for (path, hash) in &self.files {
             working_dir.add_blob(&path, &hash)?;
         }
 
-        objects_database::write(Box::new(working_dir))?;
-        Ok(())
+        let hash_str = objects_database::write(Box::new(working_dir))?;
+        Ok(hash_str)
         //HashObject;
     }
 }

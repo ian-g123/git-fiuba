@@ -326,25 +326,3 @@ fn type_byte(type_str: &str) -> Result<u8, CommandError> {
         _ => return Err(CommandError::ObjectTypeError),
     }
 }
-
-fn hex_string_to_u8_vec(hex_string: &str) -> [u8; 20] {
-    let mut result = [0; 20];
-    let mut chars = hex_string.chars().peekable();
-
-    let mut i = 0;
-    while let Some(c1) = chars.next() {
-        if let Some(c2) = chars.peek() {
-            if let (Some(n1), Some(n2)) = (c1.to_digit(16), c2.to_digit(16)) {
-                result[i] = (n1 * 16 + n2) as u8;
-                chars.next();
-                i += 1;
-            } else {
-                panic!("Invalid hex string");
-            }
-        } else {
-            panic!("Invalisd hex string");
-        }
-    }
-
-    result
-}

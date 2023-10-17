@@ -1,3 +1,4 @@
+use core::panic;
 use std::{fmt::format, fs, path::Path, process::Command};
 
 use git::commands::stagin_area::StagingArea;
@@ -47,6 +48,8 @@ fn test_single_file() {
         String::from_utf8(result.stdout).unwrap(),
         "100644 tree 30d74d258442c7c65512eafab474568dd706c430    testfile.txt\n"
     );
+
+    panic!();
 
     _ = fs::remove_dir_all(format!("{}", path));
 }

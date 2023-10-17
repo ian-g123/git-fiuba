@@ -1,4 +1,4 @@
-mod author;
+pub mod author;
 pub mod aux;
 pub mod blob;
 pub mod commit_object;

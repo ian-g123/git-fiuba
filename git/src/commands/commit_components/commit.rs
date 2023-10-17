@@ -1,11 +1,19 @@
-use std::{fs::File, io::Read, io::Write};
+use std::{
+    fs::{self, File, OpenOptions},
+    io::Read,
+    io::Write,
+};
+
+use chrono::{DateTime, Local};
 
 use crate::{
     commands::{
+        branch_manager::get_last_commit,
         command::{Command, ConfigAdderFunction},
         command_errors::CommandError,
+        config::Config,
         init_components::init::Init,
-        objects::tree::Tree,
+        objects::{author::Author, commit_object::CommitObject, tree::Tree},
         objects_database,
         stagin_area::{self, StagingArea},
     },
@@ -164,11 +172,53 @@ impl Commit {
             return Err(CommandError::MessageAndReuseError);
         }
 
-        let mut stagin_area = StagingArea::open()?;
+        let message = {
+            if let Some(message) = self.message.clone() {
+                message
+            } else if let Some(reuse_message) = self.reuse_message.clone() {
+                Self::get_commit_reuse()
+            } else {
+                return Err(CommandError::CommitMessageEmptyValue);
+            }
+        };
 
-        let mut working_dir = stagin_area.write_tree(logger)?;
+        let stagin_area = StagingArea::open()?;
 
-        let head_ref = get_head_ref()?;
+        let working_tree_hash = stagin_area.write_tree(logger)?;
+
+        let config = Config::open()?;
+
+        let Some(author_email) = config.get("user.email") else {
+            return Err(CommandError::UserConfigurationError);
+        };
+        let Some(author_name) = config.get("user.name") else {
+            return Err(CommandError::UserConfigurationError);
+        };
+
+        let author = Author::new(author_name, author_email);
+        let commiter = Author::new(author_name, author_email);
+
+        let last_commit_hash = get_last_commit()?;
+
+        let mut padres: Vec<String> = Vec::new();
+        if let Some(padre) = last_commit_hash {
+            padres.push(padre);
+        }
+
+        let datetime: DateTime<Local> = Local::now();
+        let commit = CommitObject::new(
+            padres,
+            message,
+            author,
+            commiter,
+            datetime,
+            working_tree_hash,
+        )?;
+
+        let commit_hash = objects_database::write(Box::new(commit))?;
+        if !self.dry_run {
+            update_last_commit(&commit_hash)?;
+        }
         //Commit
         /*
         if staging_area.is_empty() && self.files.is_empty(){
@@ -204,6 +254,13 @@ impl Commit {
         Ok(())
     }
 
+    /// Obtiene la fecha y hora actuales.
+    fn get_timestamp() {
+        let timestamp: DateTime<Local> = Local::now();
+        // formateo para que se vea como el de git.
+        timestamp.format("%a %b %e %H:%M:%S %Y %z").to_string();
+    }
+
     fn get_commit_reuse() -> String {
         "".to_string()
     }
@@ -237,13 +294,7 @@ impl Commit {
          */
     }
 
-    fn get_head_branch() -> Result<(), CommandError> {
-        let Ok(data_base) = File::open(".git") else {
-            return Err(CommandError::NotGitRepository);
-        };
-        //.git/HEAD --> ref: refs/heads/<current_branch>
-        Ok(())
-    }
+    /// Obtiene la rama actual. Si no se puede leer de ".git/HEAD", se devuelve error.
 
     fn get_status_output(&self, output: &mut dyn Write) -> Result<(), CommandError> {
         /*
@@ -254,6 +305,18 @@ impl Commit {
         status.get_output(output)?; */
         Ok(())
     }
+}
+
+fn update_last_commit(commit_hash: &str) -> Result<(), CommandError> {
+    let currect_branch = get_head_ref()?;
+    let branch_path = format!(".git/{}", currect_branch);
+    let mut file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .open(branch_path)
+        .map_err(|_| CommandError::FileOpenError(currect_branch))?;
+    file.write_all(commit_hash.as_bytes());
+    Ok(())
 }
 
 /// Opens file in .git/HEAD and returns the branch name
