@@ -186,7 +186,7 @@ impl Commit {
         //     2) Agregar al stagingArea. Manejar error si no está en la base de datos o no existe
         //      */
         // }
-        
+
         if let Some(commit_hash) = self.reuse_message.clone() {}
 
         //Crear Commit Object con la info necesaria --> Commit::new()

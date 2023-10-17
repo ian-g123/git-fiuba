@@ -151,6 +151,15 @@ impl GitObjectTrait for Blob {
         };
         string
     }
+
+    fn add_path(
+        &mut self,
+        vector_path: Vec<&str>,
+        current_depth: usize,
+        hash: &String,
+    ) -> Result<(), CommandError> {
+        Ok(())
+    }
 }
 
 impl fmt::Display for Blob {

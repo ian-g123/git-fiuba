@@ -141,7 +141,7 @@ impl Commit {
         lines.next();
         let message = lines.collect::<Vec<&str>>().join("\n");
         // let tree = Tree::from_hash(tree_hash.to_string())?;
-        let tree = Tree::new("path".to_string())?;
+        let tree = Tree::new("path".to_string()); // Por qué es estoooooooooooooo
         Ok(Commit {
             parent: parents.first().map(|x| x.to_string()),
             author,
@@ -270,7 +270,7 @@ impl CommitTree {
         path: &String,
         objects: HashMap<String, GitObject>,
     ) -> Result<Tree, CommandError> {
-        Ok(Tree::new(path.to_owned())?)
+        Ok(Tree::new(path.to_owned()))
     }
 
     /// Compara un archivo del WorkingTree con el Índex. Si el archivo está en la Staging Area,

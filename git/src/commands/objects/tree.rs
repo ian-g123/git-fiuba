@@ -12,7 +12,6 @@ use std::{
     collections::HashMap,
     fmt,
     io::{Read, Write},
-    path::Path,
 };
 
 #[derive(Clone)]
@@ -22,46 +21,77 @@ pub struct Tree {
 }
 
 impl Tree {
+    pub fn add_path_tree(
+        &mut self,
+        vector_path: Vec<&str>,
+        current_depth: usize,
+        hash: &String,
+    ) -> Result<(), CommandError> {
+        Ok(self.add_path(vector_path, current_depth, hash)?)
+    }
+
     /// Crea un Tree a partir de su ruta y los objetos a los que referencia. Si la ruta no existe,
     /// devuelve Error.
-    pub fn new(path: String) -> Result<Self, CommandError> {
-        Ok(Tree {
+    pub fn new(path: String) -> Tree {
+        Tree {
             path: path.clone(),
             objects: HashMap::new(),
-        })
+        }
     }
 
     /// Crea un Blob a partir de su hash y lo añade al Tree.
     pub fn add_blob(&mut self, path_name: &String, hash: &String) -> Result<(), CommandError> {
-        let blob = Blob::new_from_hash(hash.to_owned(), path_name.to_owned())?;
+        let blob = Blob::new_from_hash(hash.clone(), path_name.clone())?;
         _ = self.objects.insert(path_name.to_string(), Box::new(blob));
         Ok(())
     }
 
-    pub fn add_tree(&mut self, path_str: &String) -> Result<(), CommandError> {
+    // fn get_tree(&self, path: &str) -> &mut Tree {
+    //     let object = self.objects.get(path).unwrap();
+    //     let tree = object.as_mut_tree().unwrap();
+    //     tree
+    // }
+
+    // To fix this error, you need to ensure that you are working with a mutable reference to tree instead of a & reference.
+    // One way to do this is to change the type of tree to &mut Box<dyn Object>.
+
+    // pub fn add_tree(
+    //     &mut self,
+    //     path_str: &String,
+    //     vector_path: Vec<&str>,
+    //     current_depth: usize,
+    //     hash: &String,
+    // ) -> Result<(), CommandError> {
+    //     let path_name = get_name(path_str)?;
+
+    //     if !self.objects.contains_key(&path_name) {
+    //         let tree2 = Tree::new(path_str.to_owned());
+    //         self.objects.insert(path_str.clone(), Box::new(tree2));
+    //     }
+
+    //     let tree = self.objects.get(&path_name).unwrap();
+
+    //     tree.add_path(vector_path, current_depth + 1, hash)?;
+    //     Ok(())
+    // }
+
+    pub fn add_tree(
+        &mut self,
+        path_str: &String,
+        vector_path: Vec<&str>,
+        current_depth: usize,
+        hash: &String,
+    ) -> Result<(), CommandError> {
         let path_name = get_name(path_str)?;
-        if self.objects.contains_key(&path_name) {
-            return Ok(());
-        };
-        let tree = Tree::new(path_name.to_owned())?;
-        _ = self.objects.insert(path_name.to_string(), Box::new(tree));
-        Ok(())
-    }
 
-    pub fn add_path(&mut self, path_name: &String, hash: &String) -> Result<(), CommandError> {
-        let part_path = path_name.split("/").collect::<Vec<_>>();
-
-        let mut current_path_str = "".to_string();
-        for part in part_path {
-            current_path_str = format!("{}/{}", current_path_str, part);
-            let current_path = Path::new(&current_path_str);
-
-            if current_path.is_dir() {
-                self.add_tree(&current_path_str)?;
-            } else {
-                self.add_blob(&current_path_str, hash)?;
-            }
+        if !self.objects.contains_key(&path_name) {
+            let tree2 = Tree::new(path_str.to_owned());
+            self.objects.insert(path_str.clone(), Box::new(tree2));
         }
+
+        let tree = self.objects.get_mut(&path_name).unwrap();
+
+        tree.add_path(vector_path, current_depth + 1, hash)?;
         Ok(())
     }
 
@@ -219,6 +249,22 @@ impl GitObjectTrait for Tree {
         Ok(content)
     }
 
+    fn add_path(
+        &mut self,
+        vector_path: Vec<&str>,
+        current_depth: usize,
+        hash: &String,
+    ) -> Result<(), CommandError> {
+        let current_path_str = vector_path[..current_depth + 1].join("/");
+
+        if current_depth != vector_path.len() {
+            self.add_tree(&current_path_str, vector_path, current_depth, hash)?;
+        } else {
+            self.add_blob(&current_path_str, hash)?;
+        }
+        Ok(())
+    }
+
     fn mode(&self) -> Mode {
         Mode::Tree
     }
@@ -286,4 +332,91 @@ fn hex_string_to_u8_vec(hex_string: &str) -> [u8; 20] {
     }
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        env,
+        fs::{create_dir_all, File},
+    };
+
+    use chrono::format::format;
+
+    use super::*;
+
+    #[test]
+    fn given_a_path_a_tree_is_created() {
+        let path = "test".to_string();
+        let tree = Tree::new(path.clone());
+        assert_eq!(tree.path, path);
+    }
+
+    #[test]
+    fn given_a_path_a_tree_is_created_with_empty_objects() {
+        let path = "test".to_string();
+        let tree = Tree::new(path.clone());
+        assert_eq!(tree.objects.len(), 0);
+    }
+
+    #[test]
+    fn given_a_path_a_tree_is_created_with_empty_objects_and_then_add_a_blob() {
+        let file_name = "test.txt".to_string();
+        let current_dir = env::current_dir().unwrap();
+        println!("The current directory is {}", current_dir.display());
+
+        // Abre el archivo en modo escritura (se creará si no existe)
+        let mut file = File::create(&file_name).expect("No se pudo crear el archivo");
+
+        // Contenido que deseas escribir en el archivo
+        let content = "test";
+
+        // Escribe el contenido en el archivo
+        match file.write_all(content.as_bytes()) {
+            Ok(_) => println!("Archivo creado y contenido escrito con éxito."),
+            Err(err) => eprintln!("Error al escribir en el archivo: {}", err),
+        }
+
+        let path = format!("{}/{}", current_dir.display(), file_name);
+        let mut tree = Tree::new(path.clone());
+        let path_name = "testfile.txt".to_string();
+        let hash = "30d74d258442c7c65512eafab474568dd706c430".to_string();
+        tree.add_blob(&path, &hash).unwrap();
+        assert_eq!(tree.objects.len(), 1);
+
+        // borramos el archivo
+        let _ = std::fs::remove_file(file_name);
+    }
+
+    #[test]
+    fn hhh() {
+        let files = [
+            "dir0/dir1/dir2/meli.txt".to_string(),
+            "dir0/dir1/ian.txt".to_string(),
+            "dir0/pato.txt".to_string(),
+            "sofi.txt".to_string(),
+        ];
+        create_dir_all("dir0/dir1/dir2/").unwrap();
+        let mut tree = Tree::new("".to_string());
+
+        // Creamos los files
+        for file_str in files.iter() {
+            // let file_name = format!("{}/{}", "dir_padre".to_string(), file_str);
+            let content = "test";
+
+            // Escribe el contenido en el archivo
+            let mut file = File::create(&file_str).unwrap();
+
+            file.write_all(content.as_bytes()).unwrap();
+        }
+
+        let hash = "30d74d258442c7c65512eafab474568dd706c430".to_string();
+        for path in files {
+            let vector_path = path.split("/").collect::<Vec<_>>();
+            let current_depth: usize = 0;
+            _ = tree.add_path_tree(vector_path, current_depth, &hash);
+        }
+
+        let _ = std::fs::remove_dir_all("dir_padre");
+    }
 }

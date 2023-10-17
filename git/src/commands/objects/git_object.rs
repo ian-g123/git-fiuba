@@ -1,8 +1,5 @@
 use crate::{
-    commands::{
-        command::Command, command_errors::CommandError, commit_components::commit::Commit,
-        objects_database,
-    },
+    commands::{command_errors::CommandError, objects_database},
     logger::Logger,
 };
 
@@ -32,6 +29,13 @@ pub trait GitObjectTrait: fmt::Display {
             .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
         Ok(())
     }
+
+    fn add_path(
+        &mut self,
+        vector_path: Vec<&str>,
+        current_depth: usize,
+        hash: &String,
+    ) -> Result<(), CommandError>;
 
     fn type_str(&self) -> String;
 

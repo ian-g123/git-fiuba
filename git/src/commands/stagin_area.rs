@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
-    io::{Read, Write}, env,
+    env,
+    io::{Read, Write},
 };
 
 use crate::logger::{self, Logger};
@@ -97,13 +98,15 @@ impl StagingArea {
         let current_dir =
             env::current_dir().map_err(|_| CommandError::FailToRecreateStagingArea)?;
         let current_dir_display = "";
-        let mut staging_area_tree = Tree::new(current_dir_display.to_string())?;
+        let mut working_tree = Tree::new(current_dir_display.to_string());
 
         for (path, hash) in &self.files {
-            staging_area_tree.add_path(path, hash);
+            let vector_path = path.split("/").collect::<Vec<_>>();
+            let current_depth: usize = 0;
+            working_tree.add_path_tree(vector_path, current_depth, hash);
         }
 
-        objects_database::write(Box::new(staging_area_tree))?;
+        objects_database::write(Box::new(working_tree))?;
         Ok(())
     }
 }
