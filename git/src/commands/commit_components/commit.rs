@@ -171,6 +171,7 @@ impl Commit {
         if self.message.is_some() && self.reuse_message.is_some() {
             return Err(CommandError::MessageAndReuseError);
         }
+        logger.log("Retreiving message");
 
         let message = {
             if let Some(message) = self.message.clone() {
@@ -181,10 +182,13 @@ impl Commit {
                 return Err(CommandError::CommitMessageEmptyValue);
             }
         };
+        logger.log("Opening stagin_area");
 
         let stagin_area = StagingArea::open()?;
+        logger.log("Writing work dir tree");
 
         let working_tree_hash = stagin_area.write_tree(logger)?;
+        logger.log("Commit object created");
 
         let config = Config::open()?;
 
@@ -214,8 +218,9 @@ impl Commit {
             datetime,
             working_tree_hash,
         )?;
-
+        logger.log("Commit object created");
         let commit_hash = objects_database::write(Box::new(commit))?;
+        logger.log(&format!("Commit object saved in database {}", commit_hash));
         if !self.dry_run {
             update_last_commit(&commit_hash)?;
         }

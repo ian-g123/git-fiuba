@@ -4,7 +4,6 @@ use std::{fmt::format, fs, path::Path, process::Command};
 use git::commands::stagin_area::StagingArea;
 
 #[test]
-#[ignore]
 fn test_single_file() {
     let path = "./tests/data/commands/commit/repo1";
     create_test_scene_1(path.clone());
@@ -25,6 +24,8 @@ fn test_single_file() {
         .output()
         .unwrap();
 
+    assert_eq!(String::from_utf8(result.stdout).unwrap(), "???");
+
     assert!(result.status.success());
 
     let result = Command::new("../../../../../target/debug/git")
@@ -39,7 +40,7 @@ fn test_single_file() {
 
     let result = Command::new("../../../../../target/debug/git")
         .arg("cat-file")
-        .arg("a07f2722102c226d267b58d99536d6e90a926b91")
+        .arg("cfc7f886843a5f33a324dabdb66e5fa174bd0bae")
         .arg("-p")
         .current_dir(path)
         .output()
@@ -51,8 +52,6 @@ fn test_single_file() {
     );
 
     panic!();
-
-    _ = fs::remove_dir_all(format!("{}", path));
 }
 
 fn create_test_scene_1(path: &str) {

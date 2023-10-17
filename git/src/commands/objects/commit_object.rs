@@ -245,7 +245,9 @@ impl GitObjectTrait for CommitObject {
             buf.extend_from_slice(&hex_string_to_u8_vec(parent));
         }
         let mut stream = Cursor::new(&mut buf);
-        stream.seek(SeekFrom::End(0));
+        stream.seek(SeekFrom::End(0)).map_err(|error| {
+            CommandError::FileWriteError("Error al mover el cursor".to_string())
+        })?;
         self.author.write_to(&mut stream)?;
 
         let timestamp = self.date.timestamp();

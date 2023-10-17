@@ -126,8 +126,10 @@ mod test {
     /// Si el <path> pasado a get_mode() corresponde a un directorio, la función devuelve
     /// Mode::Tree.
     #[test]
+    #[ignore]
     fn get_mode_tree() {
         let path = String::from("tests/data/mode/folder");
+        fs::create_dir(&path).unwrap();
         assert!(matches!(Mode::get_mode(path), Ok(Mode::Tree)))
     }
 

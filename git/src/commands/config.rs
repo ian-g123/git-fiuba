@@ -14,6 +14,7 @@ impl Config {
         let Ok(mut file) = std::fs::File::open(".git/config") else {
             return Ok(Self::default_config());
         };
+        return Ok(Self::default_config());
         Err(CommandError::FileReadError("config".to_string()))
     }
 
