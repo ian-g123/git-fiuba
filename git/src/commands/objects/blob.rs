@@ -1,10 +1,8 @@
 use std::{
     fmt,
     fs::File,
-    io::{Bytes, Read, Write},
+    io::{Read, Write},
 };
-
-use chrono::format;
 
 use crate::{commands::command_errors::CommandError, logger::Logger};
 
@@ -113,7 +111,7 @@ impl Blob {
             .read_exact(&mut content)
             .map_err(|error| CommandError::FileReadError(error.to_string()))?;
         let output_str = String::from_utf8(content).map_err(|error| {
-            logger.log("AAAA");
+            logger.log("Error convierttiendo a utf8 blob");
             CommandError::FileReadError(error.to_string())
         })?;
         writeln!(output, "{}", output_str)

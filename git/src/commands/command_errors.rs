@@ -1,7 +1,6 @@
 use std::{
     error::Error,
-    fmt::{self, write},
-    path::PathBuf,
+    fmt::{self},
 };
 
 /// Enumeración de errores de flags

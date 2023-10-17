@@ -363,7 +363,7 @@ fn get_timestamp() {
 
 #[cfg(test)]
 mod test {
-    use std::io::{self, Write};
+    use std::io::Write;
 
     use crate::commands::file_compressor::compress;
 

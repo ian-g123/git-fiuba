@@ -4,11 +4,10 @@ use std::{
     io::{Read, Write},
 };
 
-use crate::logger::{self, Logger};
+use crate::logger::Logger;
 
 use super::{
     command_errors::CommandError,
-    hash_object_components::hash_object::{self, HashObject},
     objects::tree::Tree,
     objects_database,
 };

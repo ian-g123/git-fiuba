@@ -1,6 +1,4 @@
-use std::{fmt::format, fs, path::Path, process::Command};
-
-use git::commands::stagin_area::StagingArea;
+use std::{fs, path::Path, process::Command};
 
 #[test]
 fn test_single_file() {
@@ -43,16 +41,12 @@ fn test_single_file() {
         .output()
         .unwrap();
 
-    let str_result = String::from_utf8(result.stdout).unwrap();
+    assert_eq!(
+        String::from_utf8(result.stdout).unwrap(),
+        "100644 blob 30d74d258442c7c65512eafab474568dd706c430    testfile.txt\n"
+    );
 
-    println!("{}", str_result);
-
-    // assert_eq!(
-    //     String::from_utf8(result.stdout).unwrap(),
-    //     "100644 tree 30d74d258442c7c65512eafab474568dd706c430    testfile.txt\n"
-    // );
-
-    // _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(format!("{}", path));
 }
 
 fn create_test_scene_1(path: &str) {

@@ -181,20 +181,15 @@ impl CatFile {
                 return Err(CommandError::InvalidArguments);
             } else {
                 git_object::display_type_from_hash(output, &self.hash, logger)?;
-                // _ = writeln!(output, "{}", object.type_str());
             }
         } else if self.size {
             if self.pretty {
                 return Err(CommandError::InvalidArguments);
             } else {
                 git_object::display_size_from_hash(output, &self.hash, logger)?;
-                // _ = writeln!(output, "{}", object.size()?);
             }
         } else if self.pretty {
             git_object::display_from_hash(output, &self.hash, logger)?;
-            // logger.log("pretty");
-            // logger.log(&object.to_string());
-            // _ = writeln!(output, "{}", object);
         } else {
             logger.log("wtf");
         }

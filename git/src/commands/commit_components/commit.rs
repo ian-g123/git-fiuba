@@ -4,10 +4,7 @@ use crate::{
     commands::{
         command::{Command, ConfigAdderFunction},
         command_errors::CommandError,
-        init_components::init::Init,
-        objects::tree::Tree,
-        objects_database,
-        stagin_area::{self, StagingArea},
+        stagin_area::StagingArea,
     },
     logger::Logger,
 };
@@ -279,12 +276,3 @@ fn get_head_ref() -> Result<String, CommandError> {
     Ok(head_ref.to_string())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /* #[test]
-    fn get_current_branch(){
-        assert!(Commit::get_head_branch().is_ok())
-    }  */
-}
