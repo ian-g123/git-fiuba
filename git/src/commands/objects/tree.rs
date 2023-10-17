@@ -56,13 +56,13 @@ impl Tree {
         let current_path = vector_path[..current_depth + 1].join("/");
         let tree_name = get_name(&current_path)?;
 
-        if !self.objects.contains_key(&tree_name) {
+        
+        let Some(tree) = self.objects.get_mut(&tree_name) else {
             let tree = Tree::new(current_path.to_owned());
             self.objects.insert(tree_name.clone(), Box::new(tree));
-        }
-
-        let tree = self.objects.get_mut(&tree_name).unwrap();
-
+            return Ok(())
+        };
+        
         tree.add_path(vector_path, current_depth + 1, hash)?;
         Ok(())
     }
@@ -136,8 +136,8 @@ impl Tree {
                     .read_exact(&mut type_buf)
                     .map_err(|_| CommandError::InvalidMode)?;
                 match type_buf {
-                    [1] => "blob",
-                    [0] => "tree",
+                    [0] => "blob",
+                    [1] => "tree",
                     [2] => "commit",
                     [3] => "tag",
                     _ => return Err(CommandError::ObjectTypeError),
@@ -357,7 +357,7 @@ mod tests {
             _ = tree.add_path_tree(vector_path, current_depth, &hash);
         }
 
-        _ = std::fs::remove_dir_all("dir_padre");
+        _ = std::fs::remove_dir_all("dir0");
         _ = std::fs::remove_file("sofi.txt");
     }
 }
