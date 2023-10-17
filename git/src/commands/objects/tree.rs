@@ -11,7 +11,7 @@ use crate::{
 use std::{
     collections::HashMap,
     fmt,
-    io::{Read, Write},
+    io::{Read, Write}, clone,
 };
 
 #[derive(Clone)]
@@ -77,19 +77,19 @@ impl Tree {
 
     pub fn add_tree(
         &mut self,
-        path_str: &String,
+        current_path: &String,
         vector_path: Vec<&str>,
         current_depth: usize,
         hash: &String,
     ) -> Result<(), CommandError> {
-        let path_name = get_name(path_str)?;
+        let tree_name = get_name(current_path)?;
 
-        if !self.objects.contains_key(&path_name) {
-            let tree2 = Tree::new(path_str.to_owned());
-            self.objects.insert(path_str.clone(), Box::new(tree2));
+        if !self.objects.contains_key(&tree_name) {
+            let tree2 = Tree::new(current_path.to_owned());
+            self.objects.insert(tree_name.clone(), Box::new(tree2));
         }
 
-        let tree = self.objects.get_mut(&path_name).unwrap();
+        let tree = self.objects.get_mut(&tree_name).unwrap();
 
         tree.add_path(vector_path, current_depth + 1, hash)?;
         Ok(())
@@ -217,6 +217,7 @@ impl Tree {
         }
         Ok(())
     }
+
 }
 
 impl GitObjectTrait for Tree {
@@ -257,7 +258,8 @@ impl GitObjectTrait for Tree {
     ) -> Result<(), CommandError> {
         let current_path_str = vector_path[..current_depth + 1].join("/");
 
-        if current_depth != vector_path.len() {
+        let aux = vector_path.len()-1;
+        if current_depth != aux {
             self.add_tree(&current_path_str, vector_path, current_depth, hash)?;
         } else {
             self.add_blob(&current_path_str, hash)?;
@@ -333,6 +335,9 @@ fn hex_string_to_u8_vec(hex_string: &str) -> [u8; 20] {
 
     result
 }
+
+
+
 
 #[cfg(test)]
 mod tests {
