@@ -291,6 +291,10 @@ impl GitObjectTrait for CommitObject {
     fn clone_object(&self) -> GitObject {
         Box::new(self.clone())
     }
+
+    fn get_hash(&self) -> Result<[u8; 20], CommandError> {
+        todo!()
+    }
 }
 
 fn write_timestamp(
@@ -378,7 +382,7 @@ impl CommitTree {
         let path = get_current_dir()?;
         let path_name = get_path_name(path)?;
         let mut objects = HashMap::<String, GitObject>::new();
-        Self::compare(path_name.clone(), &index, &mut objects, &parent)?;
+        // Self::compare(path_name.clone(), &index, &mut objects, &parent)?;
         let mut tree = Self::create_tree(&path_name, objects)?;
         Self::add_new_files(&index, &mut tree)?;
         Ok(tree)
@@ -393,41 +397,41 @@ impl CommitTree {
     }
 
     /// Compara las carpetas y archivos del Working Tree y el Staging Area. (falta refactor)
-    fn compare(
-        path_name: String,
-        index: &HashMap<String, String>,
-        objects: &mut HashMap<String, GitObject>,
-        parent: &Option<String>,
-    ) -> Result<(), CommandError> {
-        let path = Path::new(&path_name);
+    // fn compare(
+    //     path_name: String,
+    //     index: &HashMap<String, String>,
+    //     objects: &mut HashMap<String, GitObject>,
+    //     parent: &Option<String>,
+    // ) -> Result<(), CommandError> {
+    //     let path = Path::new(&path_name);
 
-        let Ok(entries) = fs::read_dir(path.clone()) else {
-            return Err(CommandError::InvalidDirectory);
-        };
-        for entry in entries {
-            let Ok(entry) = entry else {
-                return Err(CommandError::InvalidDirectoryEntry);
-            };
-            let entry_path = entry.path();
-            let entry_name = get_path_name(entry_path.clone())?;
+    //     let Ok(entries) = fs::read_dir(path.clone()) else {
+    //         return Err(CommandError::InvalidDirectory);
+    //     };
+    //     for entry in entries {
+    //         let Ok(entry) = entry else {
+    //             return Err(CommandError::InvalidDirectoryEntry);
+    //         };
+    //         let entry_path = entry.path();
+    //         let entry_name = get_path_name(entry_path.clone())?;
 
-            if entry_path.is_dir() {
-                let mut objects = HashMap::<String, GitObject>::new();
-                Self::compare(entry_name.clone(), index, &mut objects, parent)?;
-                if !index.is_empty() {
-                    let tree = Self::create_tree(&entry_name, objects.to_owned())?;
-                    _ = objects.insert(entry_name, Box::new(tree));
-                    return Ok(());
-                }
-            } else {
-                let result = Self::compare_entry(&path_name, index, parent)?;
-                if let Some(blob) = result {
-                    _ = objects.insert(blob.get_hash(), Box::new(blob));
-                }
-            }
-        }
-        Ok(())
-    }
+    //         if entry_path.is_dir() {
+    //             let mut objects = HashMap::<String, GitObject>::new();
+    //             Self::compare(entry_name.clone(), index, &mut objects, parent)?;
+    //             if !index.is_empty() {
+    //                 let tree = Self::create_tree(&entry_name, objects.to_owned())?;
+    //                 _ = objects.insert(entry_name, Box::new(tree));
+    //                 return Ok(());
+    //             }
+    //         } else {
+    //             let result = Self::compare_entry(&path_name, index, parent)?;
+    //             if let Some(blob) = result {
+    //                 _ = objects.insert(blob.get_hash(), Box::new(blob));
+    //             }
+    //         }
+    //     }
+    //     Ok(())
+    // }
 
     /// Crea un Tree.
     fn create_tree(
@@ -441,31 +445,31 @@ impl CommitTree {
     /// se guardan las modificaciones presentes en la misma al Tree. Si el archivo no está en
     /// la Staging Area, pero fue registrado en el commit anterior, se agrega el archivo sin
     /// modificaciones al Tree.
-    fn compare_entry(
-        path: &String,
-        index: &HashMap<String, String>,
-        parent: &Option<String>,
-    ) -> Result<Option<Blob>, CommandError> {
-        let mut blob: Blob;
-        if index.contains_key(path) {
-            let Some(hash) = index.get(path) else {
-                return Err(CommandError::FileNotFound(path.to_string()));
-            };
-            blob = Blob::new_from_hash(hash.to_string(), path.to_owned())?;
-            return Ok(Some(blob));
-        }
-        let hash = get_sha1(path.to_owned(), "blob".to_string(), false)?;
+    // fn compare_entry(
+    //     path: &String,
+    //     index: &HashMap<String, String>,
+    //     parent: &Option<String>,
+    // ) -> Result<Option<Blob>, CommandError> {
+    //     let mut blob: Blob;
+    //     if index.contains_key(path) {
+    //         let Some(hash) = index.get(path) else {
+    //             return Err(CommandError::FileNotFound(path.to_string()));
+    //         };
+    //         blob = Blob::new_from_hash(hash.to_string(), path.to_owned())?;
+    //         return Ok(Some(blob));
+    //     }
+    //     let hash = get_sha1(path.to_owned(), "blob".to_string(), false)?;
 
-        if let Some(parent) = parent {
-            let found = Self::search_parent_commit(parent.to_string(), hash)?;
-            if found {
-                blob = Blob::new(path.to_owned())?;
-                return Ok(Some(blob));
-            }
-        }
+    //     if let Some(parent) = parent {
+    //         let found = Self::search_parent_commit(parent.to_string(), hash)?;
+    //         if found {
+    //             blob = Blob::new_from_path(path.to_owned())?;
+    //             return Ok(Some(blob));
+    //         }
+    //     }
 
-        Ok(None)
-    }
+    //     Ok(None)
+    // }
 
     /// Busca el contenido de un archivo en la Base de Datos y lo devuelve. Si no existe, devuelve error.
     fn read_content(hash: String) -> Result<Vec<u8>, CommandError> {

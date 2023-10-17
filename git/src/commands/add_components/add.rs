@@ -10,6 +10,8 @@ use crate::{
         command::{Command, ConfigAdderFunction},
         command_errors::CommandError,
         hash_object_components::hash_object::HashObject,
+        objects::blob::Blob,
+        objects_database,
         stagin_area::StagingArea,
     },
     logger::Logger,
@@ -142,14 +144,16 @@ impl Add {
 }
 
 fn run_for_file(path: &str, logger: &mut Logger) -> Result<(), CommandError> {
-    let mut file = fs::File::open(path).unwrap();
-    let mut content = Vec::<u8>::new();
-    file.read_to_end(&mut content).unwrap();
-    let hash_object = HashObject::new("blob".to_string(), vec![], true, false);
-    let (hash_hex, _) = hash_object.run_for_content(content)?;
+    // let mut file = fs::File::open(path).unwrap();
+    // let mut content = Vec::<u8>::new();
+    // file.read_to_end(&mut content).unwrap();
+    // let hash_object = HashObject::new("blob".to_string(), vec![], true, false);
+    // let (hash_hex, _) = hash_object.run_for_content(content)?;
+    let blob = Blob::new_from_path(path.to_string())?;
+    let hex_str = objects_database::write(Box::new(blob))?;
     match StagingArea::open() {
         Ok(mut staging_area) => {
-            staging_area.add(path, &hash_hex);
+            staging_area.add(path, &hex_str);
             staging_area.save()?;
         }
         Err(error) => {

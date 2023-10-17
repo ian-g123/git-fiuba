@@ -3,16 +3,21 @@ use crate::{
     logger::Logger,
 };
 
-use super::{blob::Blob, mode::Mode, tree::Tree};
+use super::{aux::get_sha1, blob::Blob, mode::Mode, tree::Tree};
 use std::{
     fmt,
-    io::{Read, Write},
+    io::{Cursor, Read, Write},
 };
 
 pub type GitObject = Box<dyn GitObjectTrait>;
 
 pub trait GitObjectTrait: fmt::Display {
     fn as_mut_tree(&mut self) -> Option<&mut Tree>;
+
+    /// Devuelve el árbol del objeto si es que corresponde, o sino None
+    fn as_tree(&self) -> Option<&Tree> {
+        None
+    }
 
     fn clone_object(&self) -> GitObject;
 
@@ -30,6 +35,8 @@ pub trait GitObjectTrait: fmt::Display {
         Ok(())
     }
 
+    /// Agrega un árbol al objeto Tree si es que corresponde, o sino un Blob\
+    /// Si el objeto no es un Tree, devuelve un error
     fn add_path(
         &mut self,
         vector_path: Vec<&str>,
@@ -39,18 +46,30 @@ pub trait GitObjectTrait: fmt::Display {
         Err(CommandError::ObjectNotTree)
     }
 
+    /// Devuelve el tipo del objeto hecho string
     fn type_str(&self) -> String;
 
+    /// Devuelve el modo del objeto
     fn mode(&self) -> Mode;
 
+    /// Devuelve el contenido del objeto
     fn content(&self) -> Result<Vec<u8>, CommandError>;
 
+    /// Devuelve el tamaño del objeto en bytes
     fn size(&self) -> Result<usize, CommandError> {
         let content = self.to_string_priv();
         Ok(content.len())
     }
 
     fn to_string_priv(&self) -> String;
+
+    /// Devuelve el hash del objeto
+    fn get_hash(&self) -> Result<[u8; 20], CommandError> {
+        let mut buf: Vec<u8> = Vec::new();
+        let mut stream = Cursor::new(&mut buf);
+        self.write_to(&mut stream)?;
+        Ok(get_sha1(&buf))
+    }
 }
 
 pub fn display_from_hash(
@@ -60,12 +79,20 @@ pub fn display_from_hash(
 ) -> Result<(), CommandError> {
     let (path, content) = objects_database::read_file(hash)?;
     let mut stream = std::io::Cursor::new(content);
-    let (type_str, len) = get_type_and_len(&mut stream, logger)?;
+    display_from_stream(&mut stream, logger, output)
+}
+
+pub fn display_from_stream(
+    stream: &mut dyn Read,
+    logger: &mut Logger,
+    output: &mut dyn Write,
+) -> Result<(), CommandError> {
+    let (type_str, len) = get_type_and_len(stream, logger)?;
     if type_str == "blob" {
-        return Blob::display_from_hash(&mut stream, len, path, hash, output, logger);
+        return Blob::display_from_stream(stream, len, output, logger);
     }
     if type_str == "tree" {
-        return Tree::display_from_hash(&mut stream, len, path, hash, output, logger);
+        return Tree::display_from_stream(stream, len, output, logger);
     };
     Err(CommandError::ObjectTypeError)
 }

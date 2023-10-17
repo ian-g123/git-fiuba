@@ -11,14 +11,17 @@ use crate::logger::Logger;
 use super::{
     command_errors::CommandError,
     file_compressor::{compress, extract},
-    objects::git_object::{read_git_object_from, GitObject},
+    objects::{
+        aux::{get_sha1_str, u8_vec_to_hex_string},
+        git_object::{read_git_object_from, GitObject},
+    },
 };
 
 pub(crate) fn write(git_object: GitObject) -> Result<String, CommandError> {
     let mut data = Vec::new();
     git_object.write_to(&mut data)?;
 
-    let hex_string = get_sha1_str(&data);
+    let hex_string = u8_vec_to_hex_string(&git_object.get_hash()?);
     let folder_name = &hex_string[0..2];
     let parent_path = format!(".git/objects/{}", folder_name);
     let file_name = &hex_string[2..];
@@ -39,20 +42,6 @@ pub(crate) fn write(git_object: GitObject) -> Result<String, CommandError> {
     return Ok(hex_string);
 }
 
-fn get_sha1_str(data: &[u8]) -> String {
-    let mut sha1 = Sha1::new();
-    sha1.update(data);
-    let hash_result = sha1.finalize();
-
-    // Formatea los bytes del hash en una cadena hexadecimal
-    let hex_string = hash_result
-        .iter()
-        .map(|byte| format!("{:02x}", byte))
-        .collect::<Vec<_>>()
-        .join("");
-
-    hex_string
-}
 pub(crate) fn read_object(hash_str: &str, logger: &mut Logger) -> Result<GitObject, CommandError> {
     let (path, decompressed_data) = read_file(hash_str)?;
     let mut stream = Cursor::new(decompressed_data);

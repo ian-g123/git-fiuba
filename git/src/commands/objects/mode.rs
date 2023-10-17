@@ -37,6 +37,17 @@ impl Mode {
         Ok(mode)
     }
 
+    // Cambios que hizo Ian
+    pub fn get_id_mode(&self) -> u32 {
+        match self {
+            Mode::RegularFile => 100644,
+            Mode::ExecutableFile => 100755,
+            Mode::SymbolicLink => 120000,
+            Mode::Submodule => 160000,
+            Mode::Tree => 040000,
+        }
+    }
+
     pub fn read_from(stream: &mut dyn Read) -> Result<Self, CommandError> {
         let mut buf = [0; 6];
         stream

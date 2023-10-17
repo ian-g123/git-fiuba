@@ -9,7 +9,7 @@ use crate::{
         command::{Command, ConfigAdderFunction},
         command_errors::CommandError,
         file_compressor::compress,
-        objects::blob::Blob,
+        objects::{aux::u8_vec_to_hex_string, blob::Blob, git_object::GitObjectTrait},
         objects_database,
     },
     logger::Logger,
@@ -142,26 +142,29 @@ impl HashObject {
         if self.stdin {
             let mut input = String::new();
             if stdin.read_to_string(&mut input).is_ok() {
-                let (hex_string, path) = self.run_for_content(input.as_bytes().to_vec())?;
-                let _ = writeln!(output, "{}", hex_string);
-                if path.is_some() {
-                    logger.log(&format!("Writen object to database in {:?}", path));
-                }
-                // TODO: conectar stdin con base de datos
-                // let git_object = Blob::new(path)?;
-                // let hex_string = objects_database::write(Box::new(git_object))?;
-                // let _ = writeln!(output, "{}", hex_string);
-                // logger.log(&format!("Writen object to database in {:?}", hex_string));
+                let object = Blob::new_from_content(input.as_bytes().to_vec())?;
+                self.hash_object(object, output, logger)?;
             };
         }
         for file in &self.files {
-            let content = read_file_contents(file)?;
-            let git_object = Blob::new(file.to_string())?;
-            let hex_string = objects_database::write(Box::new(git_object))?;
-            //let (hex_string, path) = self.run_for_content(content)?;
-            let _ = writeln!(output, "{}", hex_string);
-            logger.log(&format!("Writen object to database in {:?}", hex_string));
+            let object = Blob::new_from_path(file.to_string())?;
+            self.hash_object(object, output, logger)?;
         }
+        Ok(())
+    }
+
+    fn hash_object(
+        &self,
+        object: Blob,
+        output: &mut dyn Write,
+        logger: &mut Logger,
+    ) -> Result<(), CommandError> {
+        let hex_string = u8_vec_to_hex_string(&object.get_hash()?);
+        if self.write {
+            objects_database::write(Box::new(object))?;
+        }
+        let _ = writeln!(output, "{}", hex_string);
+        logger.log(&format!("Writen object to database in {:?}", hex_string));
         Ok(())
     }
 
