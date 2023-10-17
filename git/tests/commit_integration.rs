@@ -46,7 +46,7 @@ fn test_single_file() {
 
     assert_eq!(
         String::from_utf8(result.stdout).unwrap(),
-        "100644 tree 30d74d258442c7c65512eafab474568dd706c430    testfile.txt\n"
+        "100644 blob 30d74d258442c7c65512eafab474568dd706c430    testfile.txt\n"
     );
 
     panic!();

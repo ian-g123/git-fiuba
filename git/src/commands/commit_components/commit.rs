@@ -42,21 +42,21 @@ impl Command for Commit {
         }
         logger.log(&format!("committing {:?}", args));
 
-        let instance = Self::new_from(args)?;
+        let instance = Commit::new_from(args)?;
 
         instance.run(output, logger)?;
         logger.log(&format!("commit {:?}", args));
         Ok(())
     }
 
-    fn config_adders(&self) -> ConfigAdderFunction<Self> {
+    fn config_adders(&self) -> ConfigAdderFunction<Commit> {
         vec![
-            Self::add_all_config,
-            Self::add_dry_run_config,
-            Self::add_message_config,
-            Self::add_quiet_config,
-            Self::add_reuse_message_config,
-            Self::add_pathspec_config,
+            Commit::add_all_config,
+            Commit::add_dry_run_config,
+            Commit::add_message_config,
+            Commit::add_quiet_config,
+            Commit::add_reuse_message_config,
+            Commit::add_pathspec_config,
         ]
     }
 }
@@ -233,10 +233,6 @@ impl Commit {
         //      */
         // }
 
-        if self.message.is_none() {
-            self.run_enter_message();
-        }
-
         if let Some(commit_hash) = self.reuse_message.clone() {}
 
         //Crear Commit Object con la info necesaria --> Commit::new()
@@ -340,14 +336,4 @@ fn get_head_ref() -> Result<String, CommandError> {
         ));
     };
     Ok(head_ref.to_string())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /* #[test]
-    fn get_current_branch(){
-        assert!(Commit::get_head_branch().is_ok())
-    }  */
 }

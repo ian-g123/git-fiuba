@@ -1,4 +1,7 @@
-use std::{error::Error, fmt};
+use std::{
+    error::Error,
+    fmt::{self},
+};
 
 /// Enumeración de errores de flags
 #[derive(Debug, PartialEq)]
@@ -62,6 +65,14 @@ pub enum CommandError {
     FileNameError,
     /// No existe configuración de ususario.
     UserConfigurationError,
+    DirNotFound(String),
+    /// No se pudo crear el directorio
+    DirectoryCreationError(String),
+    /// No se pudo crear el archivo
+    FileCreationError(String),
+    FailToRecreateStagingArea,
+    /// Se intentó agregar un archivo dentro de un archivo
+    ObjectNotTree,
 }
 
 impl Error for CommandError {}
@@ -153,6 +164,21 @@ impl fmt::Display for CommandError {
             }
             CommandError::UserConfigurationError => {
                 write!(f, "No existe configuración de ususario.")
+            }
+            CommandError::DirNotFound(path) => {
+                write!(f, "No se encuentra el directorio: {path}")
+            }
+            CommandError::DirectoryCreationError(path) => {
+                write!(f, "No se pudo crear el directorio: {path}")
+            }
+            CommandError::FileCreationError(path) => {
+                write!(f, "No se pudo crear el archivo: {path}")
+            }
+            CommandError::FailToRecreateStagingArea => {
+                write!(f, "Error al intentar recrear el staging area")
+            }
+            CommandError::ObjectNotTree => {
+                write!(f, "Se intentó agregar un archivo dentro de un archivo")
             }
         }
     }

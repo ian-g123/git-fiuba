@@ -2,7 +2,6 @@ use std::{
     collections::HashMap,
     fmt,
     io::{Read, Write},
-    path::PathBuf,
 };
 
 use crate::{
@@ -11,119 +10,72 @@ use crate::{
 };
 
 use super::{
-    aux::{self, *},
+    aux::*,
     blob::Blob,
     git_object::{GitObject, GitObjectTrait},
     mode::Mode,
 };
+use hex;
 
-//#[derive(Debug, Clone)]
 #[derive(Clone)]
 pub struct Tree {
-    mode: Mode,
     path: String,
-    hash: Option<String>,
-    // name: String,
     objects: HashMap<String, GitObject>,
 }
 
 impl Tree {
+    pub fn add_path_tree(
+        &mut self,
+        vector_path: Vec<&str>,
+        current_depth: usize,
+        hash: &String,
+    ) -> Result<(), CommandError> {
+        Ok(self.add_path(vector_path, current_depth, hash)?)
+    }
+
     /// Crea un Tree a partir de su ruta y los objetos a los que referencia. Si la ruta no existe,
     /// devuelve Error.
-    pub fn new(path: String, objects: HashMap<String, GitObject>) -> Result<Self, CommandError> {
-        let object_type = "tree";
-        let mode = Mode::get_mode(path.clone())?;
-        // let sha1 = get_sha1(path.clone(), object_type.to_string(), false)?;
-        let objects: HashMap<String, GitObject> = HashMap::new();
-
-        Ok(Tree {
-            mode: mode,
+    pub fn new(path: String) -> Tree {
+        Tree {
             path: path.clone(),
-            hash: None,
-            // name: get_name(&path)?,
-            objects: objects,
-        })
-    }
-
-    pub fn new_from_path(path: &str) -> Result<Self, CommandError> {
-        let objects: HashMap<String, GitObject> = HashMap::new();
-
-        let mode = Mode::Tree;
-        Ok(Tree {
-            mode,
-            path: path.to_string(),
-            hash: None,
-            // name: get_name(path).unwrap(),
-            objects: objects,
-        })
-    }
-
-    /// Devuelve el hash del Tree.
-    pub fn get_hash_interno(&self) -> String {
-        todo!()
+            objects: HashMap::new(),
+        }
     }
 
     /// Crea un Blob a partir de su hash y lo añade al Tree.
     pub fn add_blob(&mut self, path_name: &String, hash: &String) -> Result<(), CommandError> {
-        let parent_path = get_parent(path_name)?;
-
-        if self.path == parent_path {
-            let blob = Blob::new_from_hash(hash.to_owned(), path_name.to_owned())?;
-            _ = self.objects.insert(path_name.to_string(), Box::new(blob));
-            return Ok(());
-        }
-        if parent_path.starts_with(&self.path) {
-            return self.add_blob_to_subtree(path_name, &hash);
-        }
-        Err(CommandError::NotYourFather)
-    }
-
-    /// Agrega un Objeto Blob o Tree al Tree.
-    fn insert(&mut self, path: &str, object: GitObject) {
-        _ = self.objects.insert(path.to_string(), object);
-    }
-
-    /// Busca el Tree donde debe guardarse el Blob.
-    fn add_blob_to_subtree(
-        &mut self,
-        path_name: &String,
-        hash: &String,
-    ) -> Result<(), CommandError> {
-        for (_, object) in self.objects.iter_mut() {
-            let Some(mut tree) = object.as_mut_tree() else {
-                continue;
-            };
-            match tree.add_blob(path_name, hash) {
-                Ok(()) => return Ok(()),
-                Err(CommandError::NotYourFather) => continue,
-                Err(error) => return Err(error),
-            };
-        }
-        let child_tree = self.add_new_blob_in_new_tree(path_name, &hash)?;
-        self.insert(path_name, Box::new(child_tree));
+        let blob = Blob::new_from_hash(hash.clone(), path_name.clone())?;
+        _ = self.objects.insert(path_name.to_string(), Box::new(blob));
         Ok(())
     }
 
-    fn add_new_blob_in_new_tree(&self, path_name: &str, hash: &str) -> Result<Tree, CommandError> {
-        let parent_path = get_parent(path_name)?;
-        let blob = Blob::new_from_hash(hash.to_string(), path_name.to_string())?;
-        let mut tree = Tree::new_from_path(&parent_path)?;
-        tree.insert(path_name, Box::new(blob));
-        self.add_tree_in_new_tree(&parent_path, tree)
+    pub fn add_tree(
+        &mut self,
+        vector_path: Vec<&str>,
+        current_depth: usize,
+        hash: &String,
+    ) -> Result<(), CommandError> {
+        let current_path = vector_path[..current_depth + 1].join("/");
+        let tree_name = get_name(&current_path)?;
+
+        let Some(tree) = self.objects.get_mut(&tree_name) else {
+            let tree = Tree::new(current_path.to_owned());
+            self.objects.insert(tree_name.clone(), Box::new(tree));
+            return Ok(());
+        };
+
+        tree.add_path(vector_path, current_depth + 1, hash)?;
+        Ok(())
     }
 
-    fn add_tree_in_new_tree(&self, path_name: &str, tree: Tree) -> Result<Tree, CommandError> {
-        let parent_path = get_parent(path_name)?;
-        if parent_path == self.path {
-            return Ok(tree);
-        }
-        let mut parent_tree = Tree::new_from_path(&parent_path)?;
-        parent_tree.insert(path_name, Box::new(tree));
-        self.add_tree_in_new_tree(&parent_path, parent_tree)
+    fn get_data(&self) -> Result<Vec<u8>, CommandError> {
+        let header = format!("1 {}\0", self.size()?);
+        let content = self.content()?;
+        Ok([header.as_bytes(), content.as_slice()].concat())
     }
 
-    fn hash(&self) -> Result<String, CommandError> {
-        self.hash.clone().ok_or(CommandError::ObjectHashNotKnown)
+    fn get_mode(&self) -> Result<Mode, CommandError> {
+        Ok(Mode::get_mode(self.path.clone())?)
     }
 
     pub fn read_from(
@@ -159,30 +111,33 @@ impl Tree {
                 .collect::<Vec<_>>()
                 .join("");
 
-            let mut size_be = [0; 4];
-            stream
-                .read_exact(&mut size_be)
-                .map_err(|error| CommandError::FailToCalculateObjectSize)?;
-            let size = u32::from_be_bytes(size_be) as usize;
+            let mut hash = [0; 20];
+            _ = stream
+                .read_exact(&mut hash)
+                .map_err(|_| CommandError::ObjectHashNotKnown);
+            let hash_str = hex::encode(hash);
+
+            let mut size_bytes = [0; 4];
+            _ = stream
+                .read_exact(&mut size_bytes)
+                .map_err(|_| CommandError::FailToCalculateObjectSize);
+            let size = u32::from_be_bytes(size_bytes) as usize;
+
             let mut name = vec![0; size];
-            stream
+            _ = stream
                 .read_exact(&mut name)
-                .map_err(|error| CommandError::FailToOpenSatginArea(error.to_string()))?;
+                .map_err(|error| CommandError::FailToOpenSatginArea(error.to_string()));
 
             let object = objects_database::read_object(&hash_str, logger)?;
             objects.insert(hash_str, object);
         }
+
         Ok(Box::new(Self {
-            mode: Mode::get_mode(path.to_string())?,
             path: path.to_string(),
-            hash: None,
             objects,
         }))
     }
 
-    pub fn filename(&self) -> Result<String, CommandError> {
-        aux::get_name(&self.path)
-    }
     pub(crate) fn display_from_hash(
         stream: &mut dyn Read,
         _: usize,
@@ -198,7 +153,7 @@ impl Tree {
                 let mut type_buf = [0; 1];
                 stream
                     .read_exact(&mut type_buf)
-                    .map_err(|error| CommandError::InvalidMode)?;
+                    .map_err(|_| CommandError::InvalidMode)?;
                 match type_buf {
                     [0] => "blob",
                     [1] => "tree",
@@ -210,7 +165,7 @@ impl Tree {
             let mut hash = vec![0; 20];
             stream
                 .read_exact(&mut hash)
-                .map_err(|error| CommandError::ObjectHashNotKnown)?;
+                .map_err(|_| CommandError::ObjectHashNotKnown)?;
             let hash_str = hash
                 .iter()
                 .map(|byte| format!("{:02x}", byte))
@@ -239,17 +194,6 @@ impl Tree {
     }
 }
 
-fn get_parent(path_name: &str) -> Result<String, CommandError> {
-    let path: PathBuf = PathBuf::from(path_name);
-    match path.parent() {
-        Some(parent_path) => match parent_path.to_str() {
-            Some(parent_path) => Ok(parent_path.to_owned()),
-            None => return Err(CommandError::FileNotFound(path_name.to_owned())),
-        },
-        None => return Err(CommandError::FileNotFound(path_name.to_owned())),
-    }
-}
-
 impl GitObjectTrait for Tree {
     fn as_mut_tree(&mut self) -> Option<&mut Tree> {
         Some(self)
@@ -269,6 +213,7 @@ impl GitObjectTrait for Tree {
             let hash_str = objects_database::write(object.to_owned())?;
             let filename = get_name(path)?;
             let type_byte = type_byte(&self.type_str())?;
+
             object.mode().write_to(&mut content)?;
             content.extend_from_slice(&[type_byte]);
             let hash_hex = hex_string_to_u8_vec(&hash_str);
@@ -278,6 +223,21 @@ impl GitObjectTrait for Tree {
             content.extend_from_slice(filename.as_bytes());
         }
         Ok(content)
+    }
+
+    fn add_path(
+        &mut self,
+        vector_path: Vec<&str>,
+        current_depth: usize,
+        hash: &String,
+    ) -> Result<(), CommandError> {
+        let current_path_str = vector_path[..current_depth + 1].join("/");
+        if current_depth != vector_path.len() - 1 {
+            self.add_tree(vector_path, current_depth, hash)?;
+        } else {
+            self.add_blob(&current_path_str, hash)?;
+        }
+        Ok(())
     }
 
     fn mode(&self) -> Mode {
@@ -294,21 +254,6 @@ impl GitObjectTrait for Tree {
         //     self.filename()
         // )
     }
-
-    // Obtiene el nombre de un archivo dada su ruta. Si la ruta no existe, devuelve error.
-    // pub fn get_name(&s)-> Result<String, CommandError>{
-
-    //     let path = Path::new(path);
-    //     if !path.exists(){
-    //         return Err(CommandError::FileNotFound(path.to_string()));
-    //     }
-    //     if let Some(file_name) = path.file_name() {
-    //         if let Some(name_str) = file_name.to_str() {
-    //             return Ok(name_str.to_string());
-    //         }
-    //     }
-    //     Err(CommandError::FileNotFound(path.to_owned()))
-    // }
 }
 
 impl fmt::Display for Tree {
@@ -324,5 +269,90 @@ fn type_byte(type_str: &str) -> Result<u8, CommandError> {
         "commit" => Ok(2),
         "tag" => Ok(3),
         _ => return Err(CommandError::ObjectTypeError),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        env,
+        fs::{create_dir_all, File},
+    };
+
+    use super::*;
+
+    #[test]
+    fn given_a_path_a_tree_is_created() {
+        let path = "test".to_string();
+        let tree = Tree::new(path.clone());
+        assert_eq!(tree.path, path);
+    }
+
+    #[test]
+    fn given_a_path_a_tree_is_created_with_empty_objects() {
+        let path = "test".to_string();
+        let tree = Tree::new(path.clone());
+        assert_eq!(tree.objects.len(), 0);
+    }
+
+    #[test]
+    fn given_a_path_a_tree_is_created_with_empty_objects_and_then_add_a_blob() {
+        let file_name = "test.txt".to_string();
+        let current_dir = env::current_dir().unwrap();
+        println!("The current directory is {}", current_dir.display());
+
+        // Abre el archivo en modo escritura (se creará si no existe)
+        let mut file = File::create(&file_name).expect("No se pudo crear el archivo");
+
+        // Contenido que deseas escribir en el archivo
+        let content = "test";
+
+        // Escribe el contenido en el archivo
+        match file.write_all(content.as_bytes()) {
+            Ok(_) => println!("Archivo creado y contenido escrito con éxito."),
+            Err(err) => eprintln!("Error al escribir en el archivo: {}", err),
+        }
+
+        let path = format!("{}/{}", current_dir.display(), file_name);
+        let mut tree = Tree::new(path.clone());
+        let hash = "30d74d258442c7c65512eafab474568dd706c430".to_string();
+        tree.add_blob(&path, &hash).unwrap();
+        assert_eq!(tree.objects.len(), 1);
+
+        // borramos el archivo
+        let _ = std::fs::remove_file(file_name);
+    }
+
+    #[test]
+    fn hhh() {
+        let files = [
+            "dir0/dir1/dir2/meli.txt".to_string(),
+            "dir0/dir1/ian.txt".to_string(),
+            "dir0/pato.txt".to_string(),
+            "sofi.txt".to_string(),
+        ];
+        create_dir_all("dir0/dir1/dir2/").unwrap();
+        let mut tree = Tree::new("".to_string());
+
+        // Creamos los files
+        for file_str in files.iter() {
+            // let file_name = format!("{}/{}", "dir_padre".to_string(), file_str);
+            let content = "test";
+
+            // Escribe el contenido en el archivo
+            let mut file = File::create(&file_str).unwrap();
+
+            file.write_all(content.as_bytes()).unwrap();
+        }
+
+        let hash = "30d74d258442c7c65512eafab474568dd706c430".to_string();
+        for path in files {
+            let vector_path = path.split("/").collect::<Vec<_>>();
+            let current_depth: usize = 0;
+            _ = tree.add_path_tree(vector_path, current_depth, &hash);
+        }
+
+        _ = std::fs::remove_dir_all("dir0");
+        _ = std::fs::remove_file("sofi.txt");
     }
 }

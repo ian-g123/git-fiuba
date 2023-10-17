@@ -30,6 +30,15 @@ pub trait GitObjectTrait: fmt::Display {
         Ok(())
     }
 
+    fn add_path(
+        &mut self,
+        vector_path: Vec<&str>,
+        current_depth: usize,
+        hash: &String,
+    ) -> Result<(), CommandError> {
+        Err(CommandError::ObjectNotTree)
+    }
+
     fn type_str(&self) -> String;
 
     fn mode(&self) -> Mode;
@@ -126,44 +135,8 @@ fn get_type_and_len(
     logger: &mut Logger,
 ) -> Result<(String, usize), CommandError> {
     let mut bytes = stream.bytes();
-    let type_str = {
-        let end = ' ' as u8;
-        let mut result = String::new();
-        let Some(Ok(mut byte)) = bytes.next() else {
-            return Err(CommandError::FileReadError(
-                "Error leyendo bytes 1".to_string(),
-            ));
-        };
-        while byte != end {
-            result.push(byte as char);
-            let Some(Ok(byte_h)) = bytes.next() else {
-                return Err(CommandError::FileReadError(
-                    "Error leyendo bytes 2".to_string(),
-                ));
-            };
-            byte = byte_h;
-        }
-        Ok(result)
-    }?;
-    let len_str = {
-        let mut result = String::new();
-        let Some(Ok(mut byte)) = bytes.next() else {
-            return Err(CommandError::FileReadError(
-                "Error leyendo bytes 3".to_string(),
-            ));
-        };
-        let end = '\0' as u8;
-        while byte != end {
-            result.push(byte as char);
-            let Some(Ok(byte_h)) = bytes.next() else {
-                return Err(CommandError::FileReadError(
-                    "Error leyendo bytes 4".to_string(),
-                ));
-            };
-            byte = byte_h;
-        }
-        Ok(result)
-    }?;
+    let type_str = get_type(&mut bytes)?;
+    let len_str = get_len(&mut bytes)?;
     logger.log("found \0");
     let len: usize = len_str
         .parse()
@@ -171,11 +144,39 @@ fn get_type_and_len(
     Ok((type_str, len))
 }
 
-// impl fmt::Display for GitObject {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         write!(f, "{}", self.to_string())
-//     }
-// }
+fn get_type(bytes: &mut std::io::Bytes<&mut dyn Read>) -> Result<String, CommandError> {
+    get_from_header(bytes, ' ')
+}
+
+// "blob 16\u0000"
+fn get_len(bytes: &mut std::io::Bytes<&mut dyn Read>) -> Result<String, CommandError> {
+    get_from_header(bytes, '\0')
+}
+
+///
+fn get_from_header(
+    bytes: &mut std::io::Bytes<&mut dyn Read>,
+    char_stop: char,
+) -> Result<String, CommandError> {
+    let type_str = {
+        let end = char_stop as u8;
+        let mut result = String::new();
+        loop {
+            if let Some(Ok(byte)) = bytes.next() {
+                if byte == end {
+                    break;
+                }
+                result.push(byte as char);
+            } else {
+                return Err(CommandError::FileReadError(
+                    "Error leyendo bytes para obtener el tipo de objeto git".to_string(),
+                ));
+            }
+        }
+        Ok(result)
+    }?;
+    Ok(type_str)
+}
 
 impl Clone for GitObject {
     fn clone(&self) -> Self {

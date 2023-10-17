@@ -1,9 +1,12 @@
-use std::fs::File;
-use std::io::{Read, Write};
-use std::path::Path;
+use std::{
+    fs::File,
+    io::{Read, Write},
+    path::Path,
+};
 
-use crate::commands::command_errors::CommandError;
-use crate::commands::hash_object_components::hash_object::HashObject;
+use crate::commands::{
+    command_errors::CommandError, hash_object_components::hash_object::HashObject,
+};
 
 /// Obtiene el nombre de un archivo dada su ruta. Si la ruta no existe, devuelve error.
 pub fn get_name(path_string: &String) -> Result<String, CommandError> {

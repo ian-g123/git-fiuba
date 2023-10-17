@@ -11,8 +11,8 @@ use super::aux::{
 use super::blob::Blob;
 use super::git_object::{GitObject, GitObjectTrait};
 use super::{author::Author, tree::Tree};
+use crate::commands::command_errors::CommandError;
 use crate::commands::file_compressor::extract;
-use crate::commands::{command_errors::CommandError, stagin_area::StagingArea};
 
 extern crate chrono;
 use chrono::{prelude::*, DateTime, LocalResult, Offset, TimeZone};
@@ -110,51 +110,49 @@ impl CommitObject {
     //     output
     // }
 
-    pub fn from_string(string: String) -> Result<Self, CommandError> {
-        let mut lines = string.lines();
-        let mut line = lines.next().unwrap().split_whitespace();
-        if line.next().unwrap() != "tree" {
-            return Err(CommandError::InvalidCommit);
-        }
-        let tree_hash = line.next().unwrap();
-        let mut line = lines.next().unwrap().split_whitespace();
-        let mut parents = Vec::<String>::new();
-        while line.next().unwrap() == "parent" {
-            let parent = line.next().unwrap().to_string();
-            parents.push(parent);
-            line = lines.next().unwrap().split_whitespace();
-        }
-        let mut line: Vec<&str> = line.collect();
-        if line.remove(0) != "author" {
-            return Err(CommandError::InvalidCommit);
-        }
+    // pub fn from_string(string: String) -> Result<Self, CommandError> {
+    //     let mut lines = string.lines();
+    //     let mut line = lines.next().unwrap().split_whitespace();
+    //     if line.next().unwrap() != "tree" {
+    //         return Err(CommandError::InvalidCommit);
+    //     }
+    //     let tree_hash = line.next().unwrap();
+    //     let mut line = lines.next().unwrap().split_whitespace();
+    //     let mut parents = Vec::<String>::new();
+    //     while line.next().unwrap() == "parent" {
+    //         let parent = line.next().unwrap().to_string();
+    //         parents.push(parent);
+    //         line = lines.next().unwrap().split_whitespace();
+    //     }
+    //     let mut line: Vec<&str> = line.collect();
+    //     if line.remove(0) != "author" {
+    //         return Err(CommandError::InvalidCommit);
+    //     }
 
-        let date = get_date(&mut line)?;
+    //     let date = get_date(&mut line)?;
 
-        let author = Author::from_strings(&mut line)?;
-        let mut line: Vec<&str> = lines.next().unwrap().split_whitespace().collect();
-        if line.remove(0) != "committer" {
-            return Err(CommandError::InvalidCommit);
-        }
+    //     let author = Author::from_strings(&mut line)?;
+    //     let mut line: Vec<&str> = lines.next().unwrap().split_whitespace().collect();
+    //     if line.remove(0) != "committer" {
+    //         return Err(CommandError::InvalidCommit);
+    //     }
 
-        let date = get_date(&mut line)?;
+    //     let date = get_date(&mut line)?;
 
-        let committer = Author::from_strings(&mut line)?;
-        //skip line
-        lines.next();
-        let message = lines.collect::<Vec<&str>>().join("\n");
-        // let tree = Tree::from_hash(tree_hash.to_string())?;
-        let tree = Tree::new("path".to_string(), HashMap::<String, GitObject>::new())?;
-        let hash = tree.get_hash_interno();
-        Ok(CommitObject {
-            parents,
-            author,
-            committer,
-            message,
-            date,
-            tree: hash,
-        })
-    }
+    //     let committer = Author::from_strings(&mut line)?;
+    //     //skip line
+    //     lines.next();
+    //     let message = lines.collect::<Vec<&str>>().join("\n");
+    //     let hash = tree.get_hash_interno();
+    //     Ok(CommitObject {
+    //         parents,
+    //         author,
+    //         committer,
+    //         message,
+    //         date,
+    //         tree: hash,
+    //     })
+    // }
 
     fn read_from(reader_stream: &mut dyn Read) -> Result<GitObject, CommandError> {
         let mut tree_hash_be = [0; 20];
@@ -436,7 +434,7 @@ impl CommitTree {
         path: &String,
         objects: HashMap<String, GitObject>,
     ) -> Result<Tree, CommandError> {
-        Ok(Tree::new(path.to_owned(), objects)?)
+        Ok(Tree::new(path.to_owned()))
     }
 
     /// Compara un archivo del WorkingTree con el Índex. Si el archivo está en la Staging Area,

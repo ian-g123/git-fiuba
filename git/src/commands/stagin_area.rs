@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    env,
     io::{Read, Write},
 };
 
@@ -89,14 +90,18 @@ impl StagingArea {
     }
 
     pub(crate) fn write_tree(&self, logger: &mut Logger) -> Result<String, CommandError> {
-        let mut working_dir = Tree::new_from_path("")?;
+        let current_dir =
+            env::current_dir().map_err(|_| CommandError::FailToRecreateStagingArea)?;
+        let current_dir_display = "";
+        let mut working_tree = Tree::new(current_dir_display.to_string());
+
         for (path, hash) in &self.files {
-            working_dir.add_blob(&path, &hash)?;
+            let vector_path = path.split("/").collect::<Vec<_>>();
+            let current_depth: usize = 0;
+            working_tree.add_path_tree(vector_path, current_depth, hash)?;
         }
 
-        let hash_str = objects_database::write(Box::new(working_dir))?;
-        Ok(hash_str)
-        //HashObject;
+        objects_database::write(Box::new(working_tree))
     }
 }
 
