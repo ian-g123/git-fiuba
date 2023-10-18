@@ -32,24 +32,6 @@ pub struct CommitObject {
 }
 
 impl CommitObject {
-    /// Crea un Commit a partir de los cambios del Staging Area.
-    // pub fn new(index: StagingArea, message: String, author: Author) -> Result<(), CommandError> {
-    //     let mut parent: Option<String> = None;
-    //     let parent_hash = Commit::get_parent()?;
-
-    //     if !parent_hash.is_empty() {
-    //         parent = Some(parent_hash)
-    //     }
-
-    //     let timestamp = get_timestamp();
-
-    //     let tree = CommitTree::new(index.files, parent)?;
-
-    //     // falta hash y author
-
-    //     Ok(())
-    // }
-
     pub fn new(
         parent: Vec<String>, //cambiar en Merge (puede tener varios padres),
         message: String,
@@ -68,6 +50,16 @@ impl CommitObject {
             offset,
             tree,
         })
+    }
+
+    pub fn get_info_commit(&self) -> Option<(String, Author, Author, i64, i32)> {
+        Some((
+            self.message.clone(),
+            self.author.clone(),
+            self.committer.clone(),
+            self.timestamp,
+            self.offset,
+        ))
     }
 
     /// Cambia la fecha y hora del Commit.

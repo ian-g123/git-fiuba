@@ -1,12 +1,20 @@
 use std::{
     fs::File,
-    io::{Read, Write},
+    io::{Cursor, Read, Write},
     path::Path,
 };
 
 extern crate sha1;
-use crate::commands::command_errors::CommandError;
+use crate::{
+    commands::{
+        branch_manager::get_last_commit, command_errors::CommandError, file_compressor::extract,
+        objects_database,
+    },
+    logger::Logger,
+};
 use sha1::{Digest, Sha1};
+
+use super::git_object;
 
 /// Obtiene el nombre de un archivo dada su ruta. Si la ruta no existe, devuelve error.
 pub fn get_name(path_string: &String) -> Result<String, CommandError> {
@@ -173,6 +181,66 @@ pub fn read_u32_from(stream: &mut dyn Read) -> Result<u32, CommandError> {
         .map_err(|error| CommandError::FileReadError(error.to_string()))?;
     let parents_len = u32::from_be_bytes(parents_len_be);
     Ok(parents_len)
+}
+
+pub fn is_in_last_commit(blob_hash: String) -> Result<(bool, String), CommandError> {
+    let last_commit = get_last_commit()?;
+    let Some(commit) = last_commit else {
+        return Ok((false, "".to_string()));
+    };
+    Ok(search_in_last_commit(&commit, blob_hash))?
+}
+
+fn search_in_last_commit(
+    parent_hash: &str,
+    obj_hash: String,
+) -> Result<(bool, String), CommandError> {
+    let path = format!(
+        ".git/objects/{}/{}",
+        parent_hash[..2].to_string(),
+        parent_hash[2..].to_string()
+    );
+    let mut logger = Logger::new("")?;
+    let mut data: Vec<u8> = Vec::new();
+    let cursor = Cursor::new(&mut data);
+    git_object::display_from_hash(&mut data, &obj_hash, &mut logger)?;
+    let buf = String::from_utf8_lossy(&data).to_string();
+    let lines: Vec<&str> = buf.split_terminator("\n").collect();
+    for line in lines {
+        let info: Vec<&str> = line.split_terminator(" ").collect();
+        let hash_and_name: Vec<&str> = info[2].split("  ").collect();
+        let (obj_type, this_hash, name) = (info[1], hash_and_name[0], hash_and_name[1]);
+        if this_hash == obj_hash {
+            return Ok((true, name.to_string()));
+        }
+        if obj_type == "tree" {
+            return search_in_last_commit(this_hash, obj_hash);
+        }
+    }
+    Ok((false, String::new()))
+}
+
+fn get_commit_tree() -> Result<Option<String>, CommandError> {
+    let Some(last_commit) = get_last_commit()? else {
+        return Ok(None);
+    };
+    let path = format!(
+        "{}/{}",
+        last_commit[0..2].to_string(),
+        last_commit[2..].to_string()
+    );
+    let Ok(mut commit_file) = File::open(path.clone()) else {
+        return Err(CommandError::FileReadError(path.to_string()));
+    };
+    let mut buf: String = String::new();
+    if commit_file.read_to_string(&mut buf).is_err() {
+        return Err(CommandError::FileReadError(path.to_string()));
+    }
+    let info: Vec<&str> = buf.split("\n").collect();
+    let tree_info = info[0].to_string();
+    let tree_info: Vec<&str> = tree_info.split(" ").collect();
+    let tree_hash = tree_info[1];
+    Ok(Some(tree_hash.to_string()))
 }
 
 pub trait SuperIntegers {

@@ -3,7 +3,9 @@ use crate::{
     logger::Logger,
 };
 
-use super::{aux::get_sha1, blob::Blob, commit_object::CommitObject, mode::Mode, tree::Tree};
+use super::{
+    author::Author, aux::get_sha1, blob::Blob, commit_object::CommitObject, mode::Mode, tree::Tree,
+};
 use std::{
     fmt,
     io::{Cursor, Read, Write},
@@ -69,6 +71,11 @@ pub trait GitObjectTrait: fmt::Display {
         let mut stream = Cursor::new(&mut buf);
         self.write_to(&mut stream)?;
         Ok(get_sha1(&buf))
+    }
+
+    ///
+    fn get_info_commit(&self) -> Option<(String, Author, Author, i64, i32)> {
+        None
     }
 }
 

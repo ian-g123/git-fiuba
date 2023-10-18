@@ -8,6 +8,7 @@ use chrono::{DateTime, Local};
 
 use crate::{
     commands::{
+        add_components::add,
         branch_manager::{get_current_branch, get_last_commit},
         command::{Command, ConfigAdderFunction},
         command_errors::CommandError,
@@ -181,15 +182,13 @@ impl Commit {
                 return Err(CommandError::StdinError);
             };
             let input = String::from_utf8_lossy(&buf).to_string();
-            if input == "\n" {
+            if Self::check_end_message(&input, &end) {
                 break;
             }
             message += &input;
-            println!("message: {}", message);
         }
         message = Self::ignore_commented_lines(message);
 
-        println!("message: {}", message);
         if message.is_empty() {
             return Err(CommandError::CommitMessageEmptyValue);
         }
@@ -197,9 +196,13 @@ impl Commit {
         Ok(message.trim().to_string())
     }
 
-    fn check_end_message(message: String) -> bool {
-        let split_message: Vec<&str> = message.split("\n").collect();
-        if let Some(last) = split_message.last() {}
+    fn check_end_message(message: &str, end: &str) -> bool {
+        let split_message: Vec<String> = message.lines().map(String::from).collect();
+        if let Some(last) = split_message.to_owned().last() {
+            if last.to_owned() == end.to_string() {
+                return true;
+            }
+        }
         false
     }
 
@@ -210,6 +213,8 @@ impl Commit {
             .collect();
         split_message.join("\n")
     }
+
+    fn empty_staging_area() {}
 
     fn run(
         &self,
@@ -233,44 +238,43 @@ impl Commit {
         };
         logger.log("Opening stagin_area");
 
-        let stagin_area = StagingArea::open()?;
+        let staging_area = StagingArea::open()?;
+
+        let stagin_area = if !self.files.is_empty() {
+            let mut new_staging_area = staging_area.empty()?;
+            for path in self.files.iter() {
+                add::run_for_file(path, &mut new_staging_area, logger)?;
+            }
+            new_staging_area
+        } else {
+            staging_area
+        };
+
         logger.log("Writing work dir tree");
 
         let working_tree_hash = stagin_area.write_tree(logger)?;
         logger.log("Work dir writen");
 
-        let config = Config::open()?;
-
-        let Some(author_email) = config.get("user.email") else {
-            return Err(CommandError::UserConfigurationError);
-        };
-        let Some(author_name) = config.get("user.name") else {
-            return Err(CommandError::UserConfigurationError);
-        };
-
-        let author = Author::new(author_name, author_email);
-        let commiter = Author::new(author_name, author_email);
-
         let last_commit_hash = get_last_commit()?;
 
-        let mut padres: Vec<String> = Vec::new();
+        let mut parents: Vec<String> = Vec::new();
         if let Some(padre) = last_commit_hash {
-            padres.push(padre);
+            parents.push(padre);
         }
 
-        let datetime: DateTime<Local> = Local::now();
-        let timestamp = datetime.timestamp();
-        let offset = datetime.offset().local_minus_utc() / 60;
-        logger.log(&format!("offset: {}", offset));
-        let commit = CommitObject::new(
-            padres,
-            message,
-            author,
-            commiter,
-            timestamp,
-            offset,
-            working_tree_hash,
-        )?;
+        let mut commit: CommitObject;
+
+        if let Some(commit_hash) = &self.reuse_message {
+            commit = Self::get_reused_commit(
+                commit_hash.to_string(),
+                parents,
+                working_tree_hash,
+                logger,
+            )?;
+        } else {
+            commit = Self::create_new_commit(message, parents, working_tree_hash, logger)?;
+        }
+
         logger.log("Commit object created");
         let mut git_object: GitObject = Box::new(commit);
         let commit_hash = objects_database::write(logger, &mut git_object)?;
@@ -309,6 +313,64 @@ impl Commit {
         // }
 
         Ok(())
+    }
+
+    fn create_new_commit(
+        message: String,
+        parents: Vec<String>,
+        working_tree_hash: String,
+        logger: &mut Logger,
+    ) -> Result<CommitObject, CommandError> {
+        let config = Config::open()?;
+
+        let Some(author_email) = config.get("user.email") else {
+            return Err(CommandError::UserConfigurationError);
+        };
+        let Some(author_name) = config.get("user.name") else {
+            return Err(CommandError::UserConfigurationError);
+        };
+
+        let author = Author::new(author_name, author_email);
+        let commiter = Author::new(author_name, author_email);
+
+        let datetime: DateTime<Local> = Local::now();
+        let timestamp = datetime.timestamp();
+        let offset = datetime.offset().local_minus_utc() / 60;
+        logger.log(&format!("offset: {}", offset));
+        let commit = CommitObject::new(
+            parents,
+            message,
+            author,
+            commiter,
+            timestamp,
+            offset,
+            working_tree_hash,
+        )?;
+        Ok(commit)
+    }
+
+    fn get_reused_commit(
+        commit_hash: String,
+        parents: Vec<String>,
+        working_tree_hash: String,
+        logger: &mut Logger,
+    ) -> Result<CommitObject, CommandError> {
+        let other_commit = objects_database::read_object(&commit_hash, logger)?;
+        if let Some((message, author, committer, timestamp, offset)) =
+            other_commit.get_info_commit()
+        {
+            let commit = CommitObject::new(
+                parents,
+                message,
+                author,
+                committer,
+                timestamp,
+                offset,
+                working_tree_hash,
+            )?;
+            return Ok(commit);
+        }
+        Err(CommandError::CommitLookUp(commit_hash))
     }
 
     /// Obtiene la fecha y hora actuales.

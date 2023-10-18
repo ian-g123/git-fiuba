@@ -1,20 +1,26 @@
 use std::{
     collections::HashMap,
     env,
+    hash::Hash,
     io::{Read, Write},
 };
 
 use crate::logger::Logger;
 
 use super::{
+    branch_manager::get_last_commit,
     command_errors::CommandError,
-    objects::{git_object::GitObject, tree::Tree},
+    objects::{
+        aux::{get_name_bis, is_in_last_commit},
+        git_object::GitObject,
+        tree::Tree,
+    },
     objects_database,
 };
 
 #[derive(Debug)]
 pub struct StagingArea {
-    pub files: HashMap<String, String>,
+    files: HashMap<String, String>,
 }
 
 impl StagingArea {
@@ -22,6 +28,23 @@ impl StagingArea {
         Self {
             files: HashMap::new(),
         }
+    }
+
+    pub fn get_changes(&self) -> HashMap<String, String> {
+        self.files.clone()
+    }
+
+    pub fn empty(&self) -> Result<StagingArea, CommandError> {
+        let mut files = self.files.clone();
+        for (path, hash) in self.files.iter() {
+            let name = get_name_bis(path)?;
+            let (is_in_last_commit, name_found) = is_in_last_commit(hash.to_string())?;
+            if !is_in_last_commit || name != name_found {
+                files.remove(path);
+            }
+        }
+        self.save()?;
+        Ok(Self { files })
     }
 
     pub fn write_to(&self, stream: &mut dyn Write) -> Result<(), CommandError> {

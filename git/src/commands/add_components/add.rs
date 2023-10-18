@@ -171,7 +171,7 @@ fn get_path_str(path: &Path) -> Result<String, CommandError> {
     Ok(path_str.to_string())
 }
 
-fn run_for_file(
+pub fn run_for_file(
     path: &str,
     staging_area: &mut StagingArea,
     logger: &mut Logger,
