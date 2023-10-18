@@ -1,5 +1,4 @@
 use std::{
-    fs::{self, File},
     io::{Read, Write},
     str,
 };
@@ -8,19 +7,13 @@ use crate::{
     commands::{
         command::{Command, ConfigAdderFunction},
         command_errors::CommandError,
-        file_compressor::compress,
-        objects::{
-            aux::u8_vec_to_hex_string,
-            blob::Blob,
-            git_object::{GitObject, GitObjectTrait},
-        },
+        objects::{aux::u8_vec_to_hex_string, blob::Blob, git_object::GitObject},
         objects_database,
     },
     logger::Logger,
 };
 
 extern crate sha1;
-use sha1::{Digest, Sha1};
 
 /// Commando hash-object
 pub struct HashObject {
@@ -146,12 +139,12 @@ impl HashObject {
         if self.stdin {
             let mut input = String::new();
             if stdin.read_to_string(&mut input).is_ok() {
-                let mut object = Blob::new_from_content(input.as_bytes().to_vec())?;
+                let object = Blob::new_from_content(input.as_bytes().to_vec())?;
                 self.hash_object(Box::new(object), output, logger)?;
             };
         }
         for file in &self.files {
-            let mut object = Blob::new_from_path(file.to_string())?;
+            let object = Blob::new_from_path(file.to_string())?;
             self.hash_object(Box::new(object), output, logger)?;
         }
         Ok(())
@@ -171,34 +164,6 @@ impl HashObject {
         logger.log(&format!("Writen object to database in {:?}", hex_string));
         Ok(())
     }
-
-    fn get_header(&self, data: &Vec<u8>) -> String {
-        let length = data.len();
-        format!("{} {}\0", self.object_type, length)
-    }
-
-    fn get_sha1(&self, data: &[u8]) -> String {
-        let mut sha1 = Sha1::new();
-        sha1.update(data);
-        let hash_result = sha1.finalize();
-
-        // Formatea los bytes del hash en una cadena hexadecimal
-        let hex_string = hash_result
-            .iter()
-            .map(|byte| format!("{:02x}", byte))
-            .collect::<Vec<_>>()
-            .join("");
-
-        hex_string
-    }
-}
-
-fn read_file_contents(path: &str) -> Result<Vec<u8>, CommandError> {
-    let mut file = File::open(path).map_err(|_| CommandError::FileNotFound(path.to_string()))?;
-    let mut data = Vec::new();
-    file.read_to_end(&mut data)
-        .map_err(|_| CommandError::FileReadError(path.to_string()))?;
-    Ok(data)
 }
 
 #[cfg(test)]

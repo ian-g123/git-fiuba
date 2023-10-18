@@ -5,9 +5,7 @@ use std::{
 };
 
 extern crate sha1;
-use crate::commands::{
-    command_errors::CommandError, hash_object_components::hash_object::HashObject,
-};
+use crate::commands::command_errors::CommandError;
 use sha1::{Digest, Sha1};
 
 /// Obtiene el nombre de un archivo dada su ruta. Si la ruta no existe, devuelve error.
@@ -32,15 +30,6 @@ pub fn get_name_bis(path_string: &String) -> Result<String, CommandError> {
         .map(|s| s.to_string())
         .ok_or_else(|| CommandError::FileNotFound(path_string.to_owned()))
 }
-
-/* /// Devuelve el hash del path pasado. Si no existe, devuelve Error.
-pub fn get_sha1(path: String, object_type: String) -> Result<String, CommandError> {
-    let content = read_file_contents(&path)?;
-    let files = [path].to_vec();
-    let hash_object = HashObject::new(object_type, files, false, false);
-    let (hash, _) = hash_object.run_for_content(content)?;
-    Ok(hash)
-} */
 
 pub fn get_sha1_str(data: &[u8]) -> String {
     let hash_result = get_sha1(data);
@@ -222,8 +211,7 @@ impl SuperIntegers for u32 {
 
 #[cfg(test)]
 mod test {
-    use crate::{commands::command::Command, logger::Logger};
-    use std::{env::current_dir, io::Cursor};
+    use std::env::current_dir;
 
     use super::*;
 

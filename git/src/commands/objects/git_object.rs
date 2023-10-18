@@ -1,5 +1,5 @@
 use crate::{
-    commands::{command_errors::CommandError, commit_components::commit::Commit, objects_database},
+    commands::{command_errors::CommandError, objects_database},
     logger::Logger,
 };
 
@@ -77,7 +77,7 @@ pub fn display_from_hash(
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (path, content) = objects_database::read_file(hash)?;
+    let (_, content) = objects_database::read_file(hash)?;
     let mut stream = std::io::Cursor::new(content);
     display_from_stream(&mut stream, logger, output)
 }
@@ -147,13 +147,6 @@ pub fn read_git_object_from(
         return CommitObject::read_from(stream);
     };
 
-    // for read_from in fns {
-    //     match read_from(stream, path, hash_str, logger) {
-    //         Ok(git_object) => return Ok(git_object),
-    //         Err(CommandError::ObjectTypeError) => continue,
-    //         Err(error) => return Err(error),
-    //     }
-    // }
     Err(CommandError::ObjectTypeError)
 }
 

@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fmt,
-    io::{Cursor, Read, Write},
+    io::{Read, Write},
 };
 
 use crate::{
@@ -314,6 +314,8 @@ mod tests {
 
 #[cfg(test)]
 mod test_write_y_display {
+    use std::io::Cursor;
+
     use crate::commands::objects::git_object;
 
     use super::*;

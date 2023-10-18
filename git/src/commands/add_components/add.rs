@@ -9,30 +9,12 @@ use crate::{
     commands::{
         command::{Command, ConfigAdderFunction},
         command_errors::CommandError,
-        hash_object_components::hash_object::HashObject,
         objects::{blob::Blob, git_object::GitObject},
         objects_database,
         stagin_area::StagingArea,
     },
     logger::Logger,
 };
-
-/// Se obtiene el nombre de los archivos y directorios del workspace\
-/// Útil para cuando tengamos que hacer la interfaz de Stage Area
-// fn get_files_names(path: &str) -> HashSet<String> {
-//     // TODO: remover los unwrap
-//     let mut files_names = HashSet::new();
-
-//     for entry in WalkDir::new(path) {
-//         let entry = entry.unwrap();
-
-//         let file_name = entry.file_name().to_str().unwrap().to_string();
-//         let directory_name = entry.path().to_str().unwrap().to_string();
-
-//         files_names.insert(file_name);
-//     }
-//     files_names
-// }
 
 /// Commando Add
 pub struct Add {
@@ -144,11 +126,6 @@ impl Add {
 }
 
 fn run_for_file(path: &str, logger: &mut Logger) -> Result<(), CommandError> {
-    // let mut file = fs::File::open(path).unwrap();
-    // let mut content = Vec::<u8>::new();
-    // file.read_to_end(&mut content).unwrap();
-    // let hash_object = HashObject::new("blob".to_string(), vec![], true, false);
-    // let (hash_hex, _) = hash_object.run_for_content(content)?;
     let mut blob = Blob::new_from_path(path.to_string())?;
     let mut git_object: GitObject = Box::new(blob);
     let hex_str = objects_database::write(logger, &mut git_object)?;

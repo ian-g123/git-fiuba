@@ -5,7 +5,6 @@ use super::command_errors::CommandError;
 /// Obtiene la ruta de la rama actual.
 pub fn get_current_branch() -> Result<String, CommandError> {
     let mut branch = String::new();
-    let mut parent = String::new();
     let path = ".git/HEAD";
     let Ok(mut head) = File::open(path) else {
         return Err(CommandError::NotGitRepository);

@@ -4,8 +4,6 @@ use std::{
     io::{Cursor, Read, Write},
 };
 
-use sha1::Sha1;
-
 use crate::{commands::command_errors::CommandError, logger::Logger};
 
 use super::{
@@ -40,19 +38,6 @@ impl Blob {
             content: None,
         })
     }
-
-    /* /// Crea un Blob a partir de su hash. Si la ruta no existe, devuelve Error.
-    pub fn new_from_hash(hash: String, path: String) -> Result<Self, CommandError> {
-        let mode = Mode::get_mode(path.clone())?;
-
-        Ok(Blob {
-            mode: mode,
-            path: path.clone(),
-            hash: hash,
-            name: get_name(&path)?,
-            content: None,
-        })
-    } */
 
     pub fn new_from_hash_and_mode(
         hash: String,
