@@ -73,6 +73,7 @@ pub enum CommandError {
     FailToRecreateStagingArea,
     /// Se intentó agregar un archivo dentro de un archivo
     ObjectNotTree,
+    StdinError,
 }
 
 impl Error for CommandError {}
@@ -179,6 +180,9 @@ impl fmt::Display for CommandError {
             }
             CommandError::ObjectNotTree => {
                 write!(f, "Se intentó agregar un archivo dentro de un archivo")
+            }
+            CommandError::StdinError => {
+                write!(f, "No se pudo leer por entrada estándar")
             }
         }
     }

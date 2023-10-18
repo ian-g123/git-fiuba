@@ -8,7 +8,7 @@ use chrono::{DateTime, Local};
 
 use crate::{
     commands::{
-        branch_manager::get_last_commit,
+        branch_manager::{get_last_commit, get_current_branch},
         command::{Command, ConfigAdderFunction},
         command_errors::CommandError,
         config::Config,
@@ -44,7 +44,7 @@ impl Command for Commit {
 
         let instance = Commit::new_from(args)?;
 
-        instance.run(output, logger)?;
+        instance.run(stdin, output, logger)?;
         logger.log(&format!("commit {:?}", args));
         Ok(())
     }
@@ -107,7 +107,12 @@ impl Commit {
         let options = ["-m".to_string()].to_vec();
         Self::check_errors_flags(i, args, &options)?;
         self.check_next_arg(i, args, CommandError::CommitMessageNoValue)?;
-        self.message = Some(args[i + 1].clone());
+        let mut new_message: String = String::new();
+        if let Some(message) = &self.message{ //se usó -m al menos 1 vez
+            new_message = format!("{}\n\n", message)
+        }
+        new_message+= &args[i + 1];
+        self.message = Some(new_message);
         Ok(i + 2)
     }
 
@@ -153,21 +158,55 @@ impl Commit {
     }
 
     fn get_enter_message_text() -> String {
-        let mensaje = "# Please enter the commit message for your changes. Lines starting\n# with '#' will be ignored, and an empty message aborts the commit.\n\n";
-        //mensaje  = format!("{}{}", mensaje, get_status_output);
+        let mensaje = "# Please enter the commit message for your changes. Lines starting\n# with '#' will be ignored, and an empty message aborts the commit.\n#\n";
         mensaje.to_string()
     }
 
-    fn run_enter_message(&self) {
+    fn run_enter_message(&self, stdin: &mut dyn Read) -> Result<String, CommandError>{
         let stdout = Self::get_enter_message_text();
-        /*
-        1) read from stdin
-        2) Ignore # lines
-        3) message
-         */
+        let branch_path = get_current_branch()?;
+        let branch_split: Vec<&str> = branch_path.split("/").collect();
+        let branch_name = branch_split[branch_split.len()-1];
+        //let status_output = 
+        println!("{}# On branch {}\n# Output de status\n#\n", stdout, branch_name);
+        let mut message = String::new();
+        let end = "q".to_string();
+        loop {
+            let mut buf = [0; 1];
+            if stdin.read_exact(&mut buf).is_err(){
+                return Err(CommandError::StdinError)
+            };
+            let input = String::from_utf8_lossy(&buf).to_string();
+            if input== "\n"{
+                break;
+            }
+            message += &input;
+            println!("message: {}", message);            
+
+        }
+        message = Self::ignore_commented_lines(message);
+
+        println!("message: {}", message);  
+        if message.is_empty(){
+            return Err(CommandError::CommitMessageEmptyValue)
+        }          
+
+        Ok(message.trim().to_string())
     }
 
-    fn run(&self, output: &mut dyn Write, logger: &mut Logger) -> Result<(), CommandError> {
+    fn check_end_message(message: String)-> bool{
+        false
+    }
+
+    fn ignore_commented_lines(message: String)-> String{
+        let split_message: Vec<&str> = message
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("#"))
+        .collect();
+        split_message.join("\n")
+    }
+
+    fn run(&self, stdin: &mut dyn Read, output: &mut dyn Write, logger: &mut Logger) -> Result<(), CommandError> {
         if self.message.is_some() && self.reuse_message.is_some() {
             return Err(CommandError::MessageAndReuseError);
         }
@@ -179,7 +218,7 @@ impl Commit {
             } else if let Some(reuse_message) = self.reuse_message.clone() {
                 Self::get_commit_reuse()
             } else {
-                return Err(CommandError::CommitMessageEmptyValue);
+                self.run_enter_message(stdin)?
             }
         };
         logger.log("Opening stagin_area");
