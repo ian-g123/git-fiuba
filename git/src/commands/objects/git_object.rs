@@ -1,9 +1,9 @@
 use crate::{
-    commands::{command_errors::CommandError, objects_database},
+    commands::{command_errors::CommandError, commit_components::commit::Commit, objects_database},
     logger::Logger,
 };
 
-use super::{aux::get_sha1, blob::Blob, mode::Mode, tree::Tree};
+use super::{aux::get_sha1, blob::Blob, commit_object::CommitObject, mode::Mode, tree::Tree};
 use std::{
     fmt,
     io::{Cursor, Read, Write},
@@ -94,6 +94,9 @@ pub fn display_from_stream(
     if type_str == "tree" {
         return Tree::display_from_stream(stream, len, output, logger);
     };
+    if type_str == "commit" {
+        return CommitObject::display_from_stream(stream, len, output, logger);
+    };
     Err(CommandError::ObjectTypeError)
 }
 
@@ -129,12 +132,6 @@ pub fn read_git_object_from(
     logger: &mut Logger,
 ) -> Result<GitObject, CommandError> {
     logger.log("read_git_object_from");
-    // let fns = {
-    //     "blob": Blob::read_from,
-    //     "tree": Tree::read_from,
-    //     // Commit::read_from,
-    //     // Tag::read_from,
-    // };
 
     let (type_str, len) = get_type_and_len(stream, logger)?;
 
@@ -145,6 +142,9 @@ pub fn read_git_object_from(
     };
     if type_str == "tree" {
         return Tree::read_from(stream, len, path, hash_str, logger);
+    };
+    if type_str == "commit" {
+        return CommitObject::read_from(stream);
     };
 
     // for read_from in fns {

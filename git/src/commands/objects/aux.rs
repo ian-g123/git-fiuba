@@ -159,6 +159,67 @@ pub fn read_string_from(stream: &mut dyn Read) -> Result<String, CommandError> {
     Ok(result)
 }
 
+pub fn read_i64_from(stream: &mut dyn Read) -> Result<i64, CommandError> {
+    let mut value_be = [0; 8];
+    stream
+        .read_exact(&mut value_be)
+        .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+    let value = i64::from_be_bytes(value_be);
+    Ok(value)
+}
+
+pub fn read_i32_from(stream: &mut dyn Read) -> Result<i32, CommandError> {
+    let mut value_be = [0; 4];
+    stream
+        .read_exact(&mut value_be)
+        .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+    let value = i32::from_be_bytes(value_be);
+    Ok(value)
+}
+
+pub fn read_u32_from(stream: &mut dyn Read) -> Result<u32, CommandError> {
+    let mut parents_len_be = [0; 4];
+    stream
+        .read_exact(&mut parents_len_be)
+        .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+    let parents_len = u32::from_be_bytes(parents_len_be);
+    Ok(parents_len)
+}
+
+pub trait SuperIntegers {
+    fn write_to(&self, stream: &mut dyn Write) -> Result<(), CommandError>;
+}
+
+impl SuperIntegers for i64 {
+    fn write_to(&self, stream: &mut dyn Write) -> Result<(), CommandError> {
+        let value_be = self.to_be_bytes();
+        stream
+            .write_all(&value_be)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        Ok(())
+    }
+}
+
+impl SuperIntegers for i32 {
+    fn write_to(&self, stream: &mut dyn Write) -> Result<(), CommandError> {
+        let value_be = self.to_be_bytes();
+        stream
+            .write_all(&value_be)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        Ok(())
+    }
+}
+
+impl SuperIntegers for u32 {
+    fn write_to(&self, stream: &mut dyn Write) -> Result<(), CommandError> {
+        let value_be = self.to_be_bytes();
+        stream
+            .write_all(&value_be)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::{commands::command::Command, logger::Logger};

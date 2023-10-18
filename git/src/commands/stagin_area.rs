@@ -101,7 +101,7 @@ impl StagingArea {
             working_tree.add_path_tree(vector_path, current_depth, hash)?;
         }
 
-        objects_database::write(Box::new(working_tree))
+        objects_database::write(logger, Box::new(working_tree))
     }
 }
 

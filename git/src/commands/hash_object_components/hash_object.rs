@@ -161,7 +161,7 @@ impl HashObject {
     ) -> Result<(), CommandError> {
         let hex_string = u8_vec_to_hex_string(&object.get_hash()?);
         if self.write {
-            objects_database::write(Box::new(object))?;
+            objects_database::write(logger, Box::new(object))?;
         }
         let _ = writeln!(output, "{}", hex_string);
         logger.log(&format!("Writen object to database in {:?}", hex_string));

@@ -17,16 +17,20 @@ use super::{
     },
 };
 
-pub(crate) fn write(git_object: GitObject) -> Result<String, CommandError> {
+pub(crate) fn write(logger: &mut Logger, git_object: GitObject) -> Result<String, CommandError> {
     let mut data = Vec::new();
+    logger.log("Escribiendo objeto");
     git_object.write_to(&mut data)?;
-
+    logger.log(&format!(
+        "Objecto escrito: {}",
+        String::from_utf8_lossy(&data)
+    ));
     let hex_string = u8_vec_to_hex_string(&git_object.get_hash()?);
     let folder_name = &hex_string[0..2];
     let parent_path = format!(".git/objects/{}", folder_name);
     let file_name = &hex_string[2..];
     let path = format!("{}/{}", parent_path, file_name);
-
+    logger.log(&format!("writting to: {}", path));
     if let Err(error) = fs::create_dir_all(parent_path) {
         return Err(CommandError::FileOpenError(error.to_string()));
     };

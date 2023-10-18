@@ -192,7 +192,7 @@ impl GitObjectTrait for Tree {
             object.mode().write_to(&mut content)?;
             content.extend_from_slice(&[type_byte]);
 
-            // let hash_str = objects_database::write(object.to_owned())?;
+            // let hash_str = objects_database::write(&logger,object.to_owned())?;
             // let hash_hex = hex_string_to_u8_vec(&hash_str);
             let hash = object.get_hash()?;
             content.extend_from_slice(&hash);

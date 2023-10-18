@@ -150,7 +150,7 @@ fn run_for_file(path: &str, logger: &mut Logger) -> Result<(), CommandError> {
     // let hash_object = HashObject::new("blob".to_string(), vec![], true, false);
     // let (hash_hex, _) = hash_object.run_for_content(content)?;
     let blob = Blob::new_from_path(path.to_string())?;
-    let hex_str = objects_database::write(Box::new(blob))?;
+    let hex_str = objects_database::write(logger, Box::new(blob))?;
     match StagingArea::open() {
         Ok(mut staging_area) => {
             staging_area.add(path, &hex_str);

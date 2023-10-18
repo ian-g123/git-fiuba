@@ -188,7 +188,7 @@ impl Commit {
         logger.log("Writing work dir tree");
 
         let working_tree_hash = stagin_area.write_tree(logger)?;
-        logger.log("Commit object created");
+        logger.log("Work dir writen");
 
         let config = Config::open()?;
 
@@ -210,19 +210,25 @@ impl Commit {
         }
 
         let datetime: DateTime<Local> = Local::now();
+        let timestamp = datetime.timestamp();
+        let offset = datetime.offset().local_minus_utc() / 60;
+        logger.log(&format!("offset: {}", offset));
         let commit = CommitObject::new(
             padres,
             message,
             author,
             commiter,
-            datetime,
+            timestamp,
+            offset,
             working_tree_hash,
         )?;
         logger.log("Commit object created");
-        let commit_hash = objects_database::write(Box::new(commit))?;
+        let commit_hash = objects_database::write(logger, Box::new(commit))?;
         logger.log(&format!("Commit object saved in database {}", commit_hash));
         if !self.dry_run {
+            logger.log(&format!("Updating last commit to {}", commit_hash));
             update_last_commit(&commit_hash)?;
+            logger.log("Last commit updated");
         }
         //Commit
         /*
@@ -238,7 +244,7 @@ impl Commit {
         //      */
         // }
 
-        if let Some(commit_hash) = self.reuse_message.clone() {}
+        // if let Some(commit_hash) = self.reuse_message.clone() {}
 
         //Crear Commit Object con la info necesaria --> Commit::new()
 
@@ -315,8 +321,14 @@ fn update_last_commit(commit_hash: &str) -> Result<(), CommandError> {
         .create(true)
         .write(true)
         .open(branch_path)
-        .map_err(|_| CommandError::FileOpenError(currect_branch))?;
-    file.write_all(commit_hash.as_bytes());
+        .map_err(|_| CommandError::FileOpenError(currect_branch.clone()))?;
+    file.write_all(commit_hash.as_bytes()).map_err(|error| {
+        CommandError::FileWriteError(format!(
+            "Error al escribir en archivo {}: {}",
+            currect_branch,
+            error.to_string()
+        ))
+    })?;
     Ok(())
 }
 
@@ -340,5 +352,5 @@ fn get_head_ref() -> Result<String, CommandError> {
             "Error leyendo .git/HEAD".to_string(),
         ));
     };
-    Ok(head_ref.to_string())
+    Ok(head_ref.trim().to_string())
 }
