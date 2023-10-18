@@ -103,8 +103,6 @@ impl StagingArea {
     }
 
     pub(crate) fn write_tree(&self, logger: &mut Logger) -> Result<String, CommandError> {
-        let current_dir =
-            env::current_dir().map_err(|_| CommandError::FailToRecreateStagingArea)?;
         let current_dir_display = "";
         let mut working_tree = Tree::new(current_dir_display.to_string());
 

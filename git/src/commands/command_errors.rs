@@ -175,15 +175,6 @@ impl fmt::Display for CommandError {
             CommandError::UserConfigurationError => {
                 write!(f, "No existe configuración de ususario.")
             }
-            CommandError::DirNotFound(path) => {
-                write!(f, "No se encuentra el directorio: {path}")
-            }
-            CommandError::DirectoryCreationError(path) => {
-                write!(f, "No se pudo crear el directorio: {path}")
-            }
-            CommandError::FileCreationError(path) => {
-                write!(f, "No se pudo crear el archivo: {path}")
-            }
             CommandError::FailToRecreateStagingArea => {
                 write!(f, "Error al intentar recrear el staging area")
             }

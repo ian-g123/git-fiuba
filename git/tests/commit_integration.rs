@@ -1,7 +1,5 @@
 use core::panic;
-use std::{fmt::format, fs, path::Path, process::Command};
-
-use git::commands::stagin_area::StagingArea;
+use std::{fs, path::Path, process::Command};
 
 #[test]
 fn test_single_file() {
@@ -49,11 +47,10 @@ fn test_single_file() {
         "100644 blob 30d74d258442c7c65512eafab474568dd706c430    testfile.txt\n"
     );
 
-    let HEAD = fs::read_to_string(path.to_owned() + "/.git/HEAD").unwrap();
-    let (_, branch_ref) = HEAD.split_once(' ').unwrap();
+    let head = fs::read_to_string(path.to_owned() + "/.git/HEAD").unwrap();
+    let (_, branch_ref) = head.split_once(' ').unwrap();
     let branch_ref = branch_ref.trim();
     let ref_path = path.to_owned() + "/.git/" + branch_ref;
-    let ref_path = "./tests/data/commands/commit/repo1/.git/refs/heads/master";
     let commit_hash = fs::read_to_string(ref_path).unwrap();
 
     let result = Command::new("../../../../../target/debug/git")
