@@ -73,7 +73,7 @@ impl Tree {
         Ok(())
     }
 
-    fn get_data(&self) -> Result<Vec<u8>, CommandError> {
+    fn get_data(&mut self) -> Result<Vec<u8>, CommandError> {
         let header = format!("1 {}\0", self.size()?);
         let content = self.content()?;
         Ok([header.as_bytes(), content.as_slice()].concat())
@@ -184,9 +184,9 @@ impl GitObjectTrait for Tree {
         "tree".to_string()
     }
 
-    fn content(&self) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self) -> Result<Vec<u8>, CommandError> {
         let mut content = Vec::new();
-        for (path, object) in self.objects.iter() {
+        for (path, object) in self.objects.iter_mut() {
             // example: 100644 blob fa49b077972391ad58037050f2a75f74e3671e92      new.txt
             let type_byte = type_id_object(&object.type_str())?;
             object.mode().write_to(&mut content)?;

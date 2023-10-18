@@ -155,11 +155,15 @@ impl GitObjectTrait for Blob {
         "blob".to_string()
     }
 
-    fn content(&self) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self) -> Result<Vec<u8>, CommandError> {
         match &self.content {
             Some(content) => Ok(content.clone()),
             None => match &self.path {
-                Some(path) => read_file_contents(path),
+                Some(path) => {
+                    let content = read_file_contents(path)?;
+                    self.content = Some(content.clone());
+                    Ok(content)
+                }
                 None => Err(CommandError::FileReadError(
                     "Error leyendo el archivo".to_string(),
                 )),
@@ -184,14 +188,16 @@ impl GitObjectTrait for Blob {
     }
 
     /// Devuelve el hash del Blob.
-    fn get_hash(&self) -> Result<[u8; 20], CommandError> {
+    fn get_hash(&mut self) -> Result<[u8; 20], CommandError> {
         match self.hash {
             Some(hash) => Ok(hash),
             None => {
                 let mut buf: Vec<u8> = Vec::new();
                 let mut stream = Cursor::new(&mut buf);
                 self.write_to(&mut stream)?;
-                Ok(get_sha1(&buf))
+                let sha1 = get_sha1(&buf);
+                self.hash = Some(sha1.clone());
+                Ok(sha1)
             }
         }
     }

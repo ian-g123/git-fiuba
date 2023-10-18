@@ -10,7 +10,7 @@ use crate::{
         command::{Command, ConfigAdderFunction},
         command_errors::CommandError,
         hash_object_components::hash_object::HashObject,
-        objects::blob::Blob,
+        objects::{blob::Blob, git_object::GitObject},
         objects_database,
         stagin_area::StagingArea,
     },
@@ -149,8 +149,9 @@ fn run_for_file(path: &str, logger: &mut Logger) -> Result<(), CommandError> {
     // file.read_to_end(&mut content).unwrap();
     // let hash_object = HashObject::new("blob".to_string(), vec![], true, false);
     // let (hash_hex, _) = hash_object.run_for_content(content)?;
-    let blob = Blob::new_from_path(path.to_string())?;
-    let hex_str = objects_database::write(logger, Box::new(blob))?;
+    let mut blob = Blob::new_from_path(path.to_string())?;
+    let mut git_object: GitObject = Box::new(blob);
+    let hex_str = objects_database::write(logger, &mut git_object)?;
     match StagingArea::open() {
         Ok(mut staging_area) => {
             staging_area.add(path, &hex_str);

@@ -21,7 +21,7 @@ pub trait GitObjectTrait: fmt::Display {
 
     fn clone_object(&self) -> GitObject;
 
-    fn write_to(&self, stream: &mut dyn std::io::Write) -> Result<(), CommandError> {
+    fn write_to(&mut self, stream: &mut dyn std::io::Write) -> Result<(), CommandError> {
         let type_str = self.type_str();
         let content = self.content()?;
         let len = content.len();
@@ -53,7 +53,7 @@ pub trait GitObjectTrait: fmt::Display {
     fn mode(&self) -> Mode;
 
     /// Devuelve el contenido del objeto
-    fn content(&self) -> Result<Vec<u8>, CommandError>;
+    fn content(&mut self) -> Result<Vec<u8>, CommandError>;
 
     /// Devuelve el tamaño del objeto en bytes
     fn size(&self) -> Result<usize, CommandError> {
@@ -64,7 +64,7 @@ pub trait GitObjectTrait: fmt::Display {
     fn to_string_priv(&self) -> String;
 
     /// Devuelve el hash del objeto
-    fn get_hash(&self) -> Result<[u8; 20], CommandError> {
+    fn get_hash(&mut self) -> Result<[u8; 20], CommandError> {
         let mut buf: Vec<u8> = Vec::new();
         let mut stream = Cursor::new(&mut buf);
         self.write_to(&mut stream)?;

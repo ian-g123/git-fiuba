@@ -9,7 +9,11 @@ use crate::{
         command::{Command, ConfigAdderFunction},
         command_errors::CommandError,
         file_compressor::compress,
-        objects::{aux::u8_vec_to_hex_string, blob::Blob, git_object::GitObjectTrait},
+        objects::{
+            aux::u8_vec_to_hex_string,
+            blob::Blob,
+            git_object::{GitObject, GitObjectTrait},
+        },
         objects_database,
     },
     logger::Logger,
@@ -142,66 +146,30 @@ impl HashObject {
         if self.stdin {
             let mut input = String::new();
             if stdin.read_to_string(&mut input).is_ok() {
-                let object = Blob::new_from_content(input.as_bytes().to_vec())?;
-                self.hash_object(object, output, logger)?;
+                let mut object = Blob::new_from_content(input.as_bytes().to_vec())?;
+                self.hash_object(Box::new(object), output, logger)?;
             };
         }
         for file in &self.files {
-            let object = Blob::new_from_path(file.to_string())?;
-            self.hash_object(object, output, logger)?;
+            let mut object = Blob::new_from_path(file.to_string())?;
+            self.hash_object(Box::new(object), output, logger)?;
         }
         Ok(())
     }
 
     fn hash_object(
         &self,
-        object: Blob,
+        mut object: GitObject,
         output: &mut dyn Write,
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
-        let hex_string = u8_vec_to_hex_string(&object.get_hash()?);
+        let hex_string = u8_vec_to_hex_string(&mut object.get_hash()?);
         if self.write {
-            objects_database::write(logger, Box::new(object))?;
+            objects_database::write(logger, &mut object)?;
         }
         let _ = writeln!(output, "{}", hex_string);
         logger.log(&format!("Writen object to database in {:?}", hex_string));
         Ok(())
-    }
-
-    /// Ejecuta el comando hash-object para el contenido de un archivo y devuelve el hash
-    /// hexadecimal del contenido
-    pub fn run_for_content(
-        &self,
-        content: Vec<u8>,
-    ) -> Result<(String, Option<String>), CommandError> {
-        let header = self.get_header(&content);
-        let mut data = Vec::new();
-
-        data.extend_from_slice(header.as_bytes());
-        data.extend_from_slice(&content);
-
-        let hex_string = self.get_sha1(&data);
-        if self.write {
-            let folder_name = &hex_string[0..2];
-            let file_name = &hex_string[2..];
-
-            let parent_path = format!(".git/objects/{}", folder_name);
-            let path = format!("{}/{}", parent_path, file_name);
-            if let Err(error) = fs::create_dir_all(parent_path) {
-                return Err(CommandError::FileOpenError(error.to_string()));
-            };
-            let Ok(mut file) = File::create(&path) else {
-                return Err(CommandError::FileOpenError(
-                    "Error al abrir archivo para escritura".to_string(),
-                ));
-            };
-            let compressed_data = compress(&data)?;
-            if let Err(error) = file.write_all(&compressed_data) {
-                return Err(CommandError::FileWriteError(error.to_string()));
-            };
-            return Ok((hex_string, Some(path)));
-        }
-        Ok((hex_string, None))
     }
 
     fn get_header(&self, data: &Vec<u8>) -> String {

@@ -8,12 +8,12 @@ use chrono::{DateTime, Local};
 
 use crate::{
     commands::{
-        branch_manager::{get_last_commit, get_current_branch},
+        branch_manager::{get_current_branch, get_last_commit},
         command::{Command, ConfigAdderFunction},
         command_errors::CommandError,
         config::Config,
         init_components::init::Init,
-        objects::{author::Author, commit_object::CommitObject, tree::Tree},
+        objects::{author::Author, commit_object::CommitObject, git_object::GitObject, tree::Tree},
         objects_database,
         stagin_area::{self, StagingArea},
     },
@@ -108,10 +108,11 @@ impl Commit {
         Self::check_errors_flags(i, args, &options)?;
         self.check_next_arg(i, args, CommandError::CommitMessageNoValue)?;
         let mut new_message: String = String::new();
-        if let Some(message) = &self.message{ //se usó -m al menos 1 vez
+        if let Some(message) = &self.message {
+            //se usó -m al menos 1 vez
             new_message = format!("{}\n\n", message)
         }
-        new_message+= &args[i + 1];
+        new_message += &args[i + 1];
         self.message = Some(new_message);
         Ok(i + 2)
     }
@@ -162,51 +163,60 @@ impl Commit {
         mensaje.to_string()
     }
 
-    fn run_enter_message(&self, stdin: &mut dyn Read) -> Result<String, CommandError>{
+    fn run_enter_message(&self, stdin: &mut dyn Read) -> Result<String, CommandError> {
         let stdout = Self::get_enter_message_text();
         let branch_path = get_current_branch()?;
         let branch_split: Vec<&str> = branch_path.split("/").collect();
-        let branch_name = branch_split[branch_split.len()-1];
-        //let status_output = 
-        println!("{}# On branch {}\n# Output de status\n#\n", stdout, branch_name);
+        let branch_name = branch_split[branch_split.len() - 1];
+        //let status_output =
+        println!(
+            "{}# On branch {}\n# Output de status\n#\n",
+            stdout, branch_name
+        );
         let mut message = String::new();
         let end = "q".to_string();
         loop {
             let mut buf = [0; 1];
-            if stdin.read_exact(&mut buf).is_err(){
-                return Err(CommandError::StdinError)
+            if stdin.read_exact(&mut buf).is_err() {
+                return Err(CommandError::StdinError);
             };
             let input = String::from_utf8_lossy(&buf).to_string();
-            if input== "\n"{
+            if input == "\n" {
                 break;
             }
             message += &input;
-            println!("message: {}", message);            
-
+            println!("message: {}", message);
         }
         message = Self::ignore_commented_lines(message);
 
-        println!("message: {}", message);  
-        if message.is_empty(){
-            return Err(CommandError::CommitMessageEmptyValue)
-        }          
+        println!("message: {}", message);
+        if message.is_empty() {
+            return Err(CommandError::CommitMessageEmptyValue);
+        }
 
         Ok(message.trim().to_string())
     }
 
-    fn check_end_message(message: String)-> bool{
+    fn check_end_message(message: String) -> bool {
+        let split_message: Vec<&str> = message.split("\n").collect();
+        if let Some(last) = split_message.last() {}
         false
     }
 
-    fn ignore_commented_lines(message: String)-> String{
+    fn ignore_commented_lines(message: String) -> String {
         let split_message: Vec<&str> = message
-        .lines()
-        .filter(|line| !line.trim_start().starts_with("#"))
-        .collect();
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("#"))
+            .collect();
         split_message.join("\n")
     }
 
-    fn run(&self, stdin: &mut dyn Read, output: &mut dyn Write, logger: &mut Logger) -> Result<(), CommandError> {
+    fn run(
+        &self,
+        stdin: &mut dyn Read,
+        output: &mut dyn Write,
+        logger: &mut Logger,
+    ) -> Result<(), CommandError> {
         if self.message.is_some() && self.reuse_message.is_some() {
             return Err(CommandError::MessageAndReuseError);
         }
@@ -262,7 +272,8 @@ impl Commit {
             working_tree_hash,
         )?;
         logger.log("Commit object created");
-        let commit_hash = objects_database::write(logger, Box::new(commit))?;
+        let mut git_object: GitObject = Box::new(commit);
+        let commit_hash = objects_database::write(logger, &mut git_object)?;
         logger.log(&format!("Commit object saved in database {}", commit_hash));
         if !self.dry_run {
             logger.log(&format!("Updating last commit to {}", commit_hash));

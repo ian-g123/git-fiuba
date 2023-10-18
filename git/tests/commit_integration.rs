@@ -80,6 +80,8 @@ fn test_single_file() {
     assert!(output_lines[2].to_string().ends_with("-0300"));
     assert_eq!(output_lines[3], "");
     assert_eq!(output_lines[4], "message");
+
+    _ = fs::remove_dir_all(format!("{}", path));
 }
 
 fn create_test_scene_1(path: &str) {

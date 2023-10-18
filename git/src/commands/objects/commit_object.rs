@@ -134,9 +134,11 @@ impl CommitObject {
             message,
         ) = read_commit_info_from(stream)?;
 
-        writeln!(output, "tree {}", tree_hash);
+        writeln!(output, "tree {}", tree_hash)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
         for parent_hash in parents {
-            writeln!(output, "parent {}", parent_hash);
+            writeln!(output, "parent {}", parent_hash)
+                .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
         }
 
         writeln!(
@@ -278,7 +280,7 @@ impl GitObjectTrait for CommitObject {
         todo!()
     }
 
-    fn content(&self) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self) -> Result<Vec<u8>, CommandError> {
         let mut buf: Vec<u8> = Vec::new();
         buf.extend_from_slice(&hex_string_to_u8_vec(&self.tree));
         let parents_len_be = (self.parents.len() as u32).to_be_bytes();
@@ -337,7 +339,7 @@ impl GitObjectTrait for CommitObject {
         Box::new(self.clone())
     }
 
-    fn get_hash(&self) -> Result<[u8; 20], CommandError> {
+    fn get_hash(&mut self) -> Result<[u8; 20], CommandError> {
         Ok(get_sha1(&self.content()?))
     }
 }
@@ -625,7 +627,7 @@ mod test {
     #[test]
     fn write_and_read() {
         // datetime for 1970-01-01 00:00:00 UTC
-        let commit = CommitObject::new(
+        let mut commit = CommitObject::new(
             vec![],
             "message".to_string(),
             Author::new("name", "email"),
@@ -640,7 +642,7 @@ mod test {
         let mut writer_stream = Cursor::new(&mut buf);
         commit.write_to(&mut writer_stream).unwrap();
         let mut reader_stream = Cursor::new(&mut buf);
-        let fetched_commit = git_object::read_git_object_from(
+        let mut fetched_commit = git_object::read_git_object_from(
             &mut reader_stream,
             "",
             "a471637c78c8f67cca05221a942bd7efabb58caa",
@@ -660,7 +662,7 @@ mod test {
     // Write and display
     #[test]
     fn write_and_display() {
-        let commit = CommitObject::new(
+        let mut commit = CommitObject::new(
             vec![],
             "message".to_string(),
             Author::new("name", "email"),

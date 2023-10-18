@@ -17,7 +17,10 @@ use super::{
     },
 };
 
-pub(crate) fn write(logger: &mut Logger, git_object: GitObject) -> Result<String, CommandError> {
+pub(crate) fn write(
+    logger: &mut Logger,
+    git_object: &mut GitObject,
+) -> Result<String, CommandError> {
     let mut data = Vec::new();
     logger.log("Escribiendo objeto");
     git_object.write_to(&mut data)?;

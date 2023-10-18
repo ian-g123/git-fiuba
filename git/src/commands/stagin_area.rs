@@ -6,7 +6,11 @@ use std::{
 
 use crate::logger::Logger;
 
-use super::{command_errors::CommandError, objects::tree::Tree, objects_database};
+use super::{
+    command_errors::CommandError,
+    objects::{git_object::GitObject, tree::Tree},
+    objects_database,
+};
 
 #[derive(Debug)]
 pub struct StagingArea {
@@ -101,7 +105,8 @@ impl StagingArea {
             working_tree.add_path_tree(vector_path, current_depth, hash)?;
         }
 
-        objects_database::write(logger, Box::new(working_tree))
+        let mut tree: GitObject = Box::new(working_tree);
+        objects_database::write(logger, &mut tree)
     }
 }
 
