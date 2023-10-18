@@ -187,13 +187,10 @@ impl GitObjectTrait for Tree {
     fn content(&mut self) -> Result<Vec<u8>, CommandError> {
         let mut content = Vec::new();
         for (path, object) in self.objects.iter_mut() {
-            // example: 100644 blob fa49b077972391ad58037050f2a75f74e3671e92      new.txt
             let type_byte = type_id_object(&object.type_str())?;
             object.mode().write_to(&mut content)?;
             content.extend_from_slice(&[type_byte]);
 
-            // let hash_str = objects_database::write(&logger,object.to_owned())?;
-            // let hash_hex = hex_string_to_u8_vec(&hash_str);
             let hash = object.get_hash()?;
             content.extend_from_slice(&hash);
 
