@@ -85,7 +85,6 @@ fn test_sub_dir() {
 
     let new_path = format!("{}/new_dir", absolute_path);
     let new_path_git = &format!("{}/.git", new_path);
-
     if !directories_exists(new_path_git) {
         panic!("No se pudo obtener el directorio actual")
     };
@@ -107,7 +106,6 @@ fn test_init() {
         .current_dir(path.clone())
         .output()
         .expect("No se pudo ejecutar el comando");
-
     let new_path_git = &format!("{}/.git", absolute_path);
     if !directories_exists(new_path_git) {
         panic!("No se pudo obtener el directorio actual")

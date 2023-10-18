@@ -26,6 +26,12 @@ pub enum CommandError {
     FileOpenError(String),
     /// Error de compresión
     CompressionError,
+    /// No se encuentra el directorio
+    DirNotFound(String),
+    /// No se pudo crear el directorio
+    DirectoryCreationError(String),
+    /// No se pudo crear el archivo
+    FileCreationError(String),
     /// No se proporcionaron suficientes argumentos para este comando
     NotEnoughArguments,
     /// El flag -e no se utiliza comúnmente junto con otros flags en el comando
@@ -42,7 +48,7 @@ pub enum CommandError {
     ReuseMessageNoValue,
     CommitLookUp(String),
     /// Error al abrir el staging area
-    FailToOpenSatginArea(String),
+    FailToOpenStaginArea(String),
     /// Error al guardar el staging area
     FailToSaveStaginArea(String),
 
@@ -65,11 +71,6 @@ pub enum CommandError {
     FileNameError,
     /// No existe configuración de ususario.
     UserConfigurationError,
-    DirNotFound(String),
-    /// No se pudo crear el directorio
-    DirectoryCreationError(String),
-    /// No se pudo crear el archivo
-    FileCreationError(String),
     FailToRecreateStagingArea,
     /// Se intentó agregar un archivo dentro de un archivo
     ObjectNotTree,
@@ -97,6 +98,14 @@ impl fmt::Display for CommandError {
                 write!(f, "Hay un error abriendo el archivo: {path}")
             }
             CommandError::CompressionError => write!(f, "Error de compresión"),
+            CommandError::DirNotFound(path) => write!(f, "No se encuentra el directorio: {path}"),
+            CommandError::DirectoryCreationError(path) => {
+                write!(f, "No se pudo crear el directorio: {path}")
+            }
+            CommandError::FileCreationError(path) => {
+                write!(f, "No se pudo crear el archivo: {path}")
+            }
+
             CommandError::NotEnoughArguments => write!(
                 f,
                 "No se proporcionaron suficientes argumentos para este comando"
@@ -118,7 +127,7 @@ impl fmt::Display for CommandError {
                 f,
                 "fatal: not a git repository (or any of the parent directories): .git"
             ),
-            CommandError::FailToOpenSatginArea(error) => {
+            CommandError::FailToOpenStaginArea(error) => {
                 write!(f, "Error al abrir el staging area: {error}")
             }
             CommandError::FailToSaveStaginArea(error) => {
