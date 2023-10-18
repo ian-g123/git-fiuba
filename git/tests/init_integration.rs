@@ -1,4 +1,8 @@
-use std::{env, fs, path::Path, process::{Command, Output}};
+use std::{
+    env, fs,
+    path::Path,
+    process::{Command, Output},
+};
 
 fn directory_exists(path: &String) -> bool {
     let path = Path::new(path);
@@ -43,7 +47,7 @@ fn inicialize_current_directory(path: &str) -> String {
     absolute_path
 }
 
-fn output_success_verification(output: Output, absolute_path : String ){
+fn output_success_verification(output: Output, absolute_path: String) {
     if output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let aux = format!("Initialized empty Git repository in {}\n", absolute_path);
@@ -53,7 +57,7 @@ fn output_success_verification(output: Output, absolute_path : String ){
     }
 }
 
-fn output_err_verification(output: Output, err_str : &str ){
+fn output_err_verification(output: Output, err_str: &str) {
     if output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stderr);
         let aux = "Argumentos inválidos\n";
@@ -63,7 +67,7 @@ fn output_err_verification(output: Output, err_str : &str ){
     }
 }
 
-fn finalize_current_directory(path : String){
+fn finalize_current_directory(path: String) {
     _ = fs::remove_dir_all(format!("{}", path));
 }
 
@@ -81,7 +85,6 @@ fn test_sub_dir() {
 
     let new_path = format!("{}/new_dir", absolute_path);
     let new_path_git = &format!("{}/.git", new_path);
-    
     if !directories_exists(new_path_git) {
         panic!("No se pudo obtener el directorio actual")
     };
@@ -103,7 +106,6 @@ fn test_init() {
         .current_dir(path.clone())
         .output()
         .expect("No se pudo ejecutar el comando");
-    
     let new_path_git = &format!("{}/.git", absolute_path);
     if !directories_exists(new_path_git) {
         panic!("No se pudo obtener el directorio actual")
@@ -111,7 +113,6 @@ fn test_init() {
     if !files_exists(new_path_git) {
         panic!("No se pudo obtener el directorio actual")
     };
-
 
     output_success_verification(output, absolute_path.clone());
     finalize_current_directory(absolute_path)
@@ -128,7 +129,6 @@ fn test_bare() {
         .current_dir(path.clone())
         .output()
         .expect("No se pudo ejecutar el comando");
-
 
     if !directories_exists(&absolute_path) {
         panic!("No se pudo obtener el directorio actual")
@@ -165,7 +165,6 @@ fn test_branch() {
     output_success_verification(output, absolute_path.clone());
     finalize_current_directory(absolute_path)
 }
-
 
 #[test]
 fn test_err_two_dir() {

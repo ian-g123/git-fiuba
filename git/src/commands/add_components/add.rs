@@ -1,7 +1,7 @@
 use std::{
     env,
     fs::{self, DirEntry, ReadDir},
-    io::{Error, Read, Write},
+    io::{Read, Write},
     path::Path,
 };
 
@@ -9,7 +9,8 @@ use crate::{
     commands::{
         command::{Command, ConfigAdderFunction},
         command_errors::CommandError,
-        hash_object_components::hash_object::HashObject,
+        objects::{blob::Blob, git_object::GitObject},
+        objects_database,
         stagin_area::StagingArea,
     },
     logger::Logger,
@@ -34,9 +35,7 @@ impl Command for Add {
 
         let instance = Self::new(args)?;
 
-        logger.log(&format!("adding {:?}", args));
         instance.run(stdin, output, logger)?;
-        logger.log(&format!("add {:?}", args));
         Ok(())
     }
 
@@ -177,28 +176,9 @@ fn run_for_file(
     staging_area: &mut StagingArea,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let mut file = fs::File::open(path).map_err(|error| file_open_error_maper(error, logger))?;
-    let mut content = Vec::<u8>::new();
-    file.read_to_end(&mut content)
-        .map_err(|error| file_open_error_maper(error, logger))?;
-
-    let hash_object = HashObject::new("blob".to_string(), vec![], true, false);
-    let (hash_hex, _) = hash_object.run_for_content(content)?;
-    insert_in_stagin_area(path, hash_hex, staging_area, logger);
+    let blob = Blob::new_from_path(path.to_string())?;
+    let mut git_object: GitObject = Box::new(blob);
+    let hex_str = objects_database::write(logger, &mut git_object)?;
+    staging_area.add(path, &hex_str);
     Ok(())
-}
-
-fn insert_in_stagin_area(
-    path: &str,
-    hash_hex: String,
-    staging_area: &mut StagingArea,
-    logger: &mut Logger,
-) {
-    staging_area.add(path, &hash_hex);
-    logger.log(&format!("staging_area.add({},{})", path, &hash_hex));
-}
-
-fn file_open_error_maper(error: Error, logger: &mut Logger) -> CommandError {
-    logger.log(&format!("Error al abrir el archivo: {:?}", error));
-    CommandError::FileOpenError(error.to_string())
 }

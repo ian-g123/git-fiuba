@@ -1,8 +1,8 @@
 use git::{
     commands::{
         add_components::add::Add, cat_file_components::cat_file::CatFile, command::Command,
-        command_errors::CommandError, hash_object_components::hash_object::HashObject,
-        init_components::init::Init,
+        command_errors::CommandError, commit_components::commit::Commit,
+        hash_object_components::hash_object::HashObject, init_components::init::Init,
     },
     logger::Logger,
 };
@@ -17,7 +17,8 @@ fn main() {
     };
 
     if let Err(error) = run(command_name, command_args, &mut logger) {
-        eprintln!("{error}");
+        logger.log(&format!("Error: {}", error));
+        eprintln!("{error}")
     }
 }
 
@@ -37,6 +38,7 @@ fn run(
         Init::run_from,
         Add::run_from,
         CatFile::run_from,
+        Commit::run_from,
     ];
 
     for command in &commands {
