@@ -1,4 +1,5 @@
 use std::{
+    borrow::BorrowMut,
     collections::HashMap,
     fmt,
     io::{Read, Write},
@@ -10,6 +11,7 @@ use crate::{
 };
 
 use super::{
+    author::Author,
     aux::*,
     blob::Blob,
     git_object::{GitObject, GitObjectTrait},
@@ -23,6 +25,54 @@ pub struct Tree {
 }
 
 impl Tree {
+    pub fn has_blob_from_hash(&self, blob_hash: &str) -> Result<(bool, String), CommandError> {
+        for (name, object) in self.objects.iter() {
+            let mut object = object.to_owned();
+            let object: &mut GitObject = object.borrow_mut();
+            let hash = object.get_hash_string()?;
+            let name = {
+                if let Some(name) = object.get_name() {
+                    name
+                } else {
+                    "".to_string()
+                }
+            };
+            if hash.to_owned() == blob_hash.to_string() {
+                return Ok((true, name));
+            }
+            if let Some(tree) = object.as_tree() {
+                return tree.has_blob_from_hash(blob_hash);
+            }
+        }
+        Ok((false, "".to_string()))
+    }
+
+    pub fn has_blob_from_name(&self, blob_name: &str) -> bool {
+        for (_, object) in self.objects.iter() {
+            if let Some(name) = object.get_name() {
+                if name.to_owned() == blob_name.to_string() {
+                    return true;
+                }
+            }
+            if let Some(tree) = object.as_tree() {
+                return tree.has_blob_from_name(blob_name);
+            }
+        }
+        false
+    }
+
+    pub fn get_deleted_blob(&self, files: &HashMap<String, String>) -> Vec<GitObject> {
+        let mut deleted_blobs: Vec<GitObject> = Vec::new();
+        for (_, object) in self.objects.iter() {
+            if let Some(path) = object.get_path() {
+                if !files.contains_key(&path) {
+                    deleted_blobs.push(object.to_owned());
+                }
+            }
+        }
+        deleted_blobs
+    }
+
     pub fn add_path_tree(
         &mut self,
         vector_path: Vec<&str>,
@@ -32,13 +82,16 @@ impl Tree {
         Ok(self.add_path(vector_path, current_depth, hash)?)
     }
 
-    /// Crea un Tree a partir de su ruta y los objetos a los que referencia. Si la ruta no existe,
-    /// devuelve Error.
+    /// Crea un Tree vacío a partir de su ruta.
     pub fn new(path: String) -> Tree {
         Tree {
             path: path.clone(),
             objects: HashMap::new(),
         }
+    }
+
+    pub fn add_object(&mut self, name: String, object: GitObject) {
+        _ = self.objects.insert(name, object);
     }
 
     /// Crea un Blob a partir de su hash y lo añade al Tree.
@@ -168,6 +221,12 @@ impl Tree {
 }
 
 impl GitObjectTrait for Tree {
+    fn get_info_commit(&self) -> Option<(String, Author, Author, i64, i32)> {
+        None
+    }
+    fn get_path(&self) -> Option<String> {
+        Some(self.path.clone())
+    }
     fn as_mut_tree(&mut self) -> Option<&mut Tree> {
         Some(self)
     }
@@ -306,6 +365,44 @@ mod tests {
         assert!(&dir1.objects.contains_key("foo.txt"));
         assert!(&tree.objects.contains_key("fu.txt"));
         assert!(&dir0.objects.contains_key("baz.txt"));
+    }
+
+    #[test]
+    fn hash_blob_from_path_true() {
+        let files = [
+            "dir0/dir1/dir2/bar.txt".to_string(),
+            "dir0/dir1/foo.txt".to_string(),
+            "dir0/baz.txt".to_string(),
+            "fu.txt".to_string(),
+        ];
+        let mut tree = Tree::new("".to_string());
+        let hash = "30d74d258442c7c65512eafab474568dd706c430".to_string();
+        for path in files {
+            let vector_path = path.split("/").collect::<Vec<_>>();
+            let current_depth: usize = 0;
+            _ = tree.add_path_tree(vector_path, current_depth, &hash);
+        }
+        let result = tree.has_blob_from_name(&"bar.txt");
+        assert!(result)
+    }
+
+    #[test]
+    fn hash_blob_from_path_false() {
+        let files = [
+            "dir0/dir1/dir2/bar.txt".to_string(),
+            "dir0/dir1/foo.txt".to_string(),
+            "dir0/baz.txt".to_string(),
+            "fu.txt".to_string(),
+        ];
+        let mut tree = Tree::new("".to_string());
+        let hash = "30d74d258442c7c65512eafab474568dd706c430".to_string();
+        for path in files {
+            let vector_path = path.split("/").collect::<Vec<_>>();
+            let current_depth: usize = 0;
+            _ = tree.add_path_tree(vector_path, current_depth, &hash);
+        }
+        let result = tree.has_blob_from_name(&"no-existe.txt");
+        assert!(!result)
     }
 }
 

@@ -11,7 +11,7 @@ use super::{
     branch_manager::get_last_commit,
     command_errors::CommandError,
     objects::{
-        aux::{get_name_bis, is_in_last_commit},
+        aux::{build_last_commit_tree, get_name_bis},
         git_object::GitObject,
         tree::Tree,
     },
@@ -30,17 +30,52 @@ impl StagingArea {
         }
     }
 
-    pub fn get_changes(&self) -> HashMap<String, String> {
+    pub fn get_files(&self) -> HashMap<String, String> {
         self.files.clone()
+    }
+
+    pub fn get_changes(&self) -> Result<HashMap<String, String>, CommandError> {
+        let tree_commit = build_last_commit_tree()?;
+        let mut changes: HashMap<String, String> = HashMap::new();
+        if let Some(tree) = tree_commit {
+            for (path, hash) in self.files.iter() {
+                let (is_in_last_commit, name) = tree.has_blob_from_hash(hash)?;
+
+                if !is_in_last_commit || get_name_bis(path)? != name {
+                    _ = changes.insert(path.to_string(), hash.to_string())
+                }
+            }
+        } else {
+            changes = self.files.clone()
+        }
+        Ok(changes)
+    }
+
+    pub fn has_changes(&self) -> Result<bool, CommandError> {
+        let changes = self.get_changes()?.len();
+        let deleted_files = self.get_deleted_files()?;
+        Ok(changes + deleted_files.len() > 0)
+    }
+
+    fn get_deleted_files(&self) -> Result<Vec<GitObject>, CommandError> {
+        let mut deleted_blobs: Vec<GitObject> = Vec::new();
+        let last_commit_tree = build_last_commit_tree()?;
+        if let Some(tree) = last_commit_tree {
+            deleted_blobs = tree.get_deleted_blob(&self.files);
+        }
+        Ok(deleted_blobs)
     }
 
     pub fn empty(&self) -> Result<StagingArea, CommandError> {
         let mut files = self.files.clone();
-        for (path, hash) in self.files.iter() {
-            let name = get_name_bis(path)?;
-            let (is_in_last_commit, name_found) = is_in_last_commit(hash.to_string())?;
-            if !is_in_last_commit || name != name_found {
-                files.remove(path);
+        let tree_commit = build_last_commit_tree()?;
+        if let Some(tree) = tree_commit {
+            for (path, hash) in self.files.iter() {
+                let name = get_name_bis(path)?;
+                let (is_in_last_commit, name_found) = tree.has_blob_from_hash(hash)?;
+                if !is_in_last_commit || name != name_found {
+                    files.remove(path);
+                }
             }
         }
         self.save()?;
@@ -126,17 +161,21 @@ impl StagingArea {
     }
 
     pub(crate) fn write_tree(&self, logger: &mut Logger) -> Result<String, CommandError> {
+        let working_tree = self.get_working_tree_staged()?;
+
+        let mut tree: GitObject = Box::new(working_tree);
+        objects_database::write(logger, &mut tree)
+    }
+
+    pub fn get_working_tree_staged(&self) -> Result<Tree, CommandError> {
         let current_dir_display = "";
         let mut working_tree = Tree::new(current_dir_display.to_string());
-
         for (path, hash) in &self.files {
             let vector_path = path.split("/").collect::<Vec<_>>();
             let current_depth: usize = 0;
             working_tree.add_path_tree(vector_path, current_depth, hash)?;
         }
-
-        let mut tree: GitObject = Box::new(working_tree);
-        objects_database::write(logger, &mut tree)
+        Ok(working_tree)
     }
 }
 
@@ -156,13 +195,15 @@ mod tests {
         let mut file_writer_mock = Cursor::new(&mut file_content_mock); // probar no crear dos mocks
 
         staging_area.add("test.txt", "30d74d258442c7c65512eafab474568dd706c430");
+        println!("files: {:?}", staging_area.get_files());
         staging_area.write_to(&mut file_writer_mock).unwrap();
 
         let mut file_reader_mock = Cursor::new(file_content_mock);
         let new_staging_area = StagingArea::read_from(&mut file_reader_mock).unwrap();
+        println!("files: {:?}", new_staging_area.get_files());
 
         assert_eq!(
-            new_staging_area.files.get("test.txt").unwrap(),
+            new_staging_area.get_files().get("test.txt").unwrap(),
             "30d74d258442c7c65512eafab474568dd706c430"
         );
     }
@@ -183,7 +224,7 @@ mod tests {
         let new_staging_area = StagingArea::read_from(&mut file_reader_mock).unwrap();
 
         assert_eq!(
-            new_staging_area.files.get("test.txt").unwrap(),
+            new_staging_area.get_files().get("test.txt").unwrap(),
             "30d74d258442c7c65512eafab474568dd706c430"
         );
     }
@@ -205,11 +246,11 @@ mod tests {
         let new_staging_area = StagingArea::read_from(&mut file_reader_mock).unwrap();
 
         assert_eq!(
-            new_staging_area.files.get("test2.txt").unwrap(),
+            new_staging_area.get_files().get("test2.txt").unwrap(),
             "30d74d258442c7c65512eafab474568dd706c450"
         );
         assert_eq!(
-            new_staging_area.files.get("test.txt").unwrap(),
+            new_staging_area.get_files().get("test.txt").unwrap(),
             "30d74d258442c7c65512eafab474568dd706c430"
         );
     }

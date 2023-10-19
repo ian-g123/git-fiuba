@@ -52,7 +52,6 @@ fn test_single_file() {
     let branch_ref = branch_ref.trim();
     let ref_path = path.to_owned() + "/.git/" + branch_ref;
     let commit_hash = fs::read_to_string(ref_path).unwrap();
-
     let result = Command::new("../../../../../target/debug/git")
         .arg("cat-file")
         .arg(commit_hash)
@@ -60,8 +59,9 @@ fn test_single_file() {
         .current_dir(path)
         .output()
         .unwrap();
-
     let output = String::from_utf8(result.stdout).unwrap();
+
+    println!("Output: {}", output);
     let output_lines: Vec<&str> = output.split('\n').collect();
     assert_eq!(
         output_lines[0],

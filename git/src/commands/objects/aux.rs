@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fs::File,
     io::{Cursor, Read, Write},
     path::Path,
@@ -14,7 +15,12 @@ use crate::{
 };
 use sha1::{Digest, Sha1};
 
-use super::git_object;
+use super::{
+    blob::Blob,
+    git_object::{self, GitObject},
+    mode::Mode,
+    tree::Tree,
+};
 
 /// Obtiene el nombre de un archivo dada su ruta. Si la ruta no existe, devuelve error.
 pub fn get_name(path_string: &String) -> Result<String, CommandError> {
@@ -182,7 +188,6 @@ pub fn read_u32_from(stream: &mut dyn Read) -> Result<u32, CommandError> {
     let parents_len = u32::from_be_bytes(parents_len_be);
     Ok(parents_len)
 }
-
 pub fn is_in_last_commit(blob_hash: String) -> Result<(bool, String), CommandError> {
     let last_commit = get_last_commit()?;
     let Some(commit) = last_commit else {
@@ -220,7 +225,45 @@ fn search_in_last_commit(
     Ok((false, String::new()))
 }
 
-fn get_commit_tree() -> Result<Option<String>, CommandError> {
+pub fn build_last_commit_tree() -> Result<Option<Tree>, CommandError> {
+    if let Some(hash) = get_commit_tree_hash()? {
+        let mut tree = Tree::new("".to_string());
+        build_tree(&mut tree, &hash)?;
+        return Ok(Some(tree));
+    }
+    Ok(None)
+}
+
+fn build_tree(tree: &mut Tree, hash: &str) -> Result<(), CommandError> {
+    let mut logger = Logger::new_dummy();
+    let mut data: Vec<u8> = Vec::new();
+    let cursor = Cursor::new(&mut data);
+    git_object::display_from_hash(&mut data, &hash, &mut logger)?;
+    let buf = String::from_utf8_lossy(&data).to_string();
+    let lines: Vec<&str> = buf.split_terminator("\n").collect();
+    for line in lines {
+        let info: Vec<&str> = line.split_terminator(" ").collect();
+        let hash_and_name: Vec<&str> = info[2].split("  ").collect();
+        let (mode, obj_type, this_hash, name) = (
+            info[0],
+            info[1].to_string(),
+            hash_and_name[0].to_string(),
+            hash_and_name[1].to_string(),
+        );
+        if obj_type == "blob" {
+            let mode = Mode::read_from_string(mode)?;
+            let blob = Blob::new_from_hash_and_name(this_hash.to_string(), name.clone(), mode)?;
+            tree.add_object(name, Box::new(blob));
+        } else {
+            let mut new_tree = Tree::new(name.clone());
+            build_tree(&mut new_tree, &this_hash)?;
+            tree.add_object(name, Box::new(new_tree));
+        }
+    }
+    Ok(())
+}
+
+pub fn get_commit_tree_hash() -> Result<Option<String>, CommandError> {
     let Some(last_commit) = get_last_commit()? else {
         return Ok(None);
     };

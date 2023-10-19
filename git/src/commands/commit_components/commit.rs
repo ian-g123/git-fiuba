@@ -8,12 +8,11 @@ use chrono::{DateTime, Local};
 
 use crate::{
     commands::{
-        add_components::add,
+        add_components::add::{self, Add},
         branch_manager::{get_current_branch, get_last_commit},
         command::{Command, ConfigAdderFunction},
         command_errors::CommandError,
         config::Config,
-        init_components::init::Init,
         objects::{author::Author, commit_object::CommitObject, git_object::GitObject, tree::Tree},
         objects_database,
         stagin_area::{self, StagingArea},
@@ -230,21 +229,25 @@ impl Commit {
         let message = {
             if let Some(message) = self.message.clone() {
                 message
-            } else if let Some(reuse_message) = self.reuse_message.clone() {
-                Self::get_commit_reuse()
+            } else if self.reuse_message.is_some() {
+                "".to_string()
             } else {
                 self.run_enter_message(stdin)?
             }
         };
         logger.log("Opening stagin_area");
 
-        let staging_area = StagingArea::open()?;
+        let mut staging_area = StagingArea::open()?;
 
-        let stagin_area = if !self.files.is_empty() {
+        staging_area = if !self.files.is_empty() {
             let mut new_staging_area = staging_area.empty()?;
             for path in self.files.iter() {
                 add::run_for_file(path, &mut new_staging_area, logger)?;
             }
+            new_staging_area
+        } else if self.all {
+            let new_staging_area = staging_area.empty()?;
+            self.run_all_config(stdin, output, logger)?;
             new_staging_area
         } else {
             staging_area
@@ -252,9 +255,37 @@ impl Commit {
 
         logger.log("Writing work dir tree");
 
-        let working_tree_hash = stagin_area.write_tree(logger)?;
+        let working_tree_hash = staging_area.write_tree(logger)?;
         logger.log("Work dir writen");
 
+        if !staging_area.has_changes()? {
+            logger.log("Nothing to commit");
+            // show status output
+            return Ok(());
+        } else {
+            self.run_commit(logger, message, working_tree_hash)?;
+        }
+
+        Ok(())
+    }
+
+    fn run_all_config(
+        &self,
+        stdin: &mut dyn Read,
+        output: &mut dyn Write,
+        logger: &mut Logger,
+    ) -> Result<(), CommandError> {
+        let add_args = [".".to_string()].to_vec();
+        Add::run_from("add", &add_args, stdin, output, logger)?;
+        Ok(())
+    }
+
+    fn run_commit(
+        &self,
+        logger: &mut Logger,
+        message: String,
+        working_tree_hash: String,
+    ) -> Result<(), CommandError> {
         let last_commit_hash = get_last_commit()?;
 
         let mut parents: Vec<String> = Vec::new();
@@ -262,20 +293,16 @@ impl Commit {
             parents.push(padre);
         }
 
-        let mut commit: CommitObject;
+        let commit: CommitObject;
 
-        if let Some(commit_hash) = &self.reuse_message {
-            commit = Self::get_reused_commit(
-                commit_hash.to_string(),
-                parents,
-                working_tree_hash,
-                logger,
-            )?;
+        commit = if let Some(commit_hash) = &self.reuse_message {
+            Self::get_reused_commit(commit_hash.to_string(), parents, working_tree_hash, logger)?
         } else {
-            commit = Self::create_new_commit(message, parents, working_tree_hash, logger)?;
-        }
+            Self::create_new_commit(message, parents, working_tree_hash, logger)?
+        };
 
         logger.log("Commit object created");
+
         let mut git_object: GitObject = Box::new(commit);
         let commit_hash = objects_database::write(logger, &mut git_object)?;
         logger.log(&format!("Commit object saved in database {}", commit_hash));
@@ -283,30 +310,8 @@ impl Commit {
             logger.log(&format!("Updating last commit to {}", commit_hash));
             update_last_commit(&commit_hash)?;
             logger.log("Last commit updated");
+            // show commit status
         }
-        //Commit
-        /*
-        if staging_area.is_empty() && self.files.is_empty(){
-            self.set_nothing_to_commit_output(output)?;
-        }
-        */
-
-        // for path in self.files.iter() {
-        //     /*
-        //     1) vaciar StagingArea o crear una nueva
-        //     2) Agregar al stagingArea. Manejar error si no está en la base de datos o no existe
-        //      */
-        // }
-
-        // if let Some(commit_hash) = self.reuse_message.clone() {}
-
-        //Crear Commit Object con la info necesaria --> Commit::new()
-
-        // if self.dry_run {
-        //     self.get_status_output(output)?;
-        // } else {
-        //     //self.add_commit(commit)
-        // }
 
         // if !self.quiet {
         //     //self.get_commit_output(commit)
@@ -380,10 +385,6 @@ impl Commit {
         timestamp.format("%a %b %e %H:%M:%S %Y %z").to_string();
     }
 
-    fn get_commit_reuse() -> String {
-        "".to_string()
-    }
-
     fn get_commit_output(&self, commit: Commit) {
         /*
         [<branch name> <commit hash[0:6]>] <message>
@@ -399,21 +400,6 @@ impl Commit {
 
         //let _ = write!(output, "{}", output_string)
     }
-
-    //error: pathspec '<path>>' did not match any file(s) known to git
-
-    fn add_files_to_index() {}
-
-    fn add_commit(&mut self, commit: Commit) {
-        /*
-        1) commit.get_hash() -> guardar en la base de datos
-        2) Actualizar current branch en .git para que apunte al nuevo commit -->
-            a- .git/HEAD --> ref: refs/heads/<current_branch> --> get_head_branch
-            b- refs/heads/<current_branch> --> write commit hash
-         */
-    }
-
-    /// Obtiene la rama actual. Si no se puede leer de ".git/HEAD", se devuelve error.
 
     fn get_status_output(&self, output: &mut dyn Write) -> Result<(), CommandError> {
         /*

@@ -51,17 +51,6 @@ impl CommitObject {
             tree,
         })
     }
-
-    pub fn get_info_commit(&self) -> Option<(String, Author, Author, i64, i32)> {
-        Some((
-            self.message.clone(),
-            self.author.clone(),
-            self.committer.clone(),
-            self.timestamp,
-            self.offset,
-        ))
-    }
-
     /// Cambia la fecha y hora del Commit.
     // pub fn change_date(&mut self, date: String) {
     //     self.date = date;
@@ -264,6 +253,18 @@ fn read_hash_from(stream: &mut dyn Read) -> Result<[u8; 20], CommandError> {
 // }
 
 impl GitObjectTrait for CommitObject {
+    fn get_info_commit(&self) -> Option<(String, Author, Author, i64, i32)> {
+        Some((
+            self.message.clone(),
+            self.author.clone(),
+            self.committer.clone(),
+            self.timestamp,
+            self.offset,
+        ))
+    }
+    fn get_path(&self) -> Option<String> {
+        None
+    }
     fn type_str(&self) -> String {
         "commit".to_string()
     }

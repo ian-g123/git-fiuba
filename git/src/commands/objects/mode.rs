@@ -54,6 +54,10 @@ impl Mode {
             .read_exact(&mut buf)
             .map_err(|_| CommandError::InvalidMode)?;
         let mode = std::str::from_utf8(&buf).map_err(|_| CommandError::InvalidMode)?;
+        Ok(Self::read_from_string(mode)?)
+    }
+
+    pub fn read_from_string(mode: &str) -> Result<Self, CommandError> {
         match mode {
             "100644" => Ok(Mode::RegularFile),
             "100755" => Ok(Mode::ExecutableFile),

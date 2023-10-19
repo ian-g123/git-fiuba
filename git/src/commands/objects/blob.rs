@@ -1,12 +1,14 @@
 use std::{
     fmt,
     fs::File,
+    hash,
     io::{Cursor, Read, Write},
 };
 
 use crate::{commands::command_errors::CommandError, logger::Logger};
 
 use super::{
+    author::Author,
     aux::*,
     git_object::{GitObject, GitObjectTrait},
     mode::Mode,
@@ -35,6 +37,21 @@ impl Blob {
             path: Some(path.clone()),
             hash: None,
             name: Some(get_name(&path)?),
+            content: None,
+        })
+    }
+
+    pub fn new_from_hash_and_name(
+        hash: String,
+        name: String,
+        mode: Mode,
+    ) -> Result<Self, CommandError> {
+        let hash = hash.cast_hex_to_u8_vec()?;
+        Ok(Blob {
+            mode,
+            path: None,
+            hash: Some(hash),
+            name: Some(name),
             content: None,
         })
     }
@@ -128,6 +145,12 @@ impl Blob {
 }
 
 impl GitObjectTrait for Blob {
+    fn get_info_commit(&self) -> Option<(String, Author, Author, i64, i32)> {
+        None
+    }
+    fn get_path(&self) -> Option<String> {
+        self.path.clone()
+    }
     fn as_mut_tree(&mut self) -> Option<&mut Tree> {
         None
     }
@@ -185,6 +208,10 @@ impl GitObjectTrait for Blob {
                 Ok(sha1)
             }
         }
+    }
+
+    fn get_name(&self) -> Option<String> {
+        self.name.clone()
     }
 }
 

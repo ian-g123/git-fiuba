@@ -4,7 +4,12 @@ use crate::{
 };
 
 use super::{
-    author::Author, aux::get_sha1, blob::Blob, commit_object::CommitObject, mode::Mode, tree::Tree,
+    author::Author,
+    aux::{get_sha1, read_string_from, u8_vec_to_hex_string, SuperStrings},
+    blob::Blob,
+    commit_object::CommitObject,
+    mode::Mode,
+    tree::Tree,
 };
 use std::{
     fmt,
@@ -73,8 +78,17 @@ pub trait GitObjectTrait: fmt::Display {
         Ok(get_sha1(&buf))
     }
 
+    /// Devuelve el hash del objeto
+    fn get_hash_string(&mut self) -> Result<String, CommandError> {
+        Ok(u8_vec_to_hex_string(&self.get_hash()?))
+    }
+
     ///
-    fn get_info_commit(&self) -> Option<(String, Author, Author, i64, i32)> {
+    fn get_info_commit(&self) -> Option<(String, Author, Author, i64, i32)>;
+
+    fn get_path(&self) -> Option<String>;
+
+    fn get_name(&self) -> Option<String> {
         None
     }
 }
