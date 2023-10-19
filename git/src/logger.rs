@@ -37,6 +37,13 @@ impl Logger {
         })
     }
 
+    pub fn new_dummy() -> Self {
+        Logger {
+            logs_sender: None,
+            writer_thread_handle: None,
+        }
+    }
+
     /// Escribe msg en el archivo de logs
     pub fn log(&mut self, msg: &str) {
         if let Some(sender) = &self.logs_sender {

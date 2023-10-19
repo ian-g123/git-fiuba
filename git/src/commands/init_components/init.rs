@@ -56,7 +56,7 @@ impl Init {
 
     fn new_default() -> Self {
         Self {
-            branch_main: "main".to_string(),
+            branch_main: "master".to_string(),
             bare: true,
             paths: Vec::<String>::new(),
         }

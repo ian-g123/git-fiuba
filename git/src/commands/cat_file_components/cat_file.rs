@@ -1,18 +1,22 @@
 use crate::{
-    commands::{command::Command, command_errors::CommandError, file_compressor::extract},
+    commands::{
+        command::Command,
+        command_errors::CommandError,
+        objects::git_object::{self},
+    },
     logger::Logger,
 };
 
 use std::{
-    fs::File,
     io::{Read, Write},
-    path::Path, vec,
+    vec,
 };
 
 extern crate libflate;
 
 pub struct CatFile {
     path: String,
+    hash: String,
     exists: bool,
     pretty: bool,
     type_object: bool,
@@ -39,14 +43,16 @@ impl Command for CatFile {
         args: &[String],
         _input: &mut dyn Read,
         output: &mut dyn Write,
-        _logger: &mut Logger,
+        logger: &mut Logger,
     ) -> Result<(), CommandError> {
         if name != "cat-file" {
             return Err(CommandError::Name);
         }
+        logger.log(&format!("cat-file args: {:?}", args));
 
-        let cat_file = CatFile::new_default(args)?;
-        cat_file.run(output)
+        let mut cat_file = CatFile::new_default()?;
+        cat_file.config(args)?;
+        cat_file.run(output, logger)
     }
 
     fn config_adders(&self) -> Vec<fn(&mut Self, usize, &[String]) -> Result<usize, CommandError>> {
@@ -55,28 +61,24 @@ impl Command for CatFile {
 }
 
 impl CatFile {
-    fn new_default(args: &[String]) -> Result<CatFile, CommandError> {
-        let mut cat_file = CatFile {
+    fn new_default() -> Result<CatFile, CommandError> {
+        let cat_file = CatFile {
             path: "".to_string(),
             exists: false,
             pretty: false,
             type_object: false,
             size: false,
+            hash: "".to_string(),
         };
-        cat_file.config(args)?;
 
         Ok(cat_file)
     }
 
-    fn add_configs(
-        self: &mut CatFile,
-        i: usize,
-        args: &[String],
-    ) -> Result<usize, CommandError> {
+    fn add_configs(self: &mut CatFile, i: usize, args: &[String]) -> Result<usize, CommandError> {
         if args.len() < 2 {
             return Err(CommandError::NotEnoughArguments);
         }
-        
+
         let flag = args[i].as_str();
 
         if is_flag(flag) {
@@ -93,89 +95,49 @@ impl CatFile {
         if !self.path.is_empty() {
             return Err(CommandError::InvalidArguments);
         }
-        
+
         self.path = format!(".git/objects/{}/{}", &flag[..2], &flag[2..]);
-        
+        self.hash = flag.to_string();
         Ok(i + 1)
     }
 
-    fn run(&self, output: &mut dyn Write) -> Result<(), CommandError> {
-        let path = Path::new(&self.path);
-
-        if !path.exists() {
-            return Err(CommandError::FileNotFound(self.path.clone()));
-        }
-
-        let data = obtain_data(path)?;
-
-        let (header, content) = match data.split_once('\0') {
-            Some((header, content)) => (header, content),
-            None => return Err(CommandError::ObjectTypeError),
-        };
-
-        let (object_type, size) = match header.split_once(' ') {
-            Some((object_type, size)) => (object_type, size),
-            None => return Err(CommandError::ObjectTypeError),
-        };
-
-        match self.show_in_output(output, object_type, size, content) {
-            Ok(()) => {}
-            Err(error) => return Err(error),
-        };
-        Ok(())
+    fn run(&self, output: &mut dyn Write, logger: &mut Logger) -> Result<(), CommandError> {
+        self.show_in_output_bis(output, logger)
     }
 
-    fn show_in_output(&self, output: &mut dyn Write, object_type: &str, size: &str, content: &str) -> Result<(), CommandError> {
+    fn show_in_output_bis(
+        &self,
+        output: &mut dyn Write,
+        logger: &mut Logger,
+    ) -> Result<(), CommandError> {
         if self.exists {
             if self.pretty || self.size || self.type_object {
                 return Err(CommandError::InvalidArguments);
-            } else {
-                _ = writeln!(output);
             }
         } else if self.type_object {
             if self.pretty || self.size {
                 return Err(CommandError::InvalidArguments);
             } else {
-                _ = writeln!(output, "{}", object_type);
+                git_object::display_type_from_hash(output, &self.hash, logger)?;
             }
         } else if self.size {
             if self.pretty {
                 return Err(CommandError::InvalidArguments);
             } else {
-                _ = writeln!(output, "{}", size);
+                git_object::display_size_from_hash(output, &self.hash, logger)?;
             }
         } else if self.pretty {
-            _ = writeln!(output, "{}", content);
+            git_object::display_from_hash(output, &self.hash, logger)?;
         }
 
         Ok(())
     }
 }
 
-/// Obtiene toda la data del archivo comprimido
-fn obtain_data(path: &Path) -> Result<String, CommandError> {
-    let string_path = match path.to_str() {
-        Some(string_path) => string_path.to_string(),
-        None => return Err(CommandError::InvalidFileName),
-    };
-
-    let mut file = File::open(path)
-        .map_err(|_| CommandError::FileNotFound(string_path.clone()))?;
-    let mut data = Vec::new();
-
-    file.read_to_end(&mut data)
-        .map_err(|_| CommandError::FileNotFound(string_path))?;
-
-    let data = extract(&data)?;
-    let data = String::from_utf8(data).map_err(|_| CommandError::ObjectTypeError)?;
-
-    Ok(data)
-}
-
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
     use super::*;
+    use std::io::Cursor;
 
     #[test]
     fn test_invalid_name() {

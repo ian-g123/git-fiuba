@@ -1,9 +1,16 @@
 use std::{
     collections::HashMap,
+    env,
     io::{Read, Write},
 };
 
-use super::command_errors::CommandError;
+use crate::logger::Logger;
+
+use super::{
+    command_errors::CommandError,
+    objects::{git_object::GitObject, tree::Tree},
+    objects_database,
+};
 
 #[derive(Debug)]
 pub struct StagingArea {
@@ -93,6 +100,20 @@ impl StagingArea {
 
     pub fn remove(&mut self, path: &str) {
         self.files.remove(path);
+    }
+
+    pub(crate) fn write_tree(&self, logger: &mut Logger) -> Result<String, CommandError> {
+        let current_dir_display = "";
+        let mut working_tree = Tree::new(current_dir_display.to_string());
+
+        for (path, hash) in &self.files {
+            let vector_path = path.split("/").collect::<Vec<_>>();
+            let current_depth: usize = 0;
+            working_tree.add_path_tree(vector_path, current_depth, hash)?;
+        }
+
+        let mut tree: GitObject = Box::new(working_tree);
+        objects_database::write(logger, &mut tree)
     }
 }
 
