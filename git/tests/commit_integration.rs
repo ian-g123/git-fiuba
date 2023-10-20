@@ -1,9 +1,14 @@
 use core::panic;
 use std::{
     fs::{self, File},
-    io::{Read, Write},
+    io::{Cursor, Read, Write},
     path::Path,
-    process::Command,
+    process::{Command, Stdio},
+};
+
+use git::{
+    commands::{command::Command as Command2, hash_object_components::hash_object::HashObject},
+    logger::Logger,
 };
 
 #[test]
@@ -66,7 +71,6 @@ fn test_single_file() {
         .unwrap();
     let output = String::from_utf8(result.stdout).unwrap();
 
-    println!("Output: {}", output);
     let output_lines: Vec<&str> = output.split('\n').collect();
     assert_eq!(
         output_lines[0],
@@ -132,8 +136,6 @@ fn test_commit_some_changes() {
         .output()
         .unwrap();
     let output = String::from_utf8(result.stdout).unwrap();
-
-    println!("Output: \n{}", output);
 
     let result = Command::new("../../../../../target/debug/git")
         .arg("cat-file")
@@ -355,7 +357,6 @@ fn test_flag_all_with_deleted_files() {
         .current_dir(path)
         .output()
         .unwrap();
-    let output = String::from_utf8(result.stdout).unwrap();
 
     let result = Command::new("../../../../../target/debug/git")
         .arg("cat-file")
@@ -382,6 +383,165 @@ fn test_flag_all_with_deleted_files() {
         String::from_utf8(result.stdout).unwrap(),
         "100644 blob 9d1bdbbe7e41c96f5eb2231cc98240845610f183    testfile1.txt\n"
     );
+
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
+#[test]
+#[ignore]
+fn test_introduce_mesage() {
+    let path = "./tests/data/commands/commit/repo5";
+    create_test_scene_2(path.clone());
+
+    let mut input_data = "Message";
+    /* let mut stdin_mock = Cursor::new(input_data.as_bytes());
+    let mut output: Vec<u8> = Vec::new();
+    let mut stdout_mock = Cursor::new(&mut output);
+    let mut logger = Logger::new("").unwrap(); */
+
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("add")
+        .arg("dir/testfile1.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
+
+    /* HashObject::run_from(
+           "commit",
+           &["".to_string()],
+           &mut stdin_mock,
+           &mut stdout_mock,
+           &mut logger,
+       )
+       .unwrap();
+    */
+    let args = ["commit"];
+    let mut child = Command::new("../../../../../target/debug/git")
+        .args(&args)
+        .current_dir(path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(input_data.as_bytes())
+            .expect("Failed to write to stdin");
+    }
+    let output = child.wait_with_output().unwrap();
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(output.status.success());
+
+    let head = fs::read_to_string(path.to_owned() + "/.git/HEAD").unwrap();
+    println!("head");
+    let (_, branch_ref) = head.split_once(' ').unwrap();
+    println!("branch ref");
+
+    let branch_ref = branch_ref.trim();
+    let ref_path = path.to_owned() + "/.git/" + branch_ref;
+    let commit_hash = fs::read_to_string(ref_path).unwrap();
+    println!("commit hash");
+    /*
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("cat-file")
+        .arg(commit_hash)
+        .arg("-p")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    let output = String::from_utf8(result.stdout).unwrap();
+
+    let output_lines: Vec<&str> = output.split('\n').collect();
+    assert_eq!(output_lines[4], input_data); */
+
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
+#[test]
+fn test_reuse_message() {
+    let path = "./tests/data/commands/commit/repo6";
+    create_test_scene_2(path.clone());
+
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("add")
+        .arg("dir/testfile1.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
+
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    assert!(result.status.success());
+
+    let head = fs::read_to_string(path.to_owned() + "/.git/HEAD").unwrap();
+    let (_, branch_ref) = head.split_once(' ').unwrap();
+    let branch_ref = branch_ref.trim();
+    let ref_path = path.to_owned() + "/.git/" + branch_ref;
+    let commit_hash = fs::read_to_string(ref_path).unwrap();
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("cat-file")
+        .arg(commit_hash.clone())
+        .arg("-p")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    let output = String::from_utf8(result.stdout).unwrap();
+
+    let output_lines: Vec<&str> = output.split('\n').collect();
+    let tree_hash = output_lines[0];
+    let author = output_lines[1];
+    let commiter = output_lines[2];
+    let message = output_lines[4];
+
+    change_test_scene_2(path);
+
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("add")
+        .arg("dir/testfile1.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
+
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-C")
+        .arg(commit_hash)
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    assert!(result.status.success());
+
+    let head = fs::read_to_string(path.to_owned() + "/.git/HEAD").unwrap();
+    let (_, branch_ref) = head.split_once(' ').unwrap();
+    let branch_ref = branch_ref.trim();
+    let ref_path = path.to_owned() + "/.git/" + branch_ref;
+    let commit_hash = fs::read_to_string(ref_path).unwrap();
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("cat-file")
+        .arg(commit_hash)
+        .arg("-p")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    let output = String::from_utf8(result.stdout).unwrap();
+
+    let output_lines: Vec<&str> = output.split('\n').collect();
+
+    assert_ne!(tree_hash, output_lines[0]);
+    assert_eq!(author, output_lines[2]);
+    assert_eq!(commiter, output_lines[3]);
+    assert_eq!(message, output_lines[5]);
 
     _ = fs::remove_dir_all(format!("{}", path));
 }

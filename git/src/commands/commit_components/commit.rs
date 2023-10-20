@@ -173,7 +173,11 @@ impl Commit {
         mensaje.to_string()
     }
 
-    fn run_enter_message(&self, stdin: &mut dyn Read) -> Result<String, CommandError> {
+    fn run_enter_message(
+        &self,
+        stdin: &mut dyn Read,
+        logger: &mut Logger,
+    ) -> Result<String, CommandError> {
         let stdout = Self::get_enter_message_text();
         let branch_path = get_current_branch()?;
         let branch_split: Vec<&str> = branch_path.split("/").collect();
@@ -188,6 +192,9 @@ impl Commit {
         loop {
             let mut buf = [0; 1];
             if stdin.read_exact(&mut buf).is_err() {
+                let mut buf = String::new();
+                stdin.read_to_string(&mut buf).unwrap();
+                logger.log(&format!("Stdin: {}\n", buf));
                 return Err(CommandError::StdinError);
             };
             let input = String::from_utf8_lossy(&buf).to_string();
@@ -242,7 +249,7 @@ impl Commit {
             } else if self.reuse_message.is_some() {
                 "".to_string()
             } else {
-                self.run_enter_message(stdin)?
+                self.run_enter_message(stdin, logger)?
             }
         };
         logger.log("Opening stagin_area");
