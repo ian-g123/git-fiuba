@@ -1,16 +1,12 @@
 use core::panic;
 use std::{
     fs::{self, File},
-    io::{Cursor, Read, Write},
+    io::Write,
     path::Path,
-    process::{Command, Stdio},
+    process::Command,
 };
 
-use git::{
-    commands::{command::Command as Command2, hash_object_components::hash_object::HashObject},
-    logger::Logger,
-};
-
+/// Prueba que se pueda commitear un solo archivo.
 #[test]
 fn test_single_file() {
     let path = "./tests/data/commands/commit/repo1";
@@ -90,6 +86,7 @@ fn test_single_file() {
     _ = fs::remove_dir_all(format!("{}", path));
 }
 
+/// Prueba que se puedan commitear únicamente los cambios agregados al staging area.
 #[test]
 fn test_commit_some_changes() {
     let path = "./tests/data/commands/commit/repo2";
@@ -181,6 +178,7 @@ fn test_commit_some_changes() {
     _ = fs::remove_dir_all(format!("{}", path));
 }
 
+/// Prueba el correcto funcionamiento del flag 'all'.
 #[test]
 fn test_flag_all() {
     let path = "./tests/data/commands/commit/repo4";
@@ -246,20 +244,6 @@ fn test_flag_all() {
 
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "Cambio!\n");
 
-    let head = fs::read_to_string(path.to_owned() + "/.git/HEAD").unwrap();
-    let (_, branch_ref) = head.split_once(' ').unwrap();
-    let branch_ref = branch_ref.trim();
-    let ref_path = path.to_owned() + "/.git/" + branch_ref;
-    let commit_hash = fs::read_to_string(ref_path).unwrap();
-    let result = Command::new("../../../../../target/debug/git")
-        .arg("cat-file")
-        .arg(commit_hash)
-        .arg("-p")
-        .current_dir(path)
-        .output()
-        .unwrap();
-    let output = String::from_utf8(result.stdout).unwrap();
-
     let result = Command::new("../../../../../target/debug/git")
         .arg("cat-file")
         .arg("e1cdfb660628b4b3ae42555b31adc0dceb076118")
@@ -289,6 +273,8 @@ fn test_flag_all() {
     _ = fs::remove_dir_all(format!("{}", path));
 }
 
+/// Prueba el correcto funcionamiento del flag 'all' cuando hay archivos eliminados en el
+/// working tree.
 #[test]
 fn test_flag_all_with_deleted_files() {
     let path = "./tests/data/commands/commit/repo3";
@@ -345,19 +331,6 @@ fn test_flag_all_with_deleted_files() {
 
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "Cambio!\n");
 
-    let head = fs::read_to_string(path.to_owned() + "/.git/HEAD").unwrap();
-    let (_, branch_ref) = head.split_once(' ').unwrap();
-    let branch_ref = branch_ref.trim();
-    let ref_path = path.to_owned() + "/.git/" + branch_ref;
-    let commit_hash = fs::read_to_string(ref_path).unwrap();
-    let result = Command::new("../../../../../target/debug/git")
-        .arg("cat-file")
-        .arg(commit_hash)
-        .arg("-p")
-        .current_dir(path)
-        .output()
-        .unwrap();
-
     let result = Command::new("../../../../../target/debug/git")
         .arg("cat-file")
         .arg("e1cdfb660628b4b3ae42555b31adc0dceb076118")
@@ -387,7 +360,7 @@ fn test_flag_all_with_deleted_files() {
     _ = fs::remove_dir_all(format!("{}", path));
 }
 
-#[test]
+/* #[test]
 #[ignore]
 fn test_introduce_mesage() {
     let path = "./tests/data/commands/commit/repo5";
@@ -457,8 +430,9 @@ fn test_introduce_mesage() {
     assert_eq!(output_lines[4], input_data); */
 
     _ = fs::remove_dir_all(format!("{}", path));
-}
+} */
 
+/// Prueba el correcto funcionamiento del flag 'C'.
 #[test]
 fn test_reuse_message() {
     let path = "./tests/data/commands/commit/repo6";
@@ -546,6 +520,97 @@ fn test_reuse_message() {
     _ = fs::remove_dir_all(format!("{}", path));
 }
 
+/// Prueba que se puedan agregar al staging area los archivos pasados al comando Commit.
+#[test]
+fn test_commit_paths() {
+    let path = "./tests/data/commands/commit/repo7";
+    create_test_scene_3(path.clone());
+
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("add")
+        .arg("dir/testfile1.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
+
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .arg("dir/testfile2.txt")
+        .arg("dir/testfile3.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    assert!(result.status.success());
+
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("hash-object")
+        .arg("dir/testfile2.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let testfile2_hash = String::from_utf8(result.stdout).unwrap();
+
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("hash-object")
+        .arg("dir/testfile3.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let testfile3_hash = String::from_utf8(result.stdout).unwrap();
+
+    let head = fs::read_to_string(path.to_owned() + "/.git/HEAD").unwrap();
+    let (_, branch_ref) = head.split_once(' ').unwrap();
+    let branch_ref = branch_ref.trim();
+    let ref_path = path.to_owned() + "/.git/" + branch_ref;
+    let commit_hash = fs::read_to_string(ref_path).unwrap();
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("cat-file")
+        .arg(commit_hash.clone())
+        .arg("-p")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    let output = String::from_utf8(result.stdout).unwrap();
+    println!("Output: \n {}", output);
+
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("cat-file")
+        .arg("5cf6e44531ea3001d5e1d97ceae46d7a1b40b77c")
+        .arg("-p")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    assert_eq!(
+        String::from_utf8(result.stdout).unwrap(),
+        "040000 tree f58e83153d7c915101c79d768f71e8b44b3ecfe0    dir\n"
+    );
+
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("cat-file")
+        .arg("f58e83153d7c915101c79d768f71e8b44b3ecfe0")
+        .arg("-p")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let expected = format!(
+        "100644 blob {}    testfile2.txt\n100644 blob {}    testfile3.txt\n",
+        testfile2_hash.trim(),
+        testfile3_hash.trim()
+    );
+
+    assert_eq!(String::from_utf8(result.stdout).unwrap(), expected);
+
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
 fn create_test_scene_1(path: &str) {
     create_base_scene(path);
 
@@ -575,8 +640,6 @@ fn create_test_scene_3(path: &str) {
 
     let mut file = File::create(path.to_owned() + "/dir/testfile3.txt").unwrap();
     file.write_all(b"file 3!").unwrap();
-
-    println!("creados");
 
     assert!(Path::new(&(path.to_owned() + "/dir/testfile1.txt")).exists());
     assert!(Path::new(&(path.to_owned() + "/dir/testfile2.txt")).exists());

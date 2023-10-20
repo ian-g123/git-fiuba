@@ -1,14 +1,11 @@
 use std::{
     collections::HashMap,
-    env,
-    hash::Hash,
     io::{Read, Write},
 };
 
 use crate::logger::Logger;
 
 use super::{
-    branch_manager::get_last_commit,
     command_errors::CommandError,
     objects::{
         aux::{build_last_commit_tree, get_name_bis},
@@ -84,12 +81,15 @@ impl StagingArea {
         let tree_commit = build_last_commit_tree(logger)?;
         if let Some(tree) = tree_commit {
             for (path, hash) in self.files.iter() {
+                logger.log(&format!("Vaciando staging area ...Path: {}", path));
                 let name = get_name_bis(path)?;
-                let (is_in_last_commit, name_found) = tree.has_blob_from_hash(hash)?;
-                if !is_in_last_commit || name != name_found {
+                let (is_in_last_commit, _) = tree.has_blob_from_hash(hash)?;
+                if !is_in_last_commit {
                     files.remove(path);
                 }
             }
+        } else {
+            files = HashMap::new();
         }
         self.files = files;
         Ok(())
@@ -173,7 +173,7 @@ impl StagingArea {
         self.files.remove(path);
     }
 
-    pub(crate) fn write_tree(&self, logger: &mut Logger) -> Result<String, CommandError> {
+    pub(crate) fn write_tree(&mut self, logger: &mut Logger) -> Result<String, CommandError> {
         let working_tree = self.get_working_tree_staged(logger)?;
 
         let mut tree: GitObject = Box::new(working_tree);
@@ -181,15 +181,29 @@ impl StagingArea {
         objects_database::write(logger, &mut tree)
     }
 
-    pub fn get_working_tree_staged(&self, logger: &mut Logger) -> Result<Tree, CommandError> {
+    pub fn get_working_tree_staged(&mut self, logger: &mut Logger) -> Result<Tree, CommandError> {
         let current_dir_display = "";
         let mut working_tree = Tree::new(current_dir_display.to_string());
+        self.sort_files();
         for (path, hash) in &self.files {
             let vector_path = path.split("/").collect::<Vec<_>>();
             let current_depth: usize = 0;
             working_tree.add_path_tree(logger, vector_path, current_depth, hash)?;
         }
         Ok(working_tree)
+    }
+
+    fn sort_files(&mut self) {
+        let mut keys: Vec<&String> = self.files.keys().collect();
+        keys.sort();
+
+        let mut sorted_files: HashMap<String, String> = HashMap::new();
+        for key in keys {
+            if let Some(value) = self.files.get(key) {
+                sorted_files.insert(key.clone(), value.clone());
+            }
+        }
+        self.files = sorted_files;
     }
 }
 
