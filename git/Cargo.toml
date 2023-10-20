@@ -10,3 +10,11 @@ sha1 = "0.10.6"
 libflate = "2"
 chrono = "0.4.31"
 hex = "0.4.3"
+
+[[bin]]
+name = "git"
+path = "src/main.rs"
+
+[[bin]]
+name = "fetch"
+path = "src/commands/fetch_components/fetch.rs"
