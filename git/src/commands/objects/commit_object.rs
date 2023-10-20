@@ -14,7 +14,7 @@ use super::git_object::{GitObject, GitObjectTrait};
 use super::{author::Author, tree::Tree};
 use crate::commands::command_errors::CommandError;
 use crate::commands::file_compressor::extract;
-use crate::logger::Logger;
+use crate::logger::{self, Logger};
 
 extern crate chrono;
 use chrono::{prelude::*, DateTime, LocalResult, Offset, TimeZone};
@@ -56,6 +56,10 @@ impl CommitObject {
     //     self.date = date;
     // }
 
+    pub fn get_tree_hash(&self) -> String {
+        self.tree.clone()
+    }
+
     /// Obtiene el hash del Commit padre. Si no tiene p
     fn get_parent() -> Result<String, CommandError> {
         let mut parent = String::new();
@@ -73,7 +77,10 @@ impl CommitObject {
         Ok(parent.to_string())
     }
 
-    pub fn read_from(stream: &mut dyn Read) -> Result<GitObject, CommandError> {
+    pub fn read_from(
+        stream: &mut dyn Read,
+        logger: &mut Logger,
+    ) -> Result<GitObject, CommandError> {
         let (
             tree_hash,
             parents,
@@ -84,8 +91,8 @@ impl CommitObject {
             committer_timestamp,
             committer_offset,
             message,
-        ) = read_commit_info_from(stream)?;
-
+        ) = read_commit_info_from(stream, logger)?;
+        logger.log("commit created");
         Ok(Box::new(Self {
             tree: tree_hash,
             parents,
@@ -113,7 +120,7 @@ impl CommitObject {
             committer_timestamp,
             committer_offset,
             message,
-        ) = read_commit_info_from(stream)?;
+        ) = read_commit_info_from(stream, logger)?;
 
         writeln!(output, "tree {}", tree_hash)
             .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
@@ -147,6 +154,7 @@ impl CommitObject {
 
 fn read_commit_info_from(
     stream: &mut dyn Read,
+    logger: &mut Logger,
 ) -> Result<
     (
         String,
@@ -161,16 +169,28 @@ fn read_commit_info_from(
     ),
     CommandError,
 > {
+    logger.log("read_hash_from");
     let tree_hash_be = read_hash_from(stream)?;
+    logger.log("hash to hex");
     let tree_hash = u8_vec_to_hex_string(&tree_hash_be);
+    logger.log(&format!("hash = {}", tree_hash));
+    logger.log("n_parents");
     let number_of_parents = read_u32_from(stream)?;
+    logger.log("parents");
     let parents = read_parents_from(number_of_parents, stream)?;
+    logger.log("author");
     let author = Author::read_from(stream)?;
+    logger.log("a - timestamp");
     let author_timestamp = read_i64_from(stream)?;
+    logger.log("a - offset");
     let author_offset = read_i32_from(stream)?;
+    logger.log("commiter");
     let committer = Author::read_from(stream)?;
+    logger.log("c -timestamp");
     let committer_timestamp = read_i64_from(stream)?;
+    logger.log("c -offset");
     let committer_offset = read_i32_from(stream)?;
+    logger.log("message");
     let message = read_string_from(stream)?;
     Ok((
         tree_hash,
@@ -261,6 +281,9 @@ impl GitObjectTrait for CommitObject {
             self.timestamp,
             self.offset,
         ))
+    }
+    fn as_commit(&self) -> Option<&CommitObject> {
+        Some(self)
     }
     fn get_path(&self) -> Option<String> {
         None
@@ -397,7 +420,7 @@ fn get_current_dir() -> Result<PathBuf, CommandError> {
     Ok(current_dir)
 }
 
-struct CommitTree {
+/* struct CommitTree {
     objects: HashMap<String, GitObject>,
 }
 
@@ -538,7 +561,7 @@ impl CommitTree {
         }
         Ok(false)
     }
-}
+} */
 
 /// Devuelve el nombre de un archivo o directorio dado un PathBuf.
 fn get_path_name(path: PathBuf) -> Result<String, CommandError> {
@@ -601,7 +624,7 @@ mod test {
         Ok(())
     }
 
-    #[test]
+    /* #[test]
     #[ignore]
     fn search_parent_commit_test() {
         if write().is_err() {
@@ -614,7 +637,7 @@ mod test {
             ),
             Ok(true)
         ));
-    }
+    } */
 
     // Write unit tests for write to and read from for commits:
     #[test]

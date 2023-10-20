@@ -26,6 +26,10 @@ pub trait GitObjectTrait: fmt::Display {
         None
     }
 
+    fn as_commit(&self) -> Option<&CommitObject> {
+        None
+    }
+
     fn clone_object(&self) -> GitObject;
 
     fn write_to(&mut self, stream: &mut dyn std::io::Write) -> Result<(), CommandError> {
@@ -46,6 +50,7 @@ pub trait GitObjectTrait: fmt::Display {
     /// Si el objeto no es un Tree, devuelve un error
     fn add_path(
         &mut self,
+        logger: &mut Logger,
         vector_path: Vec<&str>,
         current_depth: usize,
         hash: &String,
@@ -98,7 +103,10 @@ pub fn display_from_hash(
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (_, content) = objects_database::read_file(hash)?;
+    logger.log(&format!("About to read file, hash = {}\n", hash));
+    let (_, content) = objects_database::read_file(hash, logger)?;
+    logger.log("file read\n");
+
     let mut stream = std::io::Cursor::new(content);
     display_from_stream(&mut stream, logger, output)
 }
@@ -126,7 +134,7 @@ pub fn display_type_from_hash(
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (_, content) = objects_database::read_file(hash)?;
+    let (_, content) = objects_database::read_file(hash, logger)?;
     let mut stream = std::io::Cursor::new(content);
     let (type_str, _) = get_type_and_len(&mut stream, logger)?;
     writeln!(output, "{}", type_str)
@@ -139,7 +147,7 @@ pub fn display_size_from_hash(
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (_, content) = objects_database::read_file(hash)?;
+    let (_, content) = objects_database::read_file(hash, logger)?;
     let mut stream = std::io::Cursor::new(content);
     let (_, len) = get_type_and_len(&mut stream, logger)?;
     writeln!(output, "{}", len).map_err(|error| CommandError::FileWriteError(error.to_string()))?;
@@ -156,7 +164,7 @@ pub fn read_git_object_from(
 
     let (type_str, len) = get_type_and_len(stream, logger)?;
 
-    logger.log(&format!("len: {}", len));
+    logger.log(&format!("len: {}, type: {}", len, type_str));
 
     if type_str == "blob" {
         return Blob::read_from(stream, len, path, hash_str, logger);
@@ -165,7 +173,7 @@ pub fn read_git_object_from(
         return Tree::read_from(stream, len, path, hash_str, logger);
     };
     if type_str == "commit" {
-        return CommitObject::read_from(stream);
+        return CommitObject::read_from(stream, logger);
     };
 
     Err(CommandError::ObjectTypeError)

@@ -17,7 +17,7 @@ use sha1::{Digest, Sha1};
 
 use super::{
     blob::Blob,
-    git_object::{self, GitObject},
+    git_object::{self, read_git_object_from, GitObject},
     mode::Mode,
     tree::Tree,
 };
@@ -188,15 +188,22 @@ pub fn read_u32_from(stream: &mut dyn Read) -> Result<u32, CommandError> {
     let parents_len = u32::from_be_bytes(parents_len_be);
     Ok(parents_len)
 }
-pub fn is_in_last_commit(blob_hash: String) -> Result<(bool, String), CommandError> {
-    let last_commit = get_last_commit()?;
+pub fn is_in_last_commit(
+    blob_hash: String,
+    logger: &mut Logger,
+) -> Result<(bool, String), CommandError> {
+    if let Some(tree) = build_last_commit_tree(logger)? {
+        return Ok(tree.has_blob_from_hash(&blob_hash)?);
+    }
+    Ok((false, "".to_string()))
+    /* let last_commit = get_last_commit()?;
     let Some(commit) = last_commit else {
         return Ok((false, "".to_string()));
     };
-    Ok(search_in_last_commit(&commit, blob_hash))?
+    Ok(search_in_last_commit(&commit, blob_hash))? */
 }
 
-fn search_in_last_commit(
+/* fn search_in_last_commit(
     parent_hash: &str,
     obj_hash: String,
 ) -> Result<(bool, String), CommandError> {
@@ -223,67 +230,87 @@ fn search_in_last_commit(
         }
     }
     Ok((false, String::new()))
-}
+} */
 
-pub fn build_last_commit_tree() -> Result<Option<Tree>, CommandError> {
-    if let Some(hash) = get_commit_tree_hash()? {
+pub fn build_last_commit_tree(logger: &mut Logger) -> Result<Option<Tree>, CommandError> {
+    if let Some(hash) = get_commit_tree_hash(logger)? {
         let mut tree = Tree::new("".to_string());
-        build_tree(&mut tree, &hash)?;
+        build_tree(&mut tree, &hash, logger)?;
         return Ok(Some(tree));
     }
     Ok(None)
 }
 
-fn build_tree(tree: &mut Tree, hash: &str) -> Result<(), CommandError> {
-    let mut logger = Logger::new_dummy();
+fn build_tree(tree: &mut Tree, hash: &str, logger: &mut Logger) -> Result<(), CommandError> {
     let mut data: Vec<u8> = Vec::new();
-    let cursor = Cursor::new(&mut data);
-    git_object::display_from_hash(&mut data, &hash, &mut logger)?;
+    let cursor: Cursor<&mut Vec<u8>> = Cursor::new(&mut data);
+    //logger.log("before display");
+    git_object::display_from_hash(&mut data, &hash, logger)?;
+    //logger.log("reading tree");
     let buf = String::from_utf8_lossy(&data).to_string();
     let lines: Vec<&str> = buf.split_terminator("\n").collect();
     for line in lines {
+        //logger.log(&format!("Line: {}", line));
         let info: Vec<&str> = line.split_terminator(" ").collect();
-        let hash_and_name: Vec<&str> = info[2].split("  ").collect();
+        //let hash_and_name: Vec<&str> = info[2].split("  ").collect();
+        //logger.log(&format!("info: {}", info.len(),));
+
         let (mode, obj_type, this_hash, name) = (
             info[0],
             info[1].to_string(),
-            hash_and_name[0].to_string(),
-            hash_and_name[1].to_string(),
+            info[2].to_string(),
+            info[info.len() - 1].to_string(),
         );
+        /* logger.log(&format!(
+            "Mode: {}, type: {}, hash: {}, name: {}",
+            mode, obj_type, this_hash, name
+        )); */
+
         if obj_type == "blob" {
+            //logger.log("found blob");
             let mode = Mode::read_from_string(mode)?;
             let blob = Blob::new_from_hash_and_name(this_hash.to_string(), name.clone(), mode)?;
             tree.add_object(name, Box::new(blob));
         } else {
+            //logger.log("found tree");
             let mut new_tree = Tree::new(name.clone());
-            build_tree(&mut new_tree, &this_hash)?;
+            build_tree(&mut new_tree, &this_hash, logger)?;
             tree.add_object(name, Box::new(new_tree));
         }
     }
     Ok(())
 }
 
-pub fn get_commit_tree_hash() -> Result<Option<String>, CommandError> {
+pub fn get_commit_tree_hash(logger: &mut Logger) -> Result<Option<String>, CommandError> {
     let Some(last_commit) = get_last_commit()? else {
         return Ok(None);
     };
-    let path = format!(
-        "{}/{}",
+    /* let path = format!(
+        ".git/objects/{}/{}",
         last_commit[0..2].to_string(),
         last_commit[2..].to_string()
     );
     let Ok(mut commit_file) = File::open(path.clone()) else {
         return Err(CommandError::FileReadError(path.to_string()));
     };
-    let mut buf: String = String::new();
-    if commit_file.read_to_string(&mut buf).is_err() {
+    let mut buf: Vec<u8> = Vec::new();
+    if commit_file.read_to_end(&mut buf).is_err() {
         return Err(CommandError::FileReadError(path.to_string()));
     }
+    let mut buf = extract(&buf)?; */
+    //let mut buf = String::from_utf8_lossy(&buf).to_string();
+    let commit = objects_database::read_object(&last_commit, logger)?;
+    if let Some(commit) = commit.as_commit() {
+        let tree_hash = commit.get_tree_hash();
+        //logger.log(&format!("Hash del tree {}", tree_hash));
+        return Ok(Some(tree_hash));
+    }
+    /* logger.log(&format!("Tree read = {}", buf));
     let info: Vec<&str> = buf.split("\n").collect();
     let tree_info = info[0].to_string();
     let tree_info: Vec<&str> = tree_info.split(" ").collect();
-    let tree_hash = tree_info[1];
-    Ok(Some(tree_hash.to_string()))
+    let tree_hash = tree_info[1]; */
+    Ok(None)
 }
 
 pub trait SuperIntegers {

@@ -35,7 +35,7 @@ impl StagingArea {
     }
 
     pub fn get_changes(&self) -> Result<HashMap<String, String>, CommandError> {
-        let tree_commit = build_last_commit_tree()?;
+        let tree_commit = build_last_commit_tree(&mut Logger::new_dummy())?;
         let mut changes: HashMap<String, String> = HashMap::new();
         if let Some(tree) = tree_commit {
             for (path, hash) in self.files.iter() {
@@ -59,16 +59,29 @@ impl StagingArea {
 
     fn get_deleted_files(&self) -> Result<Vec<GitObject>, CommandError> {
         let mut deleted_blobs: Vec<GitObject> = Vec::new();
-        let last_commit_tree = build_last_commit_tree()?;
+        let last_commit_tree = build_last_commit_tree(&mut Logger::new_dummy())?;
         if let Some(tree) = last_commit_tree {
             deleted_blobs = tree.get_deleted_blob(&self.files);
         }
         Ok(deleted_blobs)
     }
 
-    pub fn empty(&self) -> Result<StagingArea, CommandError> {
+    pub fn has_file_from_path(&self, path: &str) -> bool {
+        self.get_files().contains_key(path)
+    }
+
+    pub fn has_file_from_hash(&self, hash_obj: &str) -> bool {
+        for (path, hash) in self.get_files() {
+            if hash_obj == hash {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn empty(&mut self, logger: &mut Logger) -> Result<(), CommandError> {
         let mut files = self.files.clone();
-        let tree_commit = build_last_commit_tree()?;
+        let tree_commit = build_last_commit_tree(logger)?;
         if let Some(tree) = tree_commit {
             for (path, hash) in self.files.iter() {
                 let name = get_name_bis(path)?;
@@ -78,8 +91,8 @@ impl StagingArea {
                 }
             }
         }
-        self.save()?;
-        Ok(Self { files })
+        self.files = files;
+        Ok(())
     }
 
     pub fn write_to(&self, stream: &mut dyn Write) -> Result<(), CommandError> {
@@ -161,19 +174,20 @@ impl StagingArea {
     }
 
     pub(crate) fn write_tree(&self, logger: &mut Logger) -> Result<String, CommandError> {
-        let working_tree = self.get_working_tree_staged()?;
+        let working_tree = self.get_working_tree_staged(logger)?;
 
         let mut tree: GitObject = Box::new(working_tree);
+
         objects_database::write(logger, &mut tree)
     }
 
-    pub fn get_working_tree_staged(&self) -> Result<Tree, CommandError> {
+    pub fn get_working_tree_staged(&self, logger: &mut Logger) -> Result<Tree, CommandError> {
         let current_dir_display = "";
         let mut working_tree = Tree::new(current_dir_display.to_string());
         for (path, hash) in &self.files {
             let vector_path = path.split("/").collect::<Vec<_>>();
             let current_depth: usize = 0;
-            working_tree.add_path_tree(vector_path, current_depth, hash)?;
+            working_tree.add_path_tree(logger, vector_path, current_depth, hash)?;
         }
         Ok(working_tree)
     }

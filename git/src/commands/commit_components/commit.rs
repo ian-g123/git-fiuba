@@ -1,7 +1,10 @@
 use std::{
+    borrow::BorrowMut,
+    collections::HashMap,
     fs::{self, File, OpenOptions},
     io::Read,
-    io::Write,
+    io::{Cursor, Write},
+    path::{Path, PathBuf},
 };
 
 use chrono::{DateTime, Local};
@@ -13,7 +16,14 @@ use crate::{
         command::{Command, ConfigAdderFunction},
         command_errors::CommandError,
         config::Config,
-        objects::{author::Author, commit_object::CommitObject, git_object::GitObject, tree::Tree},
+        objects::{
+            author::Author,
+            aux::{get_name_bis, get_sha1_str, is_in_last_commit},
+            blob::Blob,
+            commit_object::CommitObject,
+            git_object::{display_from_hash, GitObject, GitObjectTrait},
+            tree::Tree,
+        },
         objects_database,
         stagin_area::{self, StagingArea},
     },
@@ -238,25 +248,34 @@ impl Commit {
         logger.log("Opening stagin_area");
 
         let mut staging_area = StagingArea::open()?;
+        logger.log("Staging area opened");
 
-        staging_area = if !self.files.is_empty() {
-            let mut new_staging_area = staging_area.empty()?;
+        if !self.files.is_empty() {
+            staging_area.empty(logger)?;
             for path in self.files.iter() {
-                add::run_for_file(path, &mut new_staging_area, logger)?;
+                add::run_for_file(path, &mut staging_area, logger)?;
             }
-            new_staging_area
-        } else if self.all {
-            let new_staging_area = staging_area.empty()?;
-            self.run_all_config(stdin, output, logger)?;
-            new_staging_area
-        } else {
-            staging_area
-        };
+            staging_area.save()?;
+        }
+        if self.all {
+            staging_area.empty(logger)?;
+            self.run_all_config(&mut staging_area, logger)?;
+            logger.log("Listo 'all'");
+            for (path, hash) in staging_area.get_files() {
+                logger.log(&format!("path; {}, hash: {}", path, hash));
+            }
+
+            staging_area.save()?;
+        }
 
         logger.log("Writing work dir tree");
 
         let working_tree_hash = staging_area.write_tree(logger)?;
         logger.log("Work dir writen");
+
+        let wt = staging_area.get_working_tree_staged(logger)?.get_elems();
+
+        show_logger(logger, wt);
 
         if !staging_area.has_changes()? {
             logger.log("Nothing to commit");
@@ -271,12 +290,56 @@ impl Commit {
 
     fn run_all_config(
         &self,
-        stdin: &mut dyn Read,
-        output: &mut dyn Write,
+        staging_area: &mut StagingArea,
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
-        let add_args = [".".to_string()].to_vec();
-        Add::run_from("add", &add_args, stdin, output, logger)?;
+        logger.log("Running 'all' configuration\n");
+        for (path, _) in staging_area.get_files() {
+            if !Path::new(&path).exists() {
+                staging_area.remove(&path);
+            }
+        }
+        Self::save_entries("./", staging_area, logger)?;
+
+        Ok(())
+    }
+
+    fn save_entries(
+        path_name: &str,
+        staging_area: &mut StagingArea,
+        logger: &mut Logger,
+    ) -> Result<(), CommandError> {
+        let path = Path::new(path_name);
+
+        let Ok(entries) = fs::read_dir(path.clone()) else {
+            return Err(CommandError::DirNotFound(path_name.to_owned()));
+        };
+        for entry in entries {
+            let Ok(entry) = entry else {
+                return Err(CommandError::DirNotFound(path_name.to_owned())); //cambiar!
+            };
+            let entry_path = entry.path();
+            let entry_name = get_path_name(entry_path.clone())?;
+
+            if entry_path.is_dir() {
+                Self::save_entries(&entry_name, staging_area, logger)?;
+                return Ok(());
+            } else {
+                let mut blob = Blob::new_from_path(entry_name.to_string())?;
+                let hash = &blob.get_hash_string()?;
+                logger.log(&format!("\nBefore checking last commit\n"));
+                let (res, name) = is_in_last_commit(hash.to_owned(), logger)?;
+                logger.log(&format!("\nRevisando: {} , hash: {}\n", entry_name, hash));
+                if staging_area.has_file_from_path(&entry_name[2..])
+                    || (res && name == get_name_bis(&entry_name)?)
+                {
+                    logger.log(&format!("\nAñadiendo: {} , hash: {}\n", entry_name, hash));
+                    let mut git_object: GitObject = Box::new(blob);
+                    let hex_str = objects_database::write(logger, &mut git_object)?;
+                    staging_area.add(&entry_name, &hex_str);
+                }
+            }
+        }
         Ok(())
     }
 
@@ -409,6 +472,36 @@ impl Commit {
         /* let mut status = Status::new_default();
         status.get_output(output)?; */
         Ok(())
+    }
+}
+
+/// Devuelve el nombre de un archivo o directorio dado un PathBuf.
+fn get_path_name(path: PathBuf) -> Result<String, CommandError> {
+    let Some(path_name) = path.to_str() else {
+        return Err(CommandError::DirNotFound("".to_string())); //cambiar
+    };
+    Ok(path_name.to_string())
+}
+
+fn show_logger(logger: &mut Logger, objects: HashMap<String, GitObject>) {
+    for (path, obj) in objects.iter() {
+        let mut obj = obj.to_owned();
+        let obj: &mut GitObject = obj.borrow_mut();
+        //let content = obj.content().unwrap();
+        //let content = String::from_utf8_lossy(&content).to_string();
+        let hash = obj.get_hash_string().unwrap();
+        let mut output: Vec<u8> = Vec::new();
+        let mut cursor = Cursor::new(&mut output);
+        display_from_hash(&mut cursor, &hash, logger).unwrap();
+        let content = String::from_utf8_lossy(&output).to_string();
+        logger.log(&format!(
+            "Path: {}, Hash: {}\n, Content; {}\n",
+            path, hash, content
+        ));
+        if let Some(tree) = obj.as_tree() {
+            logger.log(&format!("it's a tree\n"));
+            show_logger(logger, tree.get_elems())
+        }
     }
 }
 

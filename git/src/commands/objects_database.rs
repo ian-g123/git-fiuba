@@ -2,6 +2,7 @@ extern crate sha1;
 use std::{
     fs::{self, File},
     io::{Cursor, Read, Write},
+    path::PathBuf,
 };
 
 use sha1::{Digest, Sha1};
@@ -50,14 +51,21 @@ pub(crate) fn write(
 }
 
 pub(crate) fn read_object(hash_str: &str, logger: &mut Logger) -> Result<GitObject, CommandError> {
-    let (path, decompressed_data) = read_file(hash_str)?;
+    let (path, decompressed_data) = read_file(hash_str, logger)?;
     let mut stream = Cursor::new(decompressed_data);
 
     read_git_object_from(&mut stream, &path, &hash_str, logger)
 }
 
-pub(crate) fn read_file(hash_str: &str) -> Result<(String, Vec<u8>), CommandError> {
+pub(crate) fn read_file(
+    hash_str: &str,
+    logger: &mut Logger,
+) -> Result<(String, Vec<u8>), CommandError> {
     let path = format!(".git/objects/{}/{}", &hash_str[0..2], &hash_str[2..]);
+    logger.log(&format!("Path: {}", path.clone()));
+    let exists = PathBuf::from(path.clone()).exists();
+    logger.log(&format!("Existe?: {}", exists));
+
     let mut file = File::open(&path).map_err(|error| {
         CommandError::FileOpenError(format!(
             "Error al abrir archivo {}: {}",
