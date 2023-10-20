@@ -2,7 +2,17 @@
 
 Repo for Rust Taller De Programacion 1 FIUBA
 
-Test client `clear; cargo run --bin fetch`
+# Test client
+
+1. Iniciar servidor:
+
+En `git/server-test`
+
+`sh start-daemon.rs`
+
+2. en `git`
+
+`clear; cargo run --bin fetch`
 
 # Bibliografía de referencia
 
