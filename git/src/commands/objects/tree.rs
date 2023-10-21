@@ -16,6 +16,7 @@ use super::{
     blob::Blob,
     git_object::{GitObject, GitObjectTrait},
     mode::Mode,
+    super_string::{read_string_from, u8_vec_to_hex_string, SuperStrings},
 };
 
 #[derive(Clone)]
@@ -105,7 +106,7 @@ impl Tree {
         // let blob = Blob::new_from_hash(hash.clone(), path_name.clone())?;
         let blob =
             Blob::new_from_hash_and_mode(hash.clone(), path_name.clone(), Mode::RegularFile)?;
-        let blob_name = get_name_bis(&path_name)?;
+        let blob_name = get_name(&path_name)?;
         _ = self.objects.insert(blob_name.to_string(), Box::new(blob));
         Ok(())
     }
@@ -118,7 +119,7 @@ impl Tree {
         hash: &String,
     ) -> Result<GitObject, CommandError> {
         let current_path = vector_path[..current_depth + 1].join("/");
-        let tree_name = get_name_bis(&current_path)?;
+        let tree_name = get_name(&current_path)?;
 
         if !self.objects.contains_key(&tree_name) {
             let tree = Tree::new(current_path.to_owned());
@@ -217,10 +218,19 @@ impl Tree {
                 .join("");
 
             let name_str = read_string_from(stream)?;
+
             objects.push((mode, type_src.to_string(), hash_str, name_str));
         }
         for (mode, type_str, hash, name) in objects {
+            logger.log(&format!(
+                "Mode: {}, type: {}, hash: {}, name: {}",
+                mode, type_str, hash, name
+            ));
+            //let line = format!("{} {} {}    {}", mode, type_str, hash, name);
             writeln!(output, "{} {} {}    {}", mode, type_str, hash, name)
+                .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+            output
+                .flush()
                 .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
         }
         Ok(())
@@ -228,6 +238,19 @@ impl Tree {
 
     pub fn get_elems(&self) -> HashMap<String, GitObject> {
         self.objects.clone()
+    }
+
+    fn sort_objects(&self) -> Vec<(String, GitObject)> {
+        let mut keys: Vec<&String> = self.objects.keys().collect();
+        keys.sort();
+
+        let mut sorted_objects: Vec<(String, GitObject)> = Vec::new();
+        for key in keys {
+            if let Some(value) = self.objects.get(key) {
+                sorted_objects.push((key.clone(), value.clone()));
+            }
+        }
+        sorted_objects
     }
 }
 
@@ -256,7 +279,8 @@ impl GitObjectTrait for Tree {
 
     fn content(&mut self) -> Result<Vec<u8>, CommandError> {
         let mut content = Vec::new();
-        for (path, object) in self.objects.iter_mut() {
+        let mut objects = self.sort_objects();
+        for (path, object) in objects.iter_mut() {
             let type_byte = type_id_object(&object.type_str())?;
             object.mode().write_to(&mut content)?;
             content.extend_from_slice(&[type_byte]);

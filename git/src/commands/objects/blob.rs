@@ -12,6 +12,7 @@ use super::{
     aux::*,
     git_object::{GitObject, GitObjectTrait},
     mode::Mode,
+    super_string::SuperStrings,
     tree::Tree,
 };
 
@@ -66,7 +67,7 @@ impl Blob {
             mode,
             path: Some(path.clone()),
             hash: Some(hash),
-            name: Some(get_name_bis(&path)?),
+            name: Some(get_name(&path)?),
             content: None,
         })
     }
@@ -135,7 +136,7 @@ impl Blob {
             .read_exact(&mut content)
             .map_err(|error| CommandError::FileReadError(error.to_string()))?;
         let output_str = String::from_utf8(content).map_err(|error| {
-            logger.log("Error convierttiendo a utf8 blob");
+            logger.log("Error conviertiendo a utf8 blob");
             CommandError::FileReadError(error.to_string())
         })?;
         writeln!(output, "{}", output_str)

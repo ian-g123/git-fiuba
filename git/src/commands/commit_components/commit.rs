@@ -18,10 +18,11 @@ use crate::{
         config::Config,
         objects::{
             author::Author,
-            aux::{get_name_bis, get_sha1_str, is_in_last_commit},
+            aux::get_name,
             blob::Blob,
             commit_object::CommitObject,
             git_object::{display_from_hash, GitObject, GitObjectTrait},
+            last_commit::is_in_last_commit,
             tree::Tree,
         },
         objects_database,
@@ -280,9 +281,9 @@ impl Commit {
         let working_tree_hash = staging_area.write_tree(logger)?;
         logger.log("Work dir writen");
 
-        let wt = staging_area.get_working_tree_staged(logger)?.get_elems();
+        /* let wt = staging_area.get_working_tree_staged(logger)?.get_elems();
 
-        show_logger(logger, wt);
+        show_logger(logger, wt); */
 
         if !staging_area.has_changes()? {
             logger.log("Nothing to commit");
@@ -338,7 +339,7 @@ impl Commit {
                 let (res, name) = is_in_last_commit(hash.to_owned(), logger)?;
                 logger.log(&format!("\nRevisando: {} , hash: {}\n", entry_name, hash));
                 if staging_area.has_file_from_path(&entry_name[2..])
-                    || (res && name == get_name_bis(&entry_name)?)
+                    || (res && name == get_name(&entry_name)?)
                 {
                     logger.log(&format!("\nAñadiendo: {} , hash: {}\n", entry_name, hash));
                     let mut git_object: GitObject = Box::new(blob);

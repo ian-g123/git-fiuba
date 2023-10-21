@@ -8,9 +8,7 @@ use crate::logger::Logger;
 use super::{
     command_errors::CommandError,
     objects::{
-        aux::{build_last_commit_tree, get_name_bis},
-        git_object::GitObject,
-        tree::Tree,
+        aux::get_name, git_object::GitObject, last_commit::build_last_commit_tree, tree::Tree,
     },
     objects_database,
 };
@@ -38,7 +36,7 @@ impl StagingArea {
             for (path, hash) in self.files.iter() {
                 let (is_in_last_commit, name) = tree.has_blob_from_hash(hash)?;
 
-                if !is_in_last_commit || get_name_bis(path)? != name {
+                if !is_in_last_commit || get_name(path)? != name {
                     _ = changes.insert(path.to_string(), hash.to_string())
                 }
             }
@@ -82,7 +80,7 @@ impl StagingArea {
         if let Some(tree) = tree_commit {
             for (path, hash) in self.files.iter() {
                 logger.log(&format!("Vaciando staging area ...Path: {}", path));
-                let name = get_name_bis(path)?;
+                let name = get_name(path)?;
                 let (is_in_last_commit, _) = tree.has_blob_from_hash(hash)?;
                 if !is_in_last_commit {
                     files.remove(path);
@@ -184,8 +182,8 @@ impl StagingArea {
     pub fn get_working_tree_staged(&mut self, logger: &mut Logger) -> Result<Tree, CommandError> {
         let current_dir_display = "";
         let mut working_tree = Tree::new(current_dir_display.to_string());
-        self.sort_files();
-        for (path, hash) in &self.files {
+        let files = self.sort_files();
+        for (path, hash) in files.iter() {
             let vector_path = path.split("/").collect::<Vec<_>>();
             let current_depth: usize = 0;
             working_tree.add_path_tree(logger, vector_path, current_depth, hash)?;
@@ -193,17 +191,17 @@ impl StagingArea {
         Ok(working_tree)
     }
 
-    fn sort_files(&mut self) {
+    fn sort_files(&mut self) -> Vec<(String, String)> {
         let mut keys: Vec<&String> = self.files.keys().collect();
         keys.sort();
 
-        let mut sorted_files: HashMap<String, String> = HashMap::new();
+        let mut sorted_files: Vec<(String, String)> = Vec::new();
         for key in keys {
             if let Some(value) = self.files.get(key) {
-                sorted_files.insert(key.clone(), value.clone());
+                sorted_files.push((key.clone(), value.clone()));
             }
         }
-        self.files = sorted_files;
+        sorted_files
     }
 }
 

@@ -5,8 +5,10 @@ use std::{
 
 use crate::commands::command_errors::CommandError;
 
-use super::aux::*;
+use super::super_string::{read_string_from, SuperStrings};
 
+/// Un Author realiza cambios en el repositorio y/o los commitea. Su información incluye nombre,
+/// apellido e email.
 #[derive(Clone, PartialEq, Debug)]
 pub struct Author {
     name: String,
@@ -22,16 +24,7 @@ impl Author {
         }
     }
 
-    /// Crea un Author a partir de su información. Por ejemplo:
-    ///     Example: Nombre Apellido <email@fi.uba.ar>
-    ///     string: [Nombre, Apellido, <email@fi.uba.ar>]
-    ///
-    ///     =>
-    ///
-    ///     Author{
-    ///         name: Nombre Apellido,
-    ///         email: <email@fi.uba.ar>
-    ///     }
+    /// Crea un Author a partir de su información (nombre, apellido, email).
     pub fn from_strings(strings: &mut Vec<&str>) -> Result<Self, CommandError> {
         let email_string = strings.pop();
         let email = match email_string {

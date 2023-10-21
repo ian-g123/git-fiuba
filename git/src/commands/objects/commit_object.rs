@@ -5,12 +5,11 @@ use std::fs::{self, File};
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
-use super::aux::{
-    get_sha1, hex_string_to_u8_vec, read_i32_from, read_i64_from, read_string_from, read_u32_from,
-    u8_vec_to_hex_string, SuperIntegers, SuperStrings,
-};
+use super::aux::get_sha1;
 use super::blob::Blob;
 use super::git_object::{GitObject, GitObjectTrait};
+use super::super_integers::{read_i32_from, read_i64_from, read_u32_from, SuperIntegers};
+use super::super_string::{read_string_from, u8_vec_to_hex_string, SuperStrings};
 use super::{author::Author, tree::Tree};
 use crate::commands::command_errors::CommandError;
 use crate::commands::file_compressor::extract;
@@ -298,11 +297,11 @@ impl GitObjectTrait for CommitObject {
 
     fn content(&mut self) -> Result<Vec<u8>, CommandError> {
         let mut buf: Vec<u8> = Vec::new();
-        buf.extend_from_slice(&hex_string_to_u8_vec(&self.tree));
+        buf.extend_from_slice(&self.tree.cast_hex_to_u8_vec()?);
         let parents_len_be = (self.parents.len() as u32).to_be_bytes();
         buf.extend_from_slice(&parents_len_be);
         for parent in &self.parents {
-            buf.extend_from_slice(&hex_string_to_u8_vec(parent));
+            buf.extend_from_slice(&self.tree.cast_hex_to_u8_vec()?);
         }
         let mut stream = Cursor::new(&mut buf);
         stream.seek(SeekFrom::End(0)).map_err(|error| {

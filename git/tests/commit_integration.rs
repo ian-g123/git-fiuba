@@ -608,7 +608,7 @@ fn test_commit_paths() {
 
     assert_eq!(String::from_utf8(result.stdout).unwrap(), expected);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+     _ = fs::remove_dir_all(format!("{}", path));
 }
 
 fn create_test_scene_1(path: &str) {

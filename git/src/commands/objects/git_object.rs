@@ -4,12 +4,8 @@ use crate::{
 };
 
 use super::{
-    author::Author,
-    aux::{get_sha1, read_string_from, u8_vec_to_hex_string, SuperStrings},
-    blob::Blob,
-    commit_object::CommitObject,
-    mode::Mode,
-    tree::Tree,
+    author::Author, aux::get_sha1, blob::Blob, commit_object::CommitObject, mode::Mode,
+    super_string::u8_vec_to_hex_string, tree::Tree,
 };
 use std::{
     fmt,

@@ -13,8 +13,8 @@ use super::{
     command_errors::CommandError,
     file_compressor::{compress, extract},
     objects::{
-        aux::{get_sha1_str, u8_vec_to_hex_string},
         git_object::{read_git_object_from, GitObject},
+        super_string::u8_vec_to_hex_string,
     },
 };
 

@@ -6,6 +6,8 @@ use std::{
 
 use crate::commands::command_errors::CommandError;
 
+/// Cada archivo y directorio tiene un Modo que es registrado por Git.
+/// Los Tree guardan referencia al Mode de sus subárboles y blobs.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Mode {
     RegularFile = 100644,
@@ -51,10 +53,9 @@ impl Mode {
     /// Lee de un stream y traduce el contenido a un Modo.
     pub fn read_from(stream: &mut dyn Read) -> Result<Self, CommandError> {
         let mut buf = [0; 6];
-        stream.read_exact(&mut buf).map_err(|error| {
-            println!("Error: {}", error);
-            CommandError::InvalidMode
-        })?;
+        stream
+            .read_exact(&mut buf)
+            .map_err(|_| CommandError::InvalidMode)?;
         let mode = std::str::from_utf8(&buf).map_err(|_| CommandError::InvalidMode)?;
         Ok(Self::read_from_string(mode)?)
     }
@@ -72,7 +73,7 @@ impl Mode {
     }
 
     /// Traduce el id del modo a una cadena y la escribe en un stream.
-    pub(crate) fn write_to(&self, stream: &mut dyn Write) -> Result<(), CommandError> {
+    pub fn write_to(&self, stream: &mut dyn Write) -> Result<(), CommandError> {
         let mode_str = match self {
             Mode::RegularFile => "100644",
             Mode::ExecutableFile => "100755",
