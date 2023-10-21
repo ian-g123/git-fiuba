@@ -1,9 +1,7 @@
 use std::{
-    borrow::BorrowMut,
-    collections::HashMap,
     fs::{self, File, OpenOptions},
     io::Read,
-    io::{Cursor, Write},
+    io::Write,
     path::{Path, PathBuf},
 };
 
@@ -11,8 +9,8 @@ use chrono::{DateTime, Local};
 
 use crate::{
     commands::{
-        add_components::add::{self, Add},
-        branch_manager::{get_current_branch, get_last_commit},
+        add_components::add::{self},
+        branch_manager::get_last_commit,
         command::{Command, ConfigAdderFunction},
         command_errors::CommandError,
         config::Config,
@@ -21,16 +19,16 @@ use crate::{
             aux::get_name,
             blob::Blob,
             commit_object::CommitObject,
-            git_object::{display_from_hash, GitObject, GitObjectTrait},
+            git_object::{GitObject, GitObjectTrait},
             last_commit::is_in_last_commit,
-            tree::Tree,
         },
         objects_database,
-        stagin_area::{self, StagingArea},
+        stagin_area::StagingArea,
     },
     logger::Logger,
 };
 
+/// Hace referencia a un Comando Commit.
 pub struct Commit {
     all: bool,
     reuse_message: Option<String>,
@@ -51,12 +49,12 @@ impl Command for Commit {
         if name != "commit" {
             return Err(CommandError::Name);
         }
-        logger.log(&format!("committing {:?}", args));
+        logger.log(&format!("commit args {:?}", args));
 
         let instance = Commit::new_from(args)?;
 
         instance.run(stdin, output, logger)?;
-        logger.log(&format!("commit {:?}", args));
+
         Ok(())
     }
 
@@ -73,12 +71,14 @@ impl Command for Commit {
 }
 
 impl Commit {
+    /// Crea un nuevo Comando Commit a partir de sus argumentos. Lo configura.
     fn new_from(args: &[String]) -> Result<Self, CommandError> {
         let mut commit = Self::new_default();
         commit.config(args)?;
         Ok(commit)
     }
 
+    /// Crea un nuevo Comando Commit a partir de valores por default.
     fn new_default() -> Self {
         Commit {
             all: false,
@@ -90,18 +90,7 @@ impl Commit {
         }
     }
 
-    fn check_next_arg(
-        &mut self,
-        i: usize,
-        args: &[String],
-        error: CommandError,
-    ) -> Result<(), CommandError> {
-        if i < args.len() - 1 && Self::is_flag(&args[i + 1]) {
-            return Err(error);
-        }
-        Ok(())
-    }
-
+    /// Configura el flag -C.
     fn add_reuse_message_config(
         &mut self,
         i: usize,
@@ -114,13 +103,13 @@ impl Commit {
         Ok(i + 2)
     }
 
+    /// Configura el flag -m.
     fn add_message_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options = ["-m".to_string()].to_vec();
         Self::check_errors_flags(i, args, &options)?;
         self.check_next_arg(i, args, CommandError::CommitMessageNoValue)?;
         let mut new_message: String = String::new();
         if let Some(message) = &self.message {
-            //se usó -m al menos 1 vez
             new_message = format!("{}\n\n", message)
         }
         new_message += &args[i + 1];
@@ -128,6 +117,7 @@ impl Commit {
         Ok(i + 2)
     }
 
+    /// Configura el flag --dry-run.
     fn add_dry_run_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options = ["--dry-run".to_string()].to_vec();
         Self::check_errors_flags(i, args, &options)?;
@@ -135,6 +125,7 @@ impl Commit {
         Ok(i + 1)
     }
 
+    /// Configura el flag -q.
     fn add_quiet_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options = ["-q".to_string(), "--quiet".to_string()].to_vec();
         Self::check_errors_flags(i, args, &options)?;
@@ -142,6 +133,7 @@ impl Commit {
         Ok(i + 1)
     }
 
+    /// Configura el flag (--all | -a).
     fn add_all_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options = ["-a".to_string(), "--all".to_string()].to_vec();
         Self::check_errors_flags(i, args, &options)?;
@@ -149,12 +141,26 @@ impl Commit {
         Ok(i + 1)
     }
 
+    /// Configura un Commit que recibe paths para commitear.
     fn add_pathspec_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         if Self::is_flag(&args[i]) {
             return Err(CommandError::InvalidArguments);
         }
         self.files.push(args[i].clone());
         Ok(i + 1)
+    }
+
+    /// Devuelve true si el siguiente argumento es un flag.
+    fn check_next_arg(
+        &mut self,
+        i: usize,
+        args: &[String],
+        error: CommandError,
+    ) -> Result<(), CommandError> {
+        if i >= args.len() - 1 || Self::is_flag(&args[i + 1]) {
+            return Err(error);
+        }
+        Ok(())
     }
 
     /// Comprueba si el flag es invalido. En ese caso, devuelve error.
@@ -169,42 +175,12 @@ impl Commit {
         Ok(())
     }
 
-    fn get_enter_message_text() -> String {
-        let mensaje = "# Please enter the commit message for your changes. Lines starting\n# with '#' will be ignored, and an empty message aborts the commit.\n#\n";
-        mensaje.to_string()
-    }
-
-    fn run_enter_message(
-        &self,
-        stdin: &mut dyn Read,
-        logger: &mut Logger,
-    ) -> Result<String, CommandError> {
-        let stdout = Self::get_enter_message_text();
-        let branch_path = get_current_branch()?;
-        let branch_split: Vec<&str> = branch_path.split("/").collect();
-        let branch_name = branch_split[branch_split.len() - 1];
-        //let status_output =
-        println!(
-            "{}# On branch {}\n# Output de status\n#\n",
-            stdout, branch_name
-        );
-        let mut message = String::new();
-        let end = "q".to_string();
-        loop {
-            let mut buf = [0; 1];
-            if stdin.read_exact(&mut buf).is_err() {
-                let mut buf = String::new();
-                stdin.read_to_string(&mut buf).unwrap();
-                logger.log(&format!("Stdin: {}\n", buf));
-                return Err(CommandError::StdinError);
-            };
-            let input = String::from_utf8_lossy(&buf).to_string();
-            if Self::check_end_message(&input, &end) {
-                break;
-            }
-            message += &input;
-        }
-        message = Self::ignore_commented_lines(message);
+    /// Lee el mensaje introducido por el usuario por entrada estandar.
+    fn run_enter_message(stdin: &mut dyn Read) -> Result<String, CommandError> {
+        let stdout = get_enter_message_text()?;
+        println!("{}#\n", stdout);
+        let mut message = read_from_stdin(stdin)?;
+        message = ignore_commented_lines(message);
 
         if message.is_empty() {
             return Err(CommandError::CommitMessageEmptyValue);
@@ -213,26 +189,23 @@ impl Commit {
         Ok(message.trim().to_string())
     }
 
-    fn check_end_message(message: &str, end: &str) -> bool {
-        let split_message: Vec<String> = message.lines().map(String::from).collect();
-        if let Some(last) = split_message.to_owned().last() {
-            if last.to_owned() == end.to_string() {
-                return true;
+    /// Devuelve el mesage del Commit. Si se usó el flag -m, devuelve el mensaje asociado.
+    /// Si hay que reusar el de otro commit (-C), devuelve un string vacío. Si no se ha usado
+    /// ninguno de esos flags, se pide al usuario que introduzca el mensaje nuevamente.
+    fn get_commit_message(&self, stdin: &mut dyn Read) -> Result<String, CommandError> {
+        let message = {
+            if let Some(message) = self.message.clone() {
+                message
+            } else if self.reuse_message.is_some() {
+                "".to_string()
+            } else {
+                Self::run_enter_message(stdin)?
             }
-        }
-        false
+        };
+        Ok(message)
     }
 
-    fn ignore_commented_lines(message: String) -> String {
-        let split_message: Vec<&str> = message
-            .lines()
-            .filter(|line| !line.trim_start().starts_with("#"))
-            .collect();
-        split_message.join("\n")
-    }
-
-    fn empty_staging_area() {}
-
+    /// Ejecuta el Comando Commit.
     fn run(
         &self,
         stdin: &mut dyn Read,
@@ -244,46 +217,23 @@ impl Commit {
         }
         logger.log("Retreiving message");
 
-        let message = {
-            if let Some(message) = self.message.clone() {
-                message
-            } else if self.reuse_message.is_some() {
-                "".to_string()
-            } else {
-                self.run_enter_message(stdin, logger)?
-            }
-        };
+        let message = self.get_commit_message(stdin)?;
         logger.log("Opening stagin_area");
 
         let mut staging_area = StagingArea::open()?;
         logger.log("Staging area opened");
 
         if !self.files.is_empty() {
-            staging_area.empty(logger)?;
-            for path in self.files.iter() {
-                add::run_for_file(path, &mut staging_area, logger)?;
-            }
-            staging_area.save()?;
+            self.run_files_config(logger, &mut staging_area)?
         }
         if self.all {
-            staging_area.empty(logger)?;
             self.run_all_config(&mut staging_area, logger)?;
-            logger.log("Listo 'all'");
-            for (path, hash) in staging_area.get_files() {
-                logger.log(&format!("path; {}, hash: {}", path, hash));
-            }
-
-            staging_area.save()?;
         }
 
         logger.log("Writing work dir tree");
 
         let working_tree_hash = staging_area.write_tree(logger)?;
         logger.log("Work dir writen");
-
-        /* let wt = staging_area.get_working_tree_staged(logger)?.get_elems();
-
-        show_logger(logger, wt); */
 
         if !staging_area.has_changes()? {
             logger.log("Nothing to commit");
@@ -296,61 +246,48 @@ impl Commit {
         Ok(())
     }
 
+    /// Si se han introducido paths como argumentos del comando, se eliminan los cambios
+    /// guardados en el Staging Area y se agregan los nuevos. Estos archivos deben ser
+    /// reconocidos por git.
+    fn run_files_config(
+        &self,
+        logger: &mut Logger,
+        staging_area: &mut StagingArea,
+    ) -> Result<(), CommandError> {
+        if !self.files.is_empty() {
+            staging_area.empty(logger)?;
+            for path in self.files.iter() {
+                if !is_untracked(path, logger, staging_area)? {
+                    add::run_for_file(path, staging_area, logger)?;
+                } else {
+                    return Err(CommandError::UntrackedError(path.to_owned()));
+                }
+            }
+            staging_area.save()?;
+        }
+        Ok(())
+    }
+
+    /// Guarda en el staging area todos los archivos modificados y elimina los borrados.
+    /// Los archivos untracked no se guardan.
     fn run_all_config(
         &self,
         staging_area: &mut StagingArea,
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
         logger.log("Running 'all' configuration\n");
+        staging_area.empty(logger)?;
         for (path, _) in staging_area.get_files() {
             if !Path::new(&path).exists() {
                 staging_area.remove(&path);
             }
         }
-        Self::save_entries("./", staging_area, logger)?;
-
+        save_entries("./", staging_area, logger)?;
+        staging_area.save()?;
         Ok(())
     }
 
-    fn save_entries(
-        path_name: &str,
-        staging_area: &mut StagingArea,
-        logger: &mut Logger,
-    ) -> Result<(), CommandError> {
-        let path = Path::new(path_name);
-
-        let Ok(entries) = fs::read_dir(path.clone()) else {
-            return Err(CommandError::DirNotFound(path_name.to_owned()));
-        };
-        for entry in entries {
-            let Ok(entry) = entry else {
-                return Err(CommandError::DirNotFound(path_name.to_owned())); //cambiar!
-            };
-            let entry_path = entry.path();
-            let entry_name = get_path_name(entry_path.clone())?;
-
-            if entry_path.is_dir() {
-                Self::save_entries(&entry_name, staging_area, logger)?;
-                return Ok(());
-            } else {
-                let mut blob = Blob::new_from_path(entry_name.to_string())?;
-                let hash = &blob.get_hash_string()?;
-                logger.log(&format!("\nBefore checking last commit\n"));
-                let (res, name) = is_in_last_commit(hash.to_owned(), logger)?;
-                logger.log(&format!("\nRevisando: {} , hash: {}\n", entry_name, hash));
-                if staging_area.has_file_from_path(&entry_name[2..])
-                    || (res && name == get_name(&entry_name)?)
-                {
-                    logger.log(&format!("\nAñadiendo: {} , hash: {}\n", entry_name, hash));
-                    let mut git_object: GitObject = Box::new(blob);
-                    let hex_str = objects_database::write(logger, &mut git_object)?;
-                    staging_area.add(&entry_name, &hex_str);
-                }
-            }
-        }
-        Ok(())
-    }
-
+    /// Ejecuta la creación del Commit.
     fn run_commit(
         &self,
         logger: &mut Logger,
@@ -364,15 +301,7 @@ impl Commit {
             parents.push(padre);
         }
 
-        let commit: CommitObject;
-
-        commit = if let Some(commit_hash) = &self.reuse_message {
-            Self::get_reused_commit(commit_hash.to_string(), parents, working_tree_hash, logger)?
-        } else {
-            Self::create_new_commit(message, parents, working_tree_hash, logger)?
-        };
-
-        logger.log("Commit object created");
+        let commit: CommitObject = self.get_commit(&message, parents, working_tree_hash, logger)?;
 
         let mut git_object: GitObject = Box::new(commit);
         let commit_hash = objects_database::write(logger, &mut git_object)?;
@@ -391,6 +320,32 @@ impl Commit {
         Ok(())
     }
 
+    /// Obtiene el objeto Commit y lo devuelve.
+    fn get_commit(
+        &self,
+        message: &str,
+        parents: Vec<String>,
+        working_tree_hash: String,
+        logger: &mut Logger,
+    ) -> Result<CommitObject, CommandError> {
+        let commit: CommitObject = {
+            if let Some(commit_hash) = &self.reuse_message {
+                Self::get_reused_commit(
+                    commit_hash.to_string(),
+                    parents,
+                    working_tree_hash,
+                    logger,
+                )?
+            } else {
+                Self::create_new_commit(message.to_owned(), parents, working_tree_hash, logger)?
+            }
+        };
+
+        logger.log("Commit object created");
+        Ok(commit)
+    }
+
+    /// Crea un nuevo objeto Commit a partir de la información pasada.
     fn create_new_commit(
         message: String,
         parents: Vec<String>,
@@ -425,6 +380,7 @@ impl Commit {
         Ok(commit)
     }
 
+    /// Crea un objeto Commit a partir de los datos de otro Commit.
     fn get_reused_commit(
         commit_hash: String,
         parents: Vec<String>,
@@ -449,29 +405,7 @@ impl Commit {
         Err(CommandError::CommitLookUp(commit_hash))
     }
 
-    /// Obtiene la fecha y hora actuales.
-    fn get_timestamp() {
-        let timestamp: DateTime<Local> = Local::now();
-        // formateo para que se vea como el de git.
-        timestamp.format("%a %b %e %H:%M:%S %Y %z").to_string();
-    }
-
-    fn get_commit_output(&self, commit: Commit) {
-        /*
-        [<branch name> <commit hash[0:6]>] <message>
-         # file changed, # insertions(+), # deletions(-)
-        delete mode <modo> <file_name>
-        created mode <modo> <file_name>
-
-        info necesaria: current_branch (get_head_branch), hash, message, etc
-
-        let output_string = ...;
-
-         */
-
-        //let _ = write!(output, "{}", output_string)
-    }
-
+    /// Obtiene la salida por stdout del comando Commit.
     fn get_status_output(&self, output: &mut dyn Write) -> Result<(), CommandError> {
         /*
         si el staging area está vacía, se usa el output de status.
@@ -483,6 +417,105 @@ impl Commit {
     }
 }
 
+/// Devuelve el texto que se mostrará si el Cliente no ha introducido un mensaje para el Commit.
+fn get_enter_message_text() -> Result<String, CommandError> {
+    let mensaje = "# Please enter the commit message for your changes. Lines starting\n# with '#' will be ignored, and an empty message aborts the commit.\n#\n";
+    /* let branch_path = get_current_branch()?;
+    let branch_split: Vec<&str> = branch_path.split("/").collect();
+    let branch_name = branch_split[branch_split.len() - 1]; */
+    Ok(format!("{}#\n# Output de status\n#\n", mensaje))
+}
+
+/// Lee por stdin y guarda el mensaje introducido.
+fn read_from_stdin(stdin: &mut dyn Read) -> Result<String, CommandError> {
+    let mut message = String::new();
+    let end = "q".to_string();
+    loop {
+        let mut buf = [0; 1];
+        if stdin.read_exact(&mut buf).is_err() {
+            let mut buf = String::new();
+            stdin.read_to_string(&mut buf).unwrap();
+            return Err(CommandError::StdinError);
+        };
+        let input = String::from_utf8_lossy(&buf).to_string();
+        if check_end_message(&input, &end) {
+            break;
+        }
+        message += &input;
+    }
+    Ok(message)
+}
+
+/// Comprueba si el cliente ha terminado de introducir el mensaje.
+fn check_end_message(message: &str, end: &str) -> bool {
+    let split_message: Vec<String> = message.lines().map(String::from).collect();
+    if let Some(last) = split_message.to_owned().last() {
+        if last.to_owned() == end.to_string() {
+            return true;
+        }
+    }
+    false
+}
+
+/// Devuelve un String sin las líneas que empiezan con '#'.
+fn ignore_commented_lines(message: String) -> String {
+    let split_message: Vec<&str> = message
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("#"))
+        .collect();
+    split_message.join("\n")
+}
+
+/// Devuelve true si Git no reconoce el path pasado.
+fn is_untracked(
+    path: &str,
+    logger: &mut Logger,
+    staging_area: &StagingArea,
+) -> Result<bool, CommandError> {
+    let mut blob = Blob::new_from_path(path.to_string())?;
+    let hash = &blob.get_hash_string()?;
+    let (is_in_last_commit, name) = is_in_last_commit(hash.to_owned(), logger)?;
+    if staging_area.has_file_from_path(&path) || (is_in_last_commit && name == get_name(&path)?) {
+        return Ok(false);
+    }
+    Ok(true)
+}
+
+/// Guarda en el stagin area el estado actual del working tree, sin tener en cuenta los archivos
+/// nuevos.
+fn save_entries(
+    path_name: &str,
+    staging_area: &mut StagingArea,
+    logger: &mut Logger,
+) -> Result<(), CommandError> {
+    let path = Path::new(path_name);
+
+    let Ok(entries) = fs::read_dir(path.clone()) else {
+        return Err(CommandError::DirNotFound(path_name.to_owned()));
+    };
+    for entry in entries {
+        let Ok(entry) = entry else {
+            return Err(CommandError::DirNotFound(path_name.to_owned()));
+        };
+        let entry_path = entry.path();
+        let entry_name = get_path_name(entry_path.clone())?;
+
+        if entry_path.is_dir() {
+            save_entries(&entry_name, staging_area, logger)?;
+            return Ok(());
+        } else {
+            let blob = Blob::new_from_path(entry_name.to_string())?;
+            let path = &entry_name[2..];
+            if !is_untracked(path, logger, staging_area)? {
+                let mut git_object: GitObject = Box::new(blob);
+                let hex_str = objects_database::write(logger, &mut git_object)?;
+                staging_area.add(path, &hex_str);
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Devuelve el nombre de un archivo o directorio dado un PathBuf.
 fn get_path_name(path: PathBuf) -> Result<String, CommandError> {
     let Some(path_name) = path.to_str() else {
@@ -491,28 +524,7 @@ fn get_path_name(path: PathBuf) -> Result<String, CommandError> {
     Ok(path_name.to_string())
 }
 
-fn show_logger(logger: &mut Logger, objects: HashMap<String, GitObject>) {
-    for (path, obj) in objects.iter() {
-        let mut obj = obj.to_owned();
-        let obj: &mut GitObject = obj.borrow_mut();
-        //let content = obj.content().unwrap();
-        //let content = String::from_utf8_lossy(&content).to_string();
-        let hash = obj.get_hash_string().unwrap();
-        let mut output: Vec<u8> = Vec::new();
-        let mut cursor = Cursor::new(&mut output);
-        display_from_hash(&mut cursor, &hash, logger).unwrap();
-        let content = String::from_utf8_lossy(&output).to_string();
-        logger.log(&format!(
-            "Path: {}, Hash: {}\n, Content; {}\n",
-            path, hash, content
-        ));
-        if let Some(tree) = obj.as_tree() {
-            logger.log(&format!("it's a tree\n"));
-            show_logger(logger, tree.get_elems())
-        }
-    }
-}
-
+/// Actualiza la referencia de la rama actual al nuevo commit.
 fn update_last_commit(commit_hash: &str) -> Result<(), CommandError> {
     let currect_branch = get_head_ref()?;
     let branch_path = format!(".git/{}", currect_branch);
@@ -552,4 +564,142 @@ fn get_head_ref() -> Result<String, CommandError> {
         ));
     };
     Ok(head_ref.trim().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_invalid_arg() {
+        let mut output_string = Vec::new();
+        let mut stdout_mock = Cursor::new(&mut output_string);
+
+        let input = "prueba1";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+        let mut logger = Logger::new(".git/logs").unwrap();
+
+        let args = ["-no".to_string()];
+        match Commit::run_from(
+            "commit",
+            &args,
+            &mut stdin_mock,
+            &mut stdout_mock,
+            &mut logger,
+        ) {
+            Err(error) => assert_eq!(error, CommandError::InvalidArguments),
+            Ok(_) => assert!(false),
+        }
+    }
+
+    #[test]
+    fn test_invalid_message() {
+        let mut output_string = Vec::new();
+        let mut stdout_mock = Cursor::new(&mut output_string);
+
+        let input = "prueba2";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+        let mut logger = Logger::new(".git/logs").unwrap();
+
+        let args = ["-m".to_string()];
+        match Commit::run_from(
+            "commit",
+            &args,
+            &mut stdin_mock,
+            &mut stdout_mock,
+            &mut logger,
+        ) {
+            Err(error) => assert_eq!(error, CommandError::CommitMessageNoValue),
+            Ok(_) => assert!(false),
+        }
+    }
+
+    #[test]
+    fn test_empty_message() {
+        let mut output_string = Vec::new();
+        let mut stdout_mock = Cursor::new(&mut output_string);
+
+        let input = "q\n";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+        let mut logger = Logger::new(".git/logs").unwrap();
+
+        let args = [];
+        match Commit::run_from(
+            "commit",
+            &args,
+            &mut stdin_mock,
+            &mut stdout_mock,
+            &mut logger,
+        ) {
+            Err(error) => assert_eq!(error, CommandError::CommitMessageEmptyValue),
+            Ok(_) => assert!(false),
+        }
+    }
+
+    #[test]
+    fn test_message_and_reuse() {
+        let mut output_string = Vec::new();
+        let mut stdout_mock = Cursor::new(&mut output_string);
+
+        let input = "\n";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+        let mut logger = Logger::new(".git/logs").unwrap();
+
+        let args = [
+            "-m".to_string(),
+            "message".to_string(),
+            "-C".to_string(),
+            "hash todavía no se chequea".to_string(),
+        ];
+        match Commit::run_from(
+            "commit",
+            &args,
+            &mut stdin_mock,
+            &mut stdout_mock,
+            &mut logger,
+        ) {
+            Err(error) => assert_eq!(error, CommandError::MessageAndReuseError),
+            Ok(_) => assert!(false),
+        }
+    }
+
+    #[test]
+    fn test_reuse_no_message() {
+        let mut output_string = Vec::new();
+        let mut stdout_mock = Cursor::new(&mut output_string);
+
+        let input = "\n";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+        let mut logger = Logger::new(".git/logs").unwrap();
+
+        let args = ["-m".to_string(), "message".to_string(), "-C".to_string()];
+        match Commit::run_from(
+            "commit",
+            &args,
+            &mut stdin_mock,
+            &mut stdout_mock,
+            &mut logger,
+        ) {
+            Err(error) => assert_eq!(error, CommandError::ReuseMessageNoValue),
+            Ok(_) => assert!(false),
+        }
+    }
+
+    #[test]
+    fn test_enter_message() {
+        let input = "#Evitar\nMessage\nq\n";
+        let expected = "Message".to_string();
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+
+        match Commit::run_enter_message(&mut stdin_mock) {
+            Err(error) => assert!(false, "{}", error),
+            Ok(message) => assert_eq!(message, expected),
+        }
+    }
+
+    /*
+    Aclaración: El resto de las funciones son testeadas en tests/ porque necesitan de la existencia
+    de un repositorio y de acciones previas como 'add'.
+     */
 }

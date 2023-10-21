@@ -79,7 +79,6 @@ impl StagingArea {
         let tree_commit = build_last_commit_tree(logger)?;
         if let Some(tree) = tree_commit {
             for (path, hash) in self.files.iter() {
-                logger.log(&format!("Vaciando staging area ...Path: {}", path));
                 let name = get_name(path)?;
                 let (is_in_last_commit, _) = tree.has_blob_from_hash(hash)?;
                 if !is_in_last_commit {

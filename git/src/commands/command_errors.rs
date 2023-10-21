@@ -51,6 +51,8 @@ pub enum CommandError {
     FailToOpenStaginArea(String),
     /// Error al guardar el staging area
     FailToSaveStaginArea(String),
+    /// Es un archivo untracked.
+    UntrackedError(String),
 
     CurrentDirectoryError,
     HeadError,
@@ -188,6 +190,13 @@ impl fmt::Display for CommandError {
 
             CommandError::CastingError => {
                 write!(f, "Casting error")
+            }
+            CommandError::UntrackedError(path) => {
+                write!(
+                    f,
+                    "error: pathspec '{}' did not match any file(s) known to git",
+                    path
+                )
             }
         }
     }

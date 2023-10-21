@@ -31,15 +31,8 @@ impl Tree {
             let mut object = object.to_owned();
             let object: &mut GitObject = object.borrow_mut();
             let hash = object.get_hash_string()?;
-            let name = {
-                if let Some(name) = object.get_name() {
-                    name
-                } else {
-                    "".to_string()
-                }
-            };
             if hash.to_owned() == blob_hash.to_string() {
-                return Ok((true, name));
+                return Ok((true, name.to_owned()));
             }
             if let Some(tree) = object.as_tree() {
                 return tree.has_blob_from_hash(blob_hash);
@@ -49,11 +42,9 @@ impl Tree {
     }
 
     pub fn has_blob_from_name(&self, blob_name: &str) -> bool {
-        for (_, object) in self.objects.iter() {
-            if let Some(name) = object.get_name() {
-                if name.to_owned() == blob_name.to_string() {
-                    return true;
-                }
+        for (name, object) in self.objects.iter() {
+            if name == blob_name {
+                return true;
             }
             if let Some(tree) = object.as_tree() {
                 return tree.has_blob_from_name(blob_name);
@@ -407,7 +398,7 @@ mod tests {
     }
 
     #[test]
-    fn hash_blob_from_path_true() {
+    fn hash_blob_from_name_true() {
         let files = [
             "dir0/dir1/dir2/bar.txt".to_string(),
             "dir0/dir1/foo.txt".to_string(),
@@ -427,7 +418,7 @@ mod tests {
     }
 
     #[test]
-    fn hash_blob_from_path_false() {
+    fn hash_blob_from_name_false() {
         let files = [
             "dir0/dir1/dir2/bar.txt".to_string(),
             "dir0/dir1/foo.txt".to_string(),
