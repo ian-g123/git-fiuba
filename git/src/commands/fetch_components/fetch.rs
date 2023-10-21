@@ -1,14 +1,10 @@
 //! Se conecta mediante TCP a la dirección asignada por argv.
 //! Lee lineas desde stdin y las manda mediante el socket.
 
-use std::env::args;
 use std::io::stdin;
+use std::io::Read;
 use std::io::Write;
-use std::io::{BufRead, BufReader, Read};
 use std::net::TcpStream;
-
-use git::commands::objects;
-static CLIENT_ARGS: usize = 3;
 
 fn main() -> Result<(), ()> {
     let address = "127.1.0.0:9418";
@@ -130,8 +126,24 @@ fn read_package(mut socket: &TcpStream) {
     // Observation: length of each object is encoded in a variable
     // length format and is not constrained to 32-bit or anything.
 
+    //==
+
+    // let mut buf = [0; 250];
+    // socket.read(&mut buf).unwrap();
+    // // Print bits
+    // let mut bits = Vec::with_capacity(buf.len() * 8);
+    // for byte in &buf {
+    //     for i in (0..8).rev() {
+    //         let bit = (byte >> i) & 1;
+    //         bits.push(bit);
+    //     }
+    // }
+    // println!("bits: {:?}", bits);
+
+    //==
+
     for _ in 0..object_number {
-        /// Object types
+        // Object types
         // Valid object types are:
         // OBJ_COMMIT (1)
         // OBJ_TREE (2)
@@ -139,10 +151,11 @@ fn read_package(mut socket: &TcpStream) {
         // OBJ_TAG (4)
         // OBJ_OFS_DELTA (6)
         // OBJ_REF_DELTA (7)
-        let mut object_type_buf = [0; 1];
-        socket.read_exact(&mut object_type_buf).unwrap();
+        let mut first_byte_buf = [0; 1];
+        socket.read_exact(&mut first_byte_buf).unwrap();
         // Object type is three bits
-        let object_type = object_type_buf[0] >> 5;
+
+        let object_type = first_byte_buf[0] >> 5;
         let object_type_str = match object_type {
             1 => "OBJ_COMMIT",
             2 => "OBJ_TREE",
@@ -154,53 +167,29 @@ fn read_package(mut socket: &TcpStream) {
         };
         println!("object_type: ({}) {:?}", object_type, object_type_str);
 
-        let len_bit_number: usize = ((object_type - 1) * 7 + 4) as usize;
-        let object_len_first_bytes = object_type_buf[0] & 0b00011111;
-
-        println!("len_bit_number: {:?}", len_bit_number);
-
-        let leading_len_bit_number = len_bit_number - 3;
-        let leading_len_whole_byte_number = leading_len_bit_number / 8;
-        let leading_len__diff_bit_number = leading_len_bit_number % 8;
-        let bytes_to_read = {
-            if leading_len__diff_bit_number == 0 {
-                leading_len_whole_byte_number
-            } else {
-                leading_len_whole_byte_number + 1
+        let mut bits = Vec::new();
+        let mut current_byte = first_byte_buf[0];
+        loop {
+            let mut last_len_bit_group = current_byte >> 4 & 1;
+            let mut first_byte_buf_len_bits = current_byte & 0b00001111;
+            let mut next_byte_buf = [0; 1];
+            socket.read_exact(&mut next_byte_buf).unwrap();
+            let next_byte = next_byte_buf[0];
+            for i in (0..4).rev() {
+                let bit = (first_byte_buf_len_bits >> i) & 1;
+                bits.push(bit);
             }
-        };
-
-        let mut object_len_buf = vec![0; bytes_to_read];
-        socket.read_exact(&mut object_len_buf).unwrap();
-        // Concat the first bits with the rest
-        let mut complete_vector = {
-            let mut complete_vector = vec![object_len_first_bytes];
-            complete_vector.extend(object_len_buf);
-            complete_vector
-        };
-        let result = {
-            if leading_len__diff_bit_number == 0 {
-                complete_vector;
-            } else {
-                concat_bytes_to_bits(&complete_vector);
-                // aaply rshif (8 - leading_len__diff_bit_number) amount to vector complete_vector
+            for i in (0..3).rev() {
+                let bit = (next_byte >> i) & 1;
+                bits.push(bit);
             }
-        };
-        println!("result: {:?}", result);
-
-        // let len_len = len_bit_number / 8;
-        // let mut object_size_buf = vec![0; len_len];
-        // socket.read_exact(&mut object_size_buf).unwrap();
-
-        // println!("object_size_buf: {:?}", object_size_buf);
-
-        // let object_size = u32::from_be_bytes(object_size_buf);
-        // println!("object_size: {:?}", object_size);
-
-        // let mut object_hash_buf = [0; 20];
-        // socket.read_exact(&mut object_hash_buf).unwrap();
-        // let object_hash = String::from_utf8(object_hash_buf.to_vec()).unwrap();
-        // println!("object_hash: {:?}", object_hash);
+            if last_len_bit_group == 0 {
+                break;
+            }
+            current_byte = next_byte;
+        }
+        println!("bits: {:?}", bits);
+        let len = bits_to_u32(&bits);
     }
 }
 
