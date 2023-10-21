@@ -104,6 +104,8 @@ fn read_package(mut socket: &TcpStream) {
     let object_number = read_object_number(socket);
     println!("object_number: {:?}", object_number);
 
+    leer_bits(socket);
+
     // The header is followed by number of object entries, each of which looks like this:
 
     // (undeltified representation)
@@ -120,6 +122,23 @@ fn read_package(mut socket: &TcpStream) {
     // Observation: length of each object is encoded in a variable
     // length format and is not constrained to 32-bit or anything.
 
+    // leer_objetos(object_number, socket);
+}
+
+fn leer_bits(mut socket: &TcpStream) {
+    let mut buf = &mut vec![0; 300];
+    socket.read(&mut buf).unwrap();
+    // print bits
+    let bits = concat_bytes_to_bits(&buf);
+    for (i, bit) in bits.iter().enumerate() {
+        if i % 8 == 0 {
+            print!(" ");
+        }
+        print!("{}", bit);
+    }
+}
+
+fn leer_objetos(object_number: u32, mut socket: &TcpStream) {
     for _ in 0..object_number {
         // Object types
         // Valid object types are:
@@ -147,27 +166,27 @@ fn read_package(mut socket: &TcpStream) {
         println!("object_type: ({}) {:?}", object_type, object_type_str);
 
         let mut bits = Vec::new();
-        let mut current_byte = first_byte_buf[0];
-        loop {
-            let is_last_byte = (current_byte >> 4 & 1) == 0;
-            let first_byte_buf_len_bits = current_byte & 0b00001111;
-            let next_byte = next_byte(socket);
-            let mut seven_bit_chunk = Vec::new();
-            for i in (0..4).rev() {
-                let bit = (first_byte_buf_len_bits >> i) & 1;
-                seven_bit_chunk.push(bit);
-            }
-            for i in (0..3).rev() {
-                let bit = (next_byte >> i) & 1;
+        let first_byte_buf_len_bits = first_byte_buf[0] & 0b00001111;
+        let mut seven_bit_chunk = Vec::new();
+        for i in (0..4).rev() {
+            let bit = (first_byte_buf_len_bits >> i) & 1;
+            seven_bit_chunk.push(bit);
+        }
+        println!("byte_fraction: {:?}", seven_bit_chunk);
+        bits.splice(0..0, seven_bit_chunk);
+
+        let mut is_last_byte: bool = (first_byte_buf[0] >> 4) & 1 == 0;
+        while is_last_byte {
+            let mut seven_bit_chunk = Vec::<u8>::new();
+            let current_byte = next_byte(socket);
+            is_last_byte = current_byte >> 7 == 0;
+            let seven_bit_chunk_with_zero = current_byte & 0b01111111;
+            for i in (0..7).rev() {
+                let bit = (seven_bit_chunk_with_zero >> i) & 1;
                 seven_bit_chunk.push(bit);
             }
             println!("byte_fraction: {:?}", seven_bit_chunk);
             bits.splice(0..0, seven_bit_chunk);
-
-            if is_last_byte {
-                break;
-            }
-            current_byte = next_byte;
         }
         println!("bits: {:?}", bits);
         let len = bits_to_usize(&bits);
@@ -231,7 +250,6 @@ fn concat_bytes_to_bits(bytes: &[u8]) -> Vec<u8> {
 }
 
 pub fn hex_string_to_u8_vec(hex_string: &str) -> [u8; 2] {
-    println!("hex_string: {:?}", hex_string);
     let mut result = [0; 2];
     let mut chars = hex_string.chars();
 

@@ -6,7 +6,19 @@ Repo for Rust Taller De Programacion 1 FIUBA
 
 1. Iniciar servidor:
 
-En `git/server-test`
+En `git`
+
+```
+mkdir server-repo
+cd server-repo
+git init
+touch testfile
+add testfile
+git add testfile
+git commit -m hi
+cd .git
+touch git-daemon-export-ok
+```
 
 `sh start-daemon.rs`
 
