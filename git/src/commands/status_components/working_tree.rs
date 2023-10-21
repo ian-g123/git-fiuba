@@ -52,20 +52,19 @@ fn get_path_name(path: PathBuf) -> Result<String, CommandError> {
 mod tests {
     use super::*;
 
-    /* #[test]
+    #[test]
     fn print_working_tree() {
         let wt = build_working_tree().unwrap();
-        let len = wt.get_objects().len();
-        print_tree(wt);
-        assert!(false, "Error probando, len = {}", len)
-    } */
+        validate_tree(wt);
+    }
 
-    fn print_tree(tree: Tree) {
+    fn validate_tree(tree: Tree) {
         for (name, object) in tree.get_objects().iter() {
             if let Some(new_tree) = object.as_tree() {
-                print_tree(new_tree.clone())
+                validate_tree(new_tree.clone())
             } else {
-                println!("Name: {}", name)
+                let path = PathBuf::from(name);
+                assert!(path.exists(), "File name: {}", name);
             }
         }
     }
