@@ -1,15 +1,18 @@
 use std::{
     fmt,
     fs::File,
+    hash,
     io::{Cursor, Read, Write},
 };
 
 use crate::{commands::command_errors::CommandError, logger::Logger};
 
 use super::{
+    author::Author,
     aux::*,
     git_object::{GitObject, GitObjectTrait},
     mode::Mode,
+    super_string::SuperStrings,
     tree::Tree,
 };
 
@@ -39,6 +42,21 @@ impl Blob {
         })
     }
 
+    pub fn new_from_hash_and_name(
+        hash: String,
+        name: String,
+        mode: Mode,
+    ) -> Result<Self, CommandError> {
+        let hash = hash.cast_hex_to_u8_vec()?;
+        Ok(Blob {
+            mode,
+            path: None,
+            hash: Some(hash),
+            name: Some(name),
+            content: None,
+        })
+    }
+
     pub fn new_from_hash_and_mode(
         hash: String,
         path: String,
@@ -49,7 +67,7 @@ impl Blob {
             mode,
             path: Some(path.clone()),
             hash: Some(hash),
-            name: Some(get_name_bis(&path)?),
+            name: Some(get_name(&path)?),
             content: None,
         })
     }
@@ -118,7 +136,7 @@ impl Blob {
             .read_exact(&mut content)
             .map_err(|error| CommandError::FileReadError(error.to_string()))?;
         let output_str = String::from_utf8(content).map_err(|error| {
-            logger.log("Error convierttiendo a utf8 blob");
+            logger.log("Error conviertiendo a utf8 blob");
             CommandError::FileReadError(error.to_string())
         })?;
         writeln!(output, "{}", output_str)
@@ -128,6 +146,12 @@ impl Blob {
 }
 
 impl GitObjectTrait for Blob {
+    fn get_info_commit(&self) -> Option<(String, Author, Author, i64, i32)> {
+        None
+    }
+    fn get_path(&self) -> Option<String> {
+        self.path.clone()
+    }
     fn as_mut_tree(&mut self) -> Option<&mut Tree> {
         None
     }
@@ -185,6 +209,10 @@ impl GitObjectTrait for Blob {
                 Ok(sha1)
             }
         }
+    }
+
+    fn get_name(&self) -> Option<String> {
+        self.name.clone()
     }
 }
 

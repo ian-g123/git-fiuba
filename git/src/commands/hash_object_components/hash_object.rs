@@ -7,7 +7,7 @@ use crate::{
     commands::{
         command::{Command, ConfigAdderFunction},
         command_errors::CommandError,
-        objects::{aux::u8_vec_to_hex_string, blob::Blob, git_object::GitObject},
+        objects::{blob::Blob, git_object::GitObject, super_string::u8_vec_to_hex_string},
         objects_database,
     },
     logger::Logger,
@@ -159,9 +159,10 @@ impl HashObject {
         let hex_string = u8_vec_to_hex_string(&mut object.get_hash()?);
         if self.write {
             objects_database::write(logger, &mut object)?;
+            logger.log(&format!("Writen object to database in {:?}", hex_string));
         }
         let _ = writeln!(output, "{}", hex_string);
-        logger.log(&format!("Writen object to database in {:?}", hex_string));
+
         Ok(())
     }
 }

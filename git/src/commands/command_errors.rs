@@ -51,6 +51,8 @@ pub enum CommandError {
     FailToOpenStaginArea(String),
     /// Error al guardar el staging area
     FailToSaveStaginArea(String),
+    /// Es un archivo untracked.
+    UntrackedError(String),
 
     CurrentDirectoryError,
     HeadError,
@@ -75,6 +77,7 @@ pub enum CommandError {
     /// Se intentó agregar un archivo dentro de un archivo
     ObjectNotTree,
     StdinError,
+    CastingError,
 }
 
 impl Error for CommandError {}
@@ -183,6 +186,17 @@ impl fmt::Display for CommandError {
             }
             CommandError::StdinError => {
                 write!(f, "No se pudo leer por entrada estándar")
+            }
+
+            CommandError::CastingError => {
+                write!(f, "Casting error")
+            }
+            CommandError::UntrackedError(path) => {
+                write!(
+                    f,
+                    "error: pathspec '{}' did not match any file(s) known to git",
+                    path
+                )
             }
         }
     }

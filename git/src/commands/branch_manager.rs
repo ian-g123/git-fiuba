@@ -21,7 +21,7 @@ pub fn get_current_branch() -> Result<String, CommandError> {
     Ok(branch.to_string())
 }
 
-/// Obtiene el hash del Commit padre. Si no tiene p
+/// Obtiene el hash del Commit padre.
 pub fn get_last_commit() -> Result<Option<String>, CommandError> {
     let mut parent = String::new();
     let branch = get_current_branch()?;
