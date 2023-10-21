@@ -104,7 +104,7 @@ fn read_package(mut socket: &TcpStream) {
     let object_number = read_object_number(socket);
     println!("object_number: {:?}", object_number);
 
-    leer_bits(socket);
+    // leer_bits(socket);
 
     // The header is followed by number of object entries, each of which looks like this:
 
@@ -122,7 +122,7 @@ fn read_package(mut socket: &TcpStream) {
     // Observation: length of each object is encoded in a variable
     // length format and is not constrained to 32-bit or anything.
 
-    // leer_objetos(object_number, socket);
+    leer_objetos(object_number, socket);
 }
 
 fn leer_bits(mut socket: &TcpStream) {
@@ -167,16 +167,16 @@ fn leer_objetos(object_number: u32, mut socket: &TcpStream) {
 
         let mut bits = Vec::new();
         let first_byte_buf_len_bits = first_byte_buf[0] & 0b00001111;
-        let mut seven_bit_chunk = Vec::new();
+        let mut bit_chunk = Vec::new();
         for i in (0..4).rev() {
             let bit = (first_byte_buf_len_bits >> i) & 1;
-            seven_bit_chunk.push(bit);
+            bit_chunk.push(bit);
         }
-        println!("byte_fraction: {:?}", seven_bit_chunk);
-        bits.splice(0..0, seven_bit_chunk);
+        println!("byte_fraction: {:?}", bit_chunk);
+        bits.splice(0..0, bit_chunk);
 
         let mut is_last_byte: bool = (first_byte_buf[0] >> 4) & 1 == 0;
-        while is_last_byte {
+        while !is_last_byte {
             let mut seven_bit_chunk = Vec::<u8>::new();
             let current_byte = next_byte(socket);
             is_last_byte = current_byte >> 7 == 0;
