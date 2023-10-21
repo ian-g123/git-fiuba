@@ -35,9 +35,9 @@ fn client_run(address: &str, stream: &mut dyn Read) -> std::io::Result<()> {
     let (head_branch, _) = lines.last().unwrap().split_once(' ').unwrap();
     println!("HEAD branch: {:?}", head_branch);
 
-    let line = "want b102639443a98b76ff60aa8404e79c44667ee8b2";
+    let line = format!("want {}", head_branch);
     println!("Enviando {:?}", line);
-    let lines = send_done(line, &socket)?;
+    let lines = send_done(&line, &socket)?;
     println!("=========\nRecibido:");
     for line in &lines {
         println!("{:?}", line);
@@ -97,17 +97,11 @@ fn send_done(line: &str, mut socket: &TcpStream) -> Result<Vec<String>, std::io:
 }
 
 fn read_package(mut socket: &TcpStream) {
-    let signature_buf = &mut [0; 4];
-    socket.read_exact(signature_buf).unwrap();
-    let signature = String::from_utf8(signature_buf.to_vec()).unwrap();
+    let signature = read_signature(socket);
     println!("signature: {:?}", signature);
-    let mut version_buf = [0; 4];
-    socket.read_exact(&mut version_buf).unwrap();
-    let version = u32::from_be_bytes(version_buf);
+    let version = read_verson_number(socket);
     println!("version: {:?}", version);
-    let mut object_number_buf = [0; 4];
-    socket.read_exact(&mut object_number_buf).unwrap();
-    let object_number = u32::from_be_bytes(object_number_buf);
+    let object_number = read_object_number(socket);
     println!("object_number: {:?}", object_number);
 
     // The header is followed by number of object entries, each of which looks like this:
@@ -126,22 +120,6 @@ fn read_package(mut socket: &TcpStream) {
     // Observation: length of each object is encoded in a variable
     // length format and is not constrained to 32-bit or anything.
 
-    //==
-
-    // let mut buf = [0; 250];
-    // socket.read(&mut buf).unwrap();
-    // // Print bits
-    // let mut bits = Vec::with_capacity(buf.len() * 8);
-    // for byte in &buf {
-    //     for i in (0..8).rev() {
-    //         let bit = (byte >> i) & 1;
-    //         bits.push(bit);
-    //     }
-    // }
-    // println!("bits: {:?}", bits);
-
-    //==
-
     for _ in 0..object_number {
         // Object types
         // Valid object types are:
@@ -154,8 +132,9 @@ fn read_package(mut socket: &TcpStream) {
         let mut first_byte_buf = [0; 1];
         socket.read_exact(&mut first_byte_buf).unwrap();
         // Object type is three bits
-
+        println!("first_byte_buf: {:?}", first_byte_buf);
         let object_type = first_byte_buf[0] >> 5;
+        println!("object_type: {:?}", object_type);
         let object_type_str = match object_type {
             1 => "OBJ_COMMIT",
             2 => "OBJ_TREE",
@@ -170,27 +149,74 @@ fn read_package(mut socket: &TcpStream) {
         let mut bits = Vec::new();
         let mut current_byte = first_byte_buf[0];
         loop {
-            let mut last_len_bit_group = current_byte >> 4 & 1;
-            let mut first_byte_buf_len_bits = current_byte & 0b00001111;
-            let mut next_byte_buf = [0; 1];
-            socket.read_exact(&mut next_byte_buf).unwrap();
-            let next_byte = next_byte_buf[0];
+            let is_last_byte = (current_byte >> 4 & 1) == 0;
+            let first_byte_buf_len_bits = current_byte & 0b00001111;
+            let next_byte = next_byte(socket);
+            let mut seven_bit_chunk = Vec::new();
             for i in (0..4).rev() {
                 let bit = (first_byte_buf_len_bits >> i) & 1;
-                bits.push(bit);
+                seven_bit_chunk.push(bit);
             }
             for i in (0..3).rev() {
                 let bit = (next_byte >> i) & 1;
-                bits.push(bit);
+                seven_bit_chunk.push(bit);
             }
-            if last_len_bit_group == 0 {
+            println!("byte_fraction: {:?}", seven_bit_chunk);
+            bits.splice(0..0, seven_bit_chunk);
+
+            if is_last_byte {
                 break;
             }
             current_byte = next_byte;
         }
         println!("bits: {:?}", bits);
-        let len = bits_to_u32(&bits);
+        let len = bits_to_usize(&bits);
+        println!("len: {:?}", len);
+
+        let mut buf = &mut vec![0; len];
+        socket.read(&mut buf).unwrap();
+        println!("buf: {:?}", buf);
     }
+}
+
+fn read_signature(mut socket: &TcpStream) -> String {
+    let signature_buf = &mut [0; 4];
+    socket.read_exact(signature_buf).unwrap();
+    let signature = String::from_utf8(signature_buf.to_vec()).unwrap();
+    signature
+}
+
+fn read_verson_number(mut socket: &TcpStream) -> u32 {
+    let mut version_buf = [0; 4];
+    socket.read_exact(&mut version_buf).unwrap();
+    let version = u32::from_be_bytes(version_buf);
+    version
+}
+
+fn read_object_number(mut socket: &TcpStream) -> u32 {
+    let mut object_number_buf = [0; 4];
+    socket.read_exact(&mut object_number_buf).unwrap();
+    let object_number = u32::from_be_bytes(object_number_buf);
+    object_number
+}
+
+fn next_byte(mut socket: &TcpStream) -> u8 {
+    let mut next_byte_buf = [0; 1];
+    socket.read_exact(&mut next_byte_buf).unwrap();
+    let next_byte = next_byte_buf[0];
+    next_byte
+}
+
+fn bits_to_usize(bits: &[u8]) -> usize {
+    let mut result = 0;
+    let max_power = bits.len() - 1;
+    for (i, bit) in bits.iter().enumerate() {
+        if *bit == 1 {
+            let exp = max_power - i;
+            result += 2usize.pow(exp as u32);
+        }
+    }
+    result
 }
 
 fn concat_bytes_to_bits(bytes: &[u8]) -> Vec<u8> {
