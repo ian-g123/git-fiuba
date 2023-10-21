@@ -433,8 +433,6 @@ fn read_from_stdin(stdin: &mut dyn Read) -> Result<String, CommandError> {
     loop {
         let mut buf = [0; 1];
         if stdin.read_exact(&mut buf).is_err() {
-            let mut buf = String::new();
-            stdin.read_to_string(&mut buf).unwrap();
             return Err(CommandError::StdinError);
         };
         let input = String::from_utf8_lossy(&buf).to_string();
