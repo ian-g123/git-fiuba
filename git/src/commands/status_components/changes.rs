@@ -1,6 +1,12 @@
-use std::{collections::HashMap, fs::{File, self}, io::Read, path::{Path, PathBuf}, env::current_dir};
+use std::{
+    collections::HashMap,
+    env::current_dir,
+    fs::{self, File},
+    io::Read,
+    path::{Path, PathBuf},
+};
 
-/* 
+/*
 
 -Diferencias entre Index y el último commit, que es lo que está en la Base de datos
 
@@ -10,17 +16,20 @@ use std::{collections::HashMap, fs::{File, self}, io::Read, path::{Path, PathBuf
 
 */
 
-use crate::commands::{command_errors::CommandError, hash_object_components::hash_object::HashObject, file_compressor::extract, stagin_area::StagingArea};
+use crate::commands::{
+    command_errors::CommandError, file_compressor::extract,
+    hash_object_components::hash_object::HashObject, stagin_area::StagingArea,
+};
 
-use super::{changes_types::ChangeType, change_object::ChangeObject};
+use super::{change_object::ChangeObject, changes_types::ChangeType};
 
-pub struct Changes{
-    changes: HashMap<String, ChangeObject>
+pub struct Changes {
+    changes: HashMap<String, ChangeObject>,
 }
 
-impl Changes{
-    pub fn new()-> Result<Self, CommandError>{
-        let mut changes :HashMap<String, ChangeObject> = HashMap::new();
+impl Changes {
+    pub fn new() -> Result<Self, CommandError> {
+        let mut changes: HashMap<String, ChangeObject> = HashMap::new();
         let commit_tree = get_commit_tree()?;
         let index = StagingArea::open()?;
         let index = &index.files;
@@ -30,11 +39,11 @@ impl Changes{
         Ok(Changes { changes: changes })
     }
 
-    /* 
+    /*
     falta: copy, type changed, dif entre modified y added, deleted del WT
      */
 
-    pub fn get_changes(&self)-> HashMap<String, ChangeObject>{
+    pub fn get_changes(&self) -> HashMap<String, ChangeObject> {
         self.changes.clone()
     }
 
@@ -61,59 +70,72 @@ impl Changes{
                 Self::compare(entry_name.clone(), index, changes, parent)?;
                 return Ok(());
             } else {
-                let current_hash = get_sha1(entry_name.clone(), "blob".to_string())?;
+                /* let current_hash = get_sha1(entry_name.clone(), "blob".to_string())?;
                 if let Some(parent_hash) = parent {
                     Self::compare_entry(&entry_name, index, parent_hash.to_string(), current_hash)?;
-
-                }
+                } */
             }
         }
         Ok(())
-
     }
 
-    fn compare_entry(path:&str, index: &HashMap<String, String>, parent_hash: String, current_hash:String)-> Result<ChangeObject, CommandError>{
+    fn compare_entry(
+        path: &str,
+        index: &HashMap<String, String>,
+        parent_hash: String,
+        current_hash: String,
+    ) -> Result<ChangeObject, CommandError> {
         let (is_in_last_commit, name) = Self::is_in_last_commit(parent_hash, current_hash.clone())?;
-        let change_type_working_tree : Option<ChangeType>;
-        let change_type_staging_area : Option<ChangeType>;
+        let change_type_working_tree: Option<ChangeType>;
+        let change_type_staging_area: Option<ChangeType>;
 
-        let change:ChangeObject;
-        if is_in_last_commit{
+        let change: ChangeObject;
+        if is_in_last_commit {
             let current_name = get_path_name(PathBuf::from(path.clone()))?;
-            if Self::check_is_renamed(name, current_name){
-                if index.contains_key(path){
+            if Self::check_is_renamed(name, current_name) {
+                if index.contains_key(path) {
                     change_type_working_tree = None;
                     change_type_staging_area = Some(ChangeType::Renamed);
-                }else{
+                } else {
                     change_type_staging_area = None;
                     change_type_working_tree = Some(ChangeType::Renamed);
                 }
-            }else{
+            } else {
                 change_type_working_tree = Some(ChangeType::Unmodified);
                 change_type_staging_area = Some(ChangeType::Unmodified);
             }
-        }else if index.contains_key(path){ //falta: check_is_modified
+        } else if index.contains_key(path) {
+            //falta: check_is_modified
             change_type_working_tree = None;
             change_type_staging_area = Some(ChangeType::Added);
-        }else{
+        } else {
             change_type_working_tree = Some(ChangeType::Untracked);
             change_type_staging_area = Some(ChangeType::Untracked);
         }
-        change = ChangeObject::new(current_hash, change_type_working_tree, change_type_staging_area);
+        change = ChangeObject::new(
+            current_hash,
+            change_type_working_tree,
+            change_type_staging_area,
+        );
         Ok(change)
     }
 
-    fn get_deleted_changes(index: &HashMap<String, String>, changes: &mut HashMap<String, ChangeObject>){
-        for (path, hash) in index.iter(){
-            if !changes.contains_key(path){
+    fn get_deleted_changes(
+        index: &HashMap<String, String>,
+        changes: &mut HashMap<String, ChangeObject>,
+    ) {
+        for (path, hash) in index.iter() {
+            if !changes.contains_key(path) {
                 let change = ChangeObject::new(hash.to_string(), None, Some(ChangeType::Deleted)); //deleted in WT
                 _ = changes.insert(path.to_string(), change);
             }
         }
     }
-    
 
-    fn is_in_last_commit(parent_hash: String, blob_hash: String)-> Result<(bool, String), CommandError>{
+    fn is_in_last_commit(
+        parent_hash: String,
+        blob_hash: String,
+    ) -> Result<(bool, String), CommandError> {
         let path = format!(
             ".git/objects/{}/{}",
             parent_hash[..2].to_string(),
@@ -125,7 +147,7 @@ impl Changes{
         let lines: Vec<&str> = buf.split_terminator("\n").collect();
         for line in lines {
             let info: Vec<&str> = line.split_terminator(" ").collect();
-            let hash_and_name:Vec<&str> = info[2].split("  ").collect();
+            let hash_and_name: Vec<&str> = info[2].split("  ").collect();
             let (obj_type, obj_hash, name) = (info[1], hash_and_name[0], hash_and_name[1]);
             if obj_hash == blob_hash {
                 return Ok((true, name.to_string()));
@@ -135,7 +157,6 @@ impl Changes{
             }
         }
         Ok((false, String::new()))
-
     }
 
     /// Busca el contenido de un archivo en la Base de Datos y lo devuelve. Si no existe, devuelve error.
@@ -155,22 +176,21 @@ impl Changes{
         Ok(data)
     }
 
-    fn check_is_renamed(name_data_base: String, current_name: String)->bool{
+    fn check_is_renamed(name_data_base: String, current_name: String) -> bool {
         name_data_base == current_name
     }
-
-} 
+}
 
 /// Obtiene el directorio actual.
 fn get_current_dir() -> Result<String, CommandError> {
     let Ok(current_dir) = current_dir() else {
         return Err(CommandError::DirNotFound("Current dir".to_string())); //cambiar
     };
-    let Some(current_dir_str) = current_dir.to_str()else {
+    let Some(current_dir_str) = current_dir.to_str() else {
         return Err(CommandError::DirNotFound("Current dir".to_string())); //cambiar
     };
     Ok(current_dir_str.to_string())
-}    
+}
 
 /// Devuelve el nombre de un archivo o directorio dado un PathBuf.
 fn get_path_name(path: PathBuf) -> Result<String, CommandError> {
@@ -180,14 +200,14 @@ fn get_path_name(path: PathBuf) -> Result<String, CommandError> {
     Ok(path_name.to_string())
 }
 
-/// Devuelve el hash del path pasado. Si no existe, devuelve Error.
+/* /// Devuelve el hash del path pasado. Si no existe, devuelve Error.
 pub fn get_sha1(path: String, object_type: String) -> Result<String, CommandError> {
     let content = read_file_contents(&path)?;
     let files = [path].to_vec();
     let hash_object = HashObject::new(object_type, files, false, false);
     let (hash, _) = hash_object.run_for_content(content)?;
     Ok(hash)
-}
+} */
 
 /// Lee el contenido de un archivo y lo devuelve. Si la operación falla, devuelve error.
 pub fn read_file_contents(path: &str) -> Result<Vec<u8>, CommandError> {
@@ -197,7 +217,6 @@ pub fn read_file_contents(path: &str) -> Result<Vec<u8>, CommandError> {
         .map_err(|_| CommandError::FileReadError(path.to_string()))?;
     Ok(data)
 }
-
 
 fn get_current_branch() -> Result<String, CommandError> {
     let mut branch = String::new();
@@ -235,11 +254,15 @@ fn get_last_commit() -> Result<Option<String>, CommandError> {
     Ok(Some(parent.to_string()))
 }
 
-fn get_commit_tree()-> Result<Option<String>, CommandError>{
-    let Some(last_commit) = get_last_commit()? else{
+fn get_commit_tree() -> Result<Option<String>, CommandError> {
+    let Some(last_commit) = get_last_commit()? else {
         return Ok(None);
     };
-    let path = format!("{}/{}", last_commit[0..2].to_string(), last_commit[2..].to_string());
+    let path = format!(
+        "{}/{}",
+        last_commit[0..2].to_string(),
+        last_commit[2..].to_string()
+    );
     let Ok(mut commit_file) = File::open(path.clone()) else {
         return Err(CommandError::FileReadError(path.to_string()));
     };
@@ -252,6 +275,4 @@ fn get_commit_tree()-> Result<Option<String>, CommandError>{
     let tree_info: Vec<&str> = tree_info.split(" ").collect();
     let tree_hash = tree_info[1];
     Ok(Some(tree_hash.to_string()))
-
-
 }

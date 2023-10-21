@@ -41,6 +41,14 @@ impl Tree {
         }
     }
 
+    pub fn add_object(&mut self, name: String, object: GitObject) {
+        _ = self.objects.insert(name, object);
+    }
+
+    pub fn get_objects(&self) -> &HashMap<String, GitObject> {
+        &self.objects
+    }
+
     /// Crea un Blob a partir de su hash y lo añade al Tree.
     pub fn add_blob(&mut self, path_name: &String, hash: &String) -> Result<(), CommandError> {
         // let blob = Blob::new_from_hash(hash.clone(), path_name.clone())?;
