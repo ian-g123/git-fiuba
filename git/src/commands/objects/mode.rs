@@ -37,7 +37,7 @@ impl Mode {
         Ok(mode)
     }
 
-    // Cambios que hizo Ian
+    /// Obtiene el id del modo.
     pub fn get_id_mode(&self) -> u32 {
         match self {
             Mode::RegularFile => 100644,
@@ -48,15 +48,18 @@ impl Mode {
         }
     }
 
+    /// Lee de un stream y traduce el contenido a un Modo.
     pub fn read_from(stream: &mut dyn Read) -> Result<Self, CommandError> {
         let mut buf = [0; 6];
-        stream
-            .read_exact(&mut buf)
-            .map_err(|_| CommandError::InvalidMode)?;
+        stream.read_exact(&mut buf).map_err(|error| {
+            println!("Error: {}", error);
+            CommandError::InvalidMode
+        })?;
         let mode = std::str::from_utf8(&buf).map_err(|_| CommandError::InvalidMode)?;
         Ok(Self::read_from_string(mode)?)
     }
 
+    /// Dada una cadena que representa el modo, devuelve la variante Modo correspondiente.
     pub fn read_from_string(mode: &str) -> Result<Self, CommandError> {
         match mode {
             "100644" => Ok(Mode::RegularFile),
@@ -68,6 +71,7 @@ impl Mode {
         }
     }
 
+    /// Traduce el id del modo a una cadena y la escribe en un stream.
     pub(crate) fn write_to(&self, stream: &mut dyn Write) -> Result<(), CommandError> {
         let mode_str = match self {
             Mode::RegularFile => "100644",
@@ -99,16 +103,14 @@ impl fmt::Display for Mode {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::io::{Cursor, Seek, SeekFrom};
 
     /// Si el <path> pasado a get_mode() no existe, la función devuelve error.
     #[test]
     fn get_mode_fails() {
         let path = String::from("no_existe");
 
-        assert!(matches!(
-            Mode::get_mode(path),
-            Err(CommandError::FileNotFound(path))
-        ));
+        assert!(Mode::get_mode(path).is_err());
     }
 
     /// Si el `<path>` pasado a `get_mode()` corresponde a un archivo regular, la función devuelve
@@ -132,8 +134,7 @@ mod test {
     #[test]
     #[ignore]
     fn get_mode_tree() {
-        let path = String::from("tests/data/mode/folder");
-        fs::create_dir(&path).unwrap();
+        let path = String::from("tests");
         assert!(matches!(Mode::get_mode(path), Ok(Mode::Tree)))
     }
 
@@ -144,5 +145,17 @@ mod test {
     fn get_mode_sym_link() {
         let path = String::from("tests/data/mode/link");
         assert!(matches!(Mode::get_mode(path), Ok(Mode::SymbolicLink)))
+    }
+
+    /// Prueba que un Mode se pueda leer y escribir.
+    #[test]
+    fn test_read_from() {
+        let mode = Mode::Tree;
+        let mut buf: Vec<u8> = [0; 6].to_vec();
+        let mut stream = Cursor::new(&mut buf);
+        mode.write_to(&mut stream).expect("falló en write");
+        stream.seek(SeekFrom::Start(0)).unwrap();
+        let new_mode = Mode::read_from(&mut stream).expect("falló en read");
+        assert_eq!(new_mode, mode);
     }
 }

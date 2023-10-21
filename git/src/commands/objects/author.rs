@@ -7,14 +7,31 @@ use crate::commands::command_errors::CommandError;
 
 use super::aux::*;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Author {
     name: String,
     email: String,
 }
 
 impl Author {
-    // Example string: Patricio Tourne Passarino <ptourne@fi.uba.ar>
+    /// Dado un nombre y un email, crea un Author.
+    pub fn new(name: &str, email: &str) -> Self {
+        Author {
+            name: name.to_string(),
+            email: email.to_string(),
+        }
+    }
+
+    /// Crea un Author a partir de su información. Por ejemplo:
+    ///     Example: Nombre Apellido <email@fi.uba.ar>
+    ///     string: [Nombre, Apellido, <email@fi.uba.ar>]
+    ///
+    ///     =>
+    ///
+    ///     Author{
+    ///         name: Nombre Apellido,
+    ///         email: <email@fi.uba.ar>
+    ///     }
     pub fn from_strings(strings: &mut Vec<&str>) -> Result<Self, CommandError> {
         let email_string = strings.pop();
         let email = match email_string {
@@ -26,20 +43,15 @@ impl Author {
         Ok(Author { name, email })
     }
 
-    pub fn new(name: &str, email: &str) -> Self {
-        Author {
-            name: name.to_string(),
-            email: email.to_string(),
-        }
-    }
-
-    pub(crate) fn write_to(&self, stream: &mut dyn Write) -> Result<(), CommandError> {
+    /// Guarda la información del Author en el stream pasado.
+    pub fn write_to(&self, stream: &mut dyn Write) -> Result<(), CommandError> {
         self.name.write_to(stream)?;
         self.email.write_to(stream)?;
         Ok(())
     }
 
-    pub(crate) fn read_from(stream: &mut dyn Read) -> Result<Self, CommandError> {
+    /// Lee información del stream pasado y la usa para crear un Author.
+    pub fn read_from(stream: &mut dyn Read) -> Result<Self, CommandError> {
         let name = read_string_from(stream)?;
         let email = read_string_from(stream)?;
         Ok(Author { name, email })
@@ -49,5 +61,33 @@ impl Author {
 impl fmt::Display for Author {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} <{}>", self.name, self.email)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::io::{Cursor, Seek, SeekFrom};
+
+    use super::*;
+
+    /// Prueba que se pueda crear un Author a partir de un vector de strings.
+    #[test]
+    fn create_author_from_string() {
+        let mut string = ["Juan", "Perez", "<jperez@fi.uba.ar>"].to_vec();
+        let author_expected = Author::new("Juan Perez", "jperez@fi.uba.ar");
+        let result = Author::from_strings(&mut string).unwrap();
+        assert_eq!(result, author_expected)
+    }
+
+    /// Prueba que un Author se pueda leer y escribir.
+    #[test]
+    fn test_read_and_write() {
+        let author_expected = Author::new("Juan Perez", "jperez@fi.uba.ar");
+        let buf: Vec<u8> = Vec::new();
+        let mut stream = Cursor::new(buf);
+        author_expected.write_to(&mut stream).unwrap();
+        stream.seek(SeekFrom::Start(0)).unwrap();
+        let result = Author::read_from(&mut stream).unwrap();
+        assert_eq!(result, author_expected)
     }
 }
