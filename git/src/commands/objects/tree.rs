@@ -92,28 +92,15 @@ impl Tree {
     ) -> Result<GitObject, CommandError> {
         let mut objects = HashMap::<String, GitObject>::new();
 
-        while let Ok(mode) = Mode::read_from(stream) {
-            let type_src = {
-                let mut type_buf = [0; 1];
-                stream
-                    .read_exact(&mut type_buf)
-                    .map_err(|_| CommandError::InvalidMode)?;
-                match type_buf {
-                    [0] => "blob",
-                    [1] => "tree",
-                    [2] => "commit",
-                    [3] => "tag",
-                    _ => return Err(CommandError::ObjectTypeError),
-                }
-            };
-            let mut hash = vec![0; 20];
-            stream
-                .read_exact(&mut hash)
-                .map_err(|_| CommandError::ObjectHashNotKnown)?;
-            let hash_str = u8_vec_to_hex_string(&hash);
-
-            let mut name = read_string_from(stream)?;
-
+        loop {
+            let mut buf = Vec::new();
+            if stream.read_to_end(&mut buf).is_err() {
+                break;
+            }
+            let (_mode, _name) = get_mode_name(buf).map_err(|error| {
+                CommandError::FileReadError("No se pudo leer objeto".to_string())
+            })?;
+            let hash_str = get_hash(stream)?;
             let object = objects_database::read_object(&hash_str, logger)?;
             objects.insert(hash_str, object);
         }
@@ -131,40 +118,62 @@ impl Tree {
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
         let mut objects = Vec::<(Mode, String, String, String)>::new();
-
-        while let Ok(mode) = Mode::read_from(stream) {
-            let type_src = {
-                let mut type_buf = [0; 1];
-                stream
-                    .read_exact(&mut type_buf)
-                    .map_err(|_| CommandError::InvalidMode)?;
-                match type_buf {
-                    [0] => "blob",
-                    [1] => "tree",
-                    [2] => "commit",
-                    [3] => "tag",
-                    _ => return Err(CommandError::ObjectTypeError),
-                }
+        loop {
+            let Ok(string_part_bytes) = read_to(0, stream) else {
+                break;
             };
-            let mut hash = vec![0; 20];
-            stream
-                .read_exact(&mut hash)
-                .map_err(|_| CommandError::ObjectHashNotKnown)?;
-            let hash_str = hash
-                .iter()
-                .map(|byte| format!("{:02x}", byte))
-                .collect::<Vec<_>>()
-                .join("");
 
-            let name_str = read_string_from(stream)?;
-            objects.push((mode, type_src.to_string(), hash_str, name_str));
+            let string_part_bytes = String::from_utf8(string_part_bytes).map_err(|error| {
+                CommandError::FileReadError("No se pudo leer objeto".to_string())
+            })?;
+
+            let Some((mode, name)) = string_part_bytes.split_once(' ') else {
+                return Err(CommandError::FileReadError(
+                    "No se pudo leer objeto".to_string(),
+                ));
+            };
+            let hash_str = get_hash(stream)?;
+            let mode = get_mode(mode)?;
+            let object_type = Mode::get_type_from_mode(&mode);
+            objects.push((mode, object_type, hash_str, name.to_string()));
         }
+
         for (mode, type_str, hash, name) in objects {
             writeln!(output, "{} {} {}    {}", mode, type_str, hash, name)
                 .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
         }
         Ok(())
     }
+}
+
+fn get_mode(mode: &str) -> Result<Mode, CommandError> {
+    let id = mode
+        .parse::<u32>()
+        .map_err(|error| CommandError::FileReadError("No se pudo leer objeto".to_string()))?;
+    let mode = Mode::get_mode_from_id(id)
+        .map_err(|error| CommandError::FileReadError("No se pudo leer objeto".to_string()))?;
+    Ok(mode)
+}
+
+fn get_mode_name(buf: Vec<u8>) -> Result<(String, String), CommandError> {
+    let string_mode_name = String::from_utf8(buf).map_err(|_| CommandError::InvalidMode)?;
+    let Some((mode, name)) = string_mode_name.split_once(' ') else {
+        return Err(CommandError::InvalidMode);
+    };
+    return Ok((mode.to_string(), name.to_string()));
+}
+
+fn get_hash(stream: &mut dyn Read) -> Result<String, CommandError> {
+    let mut hash = vec![0; 20];
+    stream
+        .read_exact(&mut hash)
+        .map_err(|_| CommandError::ObjectHashNotKnown)?;
+    let hash_str = hash
+        .iter()
+        .map(|byte| format!("{:02x}", byte))
+        .collect::<Vec<_>>()
+        .join("");
+    Ok(hash_str)
 }
 
 impl GitObjectTrait for Tree {
@@ -186,15 +195,14 @@ impl GitObjectTrait for Tree {
 
     fn content(&mut self) -> Result<Vec<u8>, CommandError> {
         let mut content = Vec::new();
-        for (path, object) in self.objects.iter_mut() {
-            let type_byte = type_id_object(&object.type_str())?;
-            object.mode().write_to(&mut content)?;
-            content.extend_from_slice(&[type_byte]);
-
+        for (name_object, object) in self.objects.iter_mut() {
+            let mode = &object.mode();
+            let mode_id = mode.get_id_mode();
+            println!("{} {}", mode_id, name_object);
+            write!(content, "{} {}\0", mode_id, name_object)
+                .map_err(|err| CommandError::FileWriteError(format!("{err}")))?;
             let hash = object.get_hash()?;
             content.extend_from_slice(&hash);
-
-            path.write_to(&mut content)?;
         }
         Ok(content)
     }
@@ -347,6 +355,6 @@ mod test_write_y_display {
             panic!("Error");
         };
 
-        assert_eq!(output_str, "040000 tree 6a9c5249e59f914c4770ab001a1ec71b2a24b7e1    dir0\n100644 blob 30d74d258442c7c65512eafab474568dd706c430    fu.txt\n".to_string());
+        assert_eq!(output_str, "040000 tree 378018f53fc0a1a74b2c85ec8481cdeae21df194    dir0\n100644 blob 30d74d258442c7c65512eafab474568dd706c430    fu.txt\n".to_string());
     }
 }

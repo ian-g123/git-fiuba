@@ -12,9 +12,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let (command_name, command_args) = parse_args(&args);
 
-    let Ok(mut logger) = Logger::new(".git/logs") else {
-        return;
-    };
+    let mut logger = Logger::new(".git/logs.txt").unwrap();
 
     if let Err(error) = run(command_name, command_args, &mut logger) {
         logger.log(&format!("Error: {}", error));

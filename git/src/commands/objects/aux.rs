@@ -209,6 +209,27 @@ impl SuperIntegers for u32 {
     }
 }
 
+pub fn read_to(stop_byte: u8, stream: &mut dyn Read) -> Result<Vec<u8>, CommandError> {
+    let end = stop_byte as u8;
+    let mut result = Vec::<u8>::new();
+    loop {
+        let mut buf = [0; 1];
+
+        if stream.read_exact(&mut buf).is_ok() {
+            let byte = buf[0];
+            if byte == end {
+                break;
+            }
+            result.push(byte);
+        } else {
+            return Err(CommandError::FileReadError(
+                "Error leyendo bytes para obtener el tipo de objeto git".to_string(),
+            ));
+        }
+    }
+    Ok(result)
+}
+
 #[cfg(test)]
 mod test {
     use std::env::current_dir;
