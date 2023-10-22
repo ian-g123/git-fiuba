@@ -252,7 +252,7 @@ impl Tree {
         sorted_objects
     }
 
-    fn set_hash(&mut self, hash: [u8; 20]) {
+    pub fn set_hash(&mut self, hash: [u8; 20]) {
         self.hash = Some(hash);
     }
 }
@@ -346,11 +346,11 @@ impl GitObjectTrait for Tree {
     }
 }
 
-impl fmt::Display for Tree {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.to_string_priv())
-    }
-}
+// impl fmt::Display for Tree {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         write!(f, "{}", self.to_string_priv())
+//     }
+// }
 
 fn type_id_object(type_str: &str) -> Result<u8, CommandError> {
     if type_str == "blob" {
@@ -442,7 +442,24 @@ mod tests {
             let current_depth: usize = 0;
             _ = tree.add_path_tree(&mut logger, vector_path, current_depth, &hash);
         }
-        let result = tree.objects.contains_key("bar.txt");
+        let result = tree
+            .objects
+            .get_mut("dir0")
+            .unwrap()
+            .as_tree()
+            .unwrap()
+            .objects
+            .get_mut("dir1")
+            .unwrap()
+            .as_tree()
+            .unwrap()
+            .objects
+            .get_mut("dir2")
+            .unwrap()
+            .as_tree()
+            .unwrap()
+            .objects
+            .contains_key("bar.txt");
         assert!(result)
     }
 

@@ -59,7 +59,7 @@ mod tests {
     }
 
     fn validate_tree(tree: Tree) {
-        for (name, object) in tree.get_objects().iter() {
+        for (name, object) in tree.get_objects().iter_mut() {
             if let Some(new_tree) = object.as_tree() {
                 validate_tree(new_tree.clone())
             } else {

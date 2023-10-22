@@ -14,7 +14,7 @@ use std::{
 
 pub type GitObject = Box<dyn GitObjectTrait>;
 
-pub trait GitObjectTrait: fmt::Display {
+pub trait GitObjectTrait {
     fn as_mut_tree(&mut self) -> Option<&mut Tree>;
 
     /// Devuelve el árbol del objeto si es que corresponde, o sino None
@@ -229,8 +229,8 @@ impl Clone for GitObject {
     }
 }
 
-impl std::fmt::Debug for GitObject {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_string())
-    }
-}
+// impl std::fmt::Debug for GitObject {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         write!(f, "{}", self.to_string())
+//     }
+// }

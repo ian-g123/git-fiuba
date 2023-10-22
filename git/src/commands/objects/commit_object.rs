@@ -62,9 +62,14 @@ impl CommitObject {
     ) -> Result<GitObject, CommandError> {
         let (tree_hash, parents, author, author_timestamp, author_offset, committer, _, _, message) =
             read_commit_info_from(stream, logger)?;
+        let tree_hash_str = u8_vec_to_hex_string(&tree_hash);
+        let mut tree = objects_database::read_object(&tree_hash_str, logger)?;
         logger.log("commit created");
+        let Some(tree) = tree.as_tree() else {
+            return Err(CommandError::InvalidCommit);
+        };
         Ok(Box::new(Self {
-            tree: tree_hash,
+            tree,
             parents,
             author,
             committer,
@@ -93,8 +98,8 @@ impl CommitObject {
             committer_offset,
             message,
         ) = read_commit_info_from(stream, logger)?;
-
-        writeln!(output, "tree {}", tree_hash)
+        let tree_hash_str = u8_vec_to_hex_string(&tree_hash);
+        writeln!(output, "tree {}", tree_hash_str)
             .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
         for parent_hash in parents {
             writeln!(output, "parent {}", parent_hash)
@@ -130,7 +135,7 @@ fn read_commit_info_from(
     logger: &mut Logger,
 ) -> Result<
     (
-        Tree,
+        [u8; 20],
         Vec<String>,
         Author,
         i64,
@@ -143,8 +148,8 @@ fn read_commit_info_from(
     CommandError,
 > {
     let tree_hash_be = read_hash_from(stream)?;
-    let tree_hash = u8_vec_to_hex_string(&tree_hash_be);
-    let mut tree = objects_database::read_object(&tree_hash, logger)?;
+    // let tree_hash = u8_vec_to_hex_string(&tree_hash_be);
+    // let mut tree = objects_database::read_object(&tree_hash, logger)?;
     let number_of_parents = read_u32_from(stream)?;
     let parents = read_parents_from(number_of_parents, stream)?;
     let author = Author::read_from(stream)?;
@@ -154,11 +159,11 @@ fn read_commit_info_from(
     let committer_timestamp = read_i64_from(stream)?;
     let committer_offset = read_i32_from(stream)?;
     let message = read_string_from(stream)?;
-    let Some(tree_final) = tree.as_tree() else {
-        return Err(CommandError::InvalidCommit);
-    };
+    // let Some(tree_final) = tree.as_tree() else {
+    //     return Err(CommandError::InvalidCommit);
+    // };
     Ok((
-        tree_final,
+        tree_hash_be,
         parents,
         author,
         author_timestamp,
@@ -252,8 +257,8 @@ impl GitObjectTrait for CommitObject {
         self.message.write_to(&mut stream)?;
 
         if write_to_database {
-            let mut git_object: GitObject = Box::new(self.tree);
-            objects_database::write(&mut Logger::new_dummy(), &mut git_object)?;
+            // let mut git_object: GitObject = Box::new(self.tree);
+            objects_database::write_2(&mut Logger::new_dummy(), &mut self.tree)?;
         }
         Ok(buf)
     }
@@ -280,15 +285,15 @@ impl GitObjectTrait for CommitObject {
     }
 }
 
-impl fmt::Display for CommitObject {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "tree {}\nparent {:?}\nauthor {}\ncommitter {}\n\n{}",
-            self.tree, self.parents, self.author, self.committer, self.message
-        )
-    }
-}
+// impl fmt::Display for CommitObject {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         write!(
+//             f,
+//             "tree {}\nparent {:?}\nauthor {}\ncommitter {}\n\n{}",
+//             self.tree, self.parents, self.author, self.committer, self.message
+//         )
+//     }
+// }
 
 /// Crea un DateTime<Local> a partir de la información recibida.
 fn get_date(line: &mut Vec<&str>) -> Result<DateTime<Local>, CommandError> {
@@ -401,6 +406,8 @@ mod test {
     #[test]
     fn write_and_display() {
         let hash = hex_string_to_u8_vec("a471637c78c8f67cca05221a942bd7efabb58caa");
+        let mut tree = Tree::new("".to_string());
+        tree.set_hash(hash);
         let mut commit = CommitObject::new(
             vec![],
             "message".to_string(),
@@ -408,8 +415,8 @@ mod test {
             Author::new("name", "email"),
             1,
             -180,
-            Tree::new("".to_string()),
-            Some(hash),
+            tree,
+            None,
         )
         .unwrap();
 
