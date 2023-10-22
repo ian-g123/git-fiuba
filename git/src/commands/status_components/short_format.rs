@@ -4,8 +4,6 @@ use super::format::Format;
 
 pub struct ShortFormat;
 
-impl Format for ShortFormat{
-    fn get_status(output: &mut dyn Write) {
-        
-    }
-  }
+impl Format for ShortFormat {
+    fn get_status(output: &mut dyn Write) {}
+}

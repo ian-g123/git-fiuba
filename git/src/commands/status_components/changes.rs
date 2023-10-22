@@ -18,7 +18,7 @@ use std::{
 
 use crate::commands::{
     command_errors::CommandError, file_compressor::extract,
-    hash_object_components::hash_object::HashObject, stagin_area::StagingArea,
+    hash_object_components::hash_object::HashObject, staging_area::StagingArea,
 };
 
 use super::{change_object::ChangeObject, changes_types::ChangeType};
@@ -31,17 +31,17 @@ impl Changes {
     pub fn new() -> Result<Self, CommandError> {
         let mut changes: HashMap<String, ChangeObject> = HashMap::new();
         let commit_tree = get_commit_tree()?;
-        let index = StagingArea::open()?;
-        let index = &index.files;
+        let mut index = StagingArea::open()?;
+        /* let tree_staged = index.get_working_tree_staged(logger)
         let current_dir = get_current_dir()?;
         Self::compare(current_dir, index, &mut changes, &commit_tree)?;
-        Self::get_deleted_changes(index, &mut changes);
+        Self::get_deleted_changes(index, &mut changes); */
         Ok(Changes { changes: changes })
     }
 
     /*
     falta: copy, type changed, dif entre modified y added, deleted del WT
-     */
+    */
 
     pub fn get_changes(&self) -> HashMap<String, ChangeObject> {
         self.changes.clone()

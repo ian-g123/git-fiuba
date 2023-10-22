@@ -11,7 +11,7 @@ use crate::{
         command_errors::CommandError,
         objects::{blob::Blob, git_object::GitObject},
         objects_database,
-        stagin_area::StagingArea,
+        staging_area::StagingArea,
     },
     logger::Logger,
 };

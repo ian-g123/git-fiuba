@@ -57,11 +57,8 @@ impl Status {
         }
     }
 
-    fn config_adders(&self) -> ConfigAdderFunction<Self>{
-        vec![
-            Self::add_branch_config,
-            Self::add_short_config
-        ]
+    fn config_adders(&self) -> ConfigAdderFunction<Self> {
+        vec![Self::add_branch_config, Self::add_short_config]
     }
 
     /// Configura el flag 'branch'. Devuelve error si recibe argumentos o es un flag inválido.
@@ -175,23 +172,17 @@ mod tests {
         ));
     }
 
-    /// Prueba que intentar crear un Status con flags inválidos devuelve error, según la 
+    /// Prueba que intentar crear un Status con flags inválidos devuelve error, según la
     /// implementación de Command.
     #[test]
     fn new_status_fails_flag() {
         let mut output_string = Vec::new();
         let mut stdout_mock = io::Cursor::new(&mut output_string);
 
-        let args: &[String] = &[
-            "-b".to_string(),
-            "-w".to_string(),
-        ];
-        
+        let args: &[String] = &["-b".to_string(), "-w".to_string()];
+
         assert!(matches!(
-            Status::new(
-                args,
-                &mut stdout_mock,
-            ),
+            Status::new(args, &mut stdout_mock,),
             Err(CommandError::InvalidArguments)
         ));
     }

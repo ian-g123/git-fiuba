@@ -375,78 +375,6 @@ fn test_flag_all_with_deleted_files() {
     _ = fs::remove_dir_all(format!("{}", path));
 }
 
-/* #[test]
-#[ignore]
-fn test_introduce_mesage() {
-    let path = "./tests/data/commands/commit/repo5";
-    create_test_scene_2(path.clone());
-
-    let mut input_data = "Message";
-    /* let mut stdin_mock = Cursor::new(input_data.as_bytes());
-    let mut output: Vec<u8> = Vec::new();
-    let mut stdout_mock = Cursor::new(&mut output);
-    let mut logger = Logger::new("").unwrap(); */
-
-    let result = Command::new("../../../../../target/debug/git")
-        .arg("add")
-        .arg("dir/testfile1.txt")
-        .current_dir(path)
-        .output()
-        .unwrap();
-    assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
-
-    /* HashObject::run_from(
-           "commit",
-           &["".to_string()],
-           &mut stdin_mock,
-           &mut stdout_mock,
-           &mut logger,
-       )
-       .unwrap();
-    */
-    let args = ["commit"];
-    let mut child = Command::new("../../../../../target/debug/git")
-        .args(&args)
-        .current_dir(path)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .unwrap();
-
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(input_data.as_bytes())
-            .expect("Failed to write to stdin");
-    }
-    let output = child.wait_with_output().unwrap();
-    let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(output.status.success());
-
-    let head = fs::read_to_string(path.to_owned() + "/.git/HEAD").unwrap();
-    println!("head");
-    let (_, branch_ref) = head.split_once(' ').unwrap();
-    println!("branch ref");
-
-    let branch_ref = branch_ref.trim();
-    let ref_path = path.to_owned() + "/.git/" + branch_ref;
-    let commit_hash = fs::read_to_string(ref_path).unwrap();
-    println!("commit hash");
-    /*
-    let result = Command::new("../../../../../target/debug/git")
-        .arg("cat-file")
-        .arg(commit_hash)
-        .arg("-p")
-        .current_dir(path)
-        .output()
-        .unwrap();
-    let output = String::from_utf8(result.stdout).unwrap();
-
-    let output_lines: Vec<&str> = output.split('\n').collect();
-    assert_eq!(output_lines[4], input_data); */
-
-    _ = fs::remove_dir_all(format!("{}", path));
-} */
-
 /// Prueba el correcto funcionamiento del flag 'C'.
 #[test]
 fn test_reuse_message() {
@@ -460,6 +388,15 @@ fn test_reuse_message() {
         .output()
         .unwrap();
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
+
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("hash-object")
+        .arg("dir/testfile1.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let hash1 = String::from_utf8(result.stdout).unwrap();
 
     let result = Command::new("../../../../../target/debug/git")
         .arg("commit")
@@ -500,6 +437,15 @@ fn test_reuse_message() {
         .output()
         .unwrap();
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
+
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("hash-object")
+        .arg("dir/testfile1.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let hash2 = String::from_utf8(result.stdout).unwrap();
 
     let result = Command::new("../../../../../target/debug/git")
         .arg("commit")

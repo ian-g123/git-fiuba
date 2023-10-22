@@ -7,6 +7,7 @@ use super::super_integers::{read_i32_from, read_i64_from, read_u32_from, SuperIn
 use super::super_string::{read_string_from, u8_vec_to_hex_string, SuperStrings};
 use super::{author::Author, tree::Tree};
 use crate::commands::command_errors::CommandError;
+use crate::commands::objects_database;
 use crate::logger::Logger;
 
 extern crate chrono;
@@ -116,6 +117,31 @@ impl CommitObject {
 
         Ok(())
     }
+}
+
+pub fn write_commit_to_database(
+    commit: &mut GitObject,
+    tree: &mut Tree,
+    logger: &mut Logger,
+) -> Result<String, CommandError> {
+    write_tree(tree, logger)?;
+
+    let commit_hash = objects_database::write(logger, commit)?;
+    Ok(commit_hash)
+}
+
+pub fn write_tree(tree: &mut Tree, logger: &mut Logger) -> Result<(), CommandError> {
+    let mut boxed_tree: Box<dyn GitObjectTrait> = Box::new(tree.clone());
+    logger.log(&format!("Intentando escribir..."));
+    logger.log(&format!(" hash: {}", tree.get_hash_string()?));
+
+    objects_database::write(logger, &mut boxed_tree)?;
+    for (_, child) in tree.get_objects().iter_mut() {
+        if let Some(child_tree) = child.as_mut_tree() {
+            write_tree(child_tree, logger)?;
+        }
+    }
+    Ok(())
 }
 
 /// Lee la información de un Commit.

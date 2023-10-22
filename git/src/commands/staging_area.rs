@@ -170,13 +170,13 @@ impl StagingArea {
         self.files.remove(path);
     }
 
-    pub(crate) fn write_tree(&mut self, logger: &mut Logger) -> Result<String, CommandError> {
-        let working_tree = self.get_working_tree_staged(logger)?;
+    // pub fn write_tree(&mut self, logger: &mut Logger) -> Result<String, CommandError> {
+    //     let working_tree = self.get_working_tree_staged(logger)?;
 
-        let mut tree: GitObject = Box::new(working_tree);
+    //     let mut tree: GitObject = Box::new(working_tree);
 
-        objects_database::write(logger, &mut tree)
-    }
+    //     objects_database::write(logger, &mut tree)
+    // }
 
     pub fn get_working_tree_staged(&mut self, logger: &mut Logger) -> Result<Tree, CommandError> {
         let current_dir_display = "";

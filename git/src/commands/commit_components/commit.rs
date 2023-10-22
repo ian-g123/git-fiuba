@@ -18,12 +18,12 @@ use crate::{
             author::Author,
             aux::get_name,
             blob::Blob,
-            commit_object::CommitObject,
+            commit_object::{CommitObject, write_commit_to_database},
             git_object::{GitObject, GitObjectTrait},
-            last_commit::is_in_last_commit,
+            last_commit::is_in_last_commit, tree::Tree,
         },
         objects_database,
-        stagin_area::StagingArea,
+        staging_area::StagingArea,
     },
     logger::Logger,
 };
@@ -189,9 +189,9 @@ impl Commit {
         Ok(message.trim().to_string())
     }
 
-    /// Devuelve el mesage del Commit. Si se usó el flag -m, devuelve el mensaje asociado.
-    /// Si hay que reusar el de otro commit (-C), devuelve un string vacío. Si no se ha usado
-    /// ninguno de esos flags, se pide al usuario que introduzca el mensaje nuevamente.
+    /// Devuelve el mesage del Commit. Si se usó el flag -m, devuelve el mensaje asociado.\
+    /// Si hay que reusar el de otro commit (-C), devuelve un string vacío.\
+    /// Si no se ha usado ninguno de esos flags, se pide al usuario que introduzca el mensaje nuevamente.
     fn get_commit_message(&self, stdin: &mut dyn Read) -> Result<String, CommandError> {
         let message = {
             if let Some(message) = self.message.clone() {
@@ -230,25 +230,26 @@ impl Commit {
             self.run_all_config(&mut staging_area, logger)?;
         }
 
-        logger.log("Writing work dir tree");
+        logger.log("Creating Index tree");
 
-        let working_tree_hash = staging_area.write_tree(logger)?;
-        logger.log("Work dir writen");
+        let mut staged_tree = staging_area.get_working_tree_staged(logger)?;
+
+        logger.log("Index tree created");
 
         if !staging_area.has_changes()? {
             logger.log("Nothing to commit");
             // show status output
             return Ok(());
         } else {
-            self.run_commit(logger, message, working_tree_hash)?;
+            self.run_commit(logger, message, &mut staged_tree)?;
         }
 
         Ok(())
     }
 
     /// Si se han introducido paths como argumentos del comando, se eliminan los cambios
-    /// guardados en el Staging Area y se agregan los nuevos. Estos archivos deben ser
-    /// reconocidos por git.
+    /// guardados en el Staging Area y se agregan los nuevos.\
+    /// Estos archivos deben ser reconocidos por git.
     fn run_files_config(
         &self,
         logger: &mut Logger,
@@ -268,7 +269,7 @@ impl Commit {
         Ok(())
     }
 
-    /// Guarda en el staging area todos los archivos modificados y elimina los borrados.
+    /// Guarda en el staging area todos los archivos modificados y elimina los borrados.\
     /// Los archivos untracked no se guardan.
     fn run_all_config(
         &self,
@@ -292,7 +293,7 @@ impl Commit {
         &self,
         logger: &mut Logger,
         message: String,
-        working_tree_hash: String,
+        staged_tree: &mut Tree
     ) -> Result<(), CommandError> {
         let last_commit_hash = get_last_commit()?;
 
@@ -301,10 +302,16 @@ impl Commit {
             parents.push(padre);
         }
 
-        let commit: CommitObject = self.get_commit(&message, parents, working_tree_hash, logger)?;
+        let commit: CommitObject = self.get_commit(&message, parents, staged_tree, logger)?;
 
         let mut git_object: GitObject = Box::new(commit);
-        let commit_hash = objects_database::write(logger, &mut git_object)?;
+        //let commit_hash = objects_database::write(logger, &mut git_object)?;
+
+
+        let commit_hash = write_commit_to_database(&mut git_object, staged_tree, logger)?;
+
+        //logger.log(&format!(""))
+
         logger.log(&format!("Commit object saved in database {}", commit_hash));
         if !self.dry_run {
             logger.log(&format!("Updating last commit to {}", commit_hash));
@@ -325,7 +332,7 @@ impl Commit {
         &self,
         message: &str,
         parents: Vec<String>,
-        working_tree_hash: String,
+        staged_tree: &mut Tree,
         logger: &mut Logger,
     ) -> Result<CommitObject, CommandError> {
         let commit: CommitObject = {
@@ -333,11 +340,11 @@ impl Commit {
                 Self::get_reused_commit(
                     commit_hash.to_string(),
                     parents,
-                    working_tree_hash,
+                    staged_tree.to_string(),
                     logger,
                 )?
             } else {
-                Self::create_new_commit(message.to_owned(), parents, working_tree_hash, logger)?
+                Self::create_new_commit(message.to_owned(), parents, staged_tree, logger)?
             }
         };
 
@@ -349,9 +356,11 @@ impl Commit {
     fn create_new_commit(
         message: String,
         parents: Vec<String>,
-        working_tree_hash: String,
+        staged_tree: &mut Tree,
         logger: &mut Logger,
     ) -> Result<CommitObject, CommandError> {
+
+        let staged_tree_hash = staged_tree.get_hash_string()?;
         let config = Config::open()?;
 
         let Some(author_email) = config.get("user.email") else {
@@ -375,7 +384,7 @@ impl Commit {
             commiter,
             timestamp,
             offset,
-            working_tree_hash,
+            staged_tree_hash,
         )?;
         Ok(commit)
     }
@@ -384,7 +393,7 @@ impl Commit {
     fn get_reused_commit(
         commit_hash: String,
         parents: Vec<String>,
-        working_tree_hash: String,
+        staged_tree: String,
         logger: &mut Logger,
     ) -> Result<CommitObject, CommandError> {
         let other_commit = objects_database::read_object(&commit_hash, logger)?;
@@ -398,7 +407,7 @@ impl Commit {
                 committer,
                 timestamp,
                 offset,
-                working_tree_hash,
+                staged_tree,
             )?;
             return Ok(commit);
         }

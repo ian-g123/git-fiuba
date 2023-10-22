@@ -83,12 +83,13 @@ impl Tree {
         }
     }
 
+    /// Devuelve los subdirectorios o archivos que contiene el Tree (directorio).
     pub fn add_object(&mut self, name: String, object: GitObject) {
         _ = self.objects.insert(name, object);
     }
 
-    pub fn get_objects(&self) -> &HashMap<String, GitObject> {
-        &self.objects
+    pub fn get_objects(&self) -> HashMap<String, GitObject> {
+        self.objects.clone()
     }
 
     /// Crea un Blob a partir de su hash y lo añade al Tree.
@@ -112,7 +113,7 @@ impl Tree {
         vector_path: Vec<&str>,
         current_depth: usize,
         hash: &String,
-    ) -> Result<GitObject, CommandError> {
+    ) -> Result<(), CommandError> {
         let current_path = vector_path[..current_depth + 1].join("/");
         let tree_name = get_name(&current_path)?;
 
@@ -126,18 +127,18 @@ impl Tree {
         };
 
         tree.add_path(logger, vector_path, current_depth + 1, hash)?;
-        Ok(tree.to_owned())
+        Ok(())
     }
 
-    fn get_data(&mut self) -> Result<Vec<u8>, CommandError> {
+    /* fn get_data(&mut self) -> Result<Vec<u8>, CommandError> {
         let header = format!("1 {}\0", self.size()?);
         let content = self.content()?;
         Ok([header.as_bytes(), content.as_slice()].concat())
-    }
+    } */
 
-    fn get_mode(&self) -> Result<Mode, CommandError> {
+    /* fn get_mode(&self) -> Result<Mode, CommandError> {
         Ok(Mode::get_mode(self.path.clone())?)
-    }
+    } */
 
     pub fn read_from(
         stream: &mut dyn Read,
@@ -235,7 +236,7 @@ impl Tree {
         self.objects.clone()
     }
 
-    fn sort_objects(&self) -> Vec<(String, GitObject)> {
+    pub fn sort_objects(&self) -> Vec<(String, GitObject)> {
         let mut keys: Vec<&String> = self.objects.keys().collect();
         keys.sort();
 
@@ -297,8 +298,8 @@ impl GitObjectTrait for Tree {
     ) -> Result<(), CommandError> {
         let current_path_str = vector_path[..current_depth + 1].join("/");
         if current_depth != vector_path.len() - 1 {
-            let mut tree = self.add_tree(logger, vector_path, current_depth, hash)?;
-            _ = objects_database::write(logger, &mut tree)?;
+            _ = self.add_tree(logger, vector_path, current_depth, hash)?;
+            //_ = objects_database::write(logger, &mut tree)?;
         } else {
             self.add_blob(logger, &current_path_str, hash)?;
         }
