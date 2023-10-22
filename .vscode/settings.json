@@ -1,4 +1,5 @@
 {
-  "rust-analyzer.showUnlinkedFileNotification": false,
-  "rust-analyzer.cachePriming.enable": true
+  "rust-analyzer.linkedProjects": [
+    "./git/Cargo.toml"
+  ]
 }

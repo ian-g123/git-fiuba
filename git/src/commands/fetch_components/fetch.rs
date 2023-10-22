@@ -6,6 +6,10 @@ use std::io::Read;
 use std::io::Write;
 use std::net::TcpStream;
 
+use git::commands::file_compressor::extract;
+use git::commands::file_compressor::extract_2;
+use git::commands::reader::TcpStreamBuffer;
+
 fn main() -> Result<(), ()> {
     let address = "127.1.0.0:9418";
     println!("Conectándome a {:?}", address);
@@ -104,8 +108,6 @@ fn read_package(mut socket: &TcpStream) {
     let object_number = read_object_number(socket);
     println!("object_number: {:?}", object_number);
 
-    // leer_bits(socket);
-
     // The header is followed by number of object entries, each of which looks like this:
 
     // (undeltified representation)
@@ -122,6 +124,7 @@ fn read_package(mut socket: &TcpStream) {
     // Observation: length of each object is encoded in a variable
     // length format and is not constrained to 32-bit or anything.
 
+    // leer_bits(socket);
     leer_objetos(object_number, socket);
 }
 
@@ -152,7 +155,7 @@ fn leer_objetos(object_number: u32, mut socket: &TcpStream) {
         socket.read_exact(&mut first_byte_buf).unwrap();
         // Object type is three bits
         println!("first_byte_buf: {:?}", first_byte_buf);
-        let object_type = first_byte_buf[0] >> 5;
+        let object_type = first_byte_buf[0] >> 4 & 0b00000111;
         println!("object_type: {:?}", object_type);
         let object_type_str = match object_type {
             1 => "OBJ_COMMIT",
@@ -175,7 +178,7 @@ fn leer_objetos(object_number: u32, mut socket: &TcpStream) {
         println!("byte_fraction: {:?}", bit_chunk);
         bits.splice(0..0, bit_chunk);
 
-        let mut is_last_byte: bool = (first_byte_buf[0] >> 4) & 1 == 0;
+        let mut is_last_byte: bool = first_byte_buf[0] >> 7 == 0;
         while !is_last_byte {
             let mut seven_bit_chunk = Vec::<u8>::new();
             let current_byte = next_byte(socket);
@@ -192,9 +195,26 @@ fn leer_objetos(object_number: u32, mut socket: &TcpStream) {
         let len = bits_to_usize(&bits);
         println!("len: {:?}", len);
 
-        let mut buf = &mut vec![0; len];
-        socket.read(&mut buf).unwrap();
-        println!("buf: {:?}", buf);
+        // let mut decoder = flate2::read::ZlibDecoder::new_with_buf(socket, Vec::with_capacity(1));
+        // let zlib_buf = vec![0; len];
+        // let mut decoder = flate2::read::ZlibDecoder::new_with_buf(socket, zlib_buf);
+
+        // let mut decoder = flate2::read::ZlibDecoder::new(socket);
+
+        let mut buf_stream = TcpStreamBuffer::new(&mut socket);
+        let mut decoder = flate2::read::ZlibDecoder::new(buf_stream);
+
+        let mut deflated_data = Vec::new();
+        let bytes_read = decoder.read_to_end(&mut deflated_data).unwrap();
+        let bytes_used = decoder.total_in();
+        println!("deflated_data: {:?}", deflated_data);
+        println!("deflated_data_len: {:?}", deflated_data.len());
+        println!("bytes_used: {:?}", bytes_used);
+        println!("bytes_read: {:?}", bytes_read);
+        println!(
+            "deflated_data_str: {:?}",
+            String::from_utf8(deflated_data).unwrap()
+        );
     }
 }
 
