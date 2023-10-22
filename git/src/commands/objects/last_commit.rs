@@ -59,9 +59,9 @@ pub fn get_commit_tree_hash(logger: &mut Logger) -> Result<Option<String>, Comma
     let Some(last_commit) = get_last_commit()? else {
         return Ok(None);
     };
-    let commit = objects_database::read_object(&last_commit, logger)?;
-    if let Some(commit) = commit.as_commit() {
-        let tree_hash = commit.get_tree_hash();
+    let mut commit_box = objects_database::read_object(&last_commit, logger)?;
+    if let Some(mut commit) = commit_box.as_commit_mut() {
+        let tree_hash = commit.to_owned().get_tree_hash()?;
         return Ok(Some(tree_hash));
     }
     Ok(None)

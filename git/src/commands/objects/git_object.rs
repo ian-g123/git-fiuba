@@ -18,11 +18,11 @@ pub trait GitObjectTrait: fmt::Display {
     fn as_mut_tree(&mut self) -> Option<&mut Tree>;
 
     /// Devuelve el árbol del objeto si es que corresponde, o sino None
-    fn as_tree(&self) -> Option<&Tree> {
+    fn as_tree(&mut self) -> Option<Tree> {
         None
     }
 
-    fn as_commit(&self) -> Option<&CommitObject> {
+    fn as_commit_mut(&mut self) -> Option<&CommitObject> {
         None
     }
 
@@ -30,7 +30,7 @@ pub trait GitObjectTrait: fmt::Display {
 
     fn write_to(&mut self, stream: &mut dyn std::io::Write) -> Result<(), CommandError> {
         let type_str = self.type_str();
-        let content = self.content()?;
+        let content = self.content(true)?;
         let len = content.len();
         let header = format!("{} {}\0", type_str, len);
         stream
@@ -61,7 +61,7 @@ pub trait GitObjectTrait: fmt::Display {
     fn mode(&self) -> Mode;
 
     /// Devuelve el contenido del objeto
-    fn content(&mut self) -> Result<Vec<u8>, CommandError>;
+    fn content(&mut self, write_to_database: bool) -> Result<Vec<u8>, CommandError>;
 
     /// Devuelve el tamaño del objeto en bytes
     fn size(&self) -> Result<usize, CommandError> {

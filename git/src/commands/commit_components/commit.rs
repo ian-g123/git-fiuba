@@ -18,9 +18,10 @@ use crate::{
             author::Author,
             aux::get_name,
             blob::Blob,
-            commit_object::{CommitObject, write_commit_to_database},
+            commit_object::CommitObject,
             git_object::{GitObject, GitObjectTrait},
-            last_commit::is_in_last_commit, tree::Tree,
+            last_commit::is_in_last_commit,
+            tree::Tree,
         },
         objects_database,
         staging_area::StagingArea,
@@ -241,7 +242,7 @@ impl Commit {
             // show status output
             return Ok(());
         } else {
-            self.run_commit(logger, message, &mut staged_tree)?;
+            self.run_commit(logger, message, staged_tree)?;
         }
 
         Ok(())
@@ -293,7 +294,7 @@ impl Commit {
         &self,
         logger: &mut Logger,
         message: String,
-        staged_tree: &mut Tree
+        staged_tree: Tree,
     ) -> Result<(), CommandError> {
         let last_commit_hash = get_last_commit()?;
 
@@ -307,8 +308,7 @@ impl Commit {
         let mut git_object: GitObject = Box::new(commit);
         //let commit_hash = objects_database::write(logger, &mut git_object)?;
 
-
-        let commit_hash = write_commit_to_database(&mut git_object, staged_tree, logger)?;
+        let commit_hash = objects_database::write(logger, &mut git_object)?;
 
         //logger.log(&format!(""))
 
@@ -332,17 +332,12 @@ impl Commit {
         &self,
         message: &str,
         parents: Vec<String>,
-        staged_tree: &mut Tree,
+        staged_tree: Tree,
         logger: &mut Logger,
     ) -> Result<CommitObject, CommandError> {
         let commit: CommitObject = {
             if let Some(commit_hash) = &self.reuse_message {
-                Self::get_reused_commit(
-                    commit_hash.to_string(),
-                    parents,
-                    staged_tree.to_string(),
-                    logger,
-                )?
+                Self::get_reused_commit(commit_hash.to_string(), parents, staged_tree, logger)?
             } else {
                 Self::create_new_commit(message.to_owned(), parents, staged_tree, logger)?
             }
@@ -356,10 +351,9 @@ impl Commit {
     fn create_new_commit(
         message: String,
         parents: Vec<String>,
-        staged_tree: &mut Tree,
+        mut staged_tree: Tree,
         logger: &mut Logger,
     ) -> Result<CommitObject, CommandError> {
-
         let staged_tree_hash = staged_tree.get_hash_string()?;
         let config = Config::open()?;
 
@@ -384,7 +378,8 @@ impl Commit {
             commiter,
             timestamp,
             offset,
-            staged_tree_hash,
+            staged_tree,
+            None,
         )?;
         Ok(commit)
     }
@@ -393,10 +388,11 @@ impl Commit {
     fn get_reused_commit(
         commit_hash: String,
         parents: Vec<String>,
-        staged_tree: String,
+        staged_tree: Tree,
         logger: &mut Logger,
     ) -> Result<CommitObject, CommandError> {
-        let other_commit = objects_database::read_object(&commit_hash, logger)?;
+        let mut other_commit = objects_database::read_object(&commit_hash, logger)?;
+        let hash_commit = other_commit.get_hash()?;
         if let Some((message, author, committer, timestamp, offset)) =
             other_commit.get_info_commit()
         {
@@ -408,6 +404,7 @@ impl Commit {
                 timestamp,
                 offset,
                 staged_tree,
+                Some(hash_commit),
             )?;
             return Ok(commit);
         }

@@ -23,6 +23,7 @@ use super::{
 pub struct Tree {
     path: String,
     objects: HashMap<String, GitObject>,
+    hash: Option<[u8; 20]>,
 }
 
 impl Tree {
@@ -41,17 +42,17 @@ impl Tree {
         Ok((false, "".to_string()))
     }
 
-    pub fn has_blob_from_name(&self, blob_name: &str) -> bool {
-        for (name, object) in self.objects.iter() {
-            if name == blob_name {
-                return true;
-            }
-            if let Some(tree) = object.as_tree() {
-                return tree.has_blob_from_name(blob_name);
-            }
-        }
-        false
-    }
+    // pub fn has_blob_from_name(&self, blob_name: &str) -> bool {
+    //     for (name, object) in self.objects.iter() {
+    //         if name == blob_name {
+    //             return true;
+    //         }
+    //         if let Some(tree) = object.as_tree() {
+    //             return tree.has_blob_from_name(blob_name);
+    //         }
+    //     }
+    //     false
+    // }
 
     pub fn get_deleted_blob(&self, files: &HashMap<String, String>) -> Vec<GitObject> {
         let mut deleted_blobs: Vec<GitObject> = Vec::new();
@@ -80,6 +81,7 @@ impl Tree {
         Tree {
             path: path.clone(),
             objects: HashMap::new(),
+            hash: None,
         }
     }
 
@@ -178,6 +180,7 @@ impl Tree {
         Ok(Box::new(Self {
             path: path.to_string(),
             objects,
+            hash: None,
         }))
     }
 
@@ -248,6 +251,10 @@ impl Tree {
         }
         sorted_objects
     }
+
+    fn set_hash(&mut self, hash: [u8; 20]) {
+        self.hash = Some(hash);
+    }
 }
 
 impl GitObjectTrait for Tree {
@@ -261,8 +268,8 @@ impl GitObjectTrait for Tree {
         Some(self)
     }
 
-    fn as_tree(&self) -> Option<&Tree> {
-        Some(self)
+    fn as_tree(&mut self) -> Option<Tree> {
+        Some(self.to_owned())
     }
 
     fn clone_object(&self) -> GitObject {
@@ -273,7 +280,7 @@ impl GitObjectTrait for Tree {
         "tree".to_string()
     }
 
-    fn content(&mut self) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self, write_to_database: bool) -> Result<Vec<u8>, CommandError> {
         let mut content = Vec::new();
         let mut objects = self.sort_objects();
         for (path, object) in objects.iter_mut() {
@@ -285,7 +292,12 @@ impl GitObjectTrait for Tree {
             content.extend_from_slice(&hash);
 
             path.write_to(&mut content)?;
+
+            if write_to_database {
+                objects_database::write(&mut Logger::new_dummy(), object)?;
+            }
         }
+
         Ok(content)
     }
 
@@ -296,6 +308,7 @@ impl GitObjectTrait for Tree {
         current_depth: usize,
         hash: &String,
     ) -> Result<(), CommandError> {
+        self.hash = None;
         let current_path_str = vector_path[..current_depth + 1].join("/");
         if current_depth != vector_path.len() - 1 {
             _ = self.add_tree(logger, vector_path, current_depth, hash)?;
@@ -319,6 +332,17 @@ impl GitObjectTrait for Tree {
         //     self.hash(),
         //     self.filename()
         // )
+    }
+
+    fn get_hash(&mut self) -> Result<[u8; 20], CommandError> {
+        if let Some(hash) = self.hash {
+            return Ok(hash);
+        }
+        let mut buf: Vec<u8> = Vec::new();
+        self.write_to(&mut buf)?;
+        let hash = get_sha1(&buf);
+        self.set_hash(hash);
+        Ok(hash)
     }
 }
 
@@ -393,13 +417,13 @@ mod tests {
             let current_depth: usize = 0;
             _ = tree.add_path_tree(&mut logger, vector_path, current_depth, &hash);
         }
-        let dir0 = tree.objects.get("dir0").unwrap().as_tree().unwrap();
-        let dir1 = dir0.objects.get("dir1").unwrap().as_tree().unwrap();
-        let dir2 = dir1.objects.get("dir2").unwrap().as_tree().unwrap();
-        assert!(&dir2.objects.contains_key("bar.txt"));
-        assert!(&dir1.objects.contains_key("foo.txt"));
-        assert!(&tree.objects.contains_key("fu.txt"));
+        let mut dir0 = tree.objects.get_mut("dir0").unwrap().as_tree().unwrap();
         assert!(&dir0.objects.contains_key("baz.txt"));
+        let mut dir1 = dir0.objects.get_mut("dir1").unwrap().as_tree().unwrap();
+        assert!(&dir1.objects.contains_key("foo.txt"));
+        let dir2 = dir1.objects.get_mut("dir2").unwrap().as_tree().unwrap();
+        assert!(&dir2.objects.contains_key("bar.txt"));
+        assert!(&tree.objects.contains_key("fu.txt"));
     }
 
     #[test]
@@ -418,7 +442,7 @@ mod tests {
             let current_depth: usize = 0;
             _ = tree.add_path_tree(&mut logger, vector_path, current_depth, &hash);
         }
-        let result = tree.has_blob_from_name(&"bar.txt");
+        let result = tree.objects.contains_key("bar.txt");
         assert!(result)
     }
 
@@ -438,7 +462,7 @@ mod tests {
             let current_depth: usize = 0;
             _ = tree.add_path_tree(&mut logger, vector_path, current_depth, &hash);
         }
-        let result = tree.has_blob_from_name(&"no-existe.txt");
+        let result = tree.objects.contains_key("bar.txt");
         assert!(!result)
     }
 }

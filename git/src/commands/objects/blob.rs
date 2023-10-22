@@ -164,7 +164,7 @@ impl GitObjectTrait for Blob {
         "blob".to_string()
     }
 
-    fn content(&mut self) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self, _: bool) -> Result<Vec<u8>, CommandError> {
         match &self.content {
             Some(content) => Ok(content.clone()),
             None => match &self.path {
