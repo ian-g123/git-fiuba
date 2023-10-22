@@ -594,7 +594,7 @@ fn test_commit_paths() {
 
     let result = Command::new("../../../../../target/debug/git")
         .arg("cat-file")
-        .arg("6a125f2dda80adaccb0cd79e8c890b185535e24b")
+        .arg("c335058175661d87505df52ccd254045417097db")
         .arg("-p")
         .current_dir(path)
         .output()
@@ -602,12 +602,12 @@ fn test_commit_paths() {
 
     assert_eq!(
         String::from_utf8(result.stdout).unwrap(),
-        "040000 tree d939d691de20dfedb6f26862d09aec381eb564cd    dir\n"
+        "040000 tree c8b4bef6483a95051ee8fa218ba49312d79ec415    dir\n"
     );
 
     let result = Command::new("../../../../../target/debug/git")
         .arg("cat-file")
-        .arg("d939d691de20dfedb6f26862d09aec381eb564cd")
+        .arg("c8b4bef6483a95051ee8fa218ba49312d79ec415")
         .arg("-p")
         .current_dir(path)
         .output()
@@ -621,7 +621,7 @@ fn test_commit_paths() {
 
     assert_eq!(String::from_utf8(result.stdout).unwrap(), expected);
 
-    //_ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(format!("{}", path));
 }
 
 /// Prueba que no se puedan agregar al staging area los archivos pasados al comando Commit
@@ -662,7 +662,7 @@ fn test_commit_paths_fails() {
         .unwrap();
 
     assert!(result.status.success());
-    let expected = "Hay un error abriendo el archivo: Error al abrir archivo .git/objects/ed/4466dc67cbe92a4d094224e68e6c8cbc5a9d1b: No such file or directory (os error 2)\n";
+    let expected = "error: pathspec 'dir/testfile3.txt' did not match any file(s) known to git\n";
     assert_eq!(String::from_utf8(result.stderr).unwrap(), expected);
 
     _ = fs::remove_dir_all(format!("{}", path));

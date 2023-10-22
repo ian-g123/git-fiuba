@@ -173,8 +173,10 @@ impl Tree {
 
             let mut name = read_string_from(stream)?;
 
+            logger.log(&format!("Hash del objeto: {}, name: {}", hash_str, name));
+
             let object = objects_database::read_object(&hash_str, logger)?;
-            objects.insert(hash_str, object);
+            objects.insert(name, object);
         }
         let mut tree = Box::new(Self {
             path: path.to_string(),
