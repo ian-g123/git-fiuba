@@ -72,12 +72,12 @@ pub trait GitObjectTrait {
     fn to_string_priv(&self) -> String;
 
     /// Devuelve el hash del objeto
-    fn get_hash(&mut self) -> Result<[u8; 20], CommandError> {
-        let mut buf: Vec<u8> = Vec::new();
-        let mut stream = Cursor::new(&mut buf);
-        self.write_to(&mut stream)?;
-        Ok(get_sha1(&buf))
-    }
+    fn get_hash(&mut self) -> Result<[u8; 20], CommandError>; /*  {
+                                                                  let mut buf: Vec<u8> = Vec::new();
+                                                                  let mut stream = Cursor::new(&mut buf);
+                                                                  self.write_to(&mut stream)?;
+                                                                  Ok(get_sha1(&buf))
+                                                              } */
 
     /// Devuelve el hash del objeto
     fn get_hash_string(&mut self) -> Result<String, CommandError> {
@@ -166,6 +166,7 @@ pub fn read_git_object_from(
         return Blob::read_from(stream, len, path, hash_str, logger);
     };
     if type_str == "tree" {
+        logger.log(&format!("Tree hash - reading: {}", path));
         return Tree::read_from(stream, len, path, hash_str, logger);
     };
     if type_str == "commit" {

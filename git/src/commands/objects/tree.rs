@@ -176,7 +176,12 @@ impl Tree {
             let object = objects_database::read_object(&hash_str, logger)?;
             objects.insert(hash_str, object);
         }
-
+        let mut tree = Box::new(Self {
+            path: path.to_string(),
+            objects: objects.clone(),
+            hash: None,
+        });
+        logger.log(&format!("Tree hash - reading: {}", tree.get_hash_string()?));
         Ok(Box::new(Self {
             path: path.to_string(),
             objects,
@@ -280,7 +285,7 @@ impl GitObjectTrait for Tree {
         "tree".to_string()
     }
 
-    fn content(&mut self, write_to_database: bool) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self, _: bool) -> Result<Vec<u8>, CommandError> {
         let mut content = Vec::new();
         let mut objects = self.sort_objects();
         for (path, object) in objects.iter_mut() {
@@ -293,9 +298,9 @@ impl GitObjectTrait for Tree {
 
             path.write_to(&mut content)?;
 
-            if write_to_database {
+            /* if write_to_database {
                 objects_database::write(&mut Logger::new_dummy(), object)?;
-            }
+            } */
         }
 
         Ok(content)
@@ -486,9 +491,9 @@ mod tests {
 
 #[cfg(test)]
 mod test_write_y_display {
-    use std::io::Cursor;
+    use std::io::{Cursor, Seek, SeekFrom};
 
-    use crate::commands::objects::git_object;
+    use crate::commands::objects::git_object::{self, read_git_object_from};
 
     use super::*;
     #[test]
@@ -524,5 +529,31 @@ mod test_write_y_display {
         };
 
         assert_eq!(output_str, "040000 tree 6a9c5249e59f914c4770ab001a1ec71b2a24b7e1    dir0\n100644 blob 30d74d258442c7c65512eafab474568dd706c430    fu.txt\n".to_string());
+    }
+
+    #[test]
+    #[ignore]
+    fn test_read_and_write() {
+        let files = ["dir0/baz.txt".to_string(), "fu.txt".to_string()];
+        let mut tree = Tree::new("".to_string());
+        let hash = "30d74d258442c7c65512eafab474568dd706c430".to_string();
+        let mut logger = Logger::new_dummy();
+        for path in files {
+            let vector_path = path.split("/").collect::<Vec<_>>();
+            let current_depth: usize = 0;
+            _ = tree.add_path_tree(&mut logger, vector_path, current_depth, &hash);
+        }
+
+        let mut content = Vec::new();
+        let mut writer_stream = Cursor::new(&mut content);
+        tree.write_to(&mut writer_stream).unwrap();
+
+        writer_stream.seek(SeekFrom::Start(0)).unwrap();
+
+        let mut tree_res = Tree::read_from(&mut writer_stream, 0, "", &hash, &mut logger).unwrap();
+        //assert_eq!(tree_res, Box::new(tree));
+        if let Some(tree_new) = tree_res.as_tree() {
+            let x = tree_new.clone();
+        }
     }
 }

@@ -18,7 +18,7 @@ use crate::{
             author::Author,
             aux::get_name,
             blob::Blob,
-            commit_object::CommitObject,
+            commit_object::{write_commit_tree_to_database, CommitObject},
             git_object::{GitObject, GitObjectTrait},
             last_commit::is_in_last_commit,
             tree::Tree,
@@ -231,18 +231,12 @@ impl Commit {
             self.run_all_config(&mut staging_area, logger)?;
         }
 
-        logger.log("Creating Index tree");
-
-        let mut staged_tree = staging_area.get_working_tree_staged(logger)?;
-
-        logger.log("Index tree created");
-
         if !staging_area.has_changes()? {
             logger.log("Nothing to commit");
             // show status output
             return Ok(());
         } else {
-            self.run_commit(logger, message, staged_tree)?;
+            self.run_commit(logger, message, &mut staging_area)?;
         }
 
         Ok(())
@@ -257,9 +251,16 @@ impl Commit {
         staging_area: &mut StagingArea,
     ) -> Result<(), CommandError> {
         if !self.files.is_empty() {
+            logger.log("Running pathspec configuration");
             staging_area.empty(logger)?;
+            logger.log("Running pathspec configuration X2");
+
             for path in self.files.iter() {
+                logger.log(&format!("Path from pathspec: {}", path));
+
                 if !is_untracked(path, logger, staging_area)? {
+                    logger.log("Agregado");
+
                     add::run_for_file(path, staging_area, logger)?;
                 } else {
                     return Err(CommandError::UntrackedError(path.to_owned()));
@@ -294,7 +295,7 @@ impl Commit {
         &self,
         logger: &mut Logger,
         message: String,
-        staged_tree: Tree,
+        staging_area: &mut StagingArea,
     ) -> Result<(), CommandError> {
         let last_commit_hash = get_last_commit()?;
 
@@ -303,18 +304,25 @@ impl Commit {
             parents.push(padre);
         }
 
-        let commit: CommitObject = self.get_commit(&message, parents, staged_tree, logger)?;
+        logger.log("Creating Index tree");
+
+        let mut staged_tree = staging_area.get_working_tree_staged(logger)?;
+
+        logger.log("Index tree created");
+
+        let commit: CommitObject =
+            self.get_commit(&message, parents, staged_tree.to_owned(), logger)?;
 
         let mut git_object: GitObject = Box::new(commit);
-        //let commit_hash = objects_database::write(logger, &mut git_object)?;
-
-        let commit_hash = objects_database::write(logger, &mut git_object)?;
+        write_commit_tree_to_database(&mut staged_tree, logger)?;
 
         //logger.log(&format!(""))
 
-        logger.log(&format!("Commit object saved in database {}", commit_hash));
         if !self.dry_run {
+            let commit_hash = objects_database::write(logger, &mut git_object)?;
+            logger.log(&format!("Commit object saved in database {}", commit_hash));
             logger.log(&format!("Updating last commit to {}", commit_hash));
+
             update_last_commit(&commit_hash)?;
             logger.log("Last commit updated");
             // show commit status

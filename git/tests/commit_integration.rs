@@ -515,6 +515,46 @@ fn test_commit_paths() {
 
     let testfile2_hash = String::from_utf8(result.stdout).unwrap();
 
+    let head = fs::read_to_string(path.to_owned() + "/.git/HEAD").unwrap();
+    let (_, branch_ref) = head.split_once(' ').unwrap();
+    let branch_ref = branch_ref.trim();
+    let ref_path = path.to_owned() + "/.git/" + branch_ref;
+    let commit_hash = fs::read_to_string(ref_path).unwrap();
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("cat-file")
+        .arg(commit_hash.clone())
+        .arg("-p")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    let output = String::from_utf8(result.stdout).unwrap();
+    println!("Output: \n {}", output);
+
+    let output_lines: Vec<&str> = output.split('\n').collect();
+    let tree_hash = output_lines[0];
+    let tree_hash: Vec<&str> = tree_hash.split(" ").collect();
+    println!("Tree hash: \n {}", tree_hash[1].trim());
+
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("cat-file")
+        .arg(tree_hash[1].trim())
+        .arg("-p")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    let output = String::from_utf8(result.stdout).unwrap();
+    println!("Output: \n {}", output);
+
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("cat-file")
+        .arg("d939d691de20dfedb6f26862d09aec381eb564cd")
+        .arg("-p")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    let output = String::from_utf8(result.stdout).unwrap();
+    println!("Output: \n {}", output);
+
     change_test_scene_3(path);
 
     let result = Command::new("../../../../../target/debug/git")
@@ -554,7 +594,7 @@ fn test_commit_paths() {
 
     let result = Command::new("../../../../../target/debug/git")
         .arg("cat-file")
-        .arg("c335058175661d87505df52ccd254045417097db")
+        .arg("6a125f2dda80adaccb0cd79e8c890b185535e24b")
         .arg("-p")
         .current_dir(path)
         .output()
@@ -562,12 +602,12 @@ fn test_commit_paths() {
 
     assert_eq!(
         String::from_utf8(result.stdout).unwrap(),
-        "040000 tree c8b4bef6483a95051ee8fa218ba49312d79ec415    dir\n"
+        "040000 tree d939d691de20dfedb6f26862d09aec381eb564cd    dir\n"
     );
 
     let result = Command::new("../../../../../target/debug/git")
         .arg("cat-file")
-        .arg("c8b4bef6483a95051ee8fa218ba49312d79ec415")
+        .arg("d939d691de20dfedb6f26862d09aec381eb564cd")
         .arg("-p")
         .current_dir(path)
         .output()
@@ -581,7 +621,7 @@ fn test_commit_paths() {
 
     assert_eq!(String::from_utf8(result.stdout).unwrap(), expected);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    //_ = fs::remove_dir_all(format!("{}", path));
 }
 
 /// Prueba que no se puedan agregar al staging area los archivos pasados al comando Commit

@@ -63,7 +63,10 @@ impl CommitObject {
         let (tree_hash, parents, author, author_timestamp, author_offset, committer, _, _, message) =
             read_commit_info_from(stream, logger)?;
         let tree_hash_str = u8_vec_to_hex_string(&tree_hash);
+        logger.log(&format!("Tree hash: {}", tree_hash_str));
         let mut tree = objects_database::read_object(&tree_hash_str, logger)?;
+        logger.log(&format!("Tree hash: {}", tree.get_hash_string()?));
+
         logger.log("commit created");
         let Some(tree) = tree.as_tree() else {
             return Err(CommandError::InvalidCommit);
@@ -316,6 +319,34 @@ fn get_date(line: &mut Vec<&str>) -> Result<DateTime<Local>, CommandError> {
         utc_datetime,
         offset,
     ))
+}
+
+/* pub fn write_commit_to_database(
+    commit: &mut GitObject,
+    tree: &mut Tree,
+    logger: &mut Logger,
+) -> Result<String, CommandError> {
+    write_tree(tree, logger)?;
+
+    let commit_hash = objects_database::write(logger, commit)?;
+    Ok(commit_hash)
+} */
+
+pub fn write_commit_tree_to_database(
+    tree: &mut Tree,
+    logger: &mut Logger,
+) -> Result<(), CommandError> {
+    let mut boxed_tree: Box<dyn GitObjectTrait> = Box::new(tree.clone());
+    logger.log(&format!("Intentando escribir..."));
+    logger.log(&format!(" hash: {}", tree.get_hash_string()?));
+
+    objects_database::write(logger, &mut boxed_tree)?;
+    for (_, child) in tree.get_objects().iter_mut() {
+        if let Some(child_tree) = child.as_mut_tree() {
+            write_commit_tree_to_database(child_tree, logger)?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

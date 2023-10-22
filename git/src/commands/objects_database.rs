@@ -85,6 +85,7 @@ pub(crate) fn write_2(
 pub(crate) fn read_object(hash_str: &str, logger: &mut Logger) -> Result<GitObject, CommandError> {
     let (path, decompressed_data) = read_file(hash_str, logger)?;
     let mut stream = Cursor::new(decompressed_data);
+    logger.log(&format!("Before reading"));
 
     read_git_object_from(&mut stream, &path, &hash_str, logger)
 }
