@@ -4,7 +4,7 @@ use std::{
 };
 
 fn main() {
-    let (path, data) = read_file("8b61b4f78b465af4e942f5673e3e9eb2f655f831").unwrap();
+    let (path, data) = read_file("e80e8fbbd85cdf883054fdd45103d2f43a195870").unwrap();
     println!("{:?}", String::from_utf8_lossy(&data));
 }
 
