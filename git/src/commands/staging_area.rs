@@ -52,11 +52,13 @@ impl StagingArea {
         Ok(changes + deleted_files.len() > 0)
     }
 
-    fn get_deleted_files(&self) -> Result<Vec<GitObject>, CommandError> {
-        let mut deleted_blobs: Vec<GitObject> = Vec::new();
+    fn get_deleted_files(&self) -> Result<Vec<String>, CommandError> {
+        let mut deleted_blobs: Vec<String> = Vec::new();
         let last_commit_tree = build_last_commit_tree(&mut Logger::new_dummy())?;
-        if let Some(tree) = last_commit_tree {
-            deleted_blobs = tree.get_deleted_blob(&self.files);
+        if let Some(mut tree) = last_commit_tree {
+            let files: Vec<&String> = self.files.keys().collect();
+
+            deleted_blobs = tree.get_deleted_blobs_from_path(files);
         }
         Ok(deleted_blobs)
     }
@@ -65,8 +67,23 @@ impl StagingArea {
         self.get_files().contains_key(path)
     }
 
-    pub fn has_file_from_hash(&self, hash_obj: &str) -> bool {
+    pub fn has_file_renamed(&self, actual_path: &str, actual_hash: &str) -> bool {
         for (path, hash) in self.get_files() {
+            let mut actual_parts: Vec<&str> = actual_path.split_terminator("/").collect();
+            let mut parts: Vec<&str> = path.split_terminator("/").collect();
+
+            _ = actual_parts.pop();
+            _ = parts.pop();
+
+            if actual_parts == parts && hash == actual_hash {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn has_file_from_hash(&self, hash_obj: &str) -> bool {
+        for (_, hash) in self.get_files() {
             if hash_obj == hash {
                 return true;
             }

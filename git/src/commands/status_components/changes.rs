@@ -17,35 +17,99 @@ use std::{
 */
 
 use crate::commands::{
-    command_errors::CommandError, file_compressor::extract,
-    hash_object_components::hash_object::HashObject, staging_area::StagingArea,
+    command_errors::CommandError,
+    file_compressor::extract,
+    hash_object_components::hash_object::HashObject,
+    objects::{aux::get_name, tree::Tree},
+    staging_area::{self, StagingArea},
 };
 
-use super::{change_object::ChangeObject, changes_types::ChangeType};
+use super::{
+    change_object::ChangeObject, changes_types::ChangeType, working_tree::build_working_tree,
+};
 
 pub struct Changes {
-    changes: HashMap<String, ChangeObject>,
+    index_changes: HashMap<String, ChangeObject>,
+    working_tree_changes: HashMap<String, ChangeObject>,
 }
 
 impl Changes {
-    pub fn new() -> Result<Self, CommandError> {
+    pub fn new() -> Result<(), CommandError> {
         let mut changes: HashMap<String, ChangeObject> = HashMap::new();
         let commit_tree = get_commit_tree()?;
         let mut index = StagingArea::open()?;
+        let working_tree = build_working_tree()?;
         /* let tree_staged = index.get_working_tree_staged(logger)
         let current_dir = get_current_dir()?;
         Self::compare(current_dir, index, &mut changes, &commit_tree)?;
         Self::get_deleted_changes(index, &mut changes); */
-        Ok(Changes { changes: changes })
+        //Ok(Changes { changes: changes })
+        Ok(())
+    }
+
+    fn check_staging_area_status(
+        staging_files: &HashMap<String, String>,
+        last_commit: Tree,
+    ) -> Result<(), CommandError> {
+        for (path, hash) in staging_files.iter() {
+            let has_path = last_commit.has_blob_from_path(path);
+            let (has_hash, name) = last_commit.has_blob_from_hash(hash)?;
+            let actual_name = get_name(path)?;
+            if !has_path && !has_hash {
+                // es added
+            } else if has_path && !has_hash {
+                // es modified
+            } else if has_hash && name != actual_name {
+                // es renamed
+            } else {
+                // unmodified
+            }
+        }
+        //get_deleted_changes_staging_area()
+        Ok(())
+    }
+
+    fn check_working_tree_status(
+        mut working_tree: Tree,
+        staging_area: &StagingArea,
+        last_commit: Tree,
+    ) -> Result<(), CommandError> {
+        for (name, object) in working_tree.get_objects().iter_mut() {
+            let Some(path) = object.get_name() else {
+                return Err(CommandError::FileNameError);
+            };
+            let hash = object.get_hash_string()?;
+            let has_path = staging_area.has_file_from_path(&path);
+            let has_path_renamed = staging_area.has_file_renamed(&path, &hash);
+            let has_hash = staging_area.has_file_from_hash(&hash);
+            let actual_name = get_name(&path)?;
+            let (is_in_last_commit, _) = last_commit.has_blob_from_hash(&hash)?;
+            if !has_path
+                && !has_hash
+                && !last_commit.has_blob_from_path(&path)
+                && !is_in_last_commit
+            {
+                // es untracked
+            } else if has_path && !has_hash {
+                // es modified
+            } else if has_path_renamed {
+                // es renamed
+            } else {
+                // unmodified
+            }
+        }
+        //let staged_files: Vec<&String> = staging_area.get_files().keys().collect();
+        //let deleted_changes = working_tree.get_deleted_blobs_from_path(staged_files);
+        Ok(())
     }
 
     /*
     falta: copy, type changed, dif entre modified y added, deleted del WT
     */
 
-    pub fn get_changes(&self) -> HashMap<String, ChangeObject> {
+    /* pub fn get_changes(&self) -> HashMap<String, ChangeObject> {
         self.changes.clone()
-    }
+    } */
 
     /// Compara las carpetas y archivos del Working Tree y el Staging Area. (falta refactor)
     fn compare(

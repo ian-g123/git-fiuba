@@ -42,29 +42,56 @@ impl Tree {
         Ok((false, "".to_string()))
     }
 
-    // pub fn has_blob_from_name(&self, blob_name: &str) -> bool {
-    //     for (name, object) in self.objects.iter() {
-    //         if name == blob_name {
-    //             return true;
-    //         }
-    //         if let Some(tree) = object.as_tree() {
-    //             return tree.has_blob_from_name(blob_name);
-    //         }
-    //     }
-    //     false
-    // }
+    pub fn has_blob_from_path(&self, path: &str) -> bool {
+        let mut parts: Vec<&str> = path.split_terminator("/").collect();
+        return self.follow_path_in_tree(&mut parts);
+    }
 
-    pub fn get_deleted_blob(&self, files: &HashMap<String, String>) -> Vec<GitObject> {
-        let mut deleted_blobs: Vec<GitObject> = Vec::new();
-        for (_, object) in self.objects.iter() {
-            if let Some(path) = object.get_path() {
-                if !files.contains_key(&path) {
-                    deleted_blobs.push(object.to_owned());
+    fn follow_path_in_tree(&self, path: &mut Vec<&str>) -> bool {
+        if path.is_empty() {
+            return false;
+        }
+        for (name, object) in self.get_objects().iter_mut() {
+            if name == path[0] {
+                if let Some(obj_tree) = object.as_tree() {
+                    _ = path.remove(0);
+                    return obj_tree.follow_path_in_tree(path);
+                }
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn get_deleted_blobs_from_path(&mut self, files: Vec<&String>) -> Vec<String> {
+        let mut deleted_blobs: Vec<String> = Vec::new();
+        for (_, object) in self.objects.iter_mut() {
+            if object.as_tree().is_none() {
+                if let Some(path) = object.get_path() {
+                    if !files.contains(&&path) {
+                        deleted_blobs.push(path);
+                    }
                 }
             }
         }
         deleted_blobs
     }
+
+    /* fn a(&self, path: &mut Vec<&str>, files: Vec<&String>) -> bool {
+        if path.is_empty() {
+            return false;
+        }
+        for (name, object) in self.get_objects().iter_mut() {
+            if name == path[0] {
+                if let Some(obj_tree) = object.as_tree() {
+                    _ = path.remove(0);
+                    return obj_tree.a(path);
+                }
+                return true;
+            }
+        }
+        false
+    } */
 
     pub fn add_path_tree(
         &mut self,
@@ -421,7 +448,7 @@ mod tests {
     }
 
     #[test]
-    fn hash_blob_from_name_true() {
+    fn hash_blob_from_path_true() {
         let files = [
             "dir0/dir1/dir2/bar.txt".to_string(),
             "dir0/dir1/foo.txt".to_string(),
@@ -436,29 +463,13 @@ mod tests {
             let current_depth: usize = 0;
             _ = tree.add_path_tree(&mut logger, vector_path, current_depth, &hash);
         }
-        let result = tree
-            .objects
-            .get_mut("dir0")
-            .unwrap()
-            .as_tree()
-            .unwrap()
-            .objects
-            .get_mut("dir1")
-            .unwrap()
-            .as_tree()
-            .unwrap()
-            .objects
-            .get_mut("dir2")
-            .unwrap()
-            .as_tree()
-            .unwrap()
-            .objects
-            .contains_key("bar.txt");
+
+        let result = tree.has_blob_from_path("dir0/dir1/dir2/bar.txt");
         assert!(result)
     }
 
     #[test]
-    fn hash_blob_from_name_false() {
+    fn hash_blob_from_path_false() {
         let files = [
             "dir0/dir1/dir2/bar.txt".to_string(),
             "dir0/dir1/foo.txt".to_string(),
@@ -473,7 +484,8 @@ mod tests {
             let current_depth: usize = 0;
             _ = tree.add_path_tree(&mut logger, vector_path, current_depth, &hash);
         }
-        let result = tree.objects.contains_key("bar.txt");
+        let result = tree.has_blob_from_path("dir0/dir1/dir2/barrrr.txt");
+
         assert!(!result)
     }
 }
