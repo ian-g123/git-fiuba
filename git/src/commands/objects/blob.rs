@@ -121,7 +121,6 @@ impl Blob {
 
         let blob = Blob::new_from_hash_and_content(hash, path, content)?;
         logger.log("blob created");
-        logger.log(&format!("blob: {}", blob.to_string()));
         Ok(Box::new(blob))
     }
 
@@ -135,10 +134,8 @@ impl Blob {
         stream
             .read_exact(&mut content)
             .map_err(|error| CommandError::FileReadError(error.to_string()))?;
-        let output_str = String::from_utf8(content).map_err(|error| {
-            logger.log("Error conviertiendo a utf8 blob");
-            CommandError::FileReadError(error.to_string())
-        })?;
+        let output_str = String::from_utf8(content)
+            .map_err(|error| CommandError::FileReadError(error.to_string()))?;
         writeln!(output, "{}", output_str)
             .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
         Ok(())
@@ -164,7 +161,7 @@ impl GitObjectTrait for Blob {
         "blob".to_string()
     }
 
-    fn content(&mut self, _: bool) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self) -> Result<Vec<u8>, CommandError> {
         match &self.content {
             Some(content) => Ok(content.clone()),
             None => match &self.path {

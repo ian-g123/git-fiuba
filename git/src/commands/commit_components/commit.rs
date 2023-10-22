@@ -253,14 +253,9 @@ impl Commit {
         if !self.files.is_empty() {
             logger.log("Running pathspec configuration");
             staging_area.empty(logger)?;
-            logger.log("Running pathspec configuration X2");
 
             for path in self.files.iter() {
-                logger.log(&format!("Path from pathspec: {}", path));
-
                 if !is_untracked(path, logger, staging_area)? {
-                    logger.log("Agregado");
-
                     add::run_for_file(path, staging_area, logger)?;
                 } else {
                     return Err(CommandError::UntrackedError(path.to_owned()));
@@ -315,8 +310,6 @@ impl Commit {
 
         let mut git_object: GitObject = Box::new(commit);
         write_commit_tree_to_database(&mut staged_tree, logger)?;
-
-        //logger.log(&format!(""))
 
         if !self.dry_run {
             let commit_hash = objects_database::write(logger, &mut git_object)?;

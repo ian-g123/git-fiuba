@@ -171,19 +171,11 @@ impl Tree {
                 .map_err(|_| CommandError::ObjectHashNotKnown)?;
             let hash_str = u8_vec_to_hex_string(&hash);
 
-            let mut name = read_string_from(stream)?;
-
-            logger.log(&format!("Hash del objeto: {}, name: {}", hash_str, name));
+            let name = read_string_from(stream)?;
 
             let object = objects_database::read_object(&hash_str, logger)?;
             objects.insert(name, object);
         }
-        let mut tree = Box::new(Self {
-            path: path.to_string(),
-            objects: objects.clone(),
-            hash: None,
-        });
-        logger.log(&format!("Tree hash - reading: {}", tree.get_hash_string()?));
         Ok(Box::new(Self {
             path: path.to_string(),
             objects,
@@ -228,11 +220,6 @@ impl Tree {
             objects.push((mode, type_src.to_string(), hash_str, name_str));
         }
         for (mode, type_str, hash, name) in objects {
-            logger.log(&format!(
-                "Mode: {}, type: {}, hash: {}, name: {}",
-                mode, type_str, hash, name
-            ));
-            //let line = format!("{} {} {}    {}", mode, type_str, hash, name);
             writeln!(output, "{} {} {}    {}", mode, type_str, hash, name)
                 .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
             output
@@ -287,7 +274,7 @@ impl GitObjectTrait for Tree {
         "tree".to_string()
     }
 
-    fn content(&mut self, _: bool) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self) -> Result<Vec<u8>, CommandError> {
         let mut content = Vec::new();
         let mut objects = self.sort_objects();
         for (path, object) in objects.iter_mut() {

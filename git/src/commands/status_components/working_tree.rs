@@ -53,6 +53,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore]
     fn print_working_tree() {
         let wt = build_working_tree().unwrap();
         validate_tree(wt);

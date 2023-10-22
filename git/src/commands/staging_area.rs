@@ -76,27 +76,17 @@ impl StagingArea {
 
     pub fn empty(&mut self, logger: &mut Logger) -> Result<(), CommandError> {
         let mut files = self.files.clone();
-        logger.log(&format!("Before building last commit tree"));
 
         let tree_commit = build_last_commit_tree(logger)?;
-        logger.log(&format!("After building last commit tree"));
 
         if let Some(tree) = tree_commit {
-            logger.log(&format!("Vaciando"));
-
             for (path, hash) in self.files.iter() {
-                logger.log(&format!("Vaciando ... Path: {}, hash: {}", path, hash));
-                let name = get_name(path)?;
                 let (is_in_last_commit, _) = tree.has_blob_from_hash(hash)?;
                 if !is_in_last_commit {
-                    logger.log(&format!("Eliminado"));
-
                     files.remove(path);
                 }
             }
         } else {
-            logger.log(&format!("Staging area vaciada completamente"));
-
             files = HashMap::new();
         }
         self.files = files;

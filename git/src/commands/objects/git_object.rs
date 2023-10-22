@@ -30,7 +30,7 @@ pub trait GitObjectTrait {
 
     fn write_to(&mut self, stream: &mut dyn std::io::Write) -> Result<(), CommandError> {
         let type_str = self.type_str();
-        let content = self.content(true)?;
+        let content = self.content()?;
         let len = content.len();
         let header = format!("{} {}\0", type_str, len);
         stream
@@ -61,7 +61,7 @@ pub trait GitObjectTrait {
     fn mode(&self) -> Mode;
 
     /// Devuelve el contenido del objeto
-    fn content(&mut self, write_to_database: bool) -> Result<Vec<u8>, CommandError>;
+    fn content(&mut self) -> Result<Vec<u8>, CommandError>;
 
     /// Devuelve el tamaño del objeto en bytes
     fn size(&self) -> Result<usize, CommandError> {
@@ -156,7 +156,7 @@ pub fn read_git_object_from(
     hash_str: &str,
     logger: &mut Logger,
 ) -> Result<GitObject, CommandError> {
-    logger.log("read_git_object_from");
+    logger.log("Reading git object...");
 
     let (type_str, len) = get_type_and_len(stream, logger)?;
 
@@ -166,7 +166,6 @@ pub fn read_git_object_from(
         return Blob::read_from(stream, len, path, hash_str, logger);
     };
     if type_str == "tree" {
-        logger.log(&format!("Tree hash - reading: {}", path));
         return Tree::read_from(stream, len, path, hash_str, logger);
     };
     if type_str == "commit" {
@@ -183,7 +182,6 @@ fn get_type_and_len(
     let mut bytes = stream.bytes();
     let type_str = get_type(&mut bytes)?;
     let len_str = get_len(&mut bytes)?;
-    logger.log("found \0");
     let len: usize = len_str
         .parse()
         .map_err(|_| CommandError::ObjectLengthParsingError)?;

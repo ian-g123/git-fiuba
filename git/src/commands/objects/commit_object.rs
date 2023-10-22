@@ -63,11 +63,7 @@ impl CommitObject {
         let (tree_hash, parents, author, author_timestamp, author_offset, committer, _, _, message) =
             read_commit_info_from(stream, logger)?;
         let tree_hash_str = u8_vec_to_hex_string(&tree_hash);
-        logger.log(&format!("Tree hash: {}", tree_hash_str));
         let mut tree = objects_database::read_object(&tree_hash_str, logger)?;
-        logger.log(&format!("Tree hash: {}", tree.get_hash_string()?));
-
-        logger.log("commit created");
         let Some(tree) = tree.as_tree() else {
             return Err(CommandError::InvalidCommit);
         };
@@ -235,7 +231,7 @@ impl GitObjectTrait for CommitObject {
         todo!()
     }
 
-    fn content(&mut self, write_to_database: bool) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self) -> Result<Vec<u8>, CommandError> {
         let mut buf: Vec<u8> = Vec::new();
         buf.extend_from_slice(&self.tree.get_hash()?);
         let parents_len_be = (self.parents.len() as u32).to_be_bytes();
@@ -259,10 +255,6 @@ impl GitObjectTrait for CommitObject {
 
         self.message.write_to(&mut stream)?;
 
-        if write_to_database {
-            // let mut git_object: GitObject = Box::new(self.tree);
-            objects_database::write_2(&mut Logger::new_dummy(), &mut self.tree)?;
-        }
         Ok(buf)
     }
 
@@ -280,7 +272,7 @@ impl GitObjectTrait for CommitObject {
 
     fn get_hash(&mut self) -> Result<[u8; 20], CommandError> {
         let Some(hash) = self.hash else {
-            let hash = get_sha1(&self.content(false)?);
+            let hash = get_sha1(&self.content()?);
             self.hash = Some(hash);
             return Ok(hash);
         };

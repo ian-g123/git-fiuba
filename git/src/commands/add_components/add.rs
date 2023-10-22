@@ -115,7 +115,7 @@ impl Add {
             match entry {
                 Ok(entry) => self.try_run_for_path(entry, staging_area, _output, logger)?,
                 Err(error) => {
-                    logger.log(&format!("Error en entry: {:?}", error));
+                    logger.log(&format!("Error in entry: {:?}", error));
                     return Err(CommandError::FileOpenError(error.to_string()));
                 }
             }
@@ -151,13 +151,7 @@ impl Add {
     fn read_dir(&self, logger: &mut Logger, path_str: &String) -> Result<ReadDir, CommandError> {
         match fs::read_dir(path_str) {
             Ok(read_dir) => Ok(read_dir),
-            Err(error) => {
-                logger.log(&format!(
-                    "Error en read_dir: {error} desde {:?}",
-                    env::current_dir()
-                ));
-                Err(CommandError::FileOpenError(error.to_string()))
-            }
+            Err(error) => Err(CommandError::FileOpenError(error.to_string())),
         }
     }
 }

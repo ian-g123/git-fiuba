@@ -19,7 +19,6 @@ pub fn is_in_last_commit(
 
 pub fn build_last_commit_tree(logger: &mut Logger) -> Result<Option<Tree>, CommandError> {
     if let Some(hash) = get_commit_tree_hash(logger)? {
-        logger.log(&format!("Found tree hash: {}", hash));
         let mut tree = Tree::new("".to_string());
         build_tree(&mut tree, &hash, logger)?;
         return Ok(Some(tree));
@@ -64,10 +63,7 @@ pub fn get_commit_tree_hash(logger: &mut Logger) -> Result<Option<String>, Comma
 
     let mut commit_box = objects_database::read_object(&last_commit, logger)?;
     if let Some(commit) = commit_box.as_commit_mut() {
-        logger.log(&format!("Before getting tree hash"));
-
         let tree_hash = commit.to_owned().get_tree_hash()?;
-        logger.log(&format!("Returning tree hash"));
 
         return Ok(Some(tree_hash));
     }

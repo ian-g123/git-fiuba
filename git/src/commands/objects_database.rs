@@ -23,12 +23,8 @@ pub(crate) fn write(
     git_object: &mut GitObject,
 ) -> Result<String, CommandError> {
     let mut data = Vec::new();
-    logger.log("Escribiendo objeto");
+    logger.log("Writing object ...");
     git_object.write_to(&mut data)?;
-    logger.log(&format!(
-        "Objecto escrito: {}",
-        String::from_utf8_lossy(&data)
-    ));
     let hex_string = u8_vec_to_hex_string(&git_object.get_hash()?);
     let folder_name = &hex_string[0..2];
     let parent_path = format!(".git/objects/{}", folder_name);
@@ -55,12 +51,8 @@ pub(crate) fn write_2(
     git_object: &mut dyn GitObjectTrait,
 ) -> Result<String, CommandError> {
     let mut data = Vec::new();
-    logger.log("Escribiendo objeto");
+    logger.log("Writing object...");
     git_object.write_to(&mut data)?;
-    logger.log(&format!(
-        "Objecto escrito: {}",
-        String::from_utf8_lossy(&data)
-    ));
     let hex_string = u8_vec_to_hex_string(&git_object.get_hash()?);
     let folder_name = &hex_string[0..2];
     let parent_path = format!(".git/objects/{}", folder_name);
@@ -85,8 +77,6 @@ pub(crate) fn write_2(
 pub(crate) fn read_object(hash_str: &str, logger: &mut Logger) -> Result<GitObject, CommandError> {
     let (path, decompressed_data) = read_file(hash_str, logger)?;
     let mut stream = Cursor::new(decompressed_data);
-    logger.log(&format!("Before reading"));
-
     read_git_object_from(&mut stream, &path, &hash_str, logger)
 }
 
@@ -95,9 +85,7 @@ pub(crate) fn read_file(
     logger: &mut Logger,
 ) -> Result<(String, Vec<u8>), CommandError> {
     let path = format!(".git/objects/{}/{}", &hash_str[0..2], &hash_str[2..]);
-    logger.log(&format!("Path: {}", path.clone()));
-    let exists = PathBuf::from(path.clone()).exists();
-    logger.log(&format!("Existe?: {}", exists));
+    logger.log(&format!("Reading file. Path: {}", path.clone()));
 
     let mut file = File::open(&path).map_err(|error| {
         CommandError::FileOpenError(format!(
