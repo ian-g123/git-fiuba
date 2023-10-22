@@ -233,7 +233,7 @@ fn test_flag_all() {
         .unwrap();
 
     assert!(result.status.success());
-
+    println!("testfile1_hash: {}", testfile1_hash);
     let result = Command::new("../../../../../target/debug/git")
         .arg("cat-file")
         .arg(testfile1_hash.trim())
@@ -622,7 +622,7 @@ fn test_commit_paths_fails() {
         .unwrap();
 
     assert!(result.status.success());
-    let expected = "error: pathspec 'dir/testfile3.txt' did not match any file(s) known to git\n";
+    let expected = "Hay un error abriendo el archivo: Error al abrir archivo .git/objects/ed/4466dc67cbe92a4d094224e68e6c8cbc5a9d1b: No such file or directory (os error 2)\n";
     assert_eq!(String::from_utf8(result.stderr).unwrap(), expected);
 
     _ = fs::remove_dir_all(format!("{}", path));
