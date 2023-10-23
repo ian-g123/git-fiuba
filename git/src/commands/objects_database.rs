@@ -2,6 +2,7 @@ extern crate sha1;
 use std::{
     fs::{self, File},
     io::{Cursor, Read, Write},
+    path::PathBuf,
 };
 
 use crate::logger::Logger;
@@ -10,11 +11,12 @@ use super::{
     command_errors::CommandError,
     file_compressor::{compress, extract},
     objects::{
-        aux::{get_sha1_str, u8_vec_to_hex_string},
         git_object::{read_git_object_from, GitObject},
+        super_string::u8_vec_to_hex_string,
     },
 };
 
+/// Escribe un objeto en la base de datos.
 pub(crate) fn write(
     logger: &mut Logger,
     git_object: &mut GitObject,
@@ -47,17 +49,24 @@ pub(crate) fn write(
     return Ok(hex_string);
 }
 
-/// Se obtiene un objeto a partir de su hash.
+/// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve el objeto que este representa.
 pub(crate) fn read_object(hash_str: &str, logger: &mut Logger) -> Result<GitObject, CommandError> {
-    let (path, decompressed_data) = read_file(hash_str)?;
+    let (path, decompressed_data) = read_file(hash_str, logger)?;
     let mut stream = Cursor::new(decompressed_data);
 
     read_git_object_from(&mut stream, &path, &hash_str, logger)
 }
 
-/// Se obtiene el path y la data descomprimida de un archivo a partir de su hash.
-pub fn read_file(hash_str: &str) -> Result<(String, Vec<u8>), CommandError> {
+/// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve la ruta del objeto y su data descomprimida.
+pub(crate) fn read_file(
+    hash_str: &str,
+    logger: &mut Logger,
+) -> Result<(String, Vec<u8>), CommandError> {
     let path = format!(".git/objects/{}/{}", &hash_str[0..2], &hash_str[2..]);
+    logger.log(&format!("Path: {}", path.clone()));
+    let exists = PathBuf::from(path.clone()).exists();
+    logger.log(&format!("Existe?: {}", exists));
+
     let mut file = File::open(&path).map_err(|error| {
         CommandError::FileOpenError(format!(
             "Error al abrir archivo {}: {}",

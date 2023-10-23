@@ -1,29 +1,13 @@
-use std::{
-    fs::File,
-    io::{Read, Write},
-    path::Path,
-};
+use std::{fs::File, io::Read};
 
 extern crate sha1;
 use crate::commands::command_errors::CommandError;
 use sha1::{Digest, Sha1};
 
-/// Obtiene el nombre de un archivo dada su ruta. Si la ruta no existe, devuelve error.
-pub fn get_name(path_string: &String) -> Result<String, CommandError> {
-    let path = Path::new(path_string);
-    if !path.exists() {
-        return Err(CommandError::FileNotFound(path_string.to_string()));
-    }
-    if let Some(file_name) = path.file_name() {
-        if let Some(name_str) = file_name.to_str() {
-            return Ok(name_str.to_string());
-        }
-    }
-    Err(CommandError::FileNotFound(path_string.to_owned()))
-}
+use super::super_string::u8_vec_to_hex_string;
 
 /// Obtiene el nombre de un archivo dada su ruta. Si la ruta no existe, devuelve error.
-pub fn get_name_bis(path_string: &String) -> Result<String, CommandError> {
+pub fn get_name(path_string: &str) -> Result<String, CommandError> {
     path_string
         .split("/")
         .last()
@@ -79,58 +63,6 @@ pub fn hex_string_to_u8_vec(hex_string: &str) -> [u8; 20] {
     result
 }
 
-pub fn u8_vec_to_hex_string(u8_vec: &[u8]) -> String {
-    let hex_string = u8_vec
-        .iter()
-        .map(|byte| format!("{:02x}", byte))
-        .collect::<Vec<_>>()
-        .join("");
-
-    hex_string
-}
-pub trait SuperStrings {
-    fn write_to(&self, stream: &mut dyn Write) -> Result<(), CommandError>;
-    //fn read_from(&self, stream: &mut dyn Read) -> Result<String, CommandError>;
-
-    fn cast_hex_to_u8_vec(&self) -> Result<[u8; 20], CommandError>;
-}
-
-impl SuperStrings for String {
-    fn write_to(&self, stream: &mut dyn Write) -> Result<(), CommandError> {
-        let len_be = (self.len() as u32).to_be_bytes();
-        stream
-            .write_all(&len_be)
-            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-
-        stream.write_all(self.as_bytes()).map_err(|error| {
-            CommandError::FileWriteError(format!("Error escribiendo en el stream: {}", error))
-        })?;
-        Ok(())
-    }
-
-    /// Convierte de hexadecimal a Vec<u8>.
-    fn cast_hex_to_u8_vec(&self) -> Result<[u8; 20], CommandError> {
-        let mut result = [0; 20];
-        let mut chars = self.chars();
-
-        let mut i = 0;
-        while let Some(c1) = chars.next() {
-            if let Some(c2) = chars.next() {
-                if let (Some(n1), Some(n2)) = (c1.to_digit(16), c2.to_digit(16)) {
-                    result[i] = (n1 * 16 + n2) as u8;
-                    i += 1;
-                } else {
-                    panic!("Invalid hex string");
-                }
-            } else {
-                break;
-            }
-        }
-
-        Ok(result)
-    }
-}
-
 /// Se obtiene una cadena de texto desde el stream hasta encontrar el caracter char_stop.
 pub fn read_string_until(stream: &mut dyn Read, char_stop: char) -> Result<String , CommandError> {
     let string = {
@@ -152,88 +84,6 @@ pub fn read_string_until(stream: &mut dyn Read, char_stop: char) -> Result<Strin
         Ok(result)
     }?;
     Ok(string)
-}
-
-pub fn read_i64_from(stream: &mut dyn Read) -> Result<i64, CommandError> {
-    let mut value_be = [0; 8];
-    stream
-        .read_exact(&mut value_be)
-        .map_err(|error| CommandError::FileReadError(error.to_string()))?;
-    let value = i64::from_be_bytes(value_be);
-    Ok(value)
-}
-
-pub fn read_i32_from(stream: &mut dyn Read) -> Result<i32, CommandError> {
-    let mut value_be = [0; 4];
-    stream
-        .read_exact(&mut value_be)
-        .map_err(|error| CommandError::FileReadError(error.to_string()))?;
-    let value = i32::from_be_bytes(value_be);
-    Ok(value)
-}
-
-pub fn read_u32_from(stream: &mut dyn Read) -> Result<u32, CommandError> {
-    let mut parents_len_be = [0; 4];
-    stream
-        .read_exact(&mut parents_len_be)
-        .map_err(|error| CommandError::FileReadError(error.to_string()))?;
-    let parents_len = u32::from_be_bytes(parents_len_be);
-    Ok(parents_len)
-}
-
-pub trait SuperIntegers {
-    fn write_to(&self, stream: &mut dyn Write) -> Result<(), CommandError>;
-}
-
-impl SuperIntegers for i64 {
-    fn write_to(&self, stream: &mut dyn Write) -> Result<(), CommandError> {
-        let value_be = self.to_be_bytes();
-        stream
-            .write_all(&value_be)
-            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-        Ok(())
-    }
-}
-
-impl SuperIntegers for i32 {
-    fn write_to(&self, stream: &mut dyn Write) -> Result<(), CommandError> {
-        let value_be = self.to_be_bytes();
-        stream
-            .write_all(&value_be)
-            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-        Ok(())
-    }
-}
-
-impl SuperIntegers for u32 {
-    fn write_to(&self, stream: &mut dyn Write) -> Result<(), CommandError> {
-        let value_be = self.to_be_bytes();
-        stream
-            .write_all(&value_be)
-            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-        Ok(())
-    }
-}
-
-pub fn read_to(stop_byte: u8, stream: &mut dyn Read) -> Result<Vec<u8>, CommandError> {
-    let end = stop_byte as u8;
-    let mut result = Vec::<u8>::new();
-    loop {
-        let mut buf = [0; 1];
-
-        if stream.read_exact(&mut buf).is_ok() {
-            let byte = buf[0];
-            if byte == end {
-                break;
-            }
-            result.push(byte);
-        } else {
-            return Err(CommandError::FileReadError(
-                "Error leyendo bytes para obtener el tipo de objeto git".to_string(),
-            ));
-        }
-    }
-    Ok(result)
 }
 
 #[cfg(test)]
@@ -258,18 +108,6 @@ mod test {
         match get_name(&path.to_string()) {
             Ok(result) => assert_eq!(res_expected, result),
             Err(error) => assert!(false, "{}", error),
-        }
-    }
-
-    /// Prueba que la función get_name() falle si el path no existe.
-    #[test]
-    fn get_name_fails() {
-        let path = String::from("no_existe");
-
-        let res_expected = CommandError::FileNotFound(path.clone());
-        match get_name(&path.to_string()) {
-            Err(result) => assert_eq!(res_expected, result),
-            Ok(result) => assert!(false, "Se obtuvo: {}", result),
         }
     }
 

@@ -5,7 +5,7 @@ use crate::{
 
 use super::{
     author::Author, aux::get_sha1, blob::Blob, commit_object::CommitObject, mode::Mode,
-    aux::u8_vec_to_hex_string, tree::Tree,
+    super_string::u8_vec_to_hex_string, tree::Tree,
 };
 use std::{
     fmt,
@@ -19,6 +19,10 @@ pub trait GitObjectTrait: fmt::Display {
 
     /// Devuelve el árbol del objeto si es que corresponde, o sino None
     fn as_tree(&self) -> Option<&Tree> {
+        None
+    }
+
+    fn as_commit(&self) -> Option<&CommitObject> {
         None
     }
 
@@ -45,6 +49,7 @@ pub trait GitObjectTrait: fmt::Display {
     /// Si el objeto no es un Tree, devuelve un error
     fn add_path(
         &mut self,
+        logger: &mut Logger,
         vector_path: Vec<&str>,
         current_depth: usize,
         hash: &String,
@@ -60,7 +65,6 @@ pub trait GitObjectTrait: fmt::Display {
 
     /// Devuelve el contenido del objeto
     fn content(&self) -> Result<Vec<u8>, CommandError>;
-
 
     /// Devuelve el tamaño del objeto en bytes
     fn size(&self) -> Result<usize, CommandError> {
@@ -98,7 +102,10 @@ pub fn display_from_hash(
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (_, content) = objects_database::read_file(hash)?;
+    logger.log(&format!("About to read file, hash = {}\n", hash));
+    let (_, content) = objects_database::read_file(hash, logger)?;
+    logger.log("file read\n");
+
     let mut stream = std::io::Cursor::new(content);
     display_from_stream(&mut stream, logger, output)
 }
@@ -126,7 +133,7 @@ pub fn display_type_from_hash(
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (_, content) = objects_database::read_file(hash)?;
+    let (_, content) = objects_database::read_file(hash, logger)?;
     let mut stream = std::io::Cursor::new(content);
     let (type_str, _) = get_type_and_len(&mut stream, logger)?;
     writeln!(output, "{}", type_str)
@@ -139,7 +146,7 @@ pub fn display_size_from_hash(
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (_, content) = objects_database::read_file(hash)?;
+    let (_, content) = objects_database::read_file(hash, logger)?;
     let mut stream = std::io::Cursor::new(content);
     let (_, len) = get_type_and_len(&mut stream, logger)?;
     writeln!(output, "{}", len).map_err(|error| CommandError::FileWriteError(error.to_string()))?;
@@ -156,16 +163,17 @@ pub fn read_git_object_from(
 
     let (type_str, len) = get_type_and_len(stream, logger)?;
 
-    logger.log(&format!("len: {}", len));
+    logger.log(&format!("len: {}, type: {}", len, type_str));
 
     if type_str == "blob" {
+        // return Blob::read_from(stream, len, path, logger);
         return Blob::read_from(stream, len, path, hash_str, logger);
     };
     if type_str == "tree" {
         return Tree::read_from(stream, len, path, hash_str, logger);
     };
     if type_str == "commit" {
-        return CommitObject::read_from(stream);
+        return CommitObject::read_from(stream, logger);
     };
 
     Err(CommandError::ObjectTypeError)
@@ -232,7 +240,6 @@ impl std::fmt::Debug for GitObject {
         write!(f, "{}", self.to_string())
     }
 }
-
 
 pub fn write_to_stream_from_content(
     stream: &mut dyn std::io::Write,

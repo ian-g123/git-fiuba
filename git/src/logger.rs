@@ -6,6 +6,8 @@ use std::{
     thread,
 };
 
+use crate::commands::command_errors::CommandError;
+
 pub struct Logger {
     logs_sender: Option<Sender<String>>,
     writer_thread_handle: Option<thread::JoinHandle<()>>,
@@ -14,15 +16,16 @@ pub struct Logger {
 /// Guarda mensajes en un archivo de texto
 impl Logger {
     /// Instancia logger para escribir en el archivo en path. Lo crea si no existe.
-    pub fn new(path: &str) -> Result<Self, Error> {
-        let path = Path::new(path);
+    pub fn new(path_name: &str) -> Result<Self, CommandError> {
+        let path = Path::new(path_name);
         if let Some(dir) = path.parent() {
             let _ = fs::create_dir_all(dir);
         }
         let mut file: File = fs::OpenOptions::new()
             .create(true)
             .append(true)
-            .open(path)?;
+            .open(path)
+            .map_err(|_| CommandError::FileOpenError(path_name.to_string()))?;
         let (tx, rx) = channel::<String>();
 
         let handle = thread::spawn(move || {
