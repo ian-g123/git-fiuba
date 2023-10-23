@@ -3,7 +3,7 @@ const SHORT_MODIFIED: &str = "M";
 const SHORT_ADDED: &str = "A";
 const SHORT_DELETED: &str = "D";
 const SHORT_RENAMED: &str = "R";
-const SHORT_UNTRACKED: &str = "??";
+const SHORT_UNTRACKED: &str = "?";
 const SHORT_UNMODIFIED: &str = " ";
 
 // Long format - changes types
@@ -36,6 +36,7 @@ impl ChangeType {
             ChangeType::Modified => LONG_MODIFIED.to_string(),
             ChangeType::Deleted => LONG_DELETED.to_string(),
             ChangeType::Renamed => LONG_RENAMED.to_string(),
+            ChangeType::Added => LONG_ADDED.to_string(),
             _ => "".to_string(),
         }
     }
@@ -46,7 +47,7 @@ impl ChangeType {
             ChangeType::Deleted => SHORT_DELETED.to_string(),
             ChangeType::Renamed => SHORT_RENAMED.to_string(),
             ChangeType::Added => SHORT_ADDED.to_string(),
-            _ => "".to_string(),
+            ChangeType::Untracked => SHORT_UNTRACKED.to_string(),
         }
     }
 }

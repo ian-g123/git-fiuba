@@ -28,7 +28,7 @@ fn build_working_tree_aux(path_name: &str, tree: &mut Tree) -> Result<(), Comman
         };
         let entry_path = entry.path();
         let path = &get_path_name(entry_path.clone())?;
-        if path.contains(".git") {
+        if path.contains("./.git") {
             continue;
         }
         if entry_path.is_dir() {

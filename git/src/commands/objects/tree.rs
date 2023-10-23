@@ -27,15 +27,15 @@ pub struct Tree {
 }
 
 impl Tree {
-    pub fn has_blob_from_hash(&self, blob_hash: &str) -> Result<(bool, String), CommandError> {
-        for (name, object) in self.objects.iter() {
-            let mut object = object.to_owned();
-            let object: &mut GitObject = object.borrow_mut();
+    pub fn has_blob_from_hash(&mut self, blob_hash: &str) -> Result<(bool, String), CommandError> {
+        for (name, object) in self.objects.iter_mut() {
+            /* let mut object = object.to_owned();
+            let object: &mut GitObject = object.borrow_mut(); */
             let hash = object.get_hash_string()?;
             if hash.to_owned() == blob_hash.to_string() {
                 return Ok((true, name.to_owned()));
             }
-            if let Some(tree) = object.as_tree() {
+            if let Some(tree) = object.as_mut_tree() {
                 return tree.has_blob_from_hash(blob_hash);
             }
         }

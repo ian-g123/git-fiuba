@@ -56,10 +56,10 @@ impl Format for ShortFormat {
         let mut output_message = "".to_string();
         let changes = sort_changes(changes);
         for change in changes.iter() {
-            output_message = format!("{}\n{}\n", output_message, change.to_string_change());
+            output_message = format!("{}{}\n", output_message, change.to_string_change());
         }
         if !output_message.is_empty() {
-            writeln!(output, "{}", output_message)
+            write!(output, "{}", output_message)
                 .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
         }
         Ok(())

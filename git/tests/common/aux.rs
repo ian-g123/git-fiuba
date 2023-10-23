@@ -1,7 +1,8 @@
 use std::{
     fs::{self, File},
     io::Write,
-    path::Path, process::Command,
+    path::Path,
+    process::Command,
 };
 
 pub fn create_test_scene_1(path: &str) {
@@ -64,7 +65,6 @@ pub fn create_test_scene_2(path: &str) {
 
 pub fn change_test_scene_2(path: &str) {
     let mut file = File::create(path.to_owned() + "/dir/testfile1.txt").unwrap();
-
     file.write_all(b"Cambio!").unwrap();
 }
 
@@ -89,4 +89,32 @@ pub fn create_base_scene(path: &str) {
             .is_ok(),
         "No se pudo inicializar el repositorio"
     );
+}
+
+pub fn create_test_scene_4(path: &str) {
+    create_test_scene_2(path);
+
+    let mut file = File::create(path.to_owned() + "/dir/testfile3.txt").unwrap();
+    file.write_all(b"file 3!").unwrap();
+
+    let mut file = File::create(path.to_owned() + "/dir/testfile4.txt").unwrap();
+    file.write_all(b"file 4!").unwrap();
+
+    let mut file = File::create(path.to_owned() + "/dir/testfile4.txt").unwrap();
+    file.write_all(b"file 4!").unwrap();
+
+    let mut file = File::create(path.to_owned() + "/testfile.txt").unwrap();
+    file.write_all(b"testfile!").unwrap();
+}
+
+pub fn change_test_scene_4(path: &str) {
+    let mut file = File::create(path.to_owned() + "/testfile.txt").unwrap();
+    file.write_all(b"Cambio!").unwrap();
+    _ = fs::remove_file(path.to_string() + "/dir/testfile3.txt").unwrap();
+}
+
+pub fn change_test_scene_4_part_2(path: &str) {
+    let mut file = File::create(path.to_owned() + "/testfile.txt").unwrap();
+    file.write_all(b"Cambio2!").unwrap();
+    _ = fs::remove_file(path.to_string() + "/dir/testfile2.txt").unwrap();
 }

@@ -24,7 +24,7 @@ impl ChangeObject {
         let working_tree_status = self.working_tree_status.get_short_type();
         let staging_area_status = self.staging_area_status.get_short_type();
         format!(
-            "{}{} {}\n",
+            "{}{} {}",
             staging_area_status, working_tree_status, self.path
         )
     }

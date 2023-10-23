@@ -32,7 +32,7 @@ impl StagingArea {
     pub fn get_changes(&self) -> Result<HashMap<String, String>, CommandError> {
         let tree_commit = build_last_commit_tree(&mut Logger::new_dummy())?;
         let mut changes: HashMap<String, String> = HashMap::new();
-        if let Some(tree) = tree_commit {
+        if let Some(mut tree) = tree_commit {
             for (path, hash) in self.files.iter() {
                 let (is_in_last_commit, name) = tree.has_blob_from_hash(hash)?;
 
@@ -56,7 +56,6 @@ impl StagingArea {
         let mut deleted: Vec<String> = Vec::new();
         let last_commit_tree = build_last_commit_tree(&mut Logger::new_dummy())?;
         if let Some(mut tree) = last_commit_tree {
-
             self.check_deleted_from_commit(&mut tree, &mut deleted, "".to_string())
         }
         Ok(deleted)
@@ -109,7 +108,7 @@ impl StagingArea {
 
         let tree_commit = build_last_commit_tree(logger)?;
 
-        if let Some(tree) = tree_commit {
+        if let Some(mut tree) = tree_commit {
             for (path, hash) in self.files.iter() {
                 let (is_in_last_commit, _) = tree.has_blob_from_hash(hash)?;
                 if !is_in_last_commit {

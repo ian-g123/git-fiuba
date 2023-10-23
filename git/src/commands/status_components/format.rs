@@ -18,7 +18,7 @@ pub trait Format {
             logger,
             output,
             changes_to_be_commited,
-            changes_to_be_commited,
+            changes_not_staged,
             untracked_files,
             branch,
         )?;

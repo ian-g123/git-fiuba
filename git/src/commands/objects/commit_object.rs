@@ -126,6 +126,10 @@ impl CommitObject {
 
         Ok(())
     }
+
+    pub fn get_tree(&self) -> &Tree {
+        &self.tree
+    }
 }
 
 /// Lee la información de un Commit.
@@ -217,7 +221,7 @@ impl GitObjectTrait for CommitObject {
         ))
     }
 
-    fn as_commit_mut(&mut self) -> Option<&CommitObject> {
+    fn as_commit_mut(&mut self) -> Option<&mut CommitObject> {
         Some(self)
     }
     fn get_path(&self) -> Option<String> {

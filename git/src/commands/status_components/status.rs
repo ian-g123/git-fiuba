@@ -85,6 +85,7 @@ impl Status {
 
     fn run(&self, output: &mut dyn Write, logger: &mut Logger) -> Result<(), CommandError> {
         let branch = get_current_branch_name()?;
+        logger.log(&format!("Branch: {}", branch));
         if self.short {
             let short_format = ShortFormat;
             short_format.show(logger, output, &branch)?;

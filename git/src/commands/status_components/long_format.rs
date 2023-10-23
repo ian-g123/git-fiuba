@@ -16,16 +16,16 @@ impl Format for LongFormat {
         untracked_files: &Vec<String>,
         branch: &str,
     ) -> Result<(), CommandError> {
-        let mut output_message = format!("On branch {}\n", branch);
+        let mut output_message = format!("On branch {}", branch);
         let changes_to_be_commited = sort_hashmap(changes_to_be_commited);
         if !changes_to_be_commited.is_empty() {
             output_message = format!(
-                "Changes to be committed:\n  (use \"git restore --staged <file>...\" to unstage)\n"
+                "{}\nChanges to be committed:\n  (use \"git restore --staged <file>...\" to unstage)\n", output_message
             );
         }
         for (path, change_type) in changes_to_be_commited.iter() {
             let change = change_type.get_long_type();
-            output_message = format!("{}	{}:    {}\n", output_message, change, path);
+            output_message = format!("{}	{}:   {}\n", output_message, change, path);
         }
         let changes_not_staged = sort_hashmap(changes_not_staged);
         if !changes_not_staged.is_empty() {
@@ -50,7 +50,7 @@ impl Format for LongFormat {
             && changes_not_staged.is_empty()
             && untracked_files.is_empty()
         {
-            output_message = format!("{}nothing to commit, working tree clean", output_message);
+            output_message = format!("{}\nnothing to commit, working tree clean", output_message);
         } else if changes_to_be_commited.is_empty() {
             output_message = format!(
                 "{}\nno changes added to commit (use \"git add\" and/or \"git commit -a\"",

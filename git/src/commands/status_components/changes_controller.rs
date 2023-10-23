@@ -69,16 +69,12 @@ impl ChangesController {
         &self.untracked
     }
 
-    pub fn has_changes(&self) -> bool {
-        (self.index_changes.len() + self.working_tree_changes.len() + self.untracked.len()) > 0
-    }
-
     fn check_staging_area_status(
         staging_area: &StagingArea,
         last_commit: &Option<Tree>,
     ) -> Result<HashMap<String, ChangeType>, CommandError> {
         let staging_files = staging_area.get_files();
-        let Some(commit) = last_commit else {
+        let Some(mut tree) = last_commit.to_owned() else {
             let changes: HashMap<String, ChangeType> = staging_files
                 .iter()
                 .map(|(path, _)| (path.to_string(), ChangeType::Added)) // Aquí puedes aplicar una función de transformación
@@ -88,8 +84,8 @@ impl ChangesController {
 
         let mut changes: HashMap<String, ChangeType> = HashMap::new();
         for (path, hash) in staging_files.iter() {
-            let has_path = commit.has_blob_from_path(path);
-            let (has_hash, name) = commit.has_blob_from_hash(hash)?;
+            let has_path = tree.has_blob_from_path(path);
+            let (has_hash, name) = tree.has_blob_from_hash(hash)?;
             let actual_name = get_name(path)?;
             if !has_path && !has_hash {
                 _ = changes.insert(path.to_string(), ChangeType::Added);
@@ -178,7 +174,7 @@ impl ChangesController {
         changes: &mut HashMap<String, ChangeType>,
         untracked: &mut Vec<String>,
     ) -> Result<(), CommandError> {
-        let Some(path) = object.get_name() else {
+        let Some(path) = object.get_path() else {
             return Err(CommandError::FileNameError);
         };
         let hash = object.get_hash_string()?;
@@ -187,9 +183,9 @@ impl ChangesController {
         let has_hash = staging_area.has_file_from_hash(&hash);
         //let actual_name = get_name(&path)?;
         let isnt_in_last_commit = {
-            if let Some(last_commit) = last_commit {
-                let (is_in_last_commit, _) = last_commit.has_blob_from_hash(&hash)?;
-                !is_in_last_commit && !last_commit.has_blob_from_path(&path)
+            if let Some(mut tree) = last_commit.to_owned() {
+                let (is_in_last_commit, _) = tree.has_blob_from_hash(&hash)?;
+                !is_in_last_commit && !tree.has_blob_from_path(&path)
             } else {
                 true
             }
@@ -198,10 +194,10 @@ impl ChangesController {
             untracked.push(path);
         } else if has_path && !has_hash {
             _ = changes.insert(path, ChangeType::Modified);
+        } else if has_path && has_hash {
+            _ = changes.insert(path, ChangeType::Unmodified);
         } else if has_path_renamed {
             _ = changes.insert(path, ChangeType::Renamed);
-        } else {
-            _ = changes.insert(path, ChangeType::Unmodified);
         }
         Ok(())
     }
