@@ -2,6 +2,7 @@ pub mod commands {
     pub mod add_components;
     pub mod branch_manager;
     pub mod cat_file_components;
+    pub mod clone_components;
     pub mod command;
     pub mod command_errors;
     pub mod commit_components;

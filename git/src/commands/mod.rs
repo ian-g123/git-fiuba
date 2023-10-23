@@ -1,4 +1,5 @@
 pub mod author;
+pub mod clone_components;
 pub mod command;
 pub mod command_errors;
 pub mod commit_components;

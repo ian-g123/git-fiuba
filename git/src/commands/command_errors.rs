@@ -75,6 +75,7 @@ pub enum CommandError {
     /// Se intentó agregar un archivo dentro de un archivo
     ObjectNotTree,
     StdinError,
+    InvalidArgument(String)
 }
 
 impl Error for CommandError {}
@@ -183,6 +184,9 @@ impl fmt::Display for CommandError {
             }
             CommandError::StdinError => {
                 write!(f, "No se pudo leer por entrada estándar")
+            }
+            CommandError::InvalidArgument(msg) => {
+                write!(f, "{}", msg)
             }
         }
     }
