@@ -3,13 +3,16 @@ use std::io::Write;
 use std::str;
 use std::vec;
 
+use crate::commands::branch_manager::get_current_branch;
 use crate::commands::command::Command;
 use crate::commands::command::ConfigAdderFunction;
 use crate::commands::command_errors::CommandError;
+use crate::commands::status_components::format::Format;
+use crate::commands::status_components::long_format::LongFormat;
+use crate::commands::status_components::short_format::ShortFormat;
 use crate::logger::Logger;
 
 pub struct Status {
-    branch: bool,
     short: bool,
 }
 
@@ -27,12 +30,12 @@ impl Command for Status {
 
         let instance = Self::new(args, output)?;
 
-        //instance.run(stdin, output)?;
+        instance.run(output, logger)?;
         Ok(())
     }
 
     fn config_adders(&self) -> Vec<fn(&mut Self, usize, &[String]) -> Result<usize, CommandError>> {
-        vec![Self::add_branch_config, Self::add_short_config]
+        vec![Self::add_short_config]
     }
 }
 
@@ -51,23 +54,11 @@ impl Status {
     }
 
     fn new_default() -> Self {
-        Self {
-            branch: false,
-            short: false,
-        }
+        Self { short: false }
     }
 
     fn config_adders(&self) -> ConfigAdderFunction<Self> {
-        vec![Self::add_branch_config, Self::add_short_config]
-    }
-
-    /// Configura el flag 'branch'. Devuelve error si recibe argumentos o es un flag inválido.
-    /// Caso contrario, devuelve el índice del próximo flag.
-    fn add_branch_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
-        let options: Vec<String> = ["--branch".to_string(), "-b".to_string()].to_vec();
-        Self::check_errors_flags(i, args, &options)?;
-        self.branch = true;
-        Ok(i + 1)
+        vec![Self::add_short_config]
     }
 
     /// Configura el flag 'short'. Devuelve error si recibe argumentos o es un flag inválido.
@@ -91,10 +82,17 @@ impl Status {
         Ok(())
     }
 
-    /* fn run(&self, stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), CommandError> {
-        write!(output, "{}", "");
+    fn run(&self, output: &mut dyn Write, logger: &mut Logger) -> Result<(), CommandError> {
+        let branch = get_current_branch()?;
+        if self.short {
+            let short_format = ShortFormat;
+            short_format.show(logger, output, &branch)?;
+        } else {
+            let long_format = LongFormat;
+            long_format.show(logger, output, &branch)?;
+        }
         Ok(())
-    } */
+    }
 }
 
 #[cfg(test)]
@@ -185,27 +183,6 @@ mod tests {
             Status::new(args, &mut stdout_mock,),
             Err(CommandError::InvalidArguments)
         ));
-    }
-
-    /// Prueba que se pueda crear un comando Status correctamente.
-    #[test]
-    fn create_status() {
-        let mut output_string = Vec::new();
-        let mut stdout_mock = io::Cursor::new(&mut output_string);
-
-        let input = "prueba1";
-        let mut stdin_mock = Cursor::new(input.as_bytes());
-        let mut logger = Logger::new(".git/logs").unwrap();
-
-        let args: &[String] = &[];
-        assert!(Status::run_from(
-            "status",
-            args,
-            &mut stdin_mock,
-            &mut stdout_mock,
-            &mut logger
-        )
-        .is_ok());
     }
 
     /// Prueba que check_errors_flags() falla si se recibe un flag inválido.

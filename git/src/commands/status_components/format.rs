@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Write};
+use std::{collections::HashMap, io::Write};
 
 use crate::{commands::command_errors::CommandError, logger::Logger};
 
@@ -21,7 +21,7 @@ pub trait Format {
             changes_to_be_commited,
             untracked_files,
             branch,
-        );
+        )?;
         Ok(())
     }
 
@@ -33,7 +33,7 @@ pub trait Format {
         changes_not_staged: &HashMap<String, ChangeType>,
         untracked_files: &Vec<String>,
         branch: &str,
-    );
+    ) -> Result<(), CommandError>;
 }
 
 /*

@@ -5,5 +5,5 @@ mod format;
 mod long_format;
 mod merge_conflicts;
 mod short_format;
-mod status;
+pub mod status;
 mod working_tree;

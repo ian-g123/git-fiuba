@@ -3,6 +3,7 @@ use git::{
         add_components::add::Add, cat_file_components::cat_file::CatFile, command::Command,
         command_errors::CommandError, commit_components::commit::Commit,
         hash_object_components::hash_object::HashObject, init_components::init::Init,
+        status_components::status::Status,
     },
     logger::Logger,
 };
@@ -39,6 +40,7 @@ fn run(
         Add::run_from,
         CatFile::run_from,
         Commit::run_from,
+        Status::run_from,
     ];
 
     for command in &commands {
