@@ -52,15 +52,28 @@ impl StagingArea {
         Ok(changes + deleted_files.len() > 0)
     }
 
-    fn get_deleted_files(&self) -> Result<Vec<String>, CommandError> {
-        let mut deleted_blobs: Vec<String> = Vec::new();
+    pub fn get_deleted_files(&self) -> Result<Vec<String>, CommandError> {
+        let mut deleted: Vec<String> = Vec::new();
         let last_commit_tree = build_last_commit_tree(&mut Logger::new_dummy())?;
         if let Some(mut tree) = last_commit_tree {
-            let files: Vec<&String> = self.files.keys().collect();
 
-            deleted_blobs = tree.get_deleted_blobs_from_path(files);
+            self.check_deleted_from_commit(&mut tree, &mut deleted, "".to_string())
         }
-        Ok(deleted_blobs)
+        Ok(deleted)
+    }
+
+    fn check_deleted_from_commit(&self, tree: &mut Tree, deleted: &mut Vec<String>, path: String) {
+        for (name, object) in tree.get_objects().iter_mut() {
+            let mut complete_path = format!("{}/{}", path, name);
+            if let Some(new_tree) = object.as_mut_tree() {
+                complete_path = format!("{}/", complete_path);
+                self.check_deleted_from_commit(new_tree, deleted, complete_path);
+            } else {
+                if !self.has_file_from_path(&complete_path[1..]) {
+                    _ = deleted.push(complete_path);
+                }
+            }
+        }
     }
 
     pub fn has_file_from_path(&self, path: &str) -> bool {

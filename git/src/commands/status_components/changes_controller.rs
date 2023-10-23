@@ -16,98 +16,201 @@ use std::{
 
 */
 
-use crate::commands::{
-    command_errors::CommandError,
-    file_compressor::extract,
-    hash_object_components::hash_object::HashObject,
-    objects::{aux::get_name, tree::Tree},
-    staging_area::{self, StagingArea},
+use crate::{
+    commands::{
+        command_errors::CommandError,
+        file_compressor::extract,
+        hash_object_components::hash_object::HashObject,
+        objects::{
+            aux::get_name, git_object::GitObject, last_commit::build_last_commit_tree, tree::Tree,
+        },
+        staging_area::{self, StagingArea},
+    },
+    logger::Logger,
 };
 
 use super::{
-    change_object::ChangeObject, changes_types::ChangeType, working_tree::build_working_tree,
+    change_object::ChangeObject,
+    changes_types::ChangeType,
+    working_tree::{self, build_working_tree},
 };
 
-pub struct Changes {
-    index_changes: HashMap<String, ChangeObject>,
-    working_tree_changes: HashMap<String, ChangeObject>,
+pub struct ChangesController {
+    index_changes: HashMap<String, ChangeType>,
+    working_tree_changes: HashMap<String, ChangeType>,
+    untracked: Vec<String>,
 }
 
-impl Changes {
-    pub fn new() -> Result<(), CommandError> {
-        let mut changes: HashMap<String, ChangeObject> = HashMap::new();
-        let commit_tree = get_commit_tree()?;
-        let mut index = StagingArea::open()?;
+impl ChangesController {
+    pub fn new(logger: &mut Logger) -> Result<ChangesController, CommandError> {
+        let commit_tree = build_last_commit_tree(logger)?;
+        let index = StagingArea::open()?;
         let working_tree = build_working_tree()?;
-        /* let tree_staged = index.get_working_tree_staged(logger)
-        let current_dir = get_current_dir()?;
-        Self::compare(current_dir, index, &mut changes, &commit_tree)?;
-        Self::get_deleted_changes(index, &mut changes); */
-        //Ok(Changes { changes: changes })
-        Ok(())
+        let (working_tree_changes, untracked) =
+            Self::check_working_tree_status(working_tree, &index, &commit_tree)?;
+        let index_changes = Self::check_staging_area_status(&index, &commit_tree)?;
+
+        Ok(Self {
+            index_changes,
+            working_tree_changes,
+            untracked,
+        })
+    }
+
+    pub fn get_changes_to_be_commited(&self) -> &HashMap<String, ChangeType> {
+        &self.index_changes
+    }
+
+    pub fn get_changes_not_staged(&self) -> &HashMap<String, ChangeType> {
+        &self.working_tree_changes
+    }
+
+    pub fn get_untracked_files(&self) -> &Vec<String> {
+        &self.untracked
+    }
+
+    pub fn has_changes(&self) -> bool {
+        (self.index_changes.len() + self.working_tree_changes.len() + self.untracked.len()) > 0
     }
 
     fn check_staging_area_status(
-        staging_files: &HashMap<String, String>,
-        last_commit: Tree,
-    ) -> Result<(), CommandError> {
+        staging_area: &StagingArea,
+        last_commit: &Option<Tree>,
+    ) -> Result<HashMap<String, ChangeType>, CommandError> {
+        let staging_files = staging_area.get_files();
+        let Some(commit) = last_commit else {
+            let changes: HashMap<String, ChangeType> = staging_files
+                .iter()
+                .map(|(path, _)| (path.to_string(), ChangeType::Added)) // Aquí puedes aplicar una función de transformación
+                .collect();
+            return Ok(changes);
+        };
+
+        let mut changes: HashMap<String, ChangeType> = HashMap::new();
         for (path, hash) in staging_files.iter() {
-            let has_path = last_commit.has_blob_from_path(path);
-            let (has_hash, name) = last_commit.has_blob_from_hash(hash)?;
+            let has_path = commit.has_blob_from_path(path);
+            let (has_hash, name) = commit.has_blob_from_hash(hash)?;
             let actual_name = get_name(path)?;
             if !has_path && !has_hash {
-                // es added
+                _ = changes.insert(path.to_string(), ChangeType::Added);
             } else if has_path && !has_hash {
-                // es modified
+                _ = changes.insert(path.to_string(), ChangeType::Modified);
             } else if has_hash && name != actual_name {
-                // es renamed
+                _ = changes.insert(path.to_string(), ChangeType::Renamed);
             } else {
-                // unmodified
+                _ = changes.insert(path.to_string(), ChangeType::Unmodified);
             }
         }
-        //get_deleted_changes_staging_area()
-        Ok(())
+        Self::get_deleted_changes_index(staging_area, &mut changes)?;
+        Ok(changes)
     }
 
     fn check_working_tree_status(
         mut working_tree: Tree,
         staging_area: &StagingArea,
-        last_commit: Tree,
-    ) -> Result<(), CommandError> {
-        for (name, object) in working_tree.get_objects().iter_mut() {
-            let Some(path) = object.get_name() else {
-                return Err(CommandError::FileNameError);
-            };
-            let hash = object.get_hash_string()?;
-            let has_path = staging_area.has_file_from_path(&path);
-            let has_path_renamed = staging_area.has_file_renamed(&path, &hash);
-            let has_hash = staging_area.has_file_from_hash(&hash);
-            let actual_name = get_name(&path)?;
-            let (is_in_last_commit, _) = last_commit.has_blob_from_hash(&hash)?;
-            if !has_path
-                && !has_hash
-                && !last_commit.has_blob_from_path(&path)
-                && !is_in_last_commit
-            {
-                // es untracked
-            } else if has_path && !has_hash {
-                // es modified
-            } else if has_path_renamed {
-                // es renamed
-            } else {
-                // unmodified
-            }
+        last_commit: &Option<Tree>,
+    ) -> Result<(HashMap<String, ChangeType>, Vec<String>), CommandError> {
+        let mut wt_changes: HashMap<String, ChangeType> = HashMap::new();
+        let mut untracked: Vec<String> = Vec::new();
+
+        Self::check_working_tree_aux(
+            &mut working_tree,
+            staging_area,
+            last_commit,
+            &mut wt_changes,
+            &mut untracked,
+        )?;
+        Self::get_deleted_changes_working_tree(&mut working_tree, staging_area, &mut wt_changes);
+        Ok((wt_changes, untracked))
+    }
+
+    fn get_deleted_changes_working_tree(
+        working_tree: &mut Tree,
+        staging_area: &StagingArea,
+        changes: &mut HashMap<String, ChangeType>,
+    ) {
+        let staged_files: HashMap<String, String> = staging_area.get_files();
+        let files: Vec<&String> = staged_files.keys().collect();
+        let deleted_changes = working_tree.get_deleted_blobs_from_path(files);
+        for deleted_file in deleted_changes.iter() {
+            _ = changes.insert(deleted_file.to_string(), ChangeType::Deleted)
         }
-        //let staged_files: Vec<&String> = staging_area.get_files().keys().collect();
-        //let deleted_changes = working_tree.get_deleted_blobs_from_path(staged_files);
+    }
+
+    fn get_deleted_changes_index(
+        staging_area: &StagingArea,
+        changes: &mut HashMap<String, ChangeType>,
+    ) -> Result<(), CommandError> {
+        let deleted_changes = staging_area.get_deleted_files()?;
+        for deleted_file in deleted_changes.iter() {
+            _ = changes.insert(deleted_file.to_string(), ChangeType::Deleted)
+        }
         Ok(())
     }
 
-    /*
-    falta: copy, type changed, dif entre modified y added, deleted del WT
-    */
+    fn check_working_tree_aux(
+        tree: &mut Tree,
+        staging_area: &StagingArea,
+        last_commit: &Option<Tree>,
+        changes: &mut HashMap<String, ChangeType>,
+        untracked: &mut Vec<String>,
+    ) -> Result<(), CommandError> {
+        for (_, object) in tree.get_objects().iter_mut() {
+            if let Some(mut new_tree) = object.as_tree() {
+                Self::check_working_tree_aux(
+                    &mut new_tree,
+                    staging_area,
+                    last_commit,
+                    changes,
+                    untracked,
+                )?
+            } else {
+                Self::check_file_status(object, staging_area, last_commit, changes, untracked)?;
+            }
+        }
+        Ok(())
+    }
 
-    /* pub fn get_changes(&self) -> HashMap<String, ChangeObject> {
+    fn check_file_status(
+        object: &mut GitObject,
+        staging_area: &StagingArea,
+        last_commit: &Option<Tree>,
+        changes: &mut HashMap<String, ChangeType>,
+        untracked: &mut Vec<String>,
+    ) -> Result<(), CommandError> {
+        let Some(path) = object.get_name() else {
+            return Err(CommandError::FileNameError);
+        };
+        let hash = object.get_hash_string()?;
+        let has_path = staging_area.has_file_from_path(&path);
+        let has_path_renamed = staging_area.has_file_renamed(&path, &hash);
+        let has_hash = staging_area.has_file_from_hash(&hash);
+        //let actual_name = get_name(&path)?;
+        let isnt_in_last_commit = {
+            if let Some(last_commit) = last_commit {
+                let (is_in_last_commit, _) = last_commit.has_blob_from_hash(&hash)?;
+                !is_in_last_commit && !last_commit.has_blob_from_path(&path)
+            } else {
+                true
+            }
+        };
+        if !has_path && !has_hash && isnt_in_last_commit {
+            untracked.push(path);
+        } else if has_path && !has_hash {
+            _ = changes.insert(path, ChangeType::Modified);
+        } else if has_path_renamed {
+            _ = changes.insert(path, ChangeType::Renamed);
+        } else {
+            _ = changes.insert(path, ChangeType::Unmodified);
+        }
+        Ok(())
+    }
+}
+/*
+falta: copy, type changed, dif entre modified y added, deleted del WT
+*/
+
+/*     /* pub fn get_changes(&self) -> HashMap<String, ChangeObject> {
         self.changes.clone()
     } */
 
@@ -340,3 +443,4 @@ fn get_commit_tree() -> Result<Option<String>, CommandError> {
     let tree_hash = tree_info[1];
     Ok(Some(tree_hash.to_string()))
 }
+ */

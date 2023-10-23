@@ -1,13 +1,21 @@
 // Short format - changes types.
-const MODIFIED: &str = "M";
-const UNMODIFIED: &str = " ";
+const SHORT_MODIFIED: &str = "M";
+const SHORT_ADDED: &str = "A";
+const SHORT_DELETED: &str = "D";
+const SHORT_RENAMED: &str = "R";
+const SHORT_UNTRACKED: &str = "??";
+
+// Long format - changes types
+const Long_MODIFIED: &str = "modified";
+const Long_ADDED: &str = "new file";
+const Long_DELETED: &str = "deleted";
+const Long_RENAMED: &str = "renamed";
+
 // const TYPE_CHANGED: &str = "T";
-const ADDED: &str = "A";
-const DELETED: &str = "D";
-const RENAMED: &str = "R";
+
 // const COPIED: &str = "C";
 //const UPDATED: &str = "U";
-const UNTRACKED: &str = "??";
+//const SHORT_UNMODIFIED: &str = " ";
 
 #[derive(Clone)]
 pub enum ChangeType {

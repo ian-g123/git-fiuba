@@ -233,7 +233,7 @@ impl Commit {
 
         if !staging_area.has_changes()? {
             logger.log("Nothing to commit");
-            // show status output
+            // show status output + no changes added to commit (use "git add" and/or "git commit -a")
             return Ok(());
         } else {
             self.run_commit(logger, message, &mut staging_area)?;

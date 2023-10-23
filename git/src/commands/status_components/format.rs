@@ -1,7 +1,39 @@
-use std::fmt::Write;
+use std::{collections::HashMap, fmt::Write};
 
+use crate::{commands::command_errors::CommandError, logger::Logger};
+
+use super::{changes_controller::ChangesController, changes_types::ChangeType};
 pub trait Format {
-    fn get_status(output: &mut dyn Write);
+    fn show(
+        &self,
+        logger: &mut Logger,
+        output: &mut dyn Write,
+        branch: &str,
+    ) -> Result<(), CommandError> {
+        let changes_controller = ChangesController::new(logger)?;
+        let changes_to_be_commited = changes_controller.get_changes_to_be_commited();
+        let changes_not_staged = changes_controller.get_changes_not_staged();
+        let untracked_files = changes_controller.get_untracked_files();
+        self.get_status(
+            logger,
+            output,
+            changes_to_be_commited,
+            changes_to_be_commited,
+            untracked_files,
+            branch,
+        );
+        Ok(())
+    }
+
+    fn get_status(
+        &self,
+        logger: &mut Logger,
+        output: &mut dyn Write,
+        changes_to_be_commited: &HashMap<String, ChangeType>,
+        changes_not_staged: &HashMap<String, ChangeType>,
+        untracked_files: &Vec<String>,
+        branch: &str,
+    );
 }
 
 /*
