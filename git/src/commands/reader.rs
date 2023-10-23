@@ -2,13 +2,13 @@ use std::io::{Read, Result};
 use std::net::TcpStream;
 
 pub struct TcpStreamBuffer<'a> {
-    stream: &'a mut dyn Read,
+    stream: &'a TcpStream,
     buffer: Vec<u8>,
     pos: usize,
 }
 
 impl<'a> TcpStreamBuffer<'a> {
-    pub fn new(stream: &'a mut TcpStream) -> TcpStreamBuffer<'a> {
+    pub fn new(stream: &'a TcpStream) -> TcpStreamBuffer<'a> {
         TcpStreamBuffer {
             stream,
             buffer: Vec::new(),
@@ -56,3 +56,5 @@ impl<'a> Read for TcpStreamBuffer<'a> {
         Ok(num_bytes_read)
     }
 }
+
+//impl<'a> Copy for TcpStreamBuffer<'a> {}

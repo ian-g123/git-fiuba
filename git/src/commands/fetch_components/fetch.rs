@@ -2,19 +2,25 @@
 //! Lee lineas desde stdin y las manda mediante el socket.
 
 use std::io::stdin;
+use std::io::Cursor;
 use std::io::Read;
 use std::io::Write;
 use std::net::TcpStream;
 
 use git::commands::file_compressor::extract;
 use git::commands::file_compressor::extract_2;
+use git::commands::objects::aux::get_sha1;
+use git::commands::objects::aux::get_sha1_str;
 use git::commands::reader::TcpStreamBuffer;
+extern crate sha1;
+use sha1::{Digest, Sha1};
 
 fn main() -> Result<(), ()> {
     let address = "127.1.0.0:9418";
     println!("Conectándome a {:?}", address);
 
     client_run(&address, &mut stdin()).unwrap();
+
     Ok(())
 }
 
@@ -142,7 +148,9 @@ fn leer_bits(mut socket: &TcpStream) {
 }
 
 fn leer_objetos(object_number: u32, mut socket: &TcpStream) {
+    let mut buffer = Vec::new();
     for _ in 0..object_number {
+        let mut stream = Cursor::new(&mut buffer);
         // Object types
         // Valid object types are:
         // OBJ_COMMIT (1)
@@ -151,8 +159,7 @@ fn leer_objetos(object_number: u32, mut socket: &TcpStream) {
         // OBJ_TAG (4)
         // OBJ_OFS_DELTA (6)
         // OBJ_REF_DELTA (7)
-        let mut first_byte_buf = [0; 1];
-        socket.read_exact(&mut first_byte_buf).unwrap();
+        let first_byte_buf = get_bytes(1, &mut stream, socket);
         // Object type is three bits
         println!("first_byte_buf: {:?}", first_byte_buf);
         let object_type = first_byte_buf[0] >> 4 & 0b00000111;
@@ -181,7 +188,7 @@ fn leer_objetos(object_number: u32, mut socket: &TcpStream) {
         let mut is_last_byte: bool = first_byte_buf[0] >> 7 == 0;
         while !is_last_byte {
             let mut seven_bit_chunk = Vec::<u8>::new();
-            let current_byte = next_byte(socket);
+            let current_byte = get_bytes(1, &mut stream, socket)[0];
             is_last_byte = current_byte >> 7 == 0;
             let seven_bit_chunk_with_zero = current_byte & 0b01111111;
             for i in (0..7).rev() {
@@ -201,21 +208,56 @@ fn leer_objetos(object_number: u32, mut socket: &TcpStream) {
 
         // let mut decoder = flate2::read::ZlibDecoder::new(socket);
 
-        let mut buf_stream = TcpStreamBuffer::new(&mut socket);
-        let mut decoder = flate2::read::ZlibDecoder::new(buf_stream);
+        let compressed_data = get_bytes(len, &mut stream, socket);
+        let zlib_cursor = Cursor::new(&compressed_data);
+        let mut decoder = flate2::read::ZlibDecoder::new(zlib_cursor);
 
         let mut deflated_data = Vec::new();
         let bytes_read = decoder.read_to_end(&mut deflated_data).unwrap();
-        let bytes_used = decoder.total_in();
+        let bytes_used = decoder.total_in() as usize;
         println!("deflated_data: {:?}", deflated_data);
         println!("deflated_data_len: {:?}", deflated_data.len());
         println!("bytes_used: {:?}", bytes_used);
         println!("bytes_read: {:?}", bytes_read);
         println!(
             "deflated_data_str: {:?}",
-            String::from_utf8(deflated_data).unwrap()
+            String::from_utf8(deflated_data.clone()).unwrap()
         );
+
+        let hash_result: [u8; 20] = get_sha1(&deflated_data);
+        let hash_result_str = get_sha1_str(&deflated_data);
+        println!("hash_result: {:?}", hash_result);
+        println!("hash_result_str: {:?}", hash_result_str);
+        buffer.append(&mut compressed_data[bytes_used..].to_owned());
+        println!("buffer: {:?}", buffer);
+        // buffer.splice(0..bytes_used, Vec::new());
+        // println!("remaining buffer: {:?}", buffer)
+        let bits = concat_bytes_to_bits(&buffer);
+        for (i, bit) in bits.iter().enumerate() {
+            if i % 8 == 0 {
+                print!(" ");
+            }
+            print!("{}", bit);
+        }
     }
+}
+
+fn get_bytes<'a>(
+    number_of_bytes_to_read: usize,
+    stream: &'a mut Cursor<&mut Vec<u8>>,
+    mut socket: &TcpStream,
+) -> Vec<u8> {
+    let mut bytes_to_read_from_buf = vec![0; number_of_bytes_to_read];
+    let num_bytes_read = stream.read(&mut bytes_to_read_from_buf).unwrap();
+
+    let mut bytes_to_return_buf = Vec::with_capacity(number_of_bytes_to_read);
+    bytes_to_return_buf.append(&mut bytes_to_read_from_buf[..num_bytes_read].to_owned());
+
+    let mut buf = &mut vec![0; number_of_bytes_to_read - num_bytes_read as usize];
+    socket.read(&mut buf).unwrap();
+    bytes_to_return_buf.append(buf);
+
+    bytes_to_return_buf
 }
 
 fn read_signature(mut socket: &TcpStream) -> String {
