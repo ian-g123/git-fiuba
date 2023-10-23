@@ -160,6 +160,7 @@ fn leer_objetos(object_number: u32, mut socket: &TcpStream) {
         // OBJ_OFS_DELTA (6)
         // OBJ_REF_DELTA (7)
         let first_byte_buf = get_bytes(1, &mut stream, socket);
+
         // Object type is three bits
         println!("first_byte_buf: {:?}", first_byte_buf);
         let object_type = first_byte_buf[0] >> 4 & 0b00000111;
@@ -208,12 +209,13 @@ fn leer_objetos(object_number: u32, mut socket: &TcpStream) {
 
         // let mut decoder = flate2::read::ZlibDecoder::new(socket);
 
-        let compressed_data = get_bytes(len, &mut stream, socket);
+        let compressed_data = get_bytes(len + 10, &mut stream, socket);
+        println!("compressed_data: {:?}", compressed_data);
         let zlib_cursor = Cursor::new(&compressed_data);
         let mut decoder = flate2::read::ZlibDecoder::new(zlib_cursor);
-
         let mut deflated_data = Vec::new();
         let bytes_read = decoder.read_to_end(&mut deflated_data).unwrap();
+
         let bytes_used = decoder.total_in() as usize;
         println!("deflated_data: {:?}", deflated_data);
         println!("deflated_data_len: {:?}", deflated_data.len());
@@ -221,17 +223,12 @@ fn leer_objetos(object_number: u32, mut socket: &TcpStream) {
         println!("bytes_read: {:?}", bytes_read);
         println!(
             "deflated_data_str: {:?}",
-            String::from_utf8(deflated_data.clone()).unwrap()
+            String::from_utf8_lossy(&deflated_data.clone())
         );
 
-        let hash_result: [u8; 20] = get_sha1(&deflated_data);
-        let hash_result_str = get_sha1_str(&deflated_data);
-        println!("hash_result: {:?}", hash_result);
-        println!("hash_result_str: {:?}", hash_result_str);
-        buffer.append(&mut compressed_data[bytes_used..].to_owned());
+        buffer.append(&mut compressed_data[(bytes_used)..].to_owned());
         println!("buffer: {:?}", buffer);
-        // buffer.splice(0..bytes_used, Vec::new());
-        // println!("remaining buffer: {:?}", buffer)
+        print!("buffer:");
         let bits = concat_bytes_to_bits(&buffer);
         for (i, bit) in bits.iter().enumerate() {
             if i % 8 == 0 {
@@ -239,6 +236,7 @@ fn leer_objetos(object_number: u32, mut socket: &TcpStream) {
             }
             print!("{}", bit);
         }
+        println!();
     }
 }
 
