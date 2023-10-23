@@ -139,7 +139,8 @@ impl HashObject {
         if self.stdin {
             let mut input = String::new();
             if stdin.read_to_string(&mut input).is_ok() {
-                let object = Blob::new_from_content(input.as_bytes().to_vec())?;
+                // let object = Blob::new_from_content(input.as_bytes().to_vec())?;
+                let object = Blob::new_from_content_and_path(input.as_bytes().to_vec(), "")?;
                 self.hash_object(Box::new(object), output, logger)?;
             };
         }

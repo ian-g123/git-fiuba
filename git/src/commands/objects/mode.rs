@@ -37,7 +37,6 @@ impl Mode {
         Ok(mode)
     }
 
-    // Cambios que hizo Ian
     pub fn get_id_mode(&self) -> u32 {
         match self {
             Mode::RegularFile => 100644,

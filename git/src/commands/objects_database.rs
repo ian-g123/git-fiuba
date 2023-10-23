@@ -4,8 +4,6 @@ use std::{
     io::{Cursor, Read, Write},
 };
 
-use sha1::{Digest, Sha1};
-
 use crate::logger::Logger;
 
 use super::{
@@ -49,6 +47,7 @@ pub(crate) fn write(
     return Ok(hex_string);
 }
 
+/// Se obtiene un objeto a partir de su hash.
 pub(crate) fn read_object(hash_str: &str, logger: &mut Logger) -> Result<GitObject, CommandError> {
     let (path, decompressed_data) = read_file(hash_str)?;
     let mut stream = Cursor::new(decompressed_data);
@@ -56,6 +55,7 @@ pub(crate) fn read_object(hash_str: &str, logger: &mut Logger) -> Result<GitObje
     read_git_object_from(&mut stream, &path, &hash_str, logger)
 }
 
+/// Se obtiene el path y la data descomprimida de un archivo a partir de su hash.
 pub fn read_file(hash_str: &str) -> Result<(String, Vec<u8>), CommandError> {
     let path = format!(".git/objects/{}/{}", &hash_str[0..2], &hash_str[2..]);
     let mut file = File::open(&path).map_err(|error| {

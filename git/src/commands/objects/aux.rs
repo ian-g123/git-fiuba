@@ -31,6 +31,7 @@ pub fn get_name_bis(path_string: &String) -> Result<String, CommandError> {
         .ok_or_else(|| CommandError::FileNotFound(path_string.to_owned()))
 }
 
+/// Dado la data pasado, devuelve el hash expresado en un vector de 20 bytes.
 pub fn get_sha1_str(data: &[u8]) -> String {
     let hash_result = get_sha1(data);
 
@@ -130,22 +131,27 @@ impl SuperStrings for String {
     }
 }
 
-pub fn read_string_from(stream: &mut dyn Read) -> Result<String, CommandError> {
-    let mut len_be = [0; 4];
-    stream
-        .read_exact(&mut len_be)
-        .map_err(|error| CommandError::FileReadError(error.to_string()))?;
-    let len = u32::from_be_bytes(len_be) as usize;
-
-    let mut content = vec![0; len];
-    stream
-        .read_exact(&mut content)
-        .map_err(|error| CommandError::FileReadError(error.to_string()))?;
-
-    let result = String::from_utf8(content).map_err(|error| {
-        CommandError::FileReadError(format!("Error leyendo el stream: {}", error))
-    })?;
-    Ok(result)
+/// Se obtiene una cadena de texto desde el stream hasta encontrar el caracter char_stop.
+pub fn read_string_until(stream: &mut dyn Read, char_stop: char) -> Result<String , CommandError> {
+    let string = {
+        let mut bytes = stream.bytes();
+        let end = char_stop as u8;
+        let mut result = String::new();
+        loop {
+            if let Some(Ok(byte)) = bytes.next() {
+                if byte == end {
+                    break;
+                }
+                result.push(byte as char);
+            } else {
+                return Err(CommandError::FileReadError(
+                    "Error leyendo bytes para obtener el tipo de objeto git".to_string(),
+                ));
+            }
+        }
+        Ok(result)
+    }?;
+    Ok(string)
 }
 
 pub fn read_i64_from(stream: &mut dyn Read) -> Result<i64, CommandError> {

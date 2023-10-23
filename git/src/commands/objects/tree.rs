@@ -92,19 +92,21 @@ impl Tree {
     ) -> Result<GitObject, CommandError> {
         let mut objects = HashMap::<String, GitObject>::new();
 
-        loop {
-            let mut buf = Vec::new();
-            if stream.read_to_end(&mut buf).is_err() {
-                break;
-            }
-            let (_mode, _name) = get_mode_name(buf).map_err(|error| {
-                CommandError::FileReadError("No se pudo leer objeto".to_string())
-            })?;
-            let hash_str = get_hash(stream)?;
+        while let Ok(mode) = Mode::read_from(stream) {
+            let mut separator = vec![0; 1];
+            stream
+            .read_exact(&mut separator)
+            .map_err(|_| CommandError::ObjectHashNotKnown)?;
+            let name = read_string_until(stream, '\0')?;
+            let mut hash = vec![0; 20];
+            stream
+                .read_exact(&mut hash)
+                .map_err(|_| CommandError::ObjectHashNotKnown)?;
+            let hash_str = u8_vec_to_hex_string(&hash);
+            
             let object = objects_database::read_object(&hash_str, logger)?;
-            objects.insert(hash_str, object);
+            objects.insert(name, object);
         }
-
         Ok(Box::new(Self {
             path: path.to_string(),
             objects,
@@ -144,18 +146,31 @@ impl Tree {
         }
         Ok(())
     }
+
+    pub fn sort_objects(&self) -> Vec<(String, GitObject)> {
+        let mut names_objects: Vec<&String> = self.objects.keys().collect();
+        names_objects.sort();
+    
+        let mut sorted_objects: Vec<(String, GitObject)> = Vec::new();
+        for name_object in names_objects {
+            if let Some(object) = self.objects.get(name_object) {
+                sorted_objects.push((name_object.clone(), object.clone()));
+            }
+        }
+        sorted_objects
+    }
 }
 
 fn get_mode(mode: &str) -> Result<Mode, CommandError> {
     let id = mode
         .parse::<u32>()
-        .map_err(|error| CommandError::FileReadError("No se pudo leer objeto".to_string()))?;
+        .map_err(|_| CommandError::FileReadError("No se pudo leer objeto".to_string()))?;
     let mode = Mode::get_mode_from_id(id)
-        .map_err(|error| CommandError::FileReadError("No se pudo leer objeto".to_string()))?;
+        .map_err(|_| CommandError::FileReadError("No se pudo leer objeto".to_string()))?;
     Ok(mode)
 }
 
-fn get_mode_name(buf: Vec<u8>) -> Result<(String, String), CommandError> {
+fn get_mode_and_name(buf: Vec<u8>) -> Result<(String, String), CommandError> {
     let string_mode_name = String::from_utf8(buf).map_err(|_| CommandError::InvalidMode)?;
     let Some((mode, name)) = string_mode_name.split_once(' ') else {
         return Err(CommandError::InvalidMode);
@@ -194,11 +209,12 @@ impl GitObjectTrait for Tree {
     }
 
     fn content(&mut self) -> Result<Vec<u8>, CommandError> {
+        let mut sorted_objects = self.sort_objects();
         let mut content = Vec::new();
-        for (name_object, object) in self.objects.iter_mut() {
+        for (name_object, object) in sorted_objects.iter_mut() {
             let mode = &object.mode();
             let mode_id = mode.get_id_mode();
-            println!("{} {}", mode_id, name_object);
+            // println!("{} {}", mode_id, name_object);
             write!(content, "{} {}\0", mode_id, name_object)
                 .map_err(|err| CommandError::FileWriteError(format!("{err}")))?;
             let hash = object.get_hash()?;

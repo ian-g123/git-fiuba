@@ -3,7 +3,10 @@ use crate::{
     logger::Logger,
 };
 
-use super::{aux::get_sha1, blob::Blob, commit_object::CommitObject, mode::Mode, tree::Tree};
+use super::{
+    author::Author, aux::get_sha1, blob::Blob, commit_object::CommitObject, mode::Mode,
+    aux::u8_vec_to_hex_string, tree::Tree,
+};
 use std::{
     fmt,
     io::{Cursor, Read, Write},
@@ -22,17 +25,20 @@ pub trait GitObjectTrait: fmt::Display {
     fn clone_object(&self) -> GitObject;
 
     fn write_to(&mut self, stream: &mut dyn std::io::Write) -> Result<(), CommandError> {
-        let type_str = self.type_str();
         let content = self.content()?;
-        let len = content.len();
-        let header = format!("{} {}\0", type_str, len);
-        stream
-            .write(header.as_bytes())
-            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-        stream
-            .write(content.as_slice())
-            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-        Ok(())
+        let type_str = self.type_str();
+        write_to_stream_from_content(stream, content, type_str)
+
+        //     let type_str = self.type_str();
+        //     let len = content.len();
+        //     let header = format!("{} {}\0", type_str, len);
+        //     stream
+        //         .write(header.as_bytes())
+        //         .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        //     stream
+        //         .write(content.as_slice())
+        //         .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        //     Ok(())
     }
 
     /// Agrega un árbol al objeto Tree si es que corresponde, o sino un Blob\
@@ -53,7 +59,8 @@ pub trait GitObjectTrait: fmt::Display {
     fn mode(&self) -> Mode;
 
     /// Devuelve el contenido del objeto
-    fn content(&mut self) -> Result<Vec<u8>, CommandError>;
+    fn content(&self) -> Result<Vec<u8>, CommandError>;
+
 
     /// Devuelve el tamaño del objeto en bytes
     fn size(&self) -> Result<usize, CommandError> {
@@ -69,6 +76,20 @@ pub trait GitObjectTrait: fmt::Display {
         let mut stream = Cursor::new(&mut buf);
         self.write_to(&mut stream)?;
         Ok(get_sha1(&buf))
+    }
+
+    /// Devuelve el hash del objeto
+    fn get_hash_string(&mut self) -> Result<String, CommandError> {
+        Ok(u8_vec_to_hex_string(&self.get_hash()?))
+    }
+
+    ///
+    fn get_info_commit(&self) -> Option<(String, Author, Author, i64, i32)>;
+
+    fn get_path(&self) -> Option<String>;
+
+    fn get_name(&self) -> Option<String> {
+        None
     }
 }
 
@@ -150,13 +171,15 @@ pub fn read_git_object_from(
     Err(CommandError::ObjectTypeError)
 }
 
+
+
 fn get_type_and_len(
     stream: &mut dyn Read,
     logger: &mut Logger,
 ) -> Result<(String, usize), CommandError> {
     let mut bytes = stream.bytes();
     let type_str = get_type(&mut bytes)?;
-    let len_str = get_len(&mut bytes)?;
+    let len_str = get_string_up_to_null_byte(&mut bytes)?;
     logger.log("found \0");
     let len: usize = len_str
         .parse()
@@ -169,7 +192,7 @@ fn get_type(bytes: &mut std::io::Bytes<&mut dyn Read>) -> Result<String, Command
 }
 
 // "blob 16\u0000"
-fn get_len(bytes: &mut std::io::Bytes<&mut dyn Read>) -> Result<String, CommandError> {
+fn get_string_up_to_null_byte(bytes: &mut std::io::Bytes<&mut dyn Read>) -> Result<String, CommandError> {
     get_from_header(bytes, '\0')
 }
 
@@ -208,4 +231,21 @@ impl std::fmt::Debug for GitObject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_string())
     }
+}
+
+
+pub fn write_to_stream_from_content(
+    stream: &mut dyn std::io::Write,
+    content: Vec<u8>,
+    type_str: String,
+) -> Result<(), CommandError> {
+    let len = content.len();
+    let header = format!("{} {}\0", type_str, len);
+    stream
+        .write(header.as_bytes())
+        .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+    stream
+        .write(content.as_slice())
+        .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+    Ok(())
 }

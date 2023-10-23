@@ -6,8 +6,8 @@ use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use super::aux::{
-    get_sha1, hex_string_to_u8_vec, read_i32_from, read_i64_from, read_string_from, read_u32_from,
-    u8_vec_to_hex_string, SuperIntegers, SuperStrings,
+    get_sha1, hex_string_to_u8_vec, read_i32_from, read_i64_from, read_u32_from,
+    u8_vec_to_hex_string, SuperIntegers, SuperStrings, read_string_until,
 };
 use super::blob::Blob;
 use super::git_object::{GitObject, GitObjectTrait};
@@ -164,6 +164,15 @@ impl CommitObject {
     }
 }
 
+fn read_commit_info_from_bis(stream: &mut dyn Read)-> Result<(), CommandError>{
+    let mut parents: Vec<String> = Vec::new();
+    loop{
+        let line = read_string_until(stream, '\n')?;
+
+    }
+}
+
+
 fn read_commit_info_from(
     stream: &mut dyn Read,
 ) -> Result<
@@ -190,7 +199,7 @@ fn read_commit_info_from(
     let committer = Author::read_from(stream)?;
     let committer_timestamp = read_i64_from(stream)?;
     let committer_offset = read_i32_from(stream)?;
-    let message = read_string_from(stream)?;
+    let message = read_string_until(stream)?;
     Ok((
         tree_hash,
         parents,
@@ -225,6 +234,7 @@ fn read_parents_from(
 }
 
 fn read_hash_from(stream: &mut dyn Read) -> Result<[u8; 20], CommandError> {
+
     let mut tree_hash_be = [0; 20];
     stream
         .read_exact(&mut tree_hash_be)
@@ -280,7 +290,7 @@ impl GitObjectTrait for CommitObject {
         todo!()
     }
 
-    fn content(&mut self) -> Result<Vec<u8>, CommandError> {
+    fn content(&self) -> Result<Vec<u8>, CommandError> {
         let mut buf: Vec<u8> = Vec::new();
         buf.extend_from_slice(&hex_string_to_u8_vec(&self.tree));
         let parents_len_be = (self.parents.len() as u32).to_be_bytes();
