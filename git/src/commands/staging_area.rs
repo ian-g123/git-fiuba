@@ -29,12 +29,15 @@ impl StagingArea {
         self.files.clone()
     }
 
-    pub fn get_changes(&self) -> Result<HashMap<String, String>, CommandError> {
+    pub fn get_changes(
+        &self,
+        logger: &mut Logger,
+    ) -> Result<HashMap<String, String>, CommandError> {
         let tree_commit = build_last_commit_tree(&mut Logger::new_dummy())?;
         let mut changes: HashMap<String, String> = HashMap::new();
         if let Some(mut tree) = tree_commit {
             for (path, hash) in self.files.iter() {
-                let (is_in_last_commit, name) = tree.has_blob_from_hash(hash)?;
+                let (is_in_last_commit, name) = tree.has_blob_from_hash(hash, logger)?;
 
                 if !is_in_last_commit || get_name(path)? != name {
                     _ = changes.insert(path.to_string(), hash.to_string())
@@ -46,8 +49,8 @@ impl StagingArea {
         Ok(changes)
     }
 
-    pub fn has_changes(&self) -> Result<bool, CommandError> {
-        let changes = self.get_changes()?.len();
+    pub fn has_changes(&self, logger: &mut Logger) -> Result<bool, CommandError> {
+        let changes = self.get_changes(logger)?.len();
         let deleted_files = self.get_deleted_files()?;
         Ok(changes + deleted_files.len() > 0)
     }
@@ -110,7 +113,7 @@ impl StagingArea {
 
         if let Some(mut tree) = tree_commit {
             for (path, hash) in self.files.iter() {
-                let (is_in_last_commit, _) = tree.has_blob_from_hash(hash)?;
+                let (is_in_last_commit, _) = tree.has_blob_from_hash(hash, logger)?;
                 if !is_in_last_commit {
                     files.remove(path);
                 }

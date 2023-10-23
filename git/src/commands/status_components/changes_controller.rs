@@ -42,13 +42,27 @@ pub struct ChangesController {
 }
 
 impl ChangesController {
+    /* fn print_tree(tree: Tree, logger: &mut Logger) {
+        for (name, obj) in tree.get_objects().iter() {
+            if let Some(tree2) = obj.as_tree() {
+                logger.log(&format!("Found  tree: {}", name));
+                Self::print_tree(tree2, logger);
+            } else {
+                logger.log(&format!("Found  blob: {}", name));
+            }
+        }
+    } */
     pub fn new(logger: &mut Logger) -> Result<ChangesController, CommandError> {
         let commit_tree = build_last_commit_tree(logger)?;
+        /* logger.log(&format!("Printing tree..."));
+        if let Some(tree) = commit_tree {
+            Self::print_tree(tree, logger);
+        } */
         let index = StagingArea::open()?;
         let working_tree = build_working_tree()?;
         let (working_tree_changes, untracked) =
-            Self::check_working_tree_status(working_tree, &index, &commit_tree)?;
-        let index_changes = Self::check_staging_area_status(&index, &commit_tree)?;
+            Self::check_working_tree_status(working_tree, &index, &commit_tree, logger)?;
+        let index_changes = Self::check_staging_area_status(&index, &commit_tree, logger)?;
 
         Ok(Self {
             index_changes,
@@ -72,6 +86,7 @@ impl ChangesController {
     fn check_staging_area_status(
         staging_area: &StagingArea,
         last_commit: &Option<Tree>,
+        logger: &mut Logger,
     ) -> Result<HashMap<String, ChangeType>, CommandError> {
         let staging_files = staging_area.get_files();
         let Some(mut tree) = last_commit.to_owned() else {
@@ -85,16 +100,19 @@ impl ChangesController {
         let mut changes: HashMap<String, ChangeType> = HashMap::new();
         for (path, hash) in staging_files.iter() {
             let has_path = tree.has_blob_from_path(path);
-            let (has_hash, name) = tree.has_blob_from_hash(hash)?;
+            logger.log(&format!("Path: {}, {}", path, has_path));
+            let (has_hash, name) = tree.has_blob_from_hash(hash, logger)?;
+            logger.log(&format!("Hash found: {}", has_hash));
+
             let actual_name = get_name(path)?;
             if !has_path && !has_hash {
                 _ = changes.insert(path.to_string(), ChangeType::Added);
             } else if has_path && !has_hash {
                 _ = changes.insert(path.to_string(), ChangeType::Modified);
+            } else if has_path && has_hash {
+                _ = changes.insert(path.to_string(), ChangeType::Unmodified);
             } else if has_hash && name != actual_name {
                 _ = changes.insert(path.to_string(), ChangeType::Renamed);
-            } else {
-                _ = changes.insert(path.to_string(), ChangeType::Unmodified);
             }
         }
         Self::get_deleted_changes_index(staging_area, &mut changes)?;
@@ -105,6 +123,7 @@ impl ChangesController {
         mut working_tree: Tree,
         staging_area: &StagingArea,
         last_commit: &Option<Tree>,
+        logger: &mut Logger,
     ) -> Result<(HashMap<String, ChangeType>, Vec<String>), CommandError> {
         let mut wt_changes: HashMap<String, ChangeType> = HashMap::new();
         let mut untracked: Vec<String> = Vec::new();
@@ -115,6 +134,7 @@ impl ChangesController {
             last_commit,
             &mut wt_changes,
             &mut untracked,
+            logger,
         )?;
         Self::get_deleted_changes_working_tree(&mut working_tree, staging_area, &mut wt_changes);
         Ok((wt_changes, untracked))
@@ -150,6 +170,7 @@ impl ChangesController {
         last_commit: &Option<Tree>,
         changes: &mut HashMap<String, ChangeType>,
         untracked: &mut Vec<String>,
+        logger: &mut Logger,
     ) -> Result<(), CommandError> {
         for (_, object) in tree.get_objects().iter_mut() {
             if let Some(mut new_tree) = object.as_tree() {
@@ -159,9 +180,17 @@ impl ChangesController {
                     last_commit,
                     changes,
                     untracked,
+                    logger,
                 )?
             } else {
-                Self::check_file_status(object, staging_area, last_commit, changes, untracked)?;
+                Self::check_file_status(
+                    object,
+                    staging_area,
+                    last_commit,
+                    changes,
+                    untracked,
+                    logger,
+                )?;
             }
         }
         Ok(())
@@ -173,10 +202,12 @@ impl ChangesController {
         last_commit: &Option<Tree>,
         changes: &mut HashMap<String, ChangeType>,
         untracked: &mut Vec<String>,
+        logger: &mut Logger,
     ) -> Result<(), CommandError> {
         let Some(path) = object.get_path() else {
             return Err(CommandError::FileNameError);
         };
+
         let hash = object.get_hash_string()?;
         let has_path = staging_area.has_file_from_path(&path);
         let has_path_renamed = staging_area.has_file_renamed(&path, &hash);
@@ -184,7 +215,7 @@ impl ChangesController {
         //let actual_name = get_name(&path)?;
         let isnt_in_last_commit = {
             if let Some(mut tree) = last_commit.to_owned() {
-                let (is_in_last_commit, _) = tree.has_blob_from_hash(&hash)?;
+                let (is_in_last_commit, _) = tree.has_blob_from_hash(&hash, logger)?;
                 !is_in_last_commit && !tree.has_blob_from_path(&path)
             } else {
                 true

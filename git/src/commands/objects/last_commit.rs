@@ -10,7 +10,7 @@ pub fn is_in_last_commit(
     logger: &mut Logger,
 ) -> Result<(bool, String), CommandError> {
     if let Some(mut tree) = build_last_commit_tree(logger)? {
-        return Ok(tree.has_blob_from_hash(&blob_hash)?);
+        return Ok(tree.has_blob_from_hash(&blob_hash, logger)?);
     }
     Ok((false, "".to_string()))
 }
