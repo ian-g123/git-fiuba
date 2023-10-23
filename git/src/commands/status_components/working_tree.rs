@@ -28,6 +28,9 @@ fn build_working_tree_aux(path_name: &str, tree: &mut Tree) -> Result<(), Comman
         };
         let entry_path = entry.path();
         let path = &get_path_name(entry_path.clone())?;
+        if path.contains(".git") {
+            continue;
+        }
         if entry_path.is_dir() {
             let mut new_tree = Tree::new(path[2..].to_owned());
             build_working_tree_aux(&path, &mut new_tree)?;

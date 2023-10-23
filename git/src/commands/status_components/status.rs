@@ -4,6 +4,7 @@ use std::str;
 use std::vec;
 
 use crate::commands::branch_manager::get_current_branch;
+use crate::commands::branch_manager::get_current_branch_name;
 use crate::commands::command::Command;
 use crate::commands::command::ConfigAdderFunction;
 use crate::commands::command_errors::CommandError;
@@ -83,7 +84,7 @@ impl Status {
     }
 
     fn run(&self, output: &mut dyn Write, logger: &mut Logger) -> Result<(), CommandError> {
-        let branch = get_current_branch()?;
+        let branch = get_current_branch_name()?;
         if self.short {
             let short_format = ShortFormat;
             short_format.show(logger, output, &branch)?;

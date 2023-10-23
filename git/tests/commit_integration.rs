@@ -1,10 +1,18 @@
-use core::panic;
 use std::{
     fs::{self, File},
     io::Write,
     path::Path,
     process::Command,
 };
+
+use crate::common::aux::{
+    change_test_scene_2, change_test_scene_3, create_test_scene_1, create_test_scene_2,
+    create_test_scene_3,
+};
+
+mod common {
+    pub mod aux;
+}
 
 /// Prueba que se pueda commitear un solo archivo.
 #[test]
@@ -666,91 +674,4 @@ fn test_commit_paths_fails() {
     assert_eq!(String::from_utf8(result.stderr).unwrap(), expected);
 
     _ = fs::remove_dir_all(format!("{}", path));
-}
-
-fn create_test_scene_1(path: &str) {
-    create_base_scene(path);
-
-    let Ok(_) = fs::copy(
-        "tests/data/commands/add/testfile.txt",
-        &(path.to_owned() + "/testfile.txt"),
-    ) else {
-        panic!("No se pudo copiar el archivo")
-    };
-
-    println!("Repo creado");
-
-    assert!(Path::new(&(path.to_owned() + "/testfile.txt")).exists())
-}
-
-fn create_test_scene_3(path: &str) {
-    create_base_scene(path);
-    let Ok(_) = fs::create_dir_all(path.to_owned() + "/dir/") else {
-        panic!("No se pudo crear el directorio")
-    };
-
-    let mut file = File::create(path.to_owned() + "/dir/testfile1.txt").unwrap();
-    file.write_all(b"file 1!").unwrap();
-
-    let mut file = File::create(path.to_owned() + "/dir/testfile2.txt").unwrap();
-    file.write_all(b"file 2!").unwrap();
-
-    let mut file = File::create(path.to_owned() + "/dir/testfile3.txt").unwrap();
-    file.write_all(b"file 3!").unwrap();
-
-    assert!(Path::new(&(path.to_owned() + "/dir/testfile1.txt")).exists());
-    assert!(Path::new(&(path.to_owned() + "/dir/testfile2.txt")).exists());
-    assert!(Path::new(&(path.to_owned() + "/dir/testfile3.txt")).exists());
-}
-
-fn create_test_scene_2(path: &str) {
-    create_base_scene(path);
-    // copy tests/data/commands/add/dir/ contents to path.to_owned() + "/dir/"
-    let Ok(_) = fs::create_dir_all(path.to_owned() + "/dir/") else {
-        panic!("No se pudo crear el directorio")
-    };
-    let Ok(_) = fs::copy(
-        "tests/data/commands/add/dir/testfile1.txt",
-        &(path.to_owned() + "/dir/testfile1.txt"),
-    ) else {
-        panic!("No se pudo copiar el archivo")
-    };
-    let Ok(_) = fs::copy(
-        "tests/data/commands/add/dir/testfile2.txt",
-        &(path.to_owned() + "/dir/testfile2.txt"),
-    ) else {
-        panic!("No se pudo copiar el archivo")
-    };
-
-    assert!(Path::new(&(path.to_owned() + "/dir/testfile1.txt")).exists());
-    assert!(Path::new(&(path.to_owned() + "/dir/testfile2.txt")).exists())
-}
-
-fn change_test_scene_2(path: &str) {
-    let mut file = File::create(path.to_owned() + "/dir/testfile1.txt").unwrap();
-
-    file.write_all(b"Cambio!").unwrap();
-}
-
-fn change_test_scene_3(path: &str) {
-    change_test_scene_2(path);
-
-    _ = fs::remove_file(path.to_string() + "/dir/testfile2.txt").unwrap();
-}
-
-fn create_base_scene(path: &str) {
-    _ = fs::remove_dir_all(format!("{}", path));
-    let Ok(_) = fs::create_dir_all(path.clone()) else {
-        panic!("No se pudo crear el directorio")
-    };
-
-    assert!(
-        Command::new("git")
-            .arg("init")
-            .arg("-q")
-            .current_dir(path)
-            .status()
-            .is_ok(),
-        "No se pudo inicializar el repositorio"
-    );
 }

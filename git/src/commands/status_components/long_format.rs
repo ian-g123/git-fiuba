@@ -50,10 +50,10 @@ impl Format for LongFormat {
             && changes_not_staged.is_empty()
             && untracked_files.is_empty()
         {
-            output_message = format!("{}nothing to commit, working tree clean\n", output_message);
+            output_message = format!("{}nothing to commit, working tree clean", output_message);
         } else if changes_to_be_commited.is_empty() {
             output_message = format!(
-                "{}\nno changes added to commit (use \"git add\" and/or \"git commit -a\"\n",
+                "{}\nno changes added to commit (use \"git add\" and/or \"git commit -a\"",
                 output_message
             );
         }
