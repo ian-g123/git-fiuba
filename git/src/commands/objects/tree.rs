@@ -32,9 +32,19 @@ impl Tree {
         blob_hash: &str,
         logger: &mut Logger,
     ) -> Result<(bool, String), CommandError> {
-        for (name, object) in self.objects.iter_mut() {
-            /* let mut object = object.to_owned();
-            let object: &mut GitObject = object.borrow_mut(); */
+        Ok(Self::has_blob_from_hash_aux(
+            &mut self.get_objects(),
+            logger,
+            blob_hash,
+        )?)
+    }
+
+    fn has_blob_from_hash_aux(
+        objects: &mut HashMap<String, GitObject>,
+        logger: &mut Logger,
+        blob_hash: &str,
+    ) -> Result<(bool, String), CommandError> {
+        for (name, object) in objects.iter_mut() {
             let hash = object.get_hash_string()?;
             logger.log(&format!("Hash buscado: {}, obtenido: {}", blob_hash, hash));
             if hash == blob_hash.to_string() {
@@ -45,9 +55,15 @@ impl Tree {
             if let Some(tree) = object.as_mut_tree() {
                 logger.log(&format!("es un tree"));
 
-                return tree.has_blob_from_hash(blob_hash, logger);
+                let (found, name) =
+                    Self::has_blob_from_hash_aux(&mut tree.get_objects(), logger, blob_hash)?;
+                if found {
+                    return Ok((true, name));
+                }
             }
         }
+        logger.log(&format!("sale de la funcion"));
+
         Ok((false, "".to_string()))
     }
 
@@ -562,8 +578,8 @@ mod test_write_y_display {
 
         let mut tree_res = Tree::read_from(&mut writer_stream, 0, "", &hash, &mut logger).unwrap();
         //assert_eq!(tree_res, Box::new(tree));
-        if let Some(tree_new) = tree_res.as_tree() {
+        /* if let Some(tree_new) = tree_res.as_tree() {
             let x = tree_new.clone();
-        }
+        } */
     }
 }

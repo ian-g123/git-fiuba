@@ -68,7 +68,7 @@ impl StagingArea {
         for (name, object) in tree.get_objects().iter_mut() {
             let mut complete_path = format!("{}/{}", path, name);
             if let Some(new_tree) = object.as_mut_tree() {
-                complete_path = format!("{}/", complete_path);
+                complete_path = format!("{}", complete_path);
                 self.check_deleted_from_commit(new_tree, deleted, complete_path);
             } else {
                 if !self.has_file_from_path(&complete_path[1..]) {

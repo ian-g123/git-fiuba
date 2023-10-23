@@ -42,22 +42,22 @@ pub struct ChangesController {
 }
 
 impl ChangesController {
-    /* fn print_tree(tree: Tree, logger: &mut Logger) {
-        for (name, obj) in tree.get_objects().iter() {
-            if let Some(tree2) = obj.as_tree() {
+    fn print_tree(tree: &mut Tree, logger: &mut Logger) {
+        for (name, obj) in tree.get_objects().iter_mut() {
+            if let Some(tree2) = obj.as_mut_tree() {
                 logger.log(&format!("Found  tree: {}", name));
                 Self::print_tree(tree2, logger);
             } else {
                 logger.log(&format!("Found  blob: {}", name));
             }
         }
-    } */
+    }
     pub fn new(logger: &mut Logger) -> Result<ChangesController, CommandError> {
         let commit_tree = build_last_commit_tree(logger)?;
-        /* logger.log(&format!("Printing tree..."));
-        if let Some(tree) = commit_tree {
-            Self::print_tree(tree, logger);
-        } */
+        logger.log(&format!("Printing tree..."));
+        if let Some(mut tree) = commit_tree.clone() {
+            Self::print_tree(&mut tree, logger);
+        }
         let index = StagingArea::open()?;
         let working_tree = build_working_tree()?;
         let (working_tree_changes, untracked) =

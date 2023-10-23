@@ -123,7 +123,7 @@ fn test1() {
         .output()
         .unwrap();
 
-    let expected = "On branch master\nUntracked files:\n  (use \"git add <file>...\" to include in what will be committed)\n\tdir/testfile1.txt\n\tdir/testfile2.txt\n\tdir/testfile4.txt\n\nno changes added to commit (use \"git add\" and/or \"git commit -a\"";
+    let expected = "On branch master\nUntracked files:\n  (use \"git add <file>...\" to include in what will be committed)\n\tdir/testfile1.txt\n\tdir/testfile2.txt\n\tdir/testfile4.txt\n\nno changes added to commit (use \"git add\" and/or \"git commit -a\"\n";
     assert_eq!(String::from_utf8(result.stdout).unwrap(), expected);
 
     /* change_test_scene_4(path);
