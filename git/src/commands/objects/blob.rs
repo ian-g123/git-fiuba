@@ -1,7 +1,6 @@
 use std::{
     fmt,
     fs::File,
-    hash,
     io::{Cursor, Read, Write},
 };
 
@@ -10,7 +9,7 @@ use crate::{commands::command_errors::CommandError, logger::Logger};
 use super::{
     author::Author,
     aux::*,
-    git_object::{GitObject, GitObjectTrait},
+    git_object::{write_to_stream_from_content, GitObject, GitObjectTrait},
     mode::Mode,
     super_string::SuperStrings,
     tree::Tree,
@@ -22,23 +21,17 @@ pub struct Blob {
     path: Option<String>,
     hash: Option<[u8; 20]>,
     name: Option<String>,
-    content: Option<Vec<u8>>,
 }
 
 impl Blob {
     /// Crea un Blob a partir de su ruta. Si la ruta no existe, devuelve Error.
     pub fn new_from_path(path: String) -> Result<Self, CommandError> {
-        let object_type = "blob";
         let mode = Mode::get_mode(path.clone())?;
-        // let sha1 = get_sha1(path.clone(), object_type.to_string(), false)?;
-        // let data: Vec<u8> = Vec::new();
-
         Ok(Blob {
             mode: mode,
             path: Some(path.clone()),
             hash: None,
             name: Some(get_name(&path)?),
-            content: None,
         })
     }
 
@@ -53,7 +46,6 @@ impl Blob {
             path: None,
             hash: Some(hash),
             name: Some(name),
-            content: None,
         })
     }
 
@@ -68,47 +60,38 @@ impl Blob {
             path: Some(path.clone()),
             hash: Some(hash),
             name: Some(get_name(&path)?),
-            content: None,
         })
     }
 
     /// Crea un Blob a partir de su hash. Si la ruta no existe, devuelve Error.
-    pub fn new_from_hash_and_content(
-        hash: &str,
-        path: &str,
-        content: Vec<u8>,
-    ) -> Result<Self, CommandError> {
-        let mode = Mode::get_mode(path.to_string())?;
-        let hash = hash.to_string().cast_hex_to_u8_vec()?;
+    pub fn new_from_hash_and_path(hash: [u8; 20], path: &str) -> Result<Self, CommandError> {
+        let mode = if path != "" {
+            Mode::get_mode(path.to_string())?
+        } else {
+            Mode::RegularFile
+        };
         Ok(Blob {
             mode: mode,
             path: Some(path.to_string()),
             hash: Some(hash),
             name: Some(get_name(&path.to_string())?),
-            content: Some(content),
         })
     }
 
-    pub fn new_from_content(content: Vec<u8>) -> Result<Self, CommandError> {
-        let mode = Mode::RegularFile;
-        Ok(Blob {
-            mode: mode,
-            path: None,
-            hash: None,
-            name: None,
-            content: Some(content),
-        })
+    pub fn new_from_content_and_path(content: Vec<u8>, path: &str) -> Result<Self, CommandError> {
+        let mut data: Vec<u8> = Vec::new();
+        write_to_stream_from_content(&mut data, content, "blob".to_string())?;
+        let hash = get_sha1(&data);
+        Self::new_from_hash_and_path(hash, path)
     }
 
     pub fn read_from(
         stream: &mut dyn Read,
         len: usize,
         path: &str,
-        hash: &str,
+        _: &str,
         logger: &mut Logger,
     ) -> Result<GitObject, CommandError> {
-        // read until encountering \0
-
         let mut content = vec![0; len as usize];
 
         stream
@@ -119,7 +102,7 @@ impl Blob {
             String::from_utf8(content.clone()).unwrap()
         ));
 
-        let blob = Blob::new_from_hash_and_content(hash, path, content)?;
+        let blob = Blob::new_from_content_and_path(content, path)?;
         logger.log("blob created");
         logger.log(&format!("blob: {}", blob.to_string()));
         Ok(Box::new(blob))
@@ -164,19 +147,15 @@ impl GitObjectTrait for Blob {
         "blob".to_string()
     }
 
-    fn content(&mut self) -> Result<Vec<u8>, CommandError> {
-        match &self.content {
-            Some(content) => Ok(content.clone()),
-            None => match &self.path {
-                Some(path) => {
-                    let content = read_file_contents(path)?;
-                    self.content = Some(content.clone());
-                    Ok(content)
-                }
-                None => Err(CommandError::FileReadError(
-                    "Error leyendo el archivo".to_string(),
-                )),
-            },
+    fn content(&self) -> Result<Vec<u8>, CommandError> {
+        match &self.path {
+            Some(path) => {
+                let content = read_file_contents(path)?;
+                Ok(content)
+            }
+            None => Err(CommandError::FileReadError(
+                "Archivo blob inexistente".to_string(),
+            )),
         }
     }
 
@@ -187,7 +166,7 @@ impl GitObjectTrait for Blob {
 
     fn to_string_priv(&self) -> String {
         //map content to utf8
-        let Some(content) = &self.content else {
+        let Ok(content) = self.content() else {
             return "Error convirtiendo a utf8".to_string();
         };
         let Ok(string) = String::from_utf8(content.clone()) else {
@@ -224,8 +203,8 @@ impl fmt::Display for Blob {
 
 fn read_file_contents(path: &str) -> Result<Vec<u8>, CommandError> {
     let mut file = File::open(path).map_err(|_| CommandError::FileNotFound(path.to_string()))?;
-    let mut data = Vec::new();
-    file.read_to_end(&mut data)
+    let mut content = Vec::new();
+    file.read_to_end(&mut content)
         .map_err(|_| CommandError::FileReadError(path.to_string()))?;
-    Ok(data)
+    Ok(content)
 }

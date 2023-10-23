@@ -5,8 +5,6 @@ use std::{
     path::PathBuf,
 };
 
-use sha1::{Digest, Sha1};
-
 use crate::logger::Logger;
 
 use super::{
@@ -18,6 +16,7 @@ use super::{
     },
 };
 
+/// Escribe un objeto en la base de datos.
 pub(crate) fn write(
     logger: &mut Logger,
     git_object: &mut GitObject,
@@ -50,6 +49,7 @@ pub(crate) fn write(
     return Ok(hex_string);
 }
 
+/// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve el objeto que este representa.
 pub(crate) fn read_object(hash_str: &str, logger: &mut Logger) -> Result<GitObject, CommandError> {
     let (path, decompressed_data) = read_file(hash_str, logger)?;
     let mut stream = Cursor::new(decompressed_data);
@@ -57,6 +57,7 @@ pub(crate) fn read_object(hash_str: &str, logger: &mut Logger) -> Result<GitObje
     read_git_object_from(&mut stream, &path, &hash_str, logger)
 }
 
+/// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve la ruta del objeto y su data descomprimida.
 pub(crate) fn read_file(
     hash_str: &str,
     logger: &mut Logger,

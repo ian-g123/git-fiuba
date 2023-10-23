@@ -217,7 +217,7 @@ impl GitObjectTrait for CommitObject {
         todo!()
     }
 
-    fn content(&mut self) -> Result<Vec<u8>, CommandError> {
+    fn content(&self) -> Result<Vec<u8>, CommandError> {
         let mut buf: Vec<u8> = Vec::new();
         buf.extend_from_slice(&self.tree.cast_hex_to_u8_vec()?);
         let parents_len_be = (self.parents.len() as u32).to_be_bytes();

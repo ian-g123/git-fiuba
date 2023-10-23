@@ -268,7 +268,7 @@ impl GitObjectTrait for Tree {
         "tree".to_string()
     }
 
-    fn content(&mut self) -> Result<Vec<u8>, CommandError> {
+    fn content(&self) -> Result<Vec<u8>, CommandError> {
         let mut content = Vec::new();
         let mut objects = self.sort_objects();
         for (path, object) in objects.iter_mut() {

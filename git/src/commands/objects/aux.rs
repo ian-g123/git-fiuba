@@ -13,7 +13,7 @@ pub fn get_name(path_string: &str) -> Result<String, CommandError> {
         .ok_or_else(|| CommandError::FileNotFound(path_string.to_owned()))
 }
 
-/// Dado el contenido pasado, devuelve el hash expresado en un vector de 20 bytes.
+/// Dado la data pasado, devuelve el hash expresado en un vector de 20 bytes.
 pub fn get_sha1(data: &[u8]) -> [u8; 20] {
     let mut sha1 = Sha1::new();
     sha1.update(data);
