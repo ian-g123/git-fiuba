@@ -26,8 +26,12 @@ impl<'a> TcpStreamBuffer<'a> {
         self.pos -= pos;
     }
 
-    pub fn set_current_pos(&mut self, pos: usize) {
+    pub fn set_pos(&mut self, pos: usize) {
         self.pos = pos;
+    }
+
+    pub fn get_pos(&self) -> usize {
+        self.pos
     }
 }
 
@@ -35,7 +39,7 @@ impl<'a> Read for TcpStreamBuffer<'a> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         let num_bytes_to_read = buf.len();
         let mut num_bytes_read = 0;
-        if (self.pos < self.buffer.len() - 1) {
+        if self.pos + 1 < self.buffer.len() {
             let num_bytes_to_copy = std::cmp::min(num_bytes_to_read, self.buffer.len() - self.pos);
             buf[..num_bytes_to_copy]
                 .copy_from_slice(&self.buffer[self.pos..self.pos + num_bytes_to_copy]);

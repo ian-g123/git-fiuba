@@ -148,9 +148,8 @@ fn leer_bits(mut socket: &TcpStream) {
 }
 
 fn leer_objetos(object_number: u32, mut socket: &TcpStream) {
-    let mut buffer = Vec::new();
+    let mut buffed_reader = TcpStreamBuffer::new(socket);
     for _ in 0..object_number {
-        let mut stream = Cursor::new(&mut buffer);
         // Object types
         // Valid object types are:
         // OBJ_COMMIT (1)
@@ -159,7 +158,8 @@ fn leer_objetos(object_number: u32, mut socket: &TcpStream) {
         // OBJ_TAG (4)
         // OBJ_OFS_DELTA (6)
         // OBJ_REF_DELTA (7)
-        let first_byte_buf = get_bytes(1, &mut stream, socket);
+        let mut first_byte_buf = [0; 1];
+        buffed_reader.read_exact(&mut first_byte_buf).unwrap();
 
         // Object type is three bits
         println!("first_byte_buf: {:?}", first_byte_buf);
@@ -189,7 +189,9 @@ fn leer_objetos(object_number: u32, mut socket: &TcpStream) {
         let mut is_last_byte: bool = first_byte_buf[0] >> 7 == 0;
         while !is_last_byte {
             let mut seven_bit_chunk = Vec::<u8>::new();
-            let current_byte = get_bytes(1, &mut stream, socket)[0];
+            let mut current_byte_buf = [0; 1];
+            buffed_reader.read_exact(&mut current_byte_buf).unwrap();
+            let current_byte = current_byte_buf[0];
             is_last_byte = current_byte >> 7 == 0;
             let seven_bit_chunk_with_zero = current_byte & 0b01111111;
             for i in (0..7).rev() {
@@ -209,10 +211,14 @@ fn leer_objetos(object_number: u32, mut socket: &TcpStream) {
 
         // let mut decoder = flate2::read::ZlibDecoder::new(socket);
 
-        let compressed_data = get_bytes(len + 10, &mut stream, socket);
-        println!("compressed_data: {:?}", compressed_data);
-        let zlib_cursor = Cursor::new(&compressed_data);
-        let mut decoder = flate2::read::ZlibDecoder::new(zlib_cursor);
+        // let compressed_data = get_bytes(len + 10, &mut stream, socket);
+
+        // println!("compressed_data: {:?}", compressed_data);
+        // let zlib_cursor = Cursor::new(&compressed_data);
+        // let mut decoder = flate2::read::ZlibDecoder::new(zlib_cursor);
+
+        let pos_before_reading_object = buffed_reader.get_pos();
+        let mut decoder = flate2::read::ZlibDecoder::new(&mut buffed_reader);
         let mut deflated_data = Vec::new();
         let bytes_read = decoder.read_to_end(&mut deflated_data).unwrap();
 
@@ -225,17 +231,7 @@ fn leer_objetos(object_number: u32, mut socket: &TcpStream) {
             "deflated_data_str: {:?}",
             String::from_utf8_lossy(&deflated_data.clone())
         );
-
-        buffer.append(&mut compressed_data[(bytes_used)..].to_owned());
-        println!("buffer: {:?}", buffer);
-        print!("buffer:");
-        let bits = concat_bytes_to_bits(&buffer);
-        for (i, bit) in bits.iter().enumerate() {
-            if i % 8 == 0 {
-                print!(" ");
-            }
-            print!("{}", bit);
-        }
+        buffed_reader.set_pos(pos_before_reading_object + bytes_used);
         println!();
     }
 }
