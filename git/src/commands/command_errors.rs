@@ -82,6 +82,10 @@ pub enum CommandError {
     ErrorReadingPkt,
     /// Error al enviar un mensaje
     SendingMessage,
+    /// Error al intentar abrir el archivo de configuración
+    InvalidConfigFile,
+    /// No se encontró la url del repositorio remoto
+    NoRemoteUrl,
 }
 
 impl Error for CommandError {}
@@ -202,6 +206,12 @@ impl fmt::Display for CommandError {
             }
             CommandError::SendingMessage => {
                 write!(f, "Error al enviar un mensaje")
+            }
+            CommandError::InvalidConfigFile => {
+                write!(f, "Error al intentar abrir el archivo de configuración")
+            }
+            CommandError::NoRemoteUrl => {
+                write!(f, "No se encontró la url del repositorio remoto")
             }
         }
     }

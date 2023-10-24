@@ -241,10 +241,10 @@ impl Commit {
 
         let config = Config::open()?;
 
-        let Some(author_email) = config.get("user.email") else {
+        let Some(author_email) = config.get("user", "email") else {
             return Err(CommandError::UserConfigurationError);
         };
-        let Some(author_name) = config.get("user.name") else {
+        let Some(author_name) = config.get("user", "name") else {
             return Err(CommandError::UserConfigurationError);
         };
 

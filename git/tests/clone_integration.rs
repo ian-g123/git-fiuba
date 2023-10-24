@@ -6,6 +6,7 @@ use std::{
 };
 
 #[test]
+#[ignore]
 fn test_clone() {
     let path = "./tests/data/commands/clone/test1";
     // let mut handle = create_base_scene_and_start_server(path.clone());

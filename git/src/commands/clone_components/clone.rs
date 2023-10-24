@@ -8,6 +8,7 @@ use crate::{
     commands::{
         command::{Command, ConfigAdderFunction},
         command_errors::CommandError,
+        config::Config,
         init_components::init::Init,
         objects::{blob::Blob, git_object::GitObject},
         objects_database,
@@ -117,16 +118,16 @@ impl Clone {
         let mut init_output = Vec::new();
         Init::run_from("init", args, stdin, &mut init_output, logger)?;
         let address = self.get_address();
-        let mut server = GitServer::connect_to(&address)?;
-        let (head_branch, branch_list) =
-            server.explore_repository(&self.repository_path, &self.repository_url, logger)?;
-        for (hash, path) in branch_list {
-            logger.log(&format!("{} {}", hash, path));
-        }
+        let url = address + &self.repository_path;
+        logger.log("Adding remote");
+        let mut config = Config::open()?;
+        logger.log("changing remote");
+        config.insert("remote \"origin\"", "url", &url);
+        logger.log("Saving remote");
+        config.save()?;
+        fetch(logger)?;
         Ok(())
     }
-
-    fn fetch_remote_branches(&self) {}
 
     fn get_address(&self) -> String {
         let Some(repository_port) = self.repository_port.clone() else {
@@ -141,4 +142,37 @@ impl Clone {
         }
         return self.directory.clone();
     }
+}
+
+fn fetch(logger: &mut Logger) -> Result<(), CommandError> {
+    logger.log("Fetching...");
+    let config = &Config::open()?;
+    // display config contents
+    for (domain, configs) in &config.entries {
+        logger.log(&format!("[{}]", domain));
+        for (key, value) in configs {
+            logger.log(&format!("\t{} = {}", key, value));
+        }
+    }
+    let Some(url) = config.get("remote \"origin\"", "url") else {
+        return Err(CommandError::NoRemoteUrl);
+    };
+
+    let Some((address, repository_path)) = url.split_once('/') else {
+        return Err(CommandError::InvalidConfigFile);
+    };
+
+    let (repository_url, _repository_port) = {
+        match address.split_once(':') {
+            Some((repository_url, port)) => (repository_url, Some(port)),
+            None => (address, None),
+        }
+    };
+
+    let mut server = GitServer::connect_to(&address)?;
+    let (_head_branch, branch_list) =
+        server.explore_repository(repository_path, repository_url, logger)?;
+    Ok(for (hash, path) in branch_list {
+        logger.log(&format!("{} {}", hash, path));
+    })
 }
