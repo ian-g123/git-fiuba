@@ -91,7 +91,7 @@ pub trait SuperStrings {
     fn write_to(&self, stream: &mut dyn Write) -> Result<(), CommandError>;
     //fn read_from(&self, stream: &mut dyn Read) -> Result<String, CommandError>;
 
-    fn cast_hex_to_u8_vec(&self) -> Result<[u8; 20], CommandError>;
+    fn cast_hex_to_u8_vec(&self) -> Result<Vec<u8>, CommandError>;
 }
 
 impl SuperStrings for String {
@@ -108,16 +108,20 @@ impl SuperStrings for String {
     }
 
     /// Convierte de hexadecimal a Vec<u8>.
-    fn cast_hex_to_u8_vec(&self) -> Result<[u8; 20], CommandError> {
-        let mut result = [0; 20];
+    fn cast_hex_to_u8_vec(&self) -> Result<Vec<u8>, CommandError> {
+        let len = self.len();
+        if len % 2 != 0 {
+            return Err(CommandError::InvalidArgument(
+                "Hex string must have even length".to_string(),
+            ));
+        }
+        let mut result = Vec::with_capacity(len / 2);
         let mut chars = self.chars();
 
-        let mut i = 0;
         while let Some(c1) = chars.next() {
             if let Some(c2) = chars.next() {
                 if let (Some(n1), Some(n2)) = (c1.to_digit(16), c2.to_digit(16)) {
-                    result[i] = (n1 * 16 + n2) as u8;
-                    i += 1;
+                    result.push((n1 * 16 + n2) as u8);
                 } else {
                     panic!("Invalid hex string");
                 }

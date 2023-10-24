@@ -4,8 +4,10 @@ use crate::{
     commands::{
         command::{Command, ConfigAdderFunction},
         command_errors::CommandError,
+        init_components::init::Init,
         objects::{blob::Blob, git_object::GitObject},
-        objects_database, init_components::init::Init,
+        objects_database,
+        server_components::git_server::GitServer,
     },
     logger::Logger,
 };
@@ -62,19 +64,17 @@ impl Clone {
         i: usize,
         args: &[String],
     ) -> Result<usize, CommandError> {
-        //git://host.xz[:port]/path/to/repo.git/
-        let mut url_and_repo_arg = args[i].clone();
-        if !url_and_repo_arg.starts_with("git://") {
+        let mut url_and_repo = args[i].clone();
+        if !url_and_repo.starts_with("git://") {
             return Err(CommandError::InvalidArgument(
                 "repository url must start with git://".to_string(),
             ));
         }
-
-        let url_and_repo = url_and_repo_arg[6..].to_string();
+        url_and_repo.drain(6..);
         let Some((url_and_port, path)) = url_and_repo.split_once('/') else {
             return Err(CommandError::InvalidArguments);
         };
-        clone.repository_path = path.to_string();
+        clone.repository_path = "/".to_string() + path;
         let Some((url, port)) = url_and_port.split_once(':') else {
             clone.repository_url = url_and_port.to_string();
             return Ok(i + 1);
@@ -99,10 +99,23 @@ impl Clone {
         output: &mut dyn Write,
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
-        Init::run_from("init", &[], stdin, output, logger)?;
-
+        Init::run_from("init", &[self.directory.clone()], stdin, output, logger)?;
+        let address = self.get_address();
+        let mut server = GitServer::connect_to(&address)?;
+        let mut lines =
+            server.send("git-upload-pack /server-repo\0host=127.1.0.1\0\0version=1\0")?;
+        for line in lines {
+            logger.log(&line);
+        }
         Ok(())
     }
 
     fn fetch_remote_branches(&self) {}
+
+    fn get_address(&self) -> String {
+        let Some(repository_port) = self.repository_port.clone() else {
+            return self.repository_url.clone();
+        };
+        return self.repository_url.clone() + ":" + &repository_port;
+    }
 }

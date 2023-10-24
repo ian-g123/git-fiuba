@@ -75,7 +75,13 @@ pub enum CommandError {
     /// Se intentó agregar un archivo dentro de un archivo
     ObjectNotTree,
     StdinError,
-    InvalidArgument(String)
+    InvalidArgument(String),
+    /// No se pudo conectar al servidor
+    Connection(String),
+    /// Error al leer un pkt
+    ErrorReadingPkt,
+    /// Error al enviar un mensaje
+    SendingMessage,
 }
 
 impl Error for CommandError {}
@@ -187,6 +193,15 @@ impl fmt::Display for CommandError {
             }
             CommandError::InvalidArgument(msg) => {
                 write!(f, "{}", msg)
+            }
+            CommandError::Connection(msg) => {
+                write!(f, "{}", msg)
+            }
+            CommandError::ErrorReadingPkt => {
+                write!(f, "Error al leer un pkt")
+            }
+            CommandError::SendingMessage => {
+                write!(f, "Error al enviar un mensaje")
             }
         }
     }

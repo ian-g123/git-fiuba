@@ -12,6 +12,7 @@ pub mod commands {
     pub mod init_components;
     pub mod objects;
     pub mod objects_database;
+    pub mod server_components;
     pub mod stagin_area;
 }
 pub mod logger;
