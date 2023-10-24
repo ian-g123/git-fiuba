@@ -32,6 +32,33 @@ impl GitServer {
         let lines = get_response(&self.socket, logger)?;
         Ok(lines)
     }
+
+    pub fn explore_repository(
+        &mut self,
+        repository_path: &str,
+        host: &str,
+        logger: &mut Logger,
+    ) -> Result<(String, Vec<(String, String)>), CommandError> {
+        let line = format!(
+            "git-upload-pack {}\0host={}\0\0version=1\0\n",
+            repository_path, host
+        );
+        let mut lines = self.send(&line, logger)?;
+        let first_line = lines.remove(0);
+        if first_line != "version 1\n" {
+            return Err(CommandError::ErrorReadingPkt);
+        }
+        let head_branch_line = lines.remove(0);
+        let Some((head_branch, _other_words)) = head_branch_line.split_once(' ') else {
+            return Err(CommandError::ErrorReadingPkt);
+        };
+        let mut refs = Vec::<(String, String)>::new();
+        for line in lines {
+            let (ref_name, sha1) = line.split_once(' ').ok_or(CommandError::ErrorReadingPkt)?;
+            refs.push((ref_name.to_string(), sha1.to_string()));
+        }
+        Ok((head_branch.to_string(), refs))
+    }
 }
 
 fn get_response(mut socket: &TcpStream, logger: &mut Logger) -> Result<Vec<String>, CommandError> {
@@ -40,7 +67,6 @@ fn get_response(mut socket: &TcpStream, logger: &mut Logger) -> Result<Vec<Strin
     loop {
         match String::read_pkt_format(&mut socket)? {
             Some(line) => {
-                logger.log(&format!("Received: {}", line));
                 lines.push(line);
             }
             None => break,
@@ -49,16 +75,19 @@ fn get_response(mut socket: &TcpStream, logger: &mut Logger) -> Result<Vec<Strin
     Ok(lines)
 }
 
-fn read_pkt_size(mut socket: &mut dyn Read) -> usize {
+fn read_pkt_size(socket: &mut dyn Read) -> Result<usize, CommandError> {
     let mut size_buffer = [0; 4];
-    socket.read(&mut size_buffer).unwrap();
-    let size_vec =
-        hex_string_to_u8_vec_2(String::from_utf8(size_buffer.to_vec()).unwrap().as_str());
+    socket
+        .read(&mut size_buffer)
+        .map_err(|_| CommandError::ErrorReadingPkt)?;
+    let from_utf8 =
+        &String::from_utf8(size_buffer.to_vec()).map_err(|_| CommandError::ErrorReadingPkt)?;
+    let size_vec = hex_string_to_u8_vec_2(from_utf8.as_str())?;
     let size: usize = u16::from_be_bytes(size_vec) as usize;
-    size
+    Ok(size)
 }
 
-pub fn hex_string_to_u8_vec_2(hex_string: &str) -> [u8; 2] {
+pub fn hex_string_to_u8_vec_2(hex_string: &str) -> Result<[u8; 2], CommandError> {
     let mut result = [0; 2];
     let mut chars = hex_string.chars();
 
@@ -69,14 +98,14 @@ pub fn hex_string_to_u8_vec_2(hex_string: &str) -> [u8; 2] {
                 result[i] = (n1 * 16 + n2) as u8;
                 i += 1;
             } else {
-                panic!("Invalid hex string");
+                return Err(CommandError::ErrorReadingPkt);
             }
         } else {
             break;
         }
     }
 
-    result
+    Ok(result)
 }
 
 trait Pkt {
@@ -94,38 +123,15 @@ impl Pkt for String {
     }
 
     fn read_pkt_format(stream: &mut dyn Read) -> Result<Option<String>, CommandError> {
-        // let mut len_hex = [0; 4];
-        // stream
-        //     .read_exact(&mut len_hex)
-        //     .map_err(|_| CommandError::ErrorReadingPkt)?;
-        // let len_str =
-        //     String::from_utf8(len_hex.to_vec()).map_err(|_| CommandError::ErrorReadingPkt)?;
-        // let len_vec = len_str.cast_hex_to_u8_vec()?;
-        // let mut len_be = [0; 2];
-        // len_be.copy_from_slice(&len_vec);
-
-        // let len = u16::from_be_bytes(len_be) as usize;
-        // println!("len: {}", len);
-        // if len == 0 {
-        //     return Ok("".to_string());
-        // }
-        // let mut buf = vec![0; len];
-        // stream
-        //     .read_exact(&mut buf)
-        //     .map_err(|_| CommandError::ErrorReadingPkt)?;
-        // let output = String::from_utf8(buf.clone()).map_err(|_| CommandError::ErrorReadingPkt)?;
-        // println!("buf: {:?}", buf);
-        // println!("buf.len(): {}", buf.len());
-        // println!("output: {}", output);
-        // Ok(output)
-
-        let size = read_pkt_size(stream);
+        let size = read_pkt_size(stream)?;
         if size == 0 {
             return Ok(None);
         }
         let mut line_buffer = vec![0; size - 4];
-        stream.read_exact(&mut line_buffer).unwrap();
-        let line = String::from_utf8(line_buffer).unwrap();
+        stream
+            .read_exact(&mut line_buffer)
+            .map_err(|_| CommandError::ErrorReadingPkt)?;
+        let line = String::from_utf8(line_buffer).map_err(|_| CommandError::ErrorReadingPkt)?;
         Ok(Some(line))
     }
 }

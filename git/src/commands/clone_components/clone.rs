@@ -118,12 +118,10 @@ impl Clone {
         Init::run_from("init", args, stdin, &mut init_output, logger)?;
         let address = self.get_address();
         let mut server = GitServer::connect_to(&address)?;
-        let lines = server.send(
-            "git-upload-pack /server-repo\0host=127.1.0.1\0\0version=1\0\n",
-            logger,
-        )?;
-        for line in lines {
-            logger.log(&line);
+        let (head_branch, branch_list) =
+            server.explore_repository(&self.repository_path, &self.repository_url, logger)?;
+        for (hash, path) in branch_list {
+            logger.log(&format!("{} {}", hash, path));
         }
         Ok(())
     }
