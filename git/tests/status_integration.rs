@@ -126,9 +126,32 @@ fn test1() {
     let expected = "On branch master\nUntracked files:\n  (use \"git add <file>...\" to include in what will be committed)\n\tdir/testfile1.txt\n\tdir/testfile2.txt\n\tdir/testfile4.txt\n\nno changes added to commit (use \"git add\" and/or \"git commit -a\"\n";
     assert_eq!(String::from_utf8(result.stdout).unwrap(), expected);
 
-    /* change_test_scene_4(path);
+    change_test_scene_4(path);
 
     let result = Command::new("../../../../../target/debug/git")
+        .arg("status")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    let expected = "On branch master\nChanges not staged for commit:\n  (use \"git add/rm <file>...\" to update what will be committed)\n  (use \"git restore <file>...\" to discard changes in working directory)\n\tdeleted:   dir/testfile3.txt\n\tmodified:   testfile.txt\n\nUntracked files:\n  (use \"git add <file>...\" to include in what will be committed)\n\tdir/testfile1.txt\n\tdir/testfile2.txt\n\tdir/testfile4.txt\n\nno changes added to commit (use \"git add\" and/or \"git commit -a\"\n";
+    assert_eq!(String::from_utf8(result.stdout).unwrap(), expected);
+
+    _ = Command::new("../../../../../target/debug/git")
+        .arg("add")
+        .arg("dir/testfile3.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("status")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    let expected = "On branch master\nChanges to be committed:\n  (use \"git restore --staged <file>...\" to unstage)\n\tdeleted:   dir/testfile3.txt\n\nChanges not staged for commit:\n  (use \"git add/rm <file>...\" to update what will be committed)\n  (use \"git restore <file>...\" to discard changes in working directory)\n\tmodified:   testfile.txt\n\nUntracked files:\n  (use \"git add <file>...\" to include in what will be committed)\n\tdir/testfile1.txt\n\tdir/testfile2.txt\n\tdir/testfile4.txt\n\n";
+    assert_eq!(String::from_utf8(result.stdout).unwrap(), expected);
+
+    /*let result = Command::new("../../../../../target/debug/git")
         .arg("add")
         .arg("testfile.txt")
         .arg("dir/testfile3.txt")

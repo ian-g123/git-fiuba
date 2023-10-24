@@ -175,6 +175,20 @@ fn test_invalid_file() {
         .output()
         .unwrap();
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("hash-object")
+        .arg("dir/testfile1.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    println!("{}", String::from_utf8(result.stdout).unwrap());
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("hash-object")
+        .arg("dir/testfile.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    println!("{}", String::from_utf8(result.stdout).unwrap());
 
     let result = Command::new("../../../../../target/debug/git")
         .arg("cat-file")

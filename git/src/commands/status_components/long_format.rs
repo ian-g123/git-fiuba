@@ -25,6 +25,7 @@ impl Format for LongFormat {
         }
         for (path, change_type) in changes_to_be_commited.iter() {
             let change = change_type.get_long_type();
+            logger.log(&format!("Change to be commited: {}", path));
             output_message = format!("{}	{}:   {}\n", output_message, change, path);
         }
         let changes_not_staged = sort_hashmap(changes_not_staged);
@@ -34,7 +35,7 @@ impl Format for LongFormat {
         for (path, change_type) in changes_not_staged.iter() {
             let change = change_type.get_long_type();
 
-            output_message = format!("{}	{}:    {}\n", output_message, change, path);
+            output_message = format!("{}\t{}:   {}\n", output_message, change, path);
         }
 
         let untracked_files = sort_vector(untracked_files);

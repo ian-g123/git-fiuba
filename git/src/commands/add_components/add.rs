@@ -2,14 +2,14 @@ use std::{
     env,
     fs::{self, DirEntry, ReadDir},
     io::{Read, Write},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use crate::{
     commands::{
         command::{Command, ConfigAdderFunction},
         command_errors::CommandError,
-        objects::{blob::Blob, git_object::GitObject},
+        objects::{blob::Blob, git_object::GitObject, last_commit::get_commit_tree, tree::Tree},
         objects_database,
         staging_area::StagingArea,
     },
@@ -34,6 +34,8 @@ impl Command for Add {
         }
 
         let instance = Self::new(args)?;
+
+        logger.log(&format!("Add args: {:?}", args));
 
         instance.run(stdin, output, logger)?;
         Ok(())
@@ -62,22 +64,39 @@ impl Add {
         Ok(i + 1)
     }
 
+    fn is_in_last_commit(path: &str, commit_tree: &Option<Tree>, logger: &mut Logger) -> bool {
+        if let Some(tree) = commit_tree {
+            return tree.has_blob_from_path(path, logger);
+        }
+        false
+    }
+
     fn run(
         &self,
         _stdin: &mut dyn Read,
         output: &mut dyn Write,
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
+        let last_commit = &get_commit_tree(logger)?;
+        let mut staging_area = StagingArea::open()?;
+        let mut pathspecs: Vec<String> = self.pathspecs.clone();
+        let mut position = 0;
         for pathspec in &self.pathspecs {
             if !Path::new(pathspec).exists() {
-                return Err(CommandError::FileOpenError(format!(
-                    "No existe el archivo o directorio: {:?}",
-                    pathspec
-                )));
+                if !Self::is_in_last_commit(pathspec, last_commit, logger) {
+                    return Err(CommandError::FileOpenError(format!(
+                        "No existe el archivo o directorio: {:?}",
+                        pathspec
+                    )));
+                }
+                staging_area.remove(pathspec);
+                pathspecs.remove(position);
+                continue;
             }
+            position += 1;
         }
-        let mut staging_area = StagingArea::open()?;
-        for pathspec in &self.pathspecs {
+
+        for pathspec in pathspecs.iter() {
             self.run_for_path(pathspec, &mut staging_area, output, logger)?
         }
         staging_area.save()?;

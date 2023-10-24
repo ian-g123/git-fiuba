@@ -5,13 +5,13 @@ use std::{
 
 use crate::commands::{
     command_errors::CommandError,
-    objects::{blob::Blob, tree::Tree},
+    objects::{aux::get_name, blob::Blob, tree::Tree},
 };
 
 // build working tree
 pub fn build_working_tree() -> Result<Tree, CommandError> {
     let path = "./";
-    let mut tree = Tree::new(path.to_string());
+    let mut tree = Tree::new("".to_string());
     build_working_tree_aux(path, &mut tree)?;
     Ok(tree)
 }
@@ -27,17 +27,18 @@ fn build_working_tree_aux(path_name: &str, tree: &mut Tree) -> Result<(), Comman
             return Err(CommandError::DirNotFound(path_name.to_owned()));
         };
         let entry_path = entry.path();
-        let path = &get_path_name(entry_path.clone())?;
-        if path.contains("./.git") {
+        let full_path = &get_path_name(entry_path.clone())?;
+        let path = &full_path[2..];
+        if full_path.contains("./.git") {
             continue;
         }
         if entry_path.is_dir() {
-            let mut new_tree = Tree::new(path[2..].to_owned());
-            build_working_tree_aux(&path, &mut new_tree)?;
-            tree.add_object(path.to_owned(), Box::new(new_tree));
+            let mut new_tree = Tree::new(path.to_owned());
+            build_working_tree_aux(&full_path, &mut new_tree)?;
+            tree.add_object(get_name(path)?, Box::new(new_tree));
         } else {
-            let blob = Blob::new_from_path(path[2..].to_string())?;
-            tree.add_object(path.to_owned(), Box::new(blob));
+            let blob = Blob::new_from_path(path.to_string())?;
+            tree.add_object(get_name(path)?, Box::new(blob));
         }
     }
     Ok(())

@@ -66,12 +66,17 @@ impl StagingArea {
 
     fn check_deleted_from_commit(&self, tree: &mut Tree, deleted: &mut Vec<String>, path: String) {
         for (name, object) in tree.get_objects().iter_mut() {
-            let mut complete_path = format!("{}/{}", path, name);
+            let complete_path = {
+                if path == "".to_string() {
+                    format!("{}", name)
+                } else {
+                    format!("{}/{}", path, name)
+                }
+            };
             if let Some(new_tree) = object.as_mut_tree() {
-                complete_path = format!("{}", complete_path);
                 self.check_deleted_from_commit(new_tree, deleted, complete_path);
             } else {
-                if !self.has_file_from_path(&complete_path[1..]) {
+                if !self.has_file_from_path(&complete_path) {
                     _ = deleted.push(complete_path);
                 }
             }
