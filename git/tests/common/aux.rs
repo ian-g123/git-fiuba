@@ -100,9 +100,6 @@ pub fn create_test_scene_4(path: &str) {
     let mut file = File::create(path.to_owned() + "/dir/testfile4.txt").unwrap();
     file.write_all(b"file 4!").unwrap();
 
-    let mut file = File::create(path.to_owned() + "/dir/testfile4.txt").unwrap();
-    file.write_all(b"file 4!").unwrap();
-
     let mut file = File::create(path.to_owned() + "/testfile.txt").unwrap();
     file.write_all(b"testfile!").unwrap();
 }

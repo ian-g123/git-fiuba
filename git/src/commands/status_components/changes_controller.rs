@@ -180,6 +180,8 @@ impl ChangesController {
         untracked: &mut Vec<String>,
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
+        let mut untracked_number = 0;
+        let mut total_files_dir = 0;
         for (_, object) in tree.get_objects().iter_mut() {
             if let Some(mut new_tree) = object.as_tree() {
                 Self::check_working_tree_aux(
@@ -191,7 +193,7 @@ impl ChangesController {
                     logger,
                 )?
             } else {
-                Self::check_file_status(
+                let is_untracked = Self::check_file_status(
                     object,
                     staging_area,
                     last_commit,
@@ -199,9 +201,27 @@ impl ChangesController {
                     untracked,
                     logger,
                 )?;
+                total_files_dir += 1;
+                if is_untracked {
+                    untracked_number += 1;
+                }
             }
         }
+        if untracked_number == total_files_dir {
+            Self::set_untracked_folder(untracked, untracked_number)
+        }
         Ok(())
+    }
+
+    fn set_untracked_folder(untracked: &mut Vec<String>, untracked_number: usize) {
+        let Some(last_file) = untracked.pop() else {
+            return;
+        };
+        let file_parts: Vec<&str> = last_file.split('/').collect();
+        let dir = format!("{}/", file_parts[0]);
+        let new_size = untracked.len() - untracked_number + 1;
+        untracked.truncate(new_size);
+        untracked.push(dir);
     }
 
     fn check_file_status(
@@ -211,7 +231,7 @@ impl ChangesController {
         changes: &mut HashMap<String, ChangeType>,
         untracked: &mut Vec<String>,
         logger: &mut Logger,
-    ) -> Result<(), CommandError> {
+    ) -> Result<bool, CommandError> {
         let Some(path) = object.get_path() else {
             return Err(CommandError::FileNameError);
         };
@@ -231,6 +251,7 @@ impl ChangesController {
         };
         if !has_path && !has_hash && isnt_in_last_commit {
             untracked.push(path);
+            return Ok(true);
         } else if has_path && !has_hash {
             _ = changes.insert(path, ChangeType::Modified);
         } else if has_path && has_hash {
@@ -238,7 +259,7 @@ impl ChangesController {
         } else if has_path_renamed {
             _ = changes.insert(path, ChangeType::Renamed);
         }
-        Ok(())
+        Ok(false)
     }
 }
 /*

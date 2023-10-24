@@ -18,6 +18,9 @@ impl Format for ShortFormat {
     ) -> Result<(), CommandError> {
         let mut changes: HashMap<String, ChangeObject> = HashMap::new();
         for (path, index_status) in changes_to_be_commited.iter() {
+            if matches!(index_status, ChangeType::Unmodified) {
+                continue;
+            }
             let change: ChangeObject;
             if let Some(working_tree_status) = changes_not_staged.get(path) {
                 change = ChangeObject::new(
@@ -36,6 +39,9 @@ impl Format for ShortFormat {
         }
 
         for (path, working_tree_status) in changes_not_staged.iter() {
+            if matches!(working_tree_status, ChangeType::Unmodified) {
+                continue;
+            }
             if changes_to_be_commited.get(path).is_none() {
                 let change: ChangeObject = ChangeObject::new(
                     path.to_string(),
