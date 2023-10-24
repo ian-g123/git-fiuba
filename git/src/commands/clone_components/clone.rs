@@ -1,4 +1,8 @@
-use std::io::{Read, Write};
+use std::{
+    fs,
+    io::{Read, Write},
+    net::ToSocketAddrs,
+};
 
 use crate::{
     commands::{
@@ -31,8 +35,14 @@ impl Command for Clone {
         if name != "clone" {
             return Err(CommandError::Name);
         }
+        logger.log("Initianlizing Cline");
 
         let instance = Self::new(args)?;
+        logger.log(&format!("Cloning into '{}'...", instance.get_address()));
+        logger.log(&format!("repository_path: {}", instance.repository_path));
+        logger.log(&format!("repository_url: {}", instance.repository_url));
+        logger.log(&format!("repository_port: {:?}", instance.repository_port));
+        logger.log(&format!("directory: {}", instance.directory));
 
         instance.run(stdin, output, logger)?;
         Ok(())
@@ -47,6 +57,7 @@ impl Clone {
     fn new(args: &[String]) -> Result<Clone, CommandError> {
         let mut clone = Clone::new_default();
         clone.config(args)?;
+        clone.directory = clone.get_directory();
         Ok(clone)
     }
 
@@ -70,7 +81,7 @@ impl Clone {
                 "repository url must start with git://".to_string(),
             ));
         }
-        url_and_repo.drain(6..);
+        let url_and_repo = &url_and_repo[6..];
         let Some((url_and_port, path)) = url_and_repo.split_once('/') else {
             return Err(CommandError::InvalidArguments);
         };
@@ -99,11 +110,18 @@ impl Clone {
         output: &mut dyn Write,
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
-        Init::run_from("init", &[self.directory.clone()], stdin, output, logger)?;
+        let directory = self.directory.clone();
+        fs::create_dir_all(&directory)
+            .map_err(|error| CommandError::DirectoryCreationError(error.to_string()))?;
+        let args = &[directory];
+        let mut init_output = Vec::new();
+        Init::run_from("init", args, stdin, &mut init_output, logger)?;
         let address = self.get_address();
         let mut server = GitServer::connect_to(&address)?;
-        let mut lines =
-            server.send("git-upload-pack /server-repo\0host=127.1.0.1\0\0version=1\0")?;
+        let lines = server.send(
+            "git-upload-pack /server-repo\0host=127.1.0.1\0\0version=1\0\n",
+            logger,
+        )?;
         for line in lines {
             logger.log(&line);
         }
@@ -117,5 +135,12 @@ impl Clone {
             return self.repository_url.clone();
         };
         return self.repository_url.clone() + ":" + &repository_port;
+    }
+
+    fn get_directory(&self) -> String {
+        if self.directory.is_empty() {
+            return self.repository_path[1..].to_string();
+        }
+        return self.directory.clone();
     }
 }
