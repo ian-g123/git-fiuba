@@ -17,12 +17,20 @@ impl Format for ShortFormat {
         _: &str,
     ) -> Result<(), CommandError> {
         let mut changes: HashMap<String, ChangeObject> = HashMap::new();
+        logger.log(&format!(
+            "Len changes: {}, {}, {}",
+            changes_to_be_commited.len(),
+            changes_not_staged.len(),
+            untracked_files.len()
+        ));
         for (path, index_status) in changes_to_be_commited.iter() {
-            if matches!(index_status, ChangeType::Unmodified) {
-                continue;
-            }
             let change: ChangeObject;
             if let Some(working_tree_status) = changes_not_staged.get(path) {
+                if matches!(index_status, ChangeType::Unmodified)
+                    && matches!(working_tree_status, ChangeType::Unmodified)
+                {
+                    continue;
+                }
                 change = ChangeObject::new(
                     path.to_string(),
                     working_tree_status.to_owned(),
@@ -64,6 +72,7 @@ impl Format for ShortFormat {
         for change in changes.iter() {
             output_message = format!("{}{}\n", output_message, change.to_string_change());
         }
+        logger.log(&format!("Output message: {}", output_message));
         if !output_message.is_empty() {
             write!(output, "{}", output_message)
                 .map_err(|error| CommandError::FileWriteError(error.to_string()))?;

@@ -193,15 +193,17 @@ fn general_test_short() {
 
     let expected = "?? dir/testfile1.txt\n?? dir/testfile2.txt\n?? dir/testfile4.txt\n";
     assert_eq!(String::from_utf8(result.stdout).unwrap(), expected);
-    /*
+
     change_test_scene_4(path);
 
     let result = Command::new("../../../../../target/debug/git")
         .arg("status")
+        .arg("-s")
         .current_dir(path)
         .output()
         .unwrap();
-    let expected = "On branch master\nChanges not staged for commit:\n  (use \"git add/rm <file>...\" to update what will be committed)\n  (use \"git restore <file>...\" to discard changes in working directory)\n\tdeleted:   dir/testfile3.txt\n\tmodified:   testfile.txt\n\nUntracked files:\n  (use \"git add <file>...\" to include in what will be committed)\n\tdir/testfile1.txt\n\tdir/testfile2.txt\n\tdir/testfile4.txt\n\nno changes added to commit (use \"git add\" and/or \"git commit -a\"\n";
+    let expected =
+        "?? dir/testfile1.txt\n?? dir/testfile2.txt\n D dir/testfile3.txt\n?? dir/testfile4.txt\n M testfile.txt\n";
     assert_eq!(String::from_utf8(result.stdout).unwrap(), expected);
 
     _ = Command::new("../../../../../target/debug/git")
@@ -213,11 +215,13 @@ fn general_test_short() {
 
     let result = Command::new("../../../../../target/debug/git")
         .arg("status")
+        .arg("--short")
         .current_dir(path)
         .output()
         .unwrap();
-    let expected = "On branch master\nChanges to be committed:\n  (use \"git restore --staged <file>...\" to unstage)\n\tdeleted:   dir/testfile3.txt\n\nChanges not staged for commit:\n  (use \"git add/rm <file>...\" to update what will be committed)\n  (use \"git restore <file>...\" to discard changes in working directory)\n\tmodified:   testfile.txt\n\nUntracked files:\n  (use \"git add <file>...\" to include in what will be committed)\n\tdir/testfile1.txt\n\tdir/testfile2.txt\n\tdir/testfile4.txt\n\n";
-    assert_eq!(String::from_utf8(result.stdout).unwrap(), expected); */
+    let expected =
+    "?? dir/testfile1.txt\n?? dir/testfile2.txt\nD  dir/testfile3.txt\n?? dir/testfile4.txt\n M testfile.txt\n";
+    assert_eq!(String::from_utf8(result.stdout).unwrap(), expected);
 
     _ = fs::remove_dir_all(format!("{}", path));
 }

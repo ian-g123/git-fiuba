@@ -30,7 +30,7 @@ impl Command for Status {
         }
 
         let instance = Self::new(args, output)?;
-
+        logger.log(&format!("status args: {:?}", args));
         instance.run(output, logger)?;
         Ok(())
     }

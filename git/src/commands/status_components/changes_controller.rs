@@ -207,22 +207,27 @@ impl ChangesController {
                 }
             }
         }
-        if untracked_number == total_files_dir {
-            Self::set_untracked_folder(untracked, untracked_number)
-        }
+        /* if untracked_number == total_files_dir {
+            Self::set_untracked_folder(untracked, untracked_number, logger)
+        } */
         Ok(())
     }
 
-    fn set_untracked_folder(untracked: &mut Vec<String>, untracked_number: usize) {
+    /* fn set_untracked_folder(
+        untracked: &mut Vec<String>,
+        untracked_number: usize,
+        logger: &mut Logger,
+    ) {
         let Some(last_file) = untracked.pop() else {
             return;
         };
+        logger.log("Set untracked folder");
         let file_parts: Vec<&str> = last_file.split('/').collect();
         let dir = format!("{}/", file_parts[0]);
         let new_size = untracked.len() - untracked_number + 1;
         untracked.truncate(new_size);
         untracked.push(dir);
-    }
+    } */
 
     fn check_file_status(
         object: &mut GitObject,

@@ -11,6 +11,7 @@ pub trait Format {
         branch: &str,
     ) -> Result<(), CommandError> {
         let changes_controller = ChangesController::new(logger)?;
+        logger.log(&format!("dentro de show"));
         let changes_to_be_commited = changes_controller.get_changes_to_be_commited();
         let changes_not_staged = changes_controller.get_changes_not_staged();
         let untracked_files = changes_controller.get_untracked_files();
