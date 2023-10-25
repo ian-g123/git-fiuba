@@ -90,6 +90,8 @@ pub enum CommandError {
     InvalidRefName,
     /// Tipo de objeto desconocido en packfile
     UnknownObjectType,
+    /// Error al extraer datos de un un packfile
+    ErrorExtractingPackfile,
 }
 
 impl Error for CommandError {}
@@ -222,6 +224,9 @@ impl fmt::Display for CommandError {
             }
             CommandError::UnknownObjectType => {
                 write!(f, "Tipo de objeto desconocido")
+            }
+            CommandError::ErrorExtractingPackfile => {
+                write!(f, "Error al extraer datos de un un packfile")
             }
         }
     }

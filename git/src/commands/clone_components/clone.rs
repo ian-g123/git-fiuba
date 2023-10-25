@@ -2,10 +2,7 @@ use std::{
     collections::HashMap,
     fs,
     io::{Read, Write},
-    net::ToSocketAddrs,
 };
-
-use chrono::format::format;
 
 use crate::{
     commands::{
@@ -13,8 +10,6 @@ use crate::{
         command_errors::CommandError,
         config::Config,
         init_components::init::Init,
-        objects::{blob::Blob, git_object::GitObject},
-        objects_database,
         server_components::git_server::GitServer,
     },
     logger::Logger,
@@ -299,7 +294,12 @@ fn update_ref(
     let dir_path = format!("{}/.git/refs/remotes/origin/", base_path);
     let file_path = dir_path.to_owned() + ref_name;
 
-    fs::create_dir_all(dir_path).unwrap();
+    fs::create_dir_all(dir_path).map_err(|error| {
+        CommandError::DirectoryCreationError(format!(
+            "Error creando directorio de refs: {}",
+            error.to_string()
+        ))
+    })?;
     let mut file = fs::OpenOptions::new()
         .create(true)
         .write(true)

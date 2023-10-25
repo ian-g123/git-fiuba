@@ -1,41 +1,32 @@
 use std::io::{Read, Result};
 use std::net::TcpStream;
 
-pub struct TcpStreamBuffer<'a> {
+pub struct TcpStreamBuffedReader<'a> {
     stream: &'a TcpStream,
     buffer: Vec<u8>,
     pos: usize,
 }
 
-impl<'a> TcpStreamBuffer<'a> {
-    pub fn new(stream: &'a TcpStream) -> TcpStreamBuffer<'a> {
-        TcpStreamBuffer {
+impl<'a> TcpStreamBuffedReader<'a> {
+    pub fn new(stream: &'a TcpStream) -> TcpStreamBuffedReader<'a> {
+        TcpStreamBuffedReader {
             stream,
             buffer: Vec::new(),
             pos: 0,
         }
     }
 
-    pub fn reset(&mut self) {
-        self.buffer.clear();
+    pub fn clean_up_to_pos(&mut self) {
+        self.buffer.drain(..self.pos);
         self.pos = 0;
-    }
-
-    pub fn clean_up_to(&mut self, pos: usize) {
-        self.buffer.drain(..pos);
-        self.pos -= pos;
     }
 
     pub fn set_pos(&mut self, pos: usize) {
         self.pos = pos;
     }
-
-    pub fn get_pos(&self) -> usize {
-        self.pos
-    }
 }
 
-impl<'a> Read for TcpStreamBuffer<'a> {
+impl<'a> Read for TcpStreamBuffedReader<'a> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         let num_bytes_to_read = buf.len();
         let mut num_bytes_read = 0;
