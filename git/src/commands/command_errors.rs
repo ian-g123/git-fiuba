@@ -81,11 +81,15 @@ pub enum CommandError {
     /// Error al leer un pkt
     ErrorReadingPkt,
     /// Error al enviar un mensaje
-    SendingMessage,
+    SendingMessage(String),
     /// Error al intentar abrir el archivo de configuración
     InvalidConfigFile,
     /// No se encontró la url del repositorio remoto
     NoRemoteUrl,
+    /// Nombre de rama inválido
+    InvalidRefName,
+    /// Tipo de objeto desconocido en packfile
+    UnknownObjectType,
 }
 
 impl Error for CommandError {}
@@ -204,14 +208,20 @@ impl fmt::Display for CommandError {
             CommandError::ErrorReadingPkt => {
                 write!(f, "Error al leer un pkt")
             }
-            CommandError::SendingMessage => {
-                write!(f, "Error al enviar un mensaje")
+            CommandError::SendingMessage(msg) => {
+                write!(f, "{}", msg)
             }
             CommandError::InvalidConfigFile => {
                 write!(f, "Error al intentar abrir el archivo de configuración")
             }
             CommandError::NoRemoteUrl => {
                 write!(f, "No se encontró la url del repositorio remoto")
+            }
+            CommandError::InvalidRefName => {
+                write!(f, "Nombre de rama inválido")
+            }
+            CommandError::UnknownObjectType => {
+                write!(f, "Tipo de objeto desconocido")
             }
         }
     }

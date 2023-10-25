@@ -12,8 +12,6 @@ use std::{
     vec,
 };
 
-extern crate libflate;
-
 pub struct CatFile {
     path: String,
     hash: String,

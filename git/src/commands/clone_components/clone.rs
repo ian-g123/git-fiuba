@@ -1,8 +1,11 @@
 use std::{
+    collections::HashMap,
     fs,
     io::{Read, Write},
     net::ToSocketAddrs,
 };
+
+use chrono::format::format;
 
 use crate::{
     commands::{
@@ -125,7 +128,7 @@ impl Clone {
         config.insert("remote \"origin\"", "url", &url);
         logger.log("Saving remote");
         config.save()?;
-        fetch(logger)?;
+        fetch(&self.directory, logger)?;
         Ok(())
     }
 
@@ -144,7 +147,7 @@ impl Clone {
     }
 }
 
-fn fetch(logger: &mut Logger) -> Result<(), CommandError> {
+fn fetch(base_path: &str, logger: &mut Logger) -> Result<(), CommandError> {
     logger.log("Fetching...");
     let config = &Config::open()?;
     // display config contents
@@ -170,9 +173,146 @@ fn fetch(logger: &mut Logger) -> Result<(), CommandError> {
     };
 
     let mut server = GitServer::connect_to(&address)?;
-    let (_head_branch, branch_list) =
-        server.explore_repository(repository_path, repository_url, logger)?;
-    Ok(for (hash, path) in branch_list {
-        logger.log(&format!("{} {}", hash, path));
+    update_remote_branches(
+        &mut server,
+        repository_path,
+        repository_url,
+        logger,
+        base_path,
+    )?;
+    fetch_and_save_objects(&mut server, logger, base_path)?;
+    Ok(())
+}
+
+fn fetch_and_save_objects(
+    server: &mut GitServer,
+    logger: &mut Logger,
+    base_path: &str,
+) -> Result<(), CommandError> {
+    let wants = remote_branches(base_path)?.into_values().collect();
+    let haves = local_branches(base_path)?.into_values().collect();
+    let objects_decompressed_data = server.fetch_objects(wants, haves, logger)?;
+    Ok(())
+}
+
+fn local_branches(base_path: &str) -> Result<HashMap<String, String>, CommandError> {
+    let mut branches = HashMap::<String, String>::new();
+    let branches_path = format!("{}/.git/refs/heads/", base_path);
+    let paths = fs::read_dir(branches_path).map_err(|error| {
+        CommandError::FileReadError(format!(
+            "Error leyendo directorio de branches: {}",
+            error.to_string()
+        ))
+    })?;
+    for path in paths {
+        let path = path.map_err(|error| {
+            CommandError::FileReadError(format!(
+                "Error leyendo directorio de branches: {}",
+                error.to_string()
+            ))
+        })?;
+        let file_name = &path.file_name();
+        let Some(file_name) = file_name.to_str() else {
+            return Err(CommandError::FileReadError(
+                "Error leyendo directorio de branches".to_string(),
+            ));
+        };
+        let mut file = fs::File::open(path.path()).map_err(|error| {
+            CommandError::FileReadError(format!(
+                "Error leyendo directorio de branches: {}",
+                error.to_string()
+            ))
+        })?;
+        let mut sha1 = String::new();
+        file.read_to_string(&mut sha1).map_err(|error| {
+            CommandError::FileReadError(format!(
+                "Error leyendo directorio de branches: {}",
+                error.to_string()
+            ))
+        })?;
+        branches.insert(file_name.to_string(), sha1);
+    }
+    Ok(branches)
+}
+
+fn remote_branches(base_path: &str) -> Result<HashMap<String, String>, CommandError> {
+    let mut branches = HashMap::<String, String>::new();
+    let branches_path = format!("{}/.git/refs/remotes/origin/", base_path);
+    let paths = fs::read_dir(branches_path).map_err(|error| {
+        CommandError::FileReadError(format!(
+            "Error leyendo directorio de branches: {}",
+            error.to_string()
+        ))
+    })?;
+    for path in paths {
+        let path = path.map_err(|error| {
+            CommandError::FileReadError(format!(
+                "Error leyendo directorio de branches: {}",
+                error.to_string()
+            ))
+        })?;
+        let file_name = &path.file_name();
+        let Some(file_name) = file_name.to_str() else {
+            return Err(CommandError::FileReadError(
+                "Error leyendo directorio de branches".to_string(),
+            ));
+        };
+        let mut file = fs::File::open(path.path()).map_err(|error| {
+            CommandError::FileReadError(format!(
+                "Error leyendo directorio de branches: {}",
+                error.to_string()
+            ))
+        })?;
+        let mut sha1 = String::new();
+        file.read_to_string(&mut sha1).map_err(|error| {
+            CommandError::FileReadError(format!(
+                "Error leyendo directorio de branches: {}",
+                error.to_string()
+            ))
+        })?;
+        branches.insert(file_name.to_string(), sha1);
+    }
+    Ok(branches)
+}
+
+fn update_remote_branches(
+    server: &mut GitServer,
+    repository_path: &str,
+    repository_url: &str,
+    logger: &mut Logger,
+    base_path: &str,
+) -> Result<(), CommandError> {
+    let (_head_branch, branch_remote_refs) =
+        server.explore_repository(&("/".to_owned() + repository_path), repository_url, logger)?;
+    Ok(for (sha1, mut ref_path) in branch_remote_refs {
+        ref_path.replace_range(0..11, "");
+        update_ref(&base_path, &sha1, &ref_path, logger)?;
     })
+}
+
+fn update_ref(
+    base_path: &str,
+    sha1: &str,
+    ref_name: &str,
+    logger: &mut Logger,
+) -> Result<(), CommandError> {
+    let dir_path = format!("{}/.git/refs/remotes/origin/", base_path);
+    let file_path = dir_path.to_owned() + ref_name;
+
+    fs::create_dir_all(dir_path).unwrap();
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .open(&file_path)
+        .map_err(|error| {
+            CommandError::FileWriteError(format!(
+                "Error guardando ref en {}: {}",
+                file_path,
+                &error.to_string()
+            ))
+        })?;
+    file.write_all(sha1.as_bytes()).map_err(|error| {
+        CommandError::FileWriteError("Error guardando ref:".to_string() + &error.to_string())
+    })?;
+    Ok(())
 }

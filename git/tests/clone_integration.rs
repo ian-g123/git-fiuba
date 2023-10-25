@@ -6,9 +6,10 @@ use std::{
 };
 
 #[test]
-#[ignore]
 fn test_clone() {
     let path = "./tests/data/commands/clone/test1";
+
+    _ = fs::remove_dir_all(format!("{}/server-repo", path));
     // let mut handle = create_base_scene_and_start_server(path.clone());
     // let id = handle.id();
 
