@@ -4,13 +4,17 @@ use std::{
     io::{Read, Write},
 };
 
+use chrono::format;
+
 use crate::{
     commands::{
         command::{Command, ConfigAdderFunction},
         command_errors::CommandError,
         config::Config,
         init_components::init::Init,
-        server_components::git_server::GitServer,
+        objects::{git_object::GitObject, proto_object::ProtoObject},
+        objects_database,
+        server_components::{git_server::GitServer, packfile_object_type::PackfileObjectType},
     },
     logger::Logger,
 };
@@ -145,7 +149,6 @@ impl Clone {
 fn fetch(base_path: &str, logger: &mut Logger) -> Result<(), CommandError> {
     logger.log("Fetching...");
     let config = &Config::open()?;
-    // display config contents
     for (domain, configs) in &config.entries {
         logger.log(&format!("[{}]", domain));
         for (key, value) in configs {
@@ -186,7 +189,19 @@ fn fetch_and_save_objects(
 ) -> Result<(), CommandError> {
     let wants = remote_branches(base_path)?.into_values().collect();
     let haves = local_branches(base_path)?.into_values().collect();
-    let objects_decompressed_data = server.fetch_objects(wants, haves, logger)?;
+    let objects_decompressed_data: Vec<(PackfileObjectType, usize, Vec<u8>)> =
+        server.fetch_objects(wants, haves, logger)?;
+    for (obj_type, len, content) in objects_decompressed_data {
+        logger.log(&format!(
+            "Saving object of type {} and len {}, with data {:?}",
+            obj_type,
+            len,
+            String::from_utf8_lossy(&content)
+        ));
+        let mut git_object: GitObject =
+            Box::new(ProtoObject::new(content, len, obj_type.to_string()));
+        objects_database::write_to(logger, &mut git_object, &format!("{}/", base_path))?;
+    }
     Ok(())
 }
 

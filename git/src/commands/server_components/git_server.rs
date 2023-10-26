@@ -68,7 +68,7 @@ impl GitServer {
         wants: Vec<String>,
         haves: Vec<String>,
         logger: &mut Logger,
-    ) -> Result<Vec<Vec<u8>>, CommandError> {
+    ) -> Result<Vec<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
         for want in wants {
             let line = format!("want {}\n", want);
             logger.log(&format!("Sending: {}", line));
@@ -122,19 +122,22 @@ impl GitServer {
         self.write_string_to_socket(&line)
     }
 
-    fn read_objects(&mut self, logger: &mut Logger) -> Result<Vec<Vec<u8>>, CommandError> {
+    fn read_objects(
+        &mut self,
+        logger: &mut Logger,
+    ) -> Result<Vec<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
         let object_number = self.read_packfile_header(logger)?;
         logger.log(&format!("Recieved Pack contains: {:?}", object_number));
-        let objects = self.read_objects_in_packfile(object_number, logger)?;
-        Ok(objects)
+        let objects_data = self.read_objects_in_packfile(object_number, logger)?;
+        Ok(objects_data)
     }
 
     fn read_objects_in_packfile(
         &mut self,
         object_number: u32,
         logger: &mut Logger,
-    ) -> Result<Vec<Vec<u8>>, CommandError> {
-        let mut objects = Vec::new();
+    ) -> Result<Vec<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
+        let mut objects_data = Vec::new();
         let mut buffed_reader = TcpStreamBuffedReader::new(&self.socket);
         for _ in 0..object_number {
             let mut buffed_reader: &mut TcpStreamBuffedReader<'_> = &mut buffed_reader;
@@ -158,9 +161,9 @@ impl GitServer {
                 String::from_utf8_lossy(&deflated_data.clone())
             ));
             let object = deflated_data;
-            objects.push(object);
+            objects_data.push((object_type, len, object));
         }
-        Ok(objects)
+        Ok(objects_data)
     }
 
     fn read_packfile_header(&mut self, logger: &mut Logger) -> Result<u32, CommandError> {
