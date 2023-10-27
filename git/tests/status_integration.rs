@@ -5,7 +5,7 @@ use common::aux::create_base_scene;
 use crate::common::aux::{
     change_dir_testfile1_content, change_dir_testfile1_content_and_remove_dir_testfile2,
     change_test_scene_4, create_test_scene_1, create_test_scene_2, create_test_scene_3,
-    create_test_scene_4,
+    create_test_scene_4, create_test_scene_5,
 };
 
 mod common {
@@ -223,6 +223,78 @@ fn general_test_short() {
     let expected =
     "?? dir/testfile1.txt\n?? dir/testfile2.txt\nD  dir/testfile3.txt\n?? dir/testfile4.txt\n M testfile.txt\n";
     assert_eq!(String::from_utf8(result.stdout).unwrap(), expected);
+
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
+#[test]
+fn test_untracked_folder() {
+    let path = "./tests/data/commands/status/repo7";
+
+    create_test_scene_5(path);
+
+    let expected = "?? dir/\n?? testfile.txt\n";
+
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("status")
+        .arg("-s")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let result = String::from_utf8(result.stdout).unwrap();
+    assert_eq!(result, expected);
+
+    _ = Command::new("../../../../../target/debug/git")
+        .arg("add")
+        .arg("testfile.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("status")
+        .arg("-s")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    let expected = "?? dir/\nA  testfile.txt\n";
+    let result = String::from_utf8(result.stdout).unwrap();
+    assert_eq!(result, expected);
+
+    _ = Command::new("../../../../../target/debug/git")
+        .arg("add")
+        .arg("dir/testfile1.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("status")
+        .arg("-s")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    let expected = "?? dir/dir1/\nA  dir/testfile1.txt\n?? dir/testfile2.txt\n?? dir/testfile3.txt\n?? dir/testfile4.txt\nA  testfile.txt\n";
+    let result = String::from_utf8(result.stdout).unwrap();
+    assert_eq!(result, expected);
+
+    _ = Command::new("../../../../../target/debug/git")
+        .arg("add")
+        .arg("dir/dir1/testfile5.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let result = Command::new("../../../../../target/debug/git")
+        .arg("status")
+        .arg("-s")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    let expected = "A  dir/dir1/testfile5.txt\n?? dir/dir1/testfile6.txt\nA  dir/testfile1.txt\n?? dir/testfile2.txt\n?? dir/testfile3.txt\n?? dir/testfile4.txt\nA  testfile.txt\n";
+    let result = String::from_utf8(result.stdout).unwrap();
+    assert_eq!(result, expected);
 
     _ = fs::remove_dir_all(format!("{}", path));
 }

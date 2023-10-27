@@ -1,4 +1,9 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    fs::{self, File},
+    io::Read,
+    path::{Path, PathBuf},
+};
 
 use crate::{
     commands::{
@@ -217,19 +222,25 @@ impl ChangesController {
     }
 
     fn set_untracked_folder(
-        untracked: &mut Vec<String>,
+        mut untracked: &mut Vec<String>,
         untracked_number: usize,
         logger: &mut Logger,
         staged_changes: &HashMap<String, ChangeType>,
     ) {
         logger.log("New untracked folder");
-
+        logger.log(&format!(
+            " untracked. {:?}, cant: {}",
+            untracked, untracked_number
+        ));
         if untracked.len() == 0 || untracked_number == 0 {
             return;
         }
         let last_file = &untracked[untracked.len() - 1];
         let file_parts: Vec<&str> = last_file.split('/').collect();
-        let dir = format!("{}/", file_parts[0]);
+        if file_parts.len() == 1 {
+            return;
+        }
+        let dir = format!("{}/", file_parts[..file_parts.len() - 1].join("/"));
         if staged_changes
             .iter()
             .any(|(string, _)| string.contains(&dir))
@@ -246,8 +257,13 @@ impl ChangesController {
         let dir = format!("{}/", file_parts[0]); */
 
         let new_size = original_size - untracked_number;
+        untracked.retain(|file| !file.starts_with(&dir));
+        logger.log(&format!(" new size: {:?}", new_size));
+
         untracked.truncate(new_size);
-        untracked.push(dir);
+        untracked.insert(0, dir);
+        logger.log(&format!(" untracked. {:?}", untracked));
+
         logger.log("New dir saved");
     }
 
@@ -270,13 +286,17 @@ impl ChangesController {
         //let actual_name = get_name(&path)?;
         let isnt_in_last_commit = {
             if let Some(mut tree) = last_commit.to_owned() {
-                let (is_in_last_commit, _) = tree.has_blob_from_hash(&hash, logger)?;
-                !is_in_last_commit && !tree.has_blob_from_path(&path, logger)
+                let (is_in_last_commit, name) = tree.has_blob_from_hash(&hash, logger)?;
+                (!is_in_last_commit || name != get_name(&path)?)
+                    && !tree.has_blob_from_path(&path, logger)
             } else {
                 true
             }
         };
-        if !has_path && !has_hash && isnt_in_last_commit {
+        if !has_path
+            && (!has_hash || (has_hash && content_differs(&path, object)?))
+            && isnt_in_last_commit
+        {
             untracked.push(path);
             return Ok(true);
         } else if has_path && !has_hash {
@@ -288,6 +308,21 @@ impl ChangesController {
         }
         Ok(false)
     }
+}
+
+fn content_differs(path: &str, object: &mut GitObject) -> Result<bool, CommandError> {
+    let mut staged_content: String = String::from_utf8(object.content()?)
+        .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+
+    let Ok(mut current_file) = File::open(path) else {
+        return Err(CommandError::FileOpenError(path.to_string()));
+    };
+    let mut current_content = String::new();
+    current_file
+        .read_to_string(&mut current_content)
+        .map_err(|_: std::io::Error| CommandError::FileReadError(path.to_string()))?;
+
+    Ok(current_content == staged_content)
 }
 /*
 falta: copy, type changed, dif entre modified y added, deleted del WT

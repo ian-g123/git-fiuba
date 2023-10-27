@@ -115,3 +115,30 @@ pub fn change_test_scene_4_part_2(path: &str) {
     file.write_all(b"Cambio2!").unwrap();
     _ = fs::remove_file(path.to_string() + "/dir/testfile2.txt").unwrap();
 }
+
+pub fn create_test_scene_5(path: &str) {
+    /* create_base_scene(path);
+
+    let mut file = File::create(path.to_owned() + "/dir/testfile1.txt").unwrap();
+    file.write_all(b"file 1!").unwrap();
+    let mut file = File::create(path.to_owned() + "/dir/testfile2.txt").unwrap();
+    file.write_all(b"file 2!").unwrap(); */
+    create_test_scene_2(path);
+    let Ok(_) = fs::create_dir_all(path.to_owned() + "/dir/dir1") else {
+        panic!("No se pudo crear el directorio")
+    };
+    let mut file = File::create(path.to_owned() + "/dir/testfile3.txt").unwrap();
+    file.write_all(b"file 3!").unwrap();
+
+    let mut file = File::create(path.to_owned() + "/dir/testfile4.txt").unwrap();
+    file.write_all(b"file 4!").unwrap();
+
+    let mut file = File::create(path.to_owned() + "/testfile.txt").unwrap();
+    file.write_all(b"testfile!").unwrap();
+
+    let mut file = File::create(path.to_owned() + "/dir/dir1/testfile5.txt").unwrap();
+    file.write_all(b"file 5!").unwrap();
+
+    let mut file = File::create(path.to_owned() + "/dir/dir1/testfile6.txt").unwrap();
+    file.write_all(b"file 6!").unwrap();
+}
