@@ -1,30 +1,12 @@
-use std::{
-    collections::HashMap,
-    env::current_dir,
-    fs::{self, File},
-    io::Read,
-    path::{Path, PathBuf},
-};
-
-/*
-
--Diferencias entre Index y el último commit, que es lo que está en la Base de datos
-
--Diferencias entre Index y Working Tree
-
--Archivos nuevos en el Working Tree que no están en el Staging Area ni en la Base de Datos
-
-*/
+use std::collections::HashMap;
 
 use crate::{
     commands::{
         command_errors::CommandError,
-        file_compressor::extract,
-        hash_object_components::hash_object::HashObject,
         objects::{
             aux::get_name, git_object::GitObject, last_commit::build_last_commit_tree, tree::Tree,
         },
-        staging_area::{self, StagingArea},
+        staging_area::StagingArea,
     },
     logger::Logger,
 };
@@ -35,6 +17,10 @@ use super::{
     working_tree::{self, build_working_tree},
 };
 
+/// Contiene información acerca de:
+/// - Diferencias entre Index y el último commit, que es lo que está en la Base de datos
+/// - Diferencias entre Index y Working Tree
+/// - Archivos nuevos en el Working Tree que no están en el Staging Area ni en la Base de Datos
 pub struct ChangesController {
     index_changes: HashMap<String, ChangeType>,
     working_tree_changes: HashMap<String, ChangeType>,
@@ -42,22 +28,10 @@ pub struct ChangesController {
 }
 
 impl ChangesController {
-    /* fn print_tree(tree: &mut Tree, logger: &mut Logger) {
-        for (name, obj) in tree.get_objects().iter_mut() {
-            if let Some(tree2) = obj.as_mut_tree() {
-                logger.log(&format!("Found  tree: {}", name));
-                Self::print_tree(tree2, logger);
-            } else {
-                logger.log(&format!("Found  blob: {}", name));
-            }
-        }
-    } */
+    /// Crea un nuevo ChangesController que contiene información acerca de todos los tipos de cambios
+    /// del index y el working tree desde el último commit.
     pub fn new(logger: &mut Logger) -> Result<ChangesController, CommandError> {
         let commit_tree = build_last_commit_tree(logger)?;
-        logger.log(&format!("Printing tree..."));
-        /* if let Some(mut tree) = commit_tree.clone() {
-            Self::print_tree(&mut tree, logger);
-        } */
         let index = StagingArea::open()?;
         let working_tree = build_working_tree()?;
         let (working_tree_changes, untracked) =
@@ -71,18 +45,22 @@ impl ChangesController {
         })
     }
 
+    /// Devuelve los cambios que se incluirán en el próximo commit.
     pub fn get_changes_to_be_commited(&self) -> &HashMap<String, ChangeType> {
         &self.index_changes
     }
 
+    /// Devuelve los cambios que no se incluirán en el próximo commit.
     pub fn get_changes_not_staged(&self) -> &HashMap<String, ChangeType> {
         &self.working_tree_changes
     }
 
+    /// Devuelve los archivos desconocidos para git.
     pub fn get_untracked_files(&self) -> &Vec<String> {
         &self.untracked
     }
 
+    /// Obtiene los cambios que se incluirán en el próximo commit.
     fn check_staging_area_status(
         staging_area: &StagingArea,
         last_commit: &Option<Tree>,
@@ -96,13 +74,22 @@ impl ChangesController {
                 .collect();
             return Ok(changes);
         };
+        let mut changes: HashMap<String, ChangeType> =
+            Self::check_files_in_staging_area(staging_files, logger, &mut tree)?;
+        Self::get_deleted_changes_index(staging_area, &mut changes)?;
+        Ok(changes)
+    }
 
+    /// Revisa los archivos guardados en el index para obtener el tipo de cambio que sufrieron.
+    fn check_files_in_staging_area(
+        staging_files: HashMap<String, String>,
+        logger: &mut Logger,
+        tree: &mut Tree,
+    ) -> Result<HashMap<String, ChangeType>, CommandError> {
         let mut changes: HashMap<String, ChangeType> = HashMap::new();
         for (path, hash) in staging_files.iter() {
             let has_path = tree.has_blob_from_path(path, logger);
-            logger.log(&format!("Path: {}, {}", path, has_path));
             let (has_hash, name) = tree.has_blob_from_hash(hash, logger)?;
-            logger.log(&format!("Hash found: {}", has_hash));
 
             let actual_name = get_name(path)?;
             if !has_path && !has_hash {
@@ -115,10 +102,10 @@ impl ChangesController {
                 _ = changes.insert(path.to_string(), ChangeType::Renamed);
             }
         }
-        Self::get_deleted_changes_index(staging_area, &mut changes)?;
         Ok(changes)
     }
 
+    /// Obtiene los cambios del working tree respecto al staging area.
     fn check_working_tree_status(
         mut working_tree: Tree,
         staging_area: &StagingArea,
@@ -145,6 +132,7 @@ impl ChangesController {
         Ok((wt_changes, untracked))
     }
 
+    /// Obtiene los archivos eliminados en el working tree, pero presentes en el index.
     fn get_deleted_changes_working_tree(
         working_tree: &mut Tree,
         staging_area: &StagingArea,
@@ -161,6 +149,7 @@ impl ChangesController {
         }
     }
 
+    /// Obtiene los archivos eliminados en el index, pero presentes en el último commit.
     fn get_deleted_changes_index(
         staging_area: &StagingArea,
         changes: &mut HashMap<String, ChangeType>,
