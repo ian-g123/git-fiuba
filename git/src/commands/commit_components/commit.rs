@@ -134,9 +134,9 @@ impl Commit {
         message = message[1..].to_string();
         for pos in i + 2..args.len() {
             number_of_words += 1;
-            message += &args[pos];
+            message += &format!(" {}", &args[pos]);
             if args[pos].ends_with(end) {
-                message = message[..message.len() - 2].to_string();
+                message = message[..message.len() - 1].to_string();
                 break;
             }
             if pos == args.len() - 1 {
