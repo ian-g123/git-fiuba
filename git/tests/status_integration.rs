@@ -54,7 +54,7 @@ fn test_no_changes_added_to_commit() {
 
     create_test_scene_2(path);
 
-    let expected = "On branch master\nUntracked files:\n  (use \"git add <file>...\" to include in what will be committed)\n	dir/testfile1.txt\n	dir/testfile2.txt\n\nno changes added to commit (use \"git add\" and/or \"git commit -a\"\n";
+    let expected = "On branch master\nUntracked files:\n  (use \"git add <file>...\" to include in what will be committed)\n	dir/\n\nno changes added to commit (use \"git add\" and/or \"git commit -a\"\n";
 
     let result = Command::new("../../../../../target/debug/git")
         .arg("status")
@@ -74,7 +74,7 @@ fn test_no_changes_added_to_commit_short_format() {
 
     create_test_scene_2(path);
 
-    let expected = "?? dir/testfile1.txt\n?? dir/testfile2.txt\n";
+    let expected = "?? dir/\n";
 
     let result = Command::new("../../../../../target/debug/git")
         .arg("status")

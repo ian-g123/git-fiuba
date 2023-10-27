@@ -34,9 +34,14 @@ impl ChangesController {
         let commit_tree = build_last_commit_tree(logger)?;
         let index = StagingArea::open()?;
         let working_tree = build_working_tree()?;
-        let (working_tree_changes, untracked) =
-            Self::check_working_tree_status(working_tree, &index, &commit_tree, logger)?;
         let index_changes = Self::check_staging_area_status(&index, &commit_tree, logger)?;
+        let (working_tree_changes, untracked) = Self::check_working_tree_status(
+            working_tree,
+            &index,
+            &commit_tree,
+            logger,
+            &index_changes,
+        )?;
 
         Ok(Self {
             index_changes,
@@ -111,6 +116,7 @@ impl ChangesController {
         staging_area: &StagingArea,
         last_commit: &Option<Tree>,
         logger: &mut Logger,
+        staged_changes: &HashMap<String, ChangeType>,
     ) -> Result<(HashMap<String, ChangeType>, Vec<String>), CommandError> {
         let mut wt_changes: HashMap<String, ChangeType> = HashMap::new();
         let mut untracked: Vec<String> = Vec::new();
@@ -122,6 +128,7 @@ impl ChangesController {
             &mut wt_changes,
             &mut untracked,
             logger,
+            staged_changes,
         )?;
         Self::get_deleted_changes_working_tree(
             &mut working_tree,
@@ -168,10 +175,11 @@ impl ChangesController {
         changes: &mut HashMap<String, ChangeType>,
         untracked: &mut Vec<String>,
         logger: &mut Logger,
+        staged_changes: &HashMap<String, ChangeType>,
     ) -> Result<(), CommandError> {
         let mut untracked_number = 0;
         let mut total_files_dir = 0;
-        for (_, object) in tree.get_objects().iter_mut() {
+        for (name, object) in tree.get_objects().iter_mut() {
             if let Some(mut new_tree) = object.as_tree() {
                 Self::check_working_tree_aux(
                     &mut new_tree,
@@ -180,6 +188,7 @@ impl ChangesController {
                     changes,
                     untracked,
                     logger,
+                    staged_changes,
                 )?
             } else {
                 let is_untracked = Self::check_file_status(
@@ -190,33 +199,57 @@ impl ChangesController {
                     untracked,
                     logger,
                 )?;
+
                 total_files_dir += 1;
                 if is_untracked {
                     untracked_number += 1;
                 }
+                logger.log(&format!(
+                    "total dir files: {}, untracked. {} Name: {}",
+                    total_files_dir, untracked_number, name
+                ));
             }
         }
-        /* if untracked_number == total_files_dir {
-            Self::set_untracked_folder(untracked, untracked_number, logger)
-        } */
+        if untracked_number == total_files_dir {
+            Self::set_untracked_folder(untracked, untracked_number, logger, staged_changes)
+        }
         Ok(())
     }
 
-    /* fn set_untracked_folder(
+    fn set_untracked_folder(
         untracked: &mut Vec<String>,
         untracked_number: usize,
         logger: &mut Logger,
+        staged_changes: &HashMap<String, ChangeType>,
     ) {
-        let Some(last_file) = untracked.pop() else {
+        logger.log("New untracked folder");
+
+        if untracked.len() == 0 || untracked_number == 0 {
             return;
-        };
-        logger.log("Set untracked folder");
+        }
+        let last_file = &untracked[untracked.len() - 1];
         let file_parts: Vec<&str> = last_file.split('/').collect();
         let dir = format!("{}/", file_parts[0]);
-        let new_size = untracked.len() - untracked_number + 1;
+        if staged_changes
+            .iter()
+            .any(|(string, _)| string.contains(&dir))
+        {
+            return;
+        }
+
+        let original_size = untracked.len();
+        /* let Some(last_file) = untracked.pop() else {
+            return;
+        };
+
+        let file_parts: Vec<&str> = last_file.split('/').collect();
+        let dir = format!("{}/", file_parts[0]); */
+
+        let new_size = original_size - untracked_number;
         untracked.truncate(new_size);
         untracked.push(dir);
-    } */
+        logger.log("New dir saved");
+    }
 
     fn check_file_status(
         object: &mut GitObject,
