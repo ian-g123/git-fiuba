@@ -63,13 +63,13 @@ pub fn create_test_scene_2(path: &str) {
     assert!(Path::new(&(path.to_owned() + "/dir/testfile2.txt")).exists())
 }
 
-pub fn change_test_scene_2(path: &str) {
+pub fn change_dir_testfile1_content(path: &str) {
     let mut file = File::create(path.to_owned() + "/dir/testfile1.txt").unwrap();
     file.write_all(b"Cambio!").unwrap();
 }
 
-pub fn change_test_scene_3(path: &str) {
-    change_test_scene_2(path);
+pub fn change_dir_testfile1_content_and_remove_dir_testfile2(path: &str) {
+    change_dir_testfile1_content(path);
 
     _ = fs::remove_file(path.to_string() + "/dir/testfile2.txt").unwrap();
 }

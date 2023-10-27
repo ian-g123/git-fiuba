@@ -87,7 +87,7 @@ impl Mode {
             "100755" => Ok(Mode::ExecutableFile),
             "120000" => Ok(Mode::SymbolicLink),
             "160000" => Ok(Mode::Submodule),
-            "040000" => Ok(Mode::Tree),
+            "040000" | "40000" => Ok(Mode::Tree),
             _ => Err(CommandError::InvalidMode),
         }
     }

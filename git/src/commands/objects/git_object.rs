@@ -64,15 +64,15 @@ pub trait GitObjectTrait {
     fn mode(&self) -> Mode;
 
     /// Devuelve el contenido del objeto
-    fn content(&self) -> Result<Vec<u8>, CommandError>;
+    fn content(&mut self) -> Result<Vec<u8>, CommandError>;
 
     /// Devuelve el tamaño del objeto en bytes
-    fn size(&self) -> Result<usize, CommandError> {
-        let content = self.to_string_priv();
+    fn size(&mut self) -> Result<usize, CommandError> {
+        let content = self.content()?;
         Ok(content.len())
     }
 
-    fn to_string_priv(&self) -> String;
+    fn to_string_priv(&mut self) -> String;
 
     /// Devuelve el hash del objeto
     fn get_hash(&mut self) -> Result<[u8; 20], CommandError>; /*  {
@@ -102,9 +102,7 @@ pub fn display_from_hash(
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    logger.log(&format!("About to read file, hash = {}\n", hash));
     let (_, content) = objects_database::read_file(hash, logger)?;
-    logger.log("file read\n");
 
     let mut stream = std::io::Cursor::new(content);
     display_from_stream(&mut stream, logger, output)
@@ -159,14 +157,10 @@ pub fn read_git_object_from(
     hash_str: &str,
     logger: &mut Logger,
 ) -> Result<GitObject, CommandError> {
-    logger.log("Reading git object...");
-
     let (type_str, len) = get_type_and_len(stream, logger)?;
 
-    logger.log(&format!("len: {}, type: {}", len, type_str));
-
+    logger.log(&format!("Reading object of type : {}", type_str));
     if type_str == "blob" {
-        // return Blob::read_from(stream, len, path, logger);
         return Blob::read_from(stream, len, path, hash_str, logger);
     };
     if type_str == "tree" {
@@ -186,7 +180,6 @@ fn get_type_and_len(
     let mut bytes = stream.bytes();
     let type_str = get_type(&mut bytes)?;
     let len_str = get_string_up_to_null_byte(&mut bytes)?;
-    logger.log("found \0");
     let len: usize = len_str
         .parse()
         .map_err(|_| CommandError::ObjectLengthParsingError)?;
@@ -197,7 +190,6 @@ fn get_type(bytes: &mut std::io::Bytes<&mut dyn Read>) -> Result<String, Command
     get_from_header(bytes, ' ')
 }
 
-// "blob 16\u0000"
 fn get_string_up_to_null_byte(
     bytes: &mut std::io::Bytes<&mut dyn Read>,
 ) -> Result<String, CommandError> {
@@ -232,12 +224,6 @@ fn get_from_header(
 impl Clone for GitObject {
     fn clone(&self) -> Self {
         self.clone_object()
-    }
-}
-
-impl std::fmt::Debug for GitObject {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_string())
     }
 }
 

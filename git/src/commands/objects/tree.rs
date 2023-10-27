@@ -46,15 +46,16 @@ impl Tree {
     ) -> Result<(bool, String), CommandError> {
         for (name, object) in objects.iter_mut() {
             let hash = object.get_hash_string()?;
-            logger.log(&format!("Hash buscado: {}, obtenido: {}", blob_hash, hash));
+            logger.log(&format!(
+                "Has blob from hash --> Name: {}. hash: {}",
+                name, hash
+            ));
             if hash == blob_hash.to_string() {
                 logger.log(&format!("true"));
 
                 return Ok((true, name.to_owned()));
             }
             if let Some(tree) = object.as_mut_tree() {
-                logger.log(&format!("es un tree"));
-
                 let (found, name) =
                     Self::has_blob_from_hash_aux(&mut tree.get_objects(), logger, blob_hash)?;
                 if found {
@@ -62,7 +63,6 @@ impl Tree {
                 }
             }
         }
-        logger.log(&format!("sale de la funcion"));
 
         Ok((false, "".to_string()))
     }
@@ -209,16 +209,12 @@ impl Tree {
         stream: &mut dyn Read,
         len: usize,
         path: &str,
-        hash: &str,
+        _: &str,
         logger: &mut Logger,
     ) -> Result<GitObject, CommandError> {
         let mut objects = HashMap::<String, GitObject>::new();
 
-        while let Ok(mode) = Mode::read_from(stream) {
-            let mut separator = vec![0; 1];
-            stream
-                .read_exact(&mut separator)
-                .map_err(|_| CommandError::ObjectHashNotKnown)?;
+        while let Ok(mode) = read_mode(stream) {
             let name = read_string_until(stream, '\0')?;
             let mut hash = vec![0; 20];
             stream
@@ -287,6 +283,12 @@ impl Tree {
     }
 }
 
+fn read_mode(stream: &mut dyn Read) -> Result<Mode, CommandError> {
+    let mode_str = read_string_until(stream, ' ')?;
+    let mode = Mode::read_from_string(&mode_str)?;
+    Ok(mode)
+}
+
 fn get_mode(mode: &str) -> Result<Mode, CommandError> {
     let id = mode
         .parse::<u32>()
@@ -340,7 +342,7 @@ impl GitObjectTrait for Tree {
         "tree".to_string()
     }
 
-    fn content(&self) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self) -> Result<Vec<u8>, CommandError> {
         let mut sorted_objects = self.sort_objects();
         let mut content = Vec::new();
         for (name_object, object) in sorted_objects.iter_mut() {
@@ -378,7 +380,7 @@ impl GitObjectTrait for Tree {
         Mode::Tree
     }
 
-    fn to_string_priv(&self) -> String {
+    fn to_string_priv(&mut self) -> String {
         "ASDF".to_string()
         // format!(
         //     "{} {} {:?}    {:?}\n",

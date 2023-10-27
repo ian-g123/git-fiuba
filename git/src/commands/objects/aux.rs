@@ -64,7 +64,7 @@ pub fn hex_string_to_u8_vec(hex_string: &str) -> [u8; 20] {
 }
 
 /// Se obtiene una cadena de texto desde el stream hasta encontrar el caracter char_stop.
-pub fn read_string_until(stream: &mut dyn Read, char_stop: char) -> Result<String , CommandError> {
+pub fn read_string_until(stream: &mut dyn Read, char_stop: char) -> Result<String, CommandError> {
     let string = {
         let mut bytes = stream.bytes();
         let end = char_stop as u8;
@@ -76,9 +76,10 @@ pub fn read_string_until(stream: &mut dyn Read, char_stop: char) -> Result<Strin
                 }
                 result.push(byte as char);
             } else {
-                return Err(CommandError::FileReadError(
-                    "Error leyendo bytes para obtener el tipo de objeto git".to_string(),
-                ));
+                return Err(CommandError::FileReadError(format!(
+                    "Error leyendo string hasta el caracter {}",
+                    char_stop
+                )));
             }
         }
         Ok(result)

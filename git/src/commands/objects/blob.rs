@@ -144,7 +144,7 @@ impl GitObjectTrait for Blob {
         "blob".to_string()
     }
 
-    fn content(&self) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self) -> Result<Vec<u8>, CommandError> {
         match &self.path {
             Some(path) => {
                 let content = read_file_contents(path)?;
@@ -161,7 +161,7 @@ impl GitObjectTrait for Blob {
         Mode::RegularFile
     }
 
-    fn to_string_priv(&self) -> String {
+    fn to_string_priv(&mut self) -> String {
         //map content to utf8
         let Ok(content) = self.content() else {
             return "Error convirtiendo a utf8".to_string();
@@ -189,12 +189,6 @@ impl GitObjectTrait for Blob {
 
     fn get_name(&self) -> Option<String> {
         self.name.clone()
-    }
-}
-
-impl fmt::Display for Blob {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.to_string_priv())
     }
 }
 

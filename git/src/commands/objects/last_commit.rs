@@ -30,8 +30,16 @@ pub fn get_commit_tree(logger: &mut Logger) -> Result<Option<Tree>, CommandError
 
     let mut commit_box = objects_database::read_object(&last_commit, logger)?;
     if let Some(commit) = commit_box.as_commit_mut() {
+        logger.log(&format!(
+            "Last commit content : {}",
+            String::from_utf8_lossy(&commit.content()?)
+        ));
         let tree = commit.get_tree();
 
+        logger.log(&format!(
+            "tree content : {}",
+            String::from_utf8_lossy(&(tree.to_owned().content()?))
+        ));
         return Ok(Some(tree.to_owned()));
     }
     Ok(None)

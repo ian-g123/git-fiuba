@@ -3,12 +3,17 @@ use std::{
     io::{Read, Write},
 };
 
+use chrono::format;
+
 use crate::logger::Logger;
 
 use super::{
     command_errors::CommandError,
     objects::{
-        aux::get_name, git_object::GitObject, last_commit::build_last_commit_tree, tree::Tree,
+        aux::get_name,
+        git_object::{GitObject, GitObjectTrait},
+        last_commit::build_last_commit_tree,
+        tree::Tree,
     },
     objects_database,
 };
@@ -120,6 +125,7 @@ impl StagingArea {
             for (path, hash) in self.files.iter() {
                 let (is_in_last_commit, _) = tree.has_blob_from_hash(hash, logger)?;
                 if !is_in_last_commit {
+                    logger.log(&format!("Eliminando del staging area: {}", path));
                     files.remove(path);
                 }
             }
@@ -224,6 +230,44 @@ impl StagingArea {
             let vector_path = path.split("/").collect::<Vec<_>>();
             let current_depth: usize = 0;
             working_tree.add_path_tree(logger, vector_path, current_depth, hash)?;
+        }
+        Ok(working_tree)
+    }
+
+    pub fn get_working_tree_staged_bis(
+        &mut self,
+        logger: &mut Logger,
+        new_files: Vec<String>,
+    ) -> Result<Tree, CommandError> {
+        let current_dir_display = "";
+        let mut working_tree = Tree::new(current_dir_display.to_string());
+        let files = self.sort_files();
+        let last_commit_tree = build_last_commit_tree(logger)?;
+        for (path, hash) in files.iter() {
+            let is_in_last_commit = {
+                if let Some(mut tree) = last_commit_tree.clone() {
+                    logger.log(&format!(
+                        "Last commit tree : {}",
+                        String::from_utf8_lossy(&tree.content()?)
+                    ));
+                    let (has_hash, name) = tree.has_blob_from_hash(hash, logger)?;
+                    logger.log(&format!(
+                        "Has hash: {}, name_in_commit: {}, name: {}",
+                        has_hash,
+                        name,
+                        get_name(path)?
+                    ));
+                    has_hash && get_name(path)? == name
+                } else {
+                    false
+                }
+            };
+
+            if new_files.contains(path) || is_in_last_commit {
+                let vector_path = path.split("/").collect::<Vec<_>>();
+                let current_depth: usize = 0;
+                working_tree.add_path_tree(logger, vector_path, current_depth, hash)?;
+            }
         }
         Ok(working_tree)
     }

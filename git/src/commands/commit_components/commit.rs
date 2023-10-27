@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fs::{self, File, OpenOptions},
     io::Read,
     io::Write,
@@ -224,6 +225,12 @@ impl Commit {
         let mut staging_area = StagingArea::open()?;
         logger.log("Staging area opened");
 
+        if !self.files.is_empty() && self.all {
+            return Err(CommandError::AllAndFilesFlagsCombination(
+                self.files[0].clone(),
+            ));
+        }
+
         if !self.files.is_empty() {
             self.run_files_config(logger, &mut staging_area)?
         }
@@ -252,10 +259,10 @@ impl Commit {
     ) -> Result<(), CommandError> {
         if !self.files.is_empty() {
             logger.log("Running pathspec configuration");
-            staging_area.empty(logger)?;
+            let files = staging_area.get_files();
 
             for path in self.files.iter() {
-                if !is_untracked(path, logger, staging_area)? {
+                if !is_untracked(path, logger, &files)? {
                     add::run_for_file(path, staging_area, logger)?;
                 } else {
                     return Err(CommandError::UntrackedError(path.to_owned()));
@@ -274,13 +281,14 @@ impl Commit {
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
         logger.log("Running 'all' configuration\n");
+        let files = &staging_area.get_files();
         staging_area.empty(logger)?;
         for (path, _) in staging_area.get_files() {
             if !Path::new(&path).exists() {
                 staging_area.remove(&path);
             }
         }
-        save_entries("./", staging_area, logger)?;
+        save_entries("./", staging_area, logger, files)?;
         staging_area.save()?;
         Ok(())
     }
@@ -301,7 +309,13 @@ impl Commit {
 
         logger.log("Creating Index tree");
 
-        let mut staged_tree = staging_area.get_working_tree_staged(logger)?;
+        let mut staged_tree = {
+            if self.files.is_empty() {
+                staging_area.get_working_tree_staged(logger)?
+            } else {
+                staging_area.get_working_tree_staged_bis(logger, self.files.clone())?
+            }
+        };
 
         logger.log("Index tree created");
 
@@ -475,12 +489,13 @@ fn ignore_commented_lines(message: String) -> String {
 fn is_untracked(
     path: &str,
     logger: &mut Logger,
-    staging_area: &StagingArea,
+    staging_area: &HashMap<String, String>,
 ) -> Result<bool, CommandError> {
     let mut blob = Blob::new_from_path(path.to_string())?;
     let hash = &blob.get_hash_string()?;
     let (is_in_last_commit, name) = is_in_last_commit(hash.to_owned(), logger)?;
-    if staging_area.has_file_from_path(&path) || (is_in_last_commit && name == get_name(&path)?) {
+    if staging_area.contains_key(path) || (is_in_last_commit && name == get_name(&path)?) {
+        logger.log("Staging area has this path");
         return Ok(false);
     }
     Ok(true)
@@ -492,6 +507,7 @@ fn save_entries(
     path_name: &str,
     staging_area: &mut StagingArea,
     logger: &mut Logger,
+    files: &HashMap<String, String>,
 ) -> Result<(), CommandError> {
     let path = Path::new(path_name);
 
@@ -503,15 +519,19 @@ fn save_entries(
             return Err(CommandError::DirNotFound(path_name.to_owned()));
         };
         let entry_path = entry.path();
-        let entry_name = get_path_name(entry_path.clone())?;
-
+        let entry_name = get_path_str(entry_path.clone())?;
+        if entry_name.contains(".git") {
+            continue;
+        }
+        logger.log(&format!("Saving entry name: {}", entry_name));
         if entry_path.is_dir() {
-            save_entries(&entry_name, staging_area, logger)?;
+            save_entries(&entry_name, staging_area, logger, files)?;
             return Ok(());
         } else {
             let blob = Blob::new_from_path(entry_name.to_string())?;
             let path = &entry_name[2..];
-            if !is_untracked(path, logger, staging_area)? {
+            if !is_untracked(path, logger, files)? {
+                logger.log(&format!("{} is tracked", entry_name));
                 let mut git_object: GitObject = Box::new(blob);
                 let hex_str = objects_database::write(logger, &mut git_object)?;
                 staging_area.add(path, &hex_str);
@@ -522,7 +542,7 @@ fn save_entries(
 }
 
 /// Devuelve el nombre de un archivo o directorio dado un PathBuf.
-fn get_path_name(path: PathBuf) -> Result<String, CommandError> {
+fn get_path_str(path: PathBuf) -> Result<String, CommandError> {
     let Some(path_name) = path.to_str() else {
         return Err(CommandError::DirNotFound("".to_string())); //cambiar
     };

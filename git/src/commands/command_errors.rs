@@ -78,6 +78,7 @@ pub enum CommandError {
     ObjectNotTree,
     StdinError,
     CastingError,
+    AllAndFilesFlagsCombination(String),
 }
 
 impl Error for CommandError {}
@@ -198,6 +199,12 @@ impl fmt::Display for CommandError {
                     path
                 )
             }
+
+            CommandError::AllAndFilesFlagsCombination(path) => {
+                write!(f, "fatal: paths '{} ...' with -a does not make sense", path)
+            } /*
+              fatal: paths 'fil1 ...' with -a does not make sense
+               */
         }
     }
 }
