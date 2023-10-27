@@ -78,6 +78,7 @@ pub enum CommandError {
     ObjectNotTree,
     StdinError,
     CastingError,
+    MessageIncomplete(String),
 }
 
 impl Error for CommandError {}
@@ -197,6 +198,9 @@ impl fmt::Display for CommandError {
                     "error: pathspec '{}' did not match any file(s) known to git",
                     path
                 )
+            }
+            CommandError::MessageIncomplete(end) => {
+                write!(f, "The message must end with {}", end)
             }
         }
     }

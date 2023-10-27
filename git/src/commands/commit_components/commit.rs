@@ -112,9 +112,39 @@ impl Commit {
         if let Some(message) = &self.message {
             new_message = format!("{}\n\n", message)
         }
-        new_message += &args[i + 1];
+        let (message, words) = Self::read_message_completely(i, args)?;
+        new_message += &message;
         self.message = Some(new_message);
-        Ok(i + 2)
+        Ok(i + words + 1)
+    }
+
+    fn read_message_completely(i: usize, args: &[String]) -> Result<(String, usize), CommandError> {
+        let mut message = String::new();
+        let mut number_of_words: usize = 1;
+        message += &args[i + 1];
+        let end: char;
+        if message.starts_with('"') {
+            end = '"';
+        } else if message.starts_with("'") {
+            end = '\'';
+        } else {
+            return Ok((message, number_of_words));
+        }
+
+        message = message[1..].to_string();
+        for pos in i + 2..args.len() {
+            number_of_words += 1;
+            message += &args[pos];
+            if args[pos].ends_with(end) {
+                message = message[..message.len() - 2].to_string();
+                break;
+            }
+            if pos == args.len() - 1 {
+                return Err(CommandError::MessageIncomplete(end.to_string()));
+            }
+        }
+
+        Ok((message, number_of_words))
     }
 
     /// Configura el flag --dry-run.
