@@ -4,6 +4,8 @@ extern crate sha1;
 use crate::commands::command_errors::CommandError;
 use sha1::{Digest, Sha1};
 
+use super::super_string::u8_vec_to_hex_string;
+
 /// Obtiene el nombre de un archivo dada su ruta. Si la ruta no existe, devuelve error.
 pub fn get_name(path_string: &str) -> Result<String, CommandError> {
     path_string
@@ -13,7 +15,16 @@ pub fn get_name(path_string: &str) -> Result<String, CommandError> {
         .ok_or_else(|| CommandError::FileNotFound(path_string.to_owned()))
 }
 
-/// Dado el contenido pasado, devuelve el hash expresado en un vector de 20 bytes.
+/// Dado la data pasado, devuelve el hash expresado en un vector de 20 bytes.
+pub fn get_sha1_str(data: &[u8]) -> String {
+    let hash_result = get_sha1(data);
+
+    // Formatea los bytes del hash en una cadena hexadecimal
+    let hex_string = u8_vec_to_hex_string(&hash_result);
+
+    hex_string
+}
+
 pub fn get_sha1(data: &[u8]) -> [u8; 20] {
     let mut sha1 = Sha1::new();
     sha1.update(data);
@@ -50,6 +61,29 @@ pub fn hex_string_to_u8_vec(hex_string: &str) -> [u8; 20] {
     }
 
     result
+}
+
+/// Se obtiene una cadena de texto desde el stream hasta encontrar el caracter char_stop.
+pub fn read_string_until(stream: &mut dyn Read, char_stop: char) -> Result<String , CommandError> {
+    let string = {
+        let mut bytes = stream.bytes();
+        let end = char_stop as u8;
+        let mut result = String::new();
+        loop {
+            if let Some(Ok(byte)) = bytes.next() {
+                if byte == end {
+                    break;
+                }
+                result.push(byte as char);
+            } else {
+                return Err(CommandError::FileReadError(
+                    "Error leyendo bytes para obtener el tipo de objeto git".to_string(),
+                ));
+            }
+        }
+        Ok(result)
+    }?;
+    Ok(string)
 }
 
 #[cfg(test)]

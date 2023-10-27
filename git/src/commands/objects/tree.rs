@@ -215,26 +215,16 @@ impl Tree {
         let mut objects = HashMap::<String, GitObject>::new();
 
         while let Ok(mode) = Mode::read_from(stream) {
-            let type_src = {
-                let mut type_buf = [0; 1];
-                stream
-                    .read_exact(&mut type_buf)
-                    .map_err(|_| CommandError::InvalidMode)?;
-                match type_buf {
-                    [0] => "blob",
-                    [1] => "tree",
-                    [2] => "commit",
-                    [3] => "tag",
-                    _ => return Err(CommandError::ObjectTypeError),
-                }
-            };
+            let mut separator = vec![0; 1];
+            stream
+                .read_exact(&mut separator)
+                .map_err(|_| CommandError::ObjectHashNotKnown)?;
+            let name = read_string_until(stream, '\0')?;
             let mut hash = vec![0; 20];
             stream
                 .read_exact(&mut hash)
                 .map_err(|_| CommandError::ObjectHashNotKnown)?;
             let hash_str = u8_vec_to_hex_string(&hash);
-
-            let name = read_string_from(stream)?;
 
             let object = objects_database::read_object(&hash_str, logger)?;
             objects.insert(name, object);
@@ -253,35 +243,22 @@ impl Tree {
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
         let mut objects = Vec::<(Mode, String, String, String)>::new();
-
-        while let Ok(mode) = Mode::read_from(stream) {
-            let type_src = {
-                let mut type_buf = [0; 1];
-                stream
-                    .read_exact(&mut type_buf)
-                    .map_err(|_| CommandError::InvalidMode)?;
-                match type_buf {
-                    [0] => "blob",
-                    [1] => "tree",
-                    [2] => "commit",
-                    [3] => "tag",
-                    _ => return Err(CommandError::ObjectTypeError),
-                }
+        loop {
+            let Ok(string_part_bytes) = read_string_until(stream, '\0') else {
+                break;
             };
-            let mut hash = vec![0; 20];
-            stream
-                .read_exact(&mut hash)
-                .map_err(|_| CommandError::ObjectHashNotKnown)?;
-            let hash_str = hash
-                .iter()
-                .map(|byte| format!("{:02x}", byte))
-                .collect::<Vec<_>>()
-                .join("");
 
-            let name_str = read_string_from(stream)?;
-
-            objects.push((mode, type_src.to_string(), hash_str, name_str));
+            let Some((mode, name)) = string_part_bytes.split_once(' ') else {
+                return Err(CommandError::FileReadError(
+                    "No se pudo leer objeto".to_string(),
+                ));
+            };
+            let hash_str = get_hash(stream)?;
+            let mode = get_mode(mode)?;
+            let object_type = Mode::get_type_from_mode(&mode);
+            objects.push((mode, object_type, hash_str, name.to_string()));
         }
+
         for (mode, type_str, hash, name) in objects {
             writeln!(output, "{} {} {}    {}", mode, type_str, hash, name)
                 .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
@@ -292,18 +269,14 @@ impl Tree {
         Ok(())
     }
 
-    pub fn get_elems(&self) -> HashMap<String, GitObject> {
-        self.objects.clone()
-    }
-
     pub fn sort_objects(&self) -> Vec<(String, GitObject)> {
-        let mut keys: Vec<&String> = self.objects.keys().collect();
-        keys.sort();
+        let mut names_objects: Vec<&String> = self.objects.keys().collect();
+        names_objects.sort();
 
         let mut sorted_objects: Vec<(String, GitObject)> = Vec::new();
-        for key in keys {
-            if let Some(value) = self.objects.get(key) {
-                sorted_objects.push((key.clone(), value.clone()));
+        for name_object in names_objects {
+            if let Some(object) = self.objects.get(name_object) {
+                sorted_objects.push((name_object.clone(), object.clone()));
             }
         }
         sorted_objects
@@ -312,6 +285,36 @@ impl Tree {
     pub fn set_hash(&mut self, hash: [u8; 20]) {
         self.hash = Some(hash);
     }
+}
+
+fn get_mode(mode: &str) -> Result<Mode, CommandError> {
+    let id = mode
+        .parse::<u32>()
+        .map_err(|_| CommandError::FileReadError("No se pudo leer objeto".to_string()))?;
+    let mode = Mode::get_mode_from_id(id)
+        .map_err(|_| CommandError::FileReadError("No se pudo leer objeto".to_string()))?;
+    Ok(mode)
+}
+
+fn get_mode_and_name(buf: Vec<u8>) -> Result<(String, String), CommandError> {
+    let string_mode_name = String::from_utf8(buf).map_err(|_| CommandError::InvalidMode)?;
+    let Some((mode, name)) = string_mode_name.split_once(' ') else {
+        return Err(CommandError::InvalidMode);
+    };
+    return Ok((mode.to_string(), name.to_string()));
+}
+
+fn get_hash(stream: &mut dyn Read) -> Result<String, CommandError> {
+    let mut hash = vec![0; 20];
+    stream
+        .read_exact(&mut hash)
+        .map_err(|_| CommandError::ObjectHashNotKnown)?;
+    let hash_str = hash
+        .iter()
+        .map(|byte| format!("{:02x}", byte))
+        .collect::<Vec<_>>()
+        .join("");
+    Ok(hash_str)
 }
 
 impl GitObjectTrait for Tree {
@@ -337,22 +340,17 @@ impl GitObjectTrait for Tree {
         "tree".to_string()
     }
 
-    fn content(&mut self) -> Result<Vec<u8>, CommandError> {
+    fn content(&self) -> Result<Vec<u8>, CommandError> {
+        let mut sorted_objects = self.sort_objects();
         let mut content = Vec::new();
-        let mut objects = self.sort_objects();
-        for (path, object) in objects.iter_mut() {
-            let type_byte = type_id_object(&object.type_str())?;
-            object.mode().write_to(&mut content)?;
-            content.extend_from_slice(&[type_byte]);
-
+        for (name_object, object) in sorted_objects.iter_mut() {
+            let mode = &object.mode();
+            let mode_id = mode.get_id_mode();
+            // println!("{} {}", mode_id, name_object);
+            write!(content, "{} {}\0", mode_id, name_object)
+                .map_err(|err| CommandError::FileWriteError(format!("{err}")))?;
             let hash = object.get_hash()?;
             content.extend_from_slice(&hash);
-
-            path.write_to(&mut content)?;
-
-            /* if write_to_database {
-                objects_database::write(&mut Logger::new_dummy(), object)?;
-            } */
         }
 
         Ok(content)
@@ -577,7 +575,6 @@ mod test_write_y_display {
 
     use super::*;
     #[test]
-    #[ignore]
     fn test_write_and_content() {
         let files = ["dir0/baz.txt".to_string(), "fu.txt".to_string()];
         let mut tree = Tree::new("".to_string());
@@ -608,7 +605,7 @@ mod test_write_y_display {
             panic!("Error");
         };
 
-        assert_eq!(output_str, "040000 tree 6a9c5249e59f914c4770ab001a1ec71b2a24b7e1    dir0\n100644 blob 30d74d258442c7c65512eafab474568dd706c430    fu.txt\n".to_string());
+        assert_eq!(output_str, "040000 tree 378018f53fc0a1a74b2c85ec8481cdeae21df194    dir0\n100644 blob 30d74d258442c7c65512eafab474568dd706c430    fu.txt\n".to_string());
     }
 
     #[test]

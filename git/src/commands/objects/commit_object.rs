@@ -2,10 +2,10 @@ use std::borrow::BorrowMut;
 use std::fmt;
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
-use super::aux::get_sha1;
+use super::aux::{get_sha1, read_string_until};
 use super::git_object::{GitObject, GitObjectTrait};
 use super::super_integers::{read_i32_from, read_i64_from, read_u32_from, SuperIntegers};
-use super::super_string::{read_string_from, u8_vec_to_hex_string, SuperStrings};
+use super::super_string::{u8_vec_to_hex_string, SuperStrings};
 use super::{author::Author, tree::Tree};
 use crate::commands::command_errors::CommandError;
 use crate::commands::objects_database;
@@ -132,7 +132,13 @@ impl CommitObject {
     }
 }
 
-/// Lee la información de un Commit.
+fn read_commit_info_from_bis(stream: &mut dyn Read) -> Result<(), CommandError> {
+    let mut parents: Vec<String> = Vec::new();
+    loop {
+        let line = read_string_until(stream, '\n')?;
+    }
+}
+
 fn read_commit_info_from(
     stream: &mut dyn Read,
     logger: &mut Logger,
@@ -161,10 +167,7 @@ fn read_commit_info_from(
     let committer = Author::read_from(stream)?;
     let committer_timestamp = read_i64_from(stream)?;
     let committer_offset = read_i32_from(stream)?;
-    let message = read_string_from(stream)?;
-    // let Some(tree_final) = tree.as_tree() else {
-    //     return Err(CommandError::InvalidCommit);
-    // };
+    let message = read_string_until(stream, '\n')?;
     Ok((
         tree_hash_be,
         parents,
@@ -235,7 +238,7 @@ impl GitObjectTrait for CommitObject {
         todo!()
     }
 
-    fn content(&mut self) -> Result<Vec<u8>, CommandError> {
+    fn content(&self) -> Result<Vec<u8>, CommandError> {
         let mut buf: Vec<u8> = Vec::new();
         buf.extend_from_slice(&self.tree.get_hash()?);
         let parents_len_be = (self.parents.len() as u32).to_be_bytes();

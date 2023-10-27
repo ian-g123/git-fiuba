@@ -50,7 +50,27 @@ impl Mode {
         }
     }
 
-    /// Lee de un stream y traduce el contenido a un Modo.
+    pub fn get_mode_from_id(id: u32) -> Result<Mode, CommandError> {
+        match id {
+            100644 => Ok(Mode::RegularFile),
+            100755 => Ok(Mode::ExecutableFile),
+            120000 => Ok(Mode::SymbolicLink),
+            160000 => Ok(Mode::Submodule),
+            40000 => Ok(Mode::Tree),
+            _ => Err(CommandError::InvalidMode),
+        }
+    }
+
+    pub fn get_type_from_mode(mode: &Mode) -> String {
+        match mode {
+            Mode::RegularFile => String::from("blob"),
+            Mode::ExecutableFile => String::from("blob"),
+            Mode::SymbolicLink => String::from("blob"),
+            Mode::Submodule => String::from("commit"),
+            Mode::Tree => String::from("tree"),
+        }
+    }
+
     pub fn read_from(stream: &mut dyn Read) -> Result<Self, CommandError> {
         let mut buf = [0; 6];
         stream

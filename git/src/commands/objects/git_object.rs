@@ -29,17 +29,20 @@ pub trait GitObjectTrait {
     fn clone_object(&self) -> GitObject;
 
     fn write_to(&mut self, stream: &mut dyn std::io::Write) -> Result<(), CommandError> {
-        let type_str = self.type_str();
         let content = self.content()?;
-        let len = content.len();
-        let header = format!("{} {}\0", type_str, len);
-        stream
-            .write(header.as_bytes())
-            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-        stream
-            .write(content.as_slice())
-            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-        Ok(())
+        let type_str = self.type_str();
+        write_to_stream_from_content(stream, content, type_str)
+
+        //     let type_str = self.type_str();
+        //     let len = content.len();
+        //     let header = format!("{} {}\0", type_str, len);
+        //     stream
+        //         .write(header.as_bytes())
+        //         .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        //     stream
+        //         .write(content.as_slice())
+        //         .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        //     Ok(())
     }
 
     /// Agrega un árbol al objeto Tree si es que corresponde, o sino un Blob\
@@ -61,7 +64,7 @@ pub trait GitObjectTrait {
     fn mode(&self) -> Mode;
 
     /// Devuelve el contenido del objeto
-    fn content(&mut self) -> Result<Vec<u8>, CommandError>;
+    fn content(&self) -> Result<Vec<u8>, CommandError>;
 
     /// Devuelve el tamaño del objeto en bytes
     fn size(&self) -> Result<usize, CommandError> {
@@ -163,6 +166,7 @@ pub fn read_git_object_from(
     logger.log(&format!("len: {}, type: {}", len, type_str));
 
     if type_str == "blob" {
+        // return Blob::read_from(stream, len, path, logger);
         return Blob::read_from(stream, len, path, hash_str, logger);
     };
     if type_str == "tree" {
@@ -181,7 +185,8 @@ fn get_type_and_len(
 ) -> Result<(String, usize), CommandError> {
     let mut bytes = stream.bytes();
     let type_str = get_type(&mut bytes)?;
-    let len_str = get_len(&mut bytes)?;
+    let len_str = get_string_up_to_null_byte(&mut bytes)?;
+    logger.log("found \0");
     let len: usize = len_str
         .parse()
         .map_err(|_| CommandError::ObjectLengthParsingError)?;
@@ -193,7 +198,9 @@ fn get_type(bytes: &mut std::io::Bytes<&mut dyn Read>) -> Result<String, Command
 }
 
 // "blob 16\u0000"
-fn get_len(bytes: &mut std::io::Bytes<&mut dyn Read>) -> Result<String, CommandError> {
+fn get_string_up_to_null_byte(
+    bytes: &mut std::io::Bytes<&mut dyn Read>,
+) -> Result<String, CommandError> {
     get_from_header(bytes, '\0')
 }
 
@@ -228,8 +235,24 @@ impl Clone for GitObject {
     }
 }
 
-// impl std::fmt::Debug for GitObject {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         write!(f, "{}", self.to_string())
-//     }
-// }
+impl std::fmt::Debug for GitObject {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_string())
+    }
+}
+
+pub fn write_to_stream_from_content(
+    stream: &mut dyn std::io::Write,
+    content: Vec<u8>,
+    type_str: String,
+) -> Result<(), CommandError> {
+    let len = content.len();
+    let header = format!("{} {}\0", type_str, len);
+    stream
+        .write(header.as_bytes())
+        .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+    stream
+        .write(content.as_slice())
+        .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+    Ok(())
+}
