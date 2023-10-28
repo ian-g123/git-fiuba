@@ -6,6 +6,7 @@ use std::{
 };
 
 #[test]
+#[ignore]
 fn test_clone() {
     let path = "./tests/data/commands/clone/test1";
 

@@ -1,18 +1,9 @@
 pub mod commands {
-    pub mod add_components;
-    pub mod branch_manager;
-    pub mod cat_file_components;
-    pub mod clone_components;
+    pub mod add;
+    pub mod cat_file;
     pub mod command;
-    pub mod command_errors;
-    pub mod commit_components;
-    pub mod config;
-    pub mod file_compressor;
-    pub mod hash_object_components;
-    pub mod init_components;
-    pub mod objects;
-    pub mod objects_database;
-    pub mod server_components;
-    pub mod stagin_area;
+    pub mod commit;
+    pub mod hash_object;
+    pub mod init;
+    pub mod status;
 }
-pub mod logger;

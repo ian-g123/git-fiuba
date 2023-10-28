@@ -1,6 +1,4 @@
-use crate::logger::Logger;
-
-use super::command_errors::CommandError;
+use git_lib::command_errors::CommandError;
 use std::io::{Read, Write};
 
 /// Función que agrega un valor a partir de los argumentos
@@ -24,7 +22,6 @@ pub trait Command {
         args: &[String],
         stdin: &mut dyn Read,
         output: &mut dyn Write,
-        logger: &mut Logger,
     ) -> Result<(), CommandError>;
 
     /// Método para diferenciar flags de valores
