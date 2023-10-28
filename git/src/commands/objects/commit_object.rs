@@ -105,6 +105,69 @@ impl CommitObject {
 
         Ok(())
     }
+
+    fn is_merge(&self) -> bool {
+        self.parents.len() > 1
+    }
+}
+
+pub fn sort_commits_descending_date(vec_commits: &mut Vec<CommitObject>) {
+    // ordenamos de forma descendente por fecha y lo ponemos al reves
+    vec_commits.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+}
+
+pub fn print_for_log(
+    stream: &mut dyn Write,
+    vec_commits: &mut Vec<CommitObject>,
+) -> Result<(), CommandError> {
+    let mut buf: Vec<u8> = Vec::new();
+    let mut writer_stream = Cursor::new(&mut buf);
+    for commit in vec_commits {
+        if commit.is_merge() {
+            print_merge_commit(&mut writer_stream, commit)?;
+        } else {
+            print_normal_commit(&mut writer_stream, commit)?;
+        }
+    }
+    _ = stream.write_all(&buf);
+    Ok(())
+}
+
+fn print_normal_commit(
+    stream: &mut dyn Write,
+    commit: &mut CommitObject,
+) -> Result<(), CommandError> {
+    let mut buf: Vec<u8> = Vec::new();
+    let mut writer_stream = Cursor::new(&mut buf);
+    _ = writeln!(writer_stream, "commit {}", commit.get_hash_string()?);
+    _ = writeln!(writer_stream, "Author: {}", commit.author);
+    _ = writeln!(writer_stream, "Date: {}", commit.timestamp);
+    _ = writeln!(writer_stream, "\n\t{}", commit.message);
+    _ = stream.write_all(&buf);
+    Ok(())
+}
+
+fn print_merge_commit(
+    stream: &mut dyn Write,
+    commit: &mut CommitObject,
+) -> Result<(), CommandError> {
+    let mut buf: Vec<u8> = Vec::new();
+    let mut writer_stream = Cursor::new(&mut buf);
+    let mut merges = "Merge:".to_string();
+    for parent in &commit.parents {
+        if parent.len() > 7 {
+            merges.push_str(&format!(" {}", &parent[..7]));
+        } else {
+            return Err(CommandError::InvalidCommit);
+        }
+    }
+    _ = writeln!(writer_stream, "commit {}", commit.get_hash_string()?);
+    _ = writeln!(writer_stream, "{}", merges);
+    _ = writeln!(writer_stream, "Author: {}", commit.author);
+    _ = writeln!(writer_stream, "Date: {}", commit.timestamp);
+    _ = writeln!(writer_stream, "\n\t{}", commit.message);
+    _ = stream.write_all(&buf);
+    Ok(())
 }
 
 /// Lee la información de un Commit.

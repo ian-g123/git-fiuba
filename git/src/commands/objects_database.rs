@@ -61,7 +61,7 @@ pub(crate) fn read_file(
     hash_str: &str,
     logger: &mut Logger,
 ) -> Result<(String, Vec<u8>), CommandError> {
-    let path = format!(".git/objects/{}/{}", &hash_str[0..2], &hash_str[2..]);
+    let path = format!("../.git/objects/{}/{}", &hash_str[0..2], &hash_str[2..]);
     logger.log(&format!("Path: {}", path.clone()));
     let exists = PathBuf::from(path.clone()).exists();
     logger.log(&format!("Existe?: {}", exists));
@@ -73,6 +73,7 @@ pub(crate) fn read_file(
             error.to_string()
         ))
     })?;
+
     let mut data = Vec::new();
     file.read_to_end(&mut data).map_err(|error| {
         CommandError::FileReadError(format!(

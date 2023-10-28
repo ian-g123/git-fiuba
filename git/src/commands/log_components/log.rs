@@ -1,16 +1,19 @@
 use std::{
-    fs::File,
-    io::{self, Cursor, Read, Write},
-    str,
+    collections::HashMap,
+    f32::consts::E,
+    fs::{self, File},
+    io::{Cursor, Read, Write},
 };
 
 use crate::{
     commands::{
-        cat_file_components::cat_file::CatFile,
         command::{Command, ConfigAdderFunction},
         command_errors::CommandError,
         file_compressor,
-        objects::commit_object::{self, read_from, read_from_for_log},
+        objects::commit_object::{
+            print_for_log, read_from_for_log, sort_commits_descending_date, CommitObject,
+        },
+        objects_database,
     },
     logger::Logger,
 };
@@ -34,7 +37,8 @@ impl Command for Log {
 
         let instance = Self::new(args)?;
 
-        instance.run(output)?;
+        let mut commits = instance.run()?;
+        print_for_log(output, &mut commits)?;
         Ok(())
     }
 
@@ -62,76 +66,112 @@ impl Log {
         Ok(i + 1)
     }
 
-    fn run(&self, output: &mut dyn Write) -> Result<(), CommandError> {
-        let path_to_actual_branch = get_path_to_actual_branch()?;
-        let mut file = File::open(path_to_actual_branch).map_err(|_| {
-            CommandError::FileNotFound("No se pudo abrir .git/refs/heads en log".to_string())
-        })?;
+    fn run(&self) -> Result<Vec<CommitObject>, CommandError> {
+        let mut path_to_commits: Vec<String> = Vec::new();
+        let mut commits_map: HashMap<String, CommitObject> = HashMap::new();
+        if self.all {
+            let path_to_heads = "../.git/refs/heads";
+            get_all_branches_paths(path_to_heads, &mut path_to_commits)?;
+        } else {
+            path_to_commits.push(get_hash_to_actual_branch()?);
+        }
 
-        let mut commit_hash = String::new();
-        file.read_to_string(&mut commit_hash).map_err(|_| {
-            CommandError::FileReadError("No se pudo leer .git/refs/heads en log".to_string())
-        })?;
+        for path_to_branch in path_to_commits {
+            rebuild_commits_tree(&path_to_branch, &mut commits_map)?;
+        }
+        let mut commits: Vec<_> = commits_map.drain().map(|(_, v)| v).collect();
 
-        let mut logger = Logger::new_dummy();
-        let deflated_file = file_compressor::extract(&commit_hash.as_bytes())?;
-        let mut deflated_file_reader = Cursor::new(deflated_file);
-        let commit_object = read_from_for_log(&mut deflated_file_reader, &mut logger)?;
+        sort_commits_descending_date(&mut commits);
 
-        let parents = commit_object.get_parents();
-
-        // imprimimos el padre en el output
-        writeln!(output, "{}", commit_object.parent)
-            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-        Ok(())
+        Ok(commits)
     }
 }
 
-// fn get_cat_file(hash: &str) -> Result<String, CommandError> {
-//     let args = vec!["-p".to_string(), hash.to_string()];
-//     let mut output_cat = Vec::new();
-//     let mut logger = Logger::new_dummy();
-//     CatFile::run_from(
-//         "cat-file",
-//         &args,
-//         &mut io::stdin(),
-//         &mut output_cat,
-//         &mut logger,
-//     )?;
-//     let cat_file = str::from_utf8(&output_cat).map_err(|_| {
-//         CommandError::FileReadError("No se pudo leer el output de cat-file en log".to_string())
-//     })?;
-//     Ok(cat_file.to_string())
-// }
-
-// fn get_parent(string: &String) -> Result<String, CommandError> {
-//     let mut lines = string.lines();
-//     let mut parents = Vec::new();
-//     lines.next();
-//     while let Some(line) = lines.next() {
-//         if !line.starts_with("parent") {
-//             break;
-//         }
-//         let parent = line.to_string();
-//         parents.push(parent);
-//     }
-//     let parent = parent.split_once(' ').ok_or(CommandError::FileReadError(
-//         "No se pudo leer el output de cat-file en log".to_string(),
-//     ))?;
-//     Ok(parent.1.to_string())
-// }
-
-fn get_path_to_actual_branch() -> Result<String, CommandError> {
-    let mut file = File::open(".git/HEAD")
-        .map_err(|_| CommandError::FileNotFound("No se pudo abrir .git/HEAD en log".to_string()))?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)
-        .map_err(|_| CommandError::FileReadError("No se pudo leer .git/HEAD en log".to_string()))?;
-    let Some((_, path_to_branch)) = contents.split_once(' ') else {
+fn get_all_branches_paths(
+    path_to_heads: &str,
+    path_to_commits: &mut Vec<String>,
+) -> Result<(), CommandError> {
+    Ok(if let Ok(branches) = fs::read_dir(path_to_heads) {
+        for branch_file in branches {
+            let branch_file_dir = branch_file.map_err(|_| {
+                CommandError::FileNotFound("no se pudo abrir branch en log".to_string())
+            })?;
+            let path = branch_file_dir.path();
+            let Some(branch_file_name) = path.to_str() else {
+                return Err(CommandError::FileNotFound(format!(
+                    "No se pudo abrir branch en log"
+                )));
+            };
+            path_to_commits.push(get_commit_hash(&branch_file_name.to_string())?);
+        }
+    } else {
         return Err(CommandError::FileNotFound(
-            "No se pudo abrir .git/HEAD en log".to_string(),
+            "No se pudo abrir .git/refs/heads en log".to_string(),
+        ));
+    })
+}
+
+fn rebuild_commits_tree(
+    path_to_commit: &String,
+    commits_map: &mut HashMap<String, CommitObject>,
+) -> Result<(), CommandError> {
+    if commits_map.contains_key(path_to_commit) {
+        return Ok(());
+    }
+
+    let mut logger_dummy = Logger::new_dummy();
+
+    let (_, decompressed_data) = objects_database::read_file(path_to_commit, &mut logger_dummy)?;
+
+    let mut deflated_file_reader = Cursor::new(decompressed_data);
+    let commit_object = read_from_for_log(&mut deflated_file_reader, &mut logger_dummy)?;
+
+    let parents = commit_object.get_parents();
+    for parent in &parents {
+        let path_to_parent = format!("../.git/objects/{}/{}", &parent[..2], &parent[2..]);
+        rebuild_commits_tree(&path_to_parent, commits_map)?;
+    }
+    commits_map.insert(path_to_commit.to_string(), commit_object);
+    Ok(())
+}
+
+fn get_hash_to_actual_branch() -> Result<String, CommandError> {
+    let mut file = File::open("../.git/HEAD").map_err(|_| {
+        CommandError::FileNotFound("No se pudo abrir ../.git/HEAD en log".to_string())
+    })?;
+
+    let mut refs_heads = String::new();
+    file.read_to_string(&mut refs_heads).map_err(|_| {
+        CommandError::FileReadError("No se pudo leer ../.git/HEAD en log".to_string())
+    })?;
+
+    let Some((_, path_to_branch)) = refs_heads.split_once(' ') else {
+        return Err(CommandError::FileNotFound(
+            "No se pudo abrir ../.git/HEAD en log".to_string(),
         ));
     };
-    let branch = format!(".git/{}", path_to_branch);
-    Ok(branch)
+
+    let path_to_branch = if path_to_branch.len() > 0 {
+        &path_to_branch[..path_to_branch.len() - 1]
+    } else {
+        return Err(CommandError::FileNotFound(
+            "No existe un archivo con nombre vacio en ../.git/objects considere analizarlo"
+                .to_string(),
+        ));
+    };
+
+    get_commit_hash(&path_to_branch.to_string())
+}
+
+fn get_commit_hash(path_to_branch: &String) -> Result<String, CommandError> {
+    let branch = format!("../.git/{}", path_to_branch);
+
+    let mut file = File::open(&branch)
+        .map_err(|_| CommandError::FileNotFound(format!("No se pudo abrir {branch} en log")))?;
+
+    let mut commit_hash = String::new();
+    file.read_to_string(&mut commit_hash)
+        .map_err(|_| CommandError::FileReadError(format!("No se pudo leer {branch} en log")))?;
+
+    Ok(commit_hash[..commit_hash.len() - 1].to_string())
 }
