@@ -1,6 +1,6 @@
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
-use super::aux::{get_sha1, read_string_until};
+use super::aux::{get_sha1, hex_string_to_u8_vec, read_string_until};
 use super::git_object::{GitObject, GitObjectTrait};
 use super::super_integers::{read_i32_from, read_i64_from, read_u32_from, SuperIntegers};
 use super::super_string::{u8_vec_to_hex_string, SuperStrings};
@@ -153,16 +153,54 @@ fn read_commit_info_from(
     ),
     CommandError,
 > {
-    let tree_hash_be = read_hash_from(stream)?;
-    let number_of_parents = read_u32_from(stream)?;
-    let parents = read_parents_from(number_of_parents, stream)?;
-    let author = Author::read_from(stream)?;
-    let author_timestamp = read_i64_from(stream)?;
-    let author_offset = read_i32_from(stream)?;
-    let committer = Author::read_from(stream)?;
-    let committer_timestamp = read_i64_from(stream)?;
-    let committer_offset = read_i32_from(stream)?;
-    let message = read_string_until(stream, '\n')?;
+    let mut content = String::new();
+    stream
+        .read_to_string(&mut content)
+        .map_err(|err| CommandError::FileReadError(err.to_string()))?;
+
+    let mut lines = content.lines();
+    let tree_line = lines_next(&mut lines)?;
+    let Some((_, tree_hash_str)) = tree_line.split_once(' ') else {
+        return Err(CommandError::InvalidCommit);
+    };
+    let tree_hash_be = hex_string_to_u8_vec(tree_hash_str);
+    let mut line = lines_next(&mut lines)?;
+    let mut parents = Vec::new();
+    loop {
+        let Some((word, hash)) = line.split_once(' ') else {
+            return Err(CommandError::InvalidCommit);
+        };
+        if word != "parent" {
+            break;
+        }
+        parents.push(hash.to_string());
+        let line_temp = lines_next(&mut lines)?;
+        line = line_temp;
+    }
+
+    let Some((_, author_info)) = line.split_once(' ') else {
+        return Err(CommandError::InvalidCommit);
+    };
+    let (author, author_timestamp, author_offset) = get_author_info(author_info)?;
+
+    let line = lines_next(&mut lines)?;
+    let Some((_, commiter_info)) = line.split_once(' ') else {
+        return Err(CommandError::InvalidCommit);
+    };
+    let (committer, committer_timestamp, committer_offset) = get_author_info(commiter_info)?;
+
+    lines_next(&mut lines)?;
+    let message = lines.collect();
+    // let tree_hash_be = read_hash_from(stream)?;
+    // let number_of_parents = read_u32_from(stream)?;
+    // let parents = read_parents_from(number_of_parents, stream)?;
+    // let author = Author::read_from(stream)?;
+    // let author_timestamp = read_i64_from(stream)?;
+    // let author_offset = read_i32_from(stream)?;
+    // let committer = Author::read_from(stream)?;
+    // let committer_timestamp = read_i64_from(stream)?;
+    // let committer_offset = read_i32_from(stream)?;
+    // let message = read_string_until(stream, '\n')?;
     Ok((
         tree_hash_be,
         parents,
@@ -174,6 +212,38 @@ fn read_commit_info_from(
         committer_offset,
         message,
     ))
+}
+
+fn lines_next(lines: &mut std::str::Lines<'_>) -> Result<String, CommandError> {
+    let Some(tree_line) = lines.next() else {
+        return Err(CommandError::InvalidCommit);
+    };
+    Ok(tree_line.to_string())
+}
+
+fn get_author_info(commiter_info: &str) -> Result<(Author, i64, i32), CommandError> {
+    let mut stream = Cursor::new(commiter_info.as_bytes());
+    let author = Author::read_from(&mut stream)?;
+
+    let timestamp_str = &read_string_until(&mut stream, ' ')?;
+    let timestamp_str = timestamp_str.trim();
+    let mut offset_str = String::new();
+    stream
+        .read_to_string(&mut offset_str)
+        .map_err(|err| CommandError::FileReadError(err.to_string()))?;
+    let offset_len = offset_str.len();
+    let offset_hr = offset_str[..offset_len - 2]
+        .parse::<i32>()
+        .map_err(|err| CommandError::FileReadError(err.to_string()))?;
+    let offset_min = offset_str[offset_len - 2..]
+        .parse::<i32>()
+        .map_err(|err| CommandError::FileReadError(err.to_string()))?;
+    let offset = offset_hr * 60 + offset_min;
+    let timestamp = timestamp_str
+        .parse::<i64>()
+        .map_err(|err| CommandError::FileReadError(err.to_string()))?;
+
+    Ok((author, timestamp, offset))
 }
 
 /// Devuelve el offset en string.
@@ -235,23 +305,54 @@ impl GitObjectTrait for CommitObject {
 
     fn content(&mut self) -> Result<Vec<u8>, CommandError> {
         let mut buf: Vec<u8> = Vec::new();
-        buf.extend_from_slice(&self.tree.get_hash()?);
-        let parents_len_be = (self.parents.len() as u32).to_be_bytes();
-        buf.extend_from_slice(&parents_len_be);
-        for parent in &self.parents {
-            buf.extend_from_slice(&parent.cast_hex_to_u8_vec()?);
-        }
         let mut stream = Cursor::new(&mut buf);
-        stream
-            .seek(SeekFrom::End(0))
-            .map_err(|_| CommandError::FileWriteError("Error al mover el cursor".to_string()))?;
+        writeln!(stream, "tree {}", self.tree.get_hash_string()?)
+            .map_err(|err| CommandError::FileWriteError(err.to_string()))?;
+
+        for parent in &self.parents {
+            writeln!(stream, "parent {}", parent)
+                .map_err(|err| CommandError::FileWriteError(err.to_string()))?;
+        }
+
+        write!(stream, "author ").map_err(|err| CommandError::FileWriteError(err.to_string()))?;
         self.author.write_to(&mut stream)?;
-        self.timestamp.write_to(&mut stream)?;
-        self.offset.write_to(&mut stream)?;
+
+        let offset_hr = self.offset / 60;
+        let offset_min = self.offset % 60;
+        let offset_hr_str = {
+            if offset_hr < 0 {
+                format!("-{:02}", offset_hr.abs())
+            } else {
+                format!("{:02}", offset_hr)
+            }
+        };
+        writeln!(
+            stream,
+            "{} {}{:02}",
+            self.timestamp, offset_hr_str, offset_min
+        )
+        .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+
+        write!(stream, "committer ")
+            .map_err(|err| CommandError::FileWriteError(err.to_string()))?;
         self.committer.write_to(&mut stream)?;
-        self.timestamp.write_to(&mut stream)?;
-        self.offset.write_to(&mut stream)?;
-        writeln!(stream, "{}", self.message).map_err(|_| {
+        let offset_hr = self.offset / 60;
+        let offset_min = self.offset % 60;
+
+        let offset_hr_str = {
+            if offset_hr < 0 {
+                format!("-{:02}", offset_hr.abs())
+            } else {
+                format!("{:02}", offset_hr)
+            }
+        };
+        writeln!(
+            stream,
+            "{} {}{:02}",
+            self.timestamp, offset_hr_str, offset_min
+        )
+        .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        writeln!(stream, "\n{}", self.message).map_err(|_| {
             CommandError::FileWriteError("Error al escribir el mensaje".to_string())
         })?;
 
