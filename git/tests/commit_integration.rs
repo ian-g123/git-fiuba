@@ -666,3 +666,107 @@ fn test_commit_paths_fails() {
 
     _ = fs::remove_dir_all(format!("{}", path));
 }
+
+#[test]
+fn test_long_message_fails_simple() {
+    let path = "./tests/data/commands/commit/repo9";
+    create_test_scene_1(path.clone());
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("testfile.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("'message")
+        .arg("message continues")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let expected = format!("The message must end with '\n");
+    assert_eq!(String::from_utf8(result.stderr).unwrap(), expected);
+
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
+#[test]
+fn test_long_message() {
+    let path = "./tests/data/commands/commit/repo10";
+    create_test_scene_1(path.clone());
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("testfile.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("\"this")
+        .arg("message")
+        .arg("has")
+        .arg("many")
+        .arg("words\"")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let expected = format!("");
+    assert_eq!(String::from_utf8(result.stderr).unwrap(), expected);
+
+    let head = fs::read_to_string(path.to_owned() + "/.git/HEAD").unwrap();
+    let (_, branch_ref) = head.split_once(' ').unwrap();
+    let branch_ref = branch_ref.trim();
+    let ref_path = path.to_owned() + "/.git/" + branch_ref;
+    let commit_hash = fs::read_to_string(ref_path).unwrap();
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("cat-file")
+        .arg(commit_hash)
+        .arg("-p")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    let output = String::from_utf8(result.stdout).unwrap();
+    let output_lines: Vec<&str> = output.split('\n').collect();
+
+    assert_eq!(output_lines[4], "this message has many words");
+
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
+#[test]
+fn test_long_message_fails_double() {
+    let path = "./tests/data/commands/commit/repo11";
+    create_test_scene_1(path.clone());
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("testfile.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("\"message")
+        .arg("message continues")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let expected = format!("The message must end with \"\n");
+    assert_eq!(String::from_utf8(result.stderr).unwrap(), expected);
+
+    _ = fs::remove_dir_all(format!("{}", path));
+}
