@@ -9,6 +9,7 @@ pub mod commands {
     pub mod file_compressor;
     pub mod hash_object_components;
     pub mod init_components;
+    pub mod log_components;
     pub mod objects;
     pub mod objects_database;
     pub mod stagin_area;
