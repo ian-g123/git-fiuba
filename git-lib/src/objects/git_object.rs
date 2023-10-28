@@ -108,7 +108,7 @@ pub fn display_from_stream(
     logger: &mut Logger,
     output: &mut dyn Write,
 ) -> Result<(), CommandError> {
-    let (type_str, len) = get_type_and_len(stream, logger)?;
+    let (type_str, len) = get_type_and_len(stream)?;
     if type_str == "blob" {
         return Blob::display_from_stream(stream, len, output, logger);
     }
@@ -116,7 +116,7 @@ pub fn display_from_stream(
         return Tree::display_from_stream(stream, len, output, logger);
     };
     if type_str == "commit" {
-        return CommitObject::display_from_stream(stream, len, output, logger);
+        return CommitObject::display_from_stream(stream, len, output);
     };
     Err(CommandError::ObjectTypeError)
 }
@@ -128,7 +128,7 @@ pub fn display_type_from_hash(
 ) -> Result<(), CommandError> {
     let (_, content) = objects_database::read_file(hash, logger)?;
     let mut stream = std::io::Cursor::new(content);
-    let (type_str, _) = get_type_and_len(&mut stream, logger)?;
+    let (type_str, _) = get_type_and_len(&mut stream)?;
     writeln!(output, "{}", type_str)
         .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
     Ok(())
@@ -141,7 +141,7 @@ pub fn display_size_from_hash(
 ) -> Result<(), CommandError> {
     let (_, content) = objects_database::read_file(hash, logger)?;
     let mut stream = std::io::Cursor::new(content);
-    let (_, len) = get_type_and_len(&mut stream, logger)?;
+    let (_, len) = get_type_and_len(&mut stream)?;
     writeln!(output, "{}", len).map_err(|error| CommandError::FileWriteError(error.to_string()))?;
     Ok(())
 }
@@ -152,7 +152,7 @@ pub fn read_git_object_from(
     hash_str: &str,
     logger: &mut Logger,
 ) -> Result<GitObject, CommandError> {
-    let (type_str, len) = get_type_and_len(stream, logger)?;
+    let (type_str, len) = get_type_and_len(stream)?;
 
     logger.log(&format!("Reading object of type : {}", type_str));
     if type_str == "blob" {
@@ -168,10 +168,7 @@ pub fn read_git_object_from(
     Err(CommandError::ObjectTypeError)
 }
 
-fn get_type_and_len(
-    stream: &mut dyn Read,
-    logger: &mut Logger,
-) -> Result<(String, usize), CommandError> {
+fn get_type_and_len(stream: &mut dyn Read) -> Result<(String, usize), CommandError> {
     let mut bytes = stream.bytes();
     let type_str = get_type(&mut bytes)?;
     let len_str = get_string_up_to_null_byte(&mut bytes)?;

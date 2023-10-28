@@ -1,9 +1,4 @@
-use std::{
-    fs::{self, File},
-    io::Write,
-    path::Path,
-    process::Command,
-};
+use std::{fs, process::Command};
 
 use crate::common::aux::{
     change_dir_testfile1_content, change_dir_testfile1_content_and_remove_dir_testfile2,
@@ -412,15 +407,6 @@ fn test_reuse_message() {
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
 
     let result = Command::new("../../../../../../target/debug/git")
-        .arg("hash-object")
-        .arg("dir/testfile1.txt")
-        .current_dir(path)
-        .output()
-        .unwrap();
-
-    let hash1 = String::from_utf8(result.stdout).unwrap();
-
-    let result = Command::new("../../../../../../target/debug/git")
         .arg("commit")
         .arg("-m")
         .arg("message")
@@ -459,15 +445,6 @@ fn test_reuse_message() {
         .output()
         .unwrap();
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
-
-    let result = Command::new("../../../../../../target/debug/git")
-        .arg("hash-object")
-        .arg("dir/testfile1.txt")
-        .current_dir(path)
-        .output()
-        .unwrap();
-
-    let hash2 = String::from_utf8(result.stdout).unwrap();
 
     let result = Command::new("../../../../../../target/debug/git")
         .arg("commit")

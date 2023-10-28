@@ -1,5 +1,5 @@
 use crate::commands::command::Command;
-use git_lib::{command_errors::CommandError, git_repository::GitRepository, logger::Logger};
+use git_lib::{command_errors::CommandError, git_repository::GitRepository};
 
 use std::{
     io::{Read, Write},
@@ -37,12 +37,10 @@ impl Command for CatFile {
         args: &[String],
         _input: &mut dyn Read,
         output: &mut dyn Write,
-        logger: &mut Logger,
     ) -> Result<(), CommandError> {
         if name != "cat-file" {
             return Err(CommandError::Name);
         }
-        logger.log(&format!("cat-file args: {:?}", args));
 
         let mut cat_file = CatFile::new_default()?;
         cat_file.config(args)?;
@@ -130,7 +128,6 @@ mod tests {
 
     #[test]
     fn test_invalid_name() {
-        let mut logger = Logger::new(".git/logs").unwrap();
         let mut output_string: Vec<u8> = Vec::new();
         let mut stdout_mock = Cursor::new(&mut output_string);
 
@@ -138,19 +135,12 @@ mod tests {
         let mut stdin_mock = Cursor::new(input.as_bytes());
 
         let args = vec![];
-        let result = CatFile::run_from(
-            "cat-",
-            &args,
-            &mut stdin_mock,
-            &mut stdout_mock,
-            &mut logger,
-        );
+        let result = CatFile::run_from("cat-", &args, &mut stdin_mock, &mut stdout_mock);
         assert!(matches!(result, Err(CommandError::Name)))
     }
 
     #[test]
     fn test_not_enough_arguments() {
-        let mut logger = Logger::new(".git/logs").unwrap();
         let mut output_string: Vec<u8> = Vec::new();
         let mut stdout_mock = Cursor::new(&mut output_string);
 
@@ -158,13 +148,7 @@ mod tests {
         let mut stdin_mock = Cursor::new(input.as_bytes());
 
         let args = vec!["-p".to_string()];
-        let result = CatFile::run_from(
-            "cat-file",
-            &args,
-            &mut stdin_mock,
-            &mut stdout_mock,
-            &mut logger,
-        );
+        let result = CatFile::run_from("cat-file", &args, &mut stdin_mock, &mut stdout_mock);
         assert!(matches!(result, Err(CommandError::NotEnoughArguments)))
     }
 }

@@ -89,7 +89,6 @@ pub fn read_string_until(stream: &mut dyn Read, char_stop: char) -> Result<Strin
 
 #[cfg(test)]
 mod test {
-    use std::env::current_dir;
 
     use super::*;
 

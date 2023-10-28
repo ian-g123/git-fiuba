@@ -2,7 +2,6 @@ extern crate sha1;
 use std::{
     fs::{self, File},
     io::{Cursor, Read, Write},
-    path::PathBuf,
 };
 
 use crate::logger::Logger;
@@ -11,39 +10,13 @@ use super::{
     command_errors::CommandError,
     file_compressor::{compress, extract},
     objects::{
-        git_object::{read_git_object_from, GitObject, GitObjectTrait},
+        git_object::{read_git_object_from, GitObject},
         super_string::u8_vec_to_hex_string,
     },
 };
 
 /// Escribe un objeto en la base de datos.
-pub fn write(logger: &mut Logger, git_object: &mut GitObject) -> Result<String, CommandError> {
-    let mut data = Vec::new();
-    git_object.write_to(&mut data)?;
-    let hex_string = u8_vec_to_hex_string(&git_object.get_hash()?);
-    let folder_name = &hex_string[0..2];
-    let parent_path = format!(".git/objects/{}", folder_name);
-    let file_name = &hex_string[2..];
-    let path = format!("{}/{}", parent_path, file_name);
-    if let Err(error) = fs::create_dir_all(parent_path) {
-        return Err(CommandError::FileOpenError(error.to_string()));
-    };
-    let Ok(mut file) = File::create(&path) else {
-        return Err(CommandError::FileOpenError(
-            "Error al abrir archivo para escritura".to_string(),
-        ));
-    };
-    let compressed_data = compress(&data)?;
-    if let Err(error) = file.write_all(&compressed_data) {
-        return Err(CommandError::FileWriteError(error.to_string()));
-    };
-    return Ok(hex_string);
-}
-
-pub(crate) fn write_2(
-    logger: &mut Logger,
-    git_object: &mut dyn GitObjectTrait,
-) -> Result<String, CommandError> {
+pub fn write(_: &mut Logger, git_object: &mut GitObject) -> Result<String, CommandError> {
     let mut data = Vec::new();
     git_object.write_to(&mut data)?;
     let hex_string = u8_vec_to_hex_string(&git_object.get_hash()?);
@@ -74,10 +47,7 @@ pub fn read_object(hash_str: &str, logger: &mut Logger) -> Result<GitObject, Com
 }
 
 /// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve la ruta del objeto y su data descomprimida.
-pub(crate) fn read_file(
-    hash_str: &str,
-    logger: &mut Logger,
-) -> Result<(String, Vec<u8>), CommandError> {
+pub(crate) fn read_file(hash_str: &str, _: &mut Logger) -> Result<(String, Vec<u8>), CommandError> {
     let path = format!(".git/objects/{}/{}", &hash_str[0..2], &hash_str[2..]);
 
     let mut file = File::open(&path).map_err(|error| {

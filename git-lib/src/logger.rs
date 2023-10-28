@@ -1,5 +1,4 @@
 use std::{
-    fmt::format,
     fs::{self, File},
     io::Write,
     path::Path,

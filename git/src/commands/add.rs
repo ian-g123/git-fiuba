@@ -1,7 +1,6 @@
 use crate::commands::command::{Command, ConfigAdderFunction};
 use git_lib::command_errors::CommandError;
 use git_lib::git_repository::GitRepository;
-use git_lib::logger::Logger;
 use std::io::{Read, Write};
 
 /// Commando Add
@@ -15,15 +14,12 @@ impl Command for Add {
         args: &[String],
         stdin: &mut dyn Read,
         output: &mut dyn Write,
-        logger: &mut Logger,
     ) -> Result<(), CommandError> {
         if name != "add" {
             return Err(CommandError::Name);
         }
 
         let instance = Self::new(args)?;
-
-        logger.log(&format!("Add args: {:?}", args));
 
         instance.run(stdin, output)?;
         Ok(())

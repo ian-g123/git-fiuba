@@ -1,8 +1,5 @@
 use crate::commands::command::{Command, ConfigAdderFunction};
-use git_lib::{
-    command_errors::CommandError, git_repository::GitRepository, logger::Logger,
-    objects::blob::Blob,
-};
+use git_lib::{command_errors::CommandError, git_repository::GitRepository, objects::blob::Blob};
 use std::{
     io::{Read, Write},
     str,
@@ -24,7 +21,6 @@ impl Command for HashObject {
         args: &[String],
         stdin: &mut dyn Read,
         output: &mut dyn Write,
-        logger: &mut Logger,
     ) -> Result<(), CommandError> {
         if name != "hash-object" {
             return Err(CommandError::Name);
@@ -32,7 +28,6 @@ impl Command for HashObject {
 
         let instance = Self::new_from(args)?;
 
-        logger.log(&format!("hash-object {:?}", args));
         instance.run(stdin, output)?;
         Ok(())
     }

@@ -3,9 +3,7 @@ use std::{fs, process::Command};
 use common::aux::create_base_scene;
 
 use crate::common::aux::{
-    change_dir_testfile1_content, change_dir_testfile1_content_and_remove_dir_testfile2,
-    change_test_scene_4, create_test_scene_1, create_test_scene_2, create_test_scene_3,
-    create_test_scene_4, create_test_scene_5,
+    change_test_scene_4, create_test_scene_2, create_test_scene_4, create_test_scene_5,
 };
 
 mod common {

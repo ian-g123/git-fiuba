@@ -3,7 +3,7 @@ use std::{collections::HashMap, io::Write};
 use crate::command_errors::CommandError;
 use crate::logger::Logger;
 
-use super::{changes_controller::ChangesController, changes_types::ChangeType, format::Format};
+use super::{changes_types::ChangeType, format::Format};
 
 pub struct LongFormat;
 

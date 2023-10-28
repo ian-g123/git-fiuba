@@ -1,5 +1,4 @@
 use std::{
-    fmt,
     fs::File,
     io::{Cursor, Read, Write},
 };

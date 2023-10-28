@@ -1,4 +1,4 @@
-use super::{changes_types::ChangeType, working_tree};
+use super::changes_types::ChangeType;
 
 #[derive(Clone)]
 pub struct ChangeObject {

@@ -2,17 +2,14 @@ use git::commands::{
     add::Add, cat_file::CatFile, command::Command, commit::Commit, hash_object::HashObject,
     init::Init, status::Status,
 };
-use git_lib::{command_errors::CommandError, logger::Logger};
+use git_lib::command_errors::CommandError;
 use std::{env, io};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
     let (command_name, command_args) = parse_args(&args);
 
-    let mut logger = Logger::new(".git/logs.txt").unwrap();
-
-    if let Err(error) = run(command_name, command_args, &mut logger) {
-        logger.log(&format!("Error: {}", error));
+    if let Err(error) = run(command_name, command_args) {
         eprintln!("{error}")
     }
 }
@@ -23,11 +20,7 @@ fn parse_args(args: &[String]) -> (&str, &[String]) {
     (command, command_args)
 }
 
-fn run(
-    command_name: &str,
-    command_args: &[String],
-    logger: &mut Logger,
-) -> Result<(), CommandError> {
+fn run(command_name: &str, command_args: &[String]) -> Result<(), CommandError> {
     let commands = [
         HashObject::run_from,
         Init::run_from,
@@ -43,7 +36,6 @@ fn run(
             command_args,
             &mut io::stdin(),
             &mut io::stdout(),
-            logger,
         ) {
             Ok(()) => return Ok(()),
             Err(CommandError::Name) => {}

@@ -1,5 +1,3 @@
-use std::borrow::BorrowMut;
-use std::fmt;
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
 use super::aux::{get_sha1, read_string_until};
@@ -61,7 +59,7 @@ impl CommitObject {
         logger: &mut Logger,
     ) -> Result<GitObject, CommandError> {
         let (tree_hash, parents, author, author_timestamp, author_offset, committer, _, _, message) =
-            read_commit_info_from(stream, logger)?;
+            read_commit_info_from(stream)?;
         let tree_hash_str = u8_vec_to_hex_string(&tree_hash);
         logger.log(&format!(
             "Reading tree hash from database: {}",
@@ -92,7 +90,6 @@ impl CommitObject {
         stream: &mut dyn Read,
         _: usize,
         output: &mut dyn Write,
-        logger: &mut Logger,
     ) -> Result<(), CommandError> {
         let (
             tree_hash,
@@ -104,7 +101,7 @@ impl CommitObject {
             committer_timestamp,
             committer_offset,
             message,
-        ) = read_commit_info_from(stream, logger)?;
+        ) = read_commit_info_from(stream)?;
         let tree_hash_str = u8_vec_to_hex_string(&tree_hash);
         writeln!(output, "tree {}", tree_hash_str)
             .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
@@ -142,7 +139,6 @@ impl CommitObject {
 
 fn read_commit_info_from(
     stream: &mut dyn Read,
-    logger: &mut Logger,
 ) -> Result<
     (
         [u8; 20],

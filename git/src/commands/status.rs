@@ -6,7 +6,6 @@ use std::vec;
 use crate::commands::command::Command;
 use git_lib::command_errors::CommandError;
 use git_lib::git_repository::GitRepository;
-use git_lib::logger::Logger;
 
 pub struct Status {
     short: bool,
@@ -18,14 +17,12 @@ impl Command for Status {
         args: &[String],
         _: &mut dyn Read,
         output: &mut dyn Write,
-        logger: &mut Logger,
     ) -> Result<(), CommandError> {
         if name != "status" {
             return Err(CommandError::Name);
         }
 
         let instance = Self::new(args)?;
-        logger.log(&format!("status args: {:?}", args));
         instance.run(output)?;
         Ok(())
     }
@@ -103,11 +100,10 @@ mod tests {
 
         let input = "prueba1";
         let mut stdin_mock = Cursor::new(input.as_bytes());
-        let mut logger = Logger::new(".git/logs").unwrap();
 
         let args: &[String] = &[];
         assert!(matches!(
-            Status::run_from("", args, &mut stdin_mock, &mut stdout_mock, &mut logger),
+            Status::run_from("", args, &mut stdin_mock, &mut stdout_mock),
             Err(CommandError::Name)
         ));
     }
@@ -120,17 +116,10 @@ mod tests {
 
         let input = "prueba1";
         let mut stdin_mock = Cursor::new(input.as_bytes());
-        let mut logger = Logger::new(".git/logs").unwrap();
 
         let args: &[String] = &[];
         assert!(matches!(
-            Status::run_from(
-                "hash-object",
-                args,
-                &mut stdin_mock,
-                &mut stdout_mock,
-                &mut logger
-            ),
+            Status::run_from("hash-object", args, &mut stdin_mock, &mut stdout_mock,),
             Err(CommandError::Name)
         ));
     }
@@ -143,7 +132,6 @@ mod tests {
 
         let input = "prueba1";
         let mut stdin_mock = Cursor::new(input.as_bytes());
-        let mut logger = Logger::new(".git/logs").unwrap();
 
         let args: &[String] = &[
             "-b".to_string(),
@@ -151,13 +139,7 @@ mod tests {
             "tercer argumento".to_string(),
         ];
         assert!(matches!(
-            Status::run_from(
-                "status",
-                args,
-                &mut stdin_mock,
-                &mut stdout_mock,
-                &mut logger
-            ),
+            Status::run_from("status", args, &mut stdin_mock, &mut stdout_mock,),
             Err(CommandError::InvalidArguments)
         ));
     }

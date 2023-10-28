@@ -1,7 +1,5 @@
 use std::{
-    borrow::BorrowMut,
     collections::HashMap,
-    fmt,
     io::{Read, Write},
 };
 
@@ -14,7 +12,7 @@ use super::{
     blob::Blob,
     git_object::{GitObject, GitObjectTrait},
     mode::Mode,
-    super_string::{read_string_from, u8_vec_to_hex_string, SuperStrings},
+    super_string::u8_vec_to_hex_string,
 };
 
 #[derive(Clone)]
@@ -193,19 +191,9 @@ impl Tree {
         Ok(())
     }
 
-    /* fn get_data(&mut self) -> Result<Vec<u8>, CommandError> {
-        let header = format!("1 {}\0", self.size()?);
-        let content = self.content()?;
-        Ok([header.as_bytes(), content.as_slice()].concat())
-    } */
-
-    /* fn get_mode(&self) -> Result<Mode, CommandError> {
-        Ok(Mode::get_mode(self.path.clone())?)
-    } */
-
     pub fn read_from(
         stream: &mut dyn Read,
-        len: usize,
+        _len: usize,
         path: &str,
         _: &str,
         logger: &mut Logger,
@@ -543,7 +531,7 @@ mod tests {
             _ = tree.add_path_tree(&mut logger, vector_path, current_depth, &hash);
         }
 
-        let files: Vec<&str> = [
+        let _files: Vec<&str> = [
             "no1",
             "dir0/dir1/dir2/bar.txt",
             "dir0/dir1/foo.txt",
@@ -554,7 +542,7 @@ mod tests {
         ]
         .to_vec();
 
-        let expected: Vec<String> = [
+        let _expected: Vec<String> = [
             "no1".to_string(),
             "dir0/dir1/dir2/no-existe".to_string(),
             "dir0/dir1/dir2/bar.txtt".to_string(),
@@ -571,7 +559,7 @@ mod tests {
 mod test_write_y_display {
     use std::io::{Cursor, Seek, SeekFrom};
 
-    use crate::objects::git_object::{self, read_git_object_from};
+    use crate::objects::git_object::{self};
 
     use super::*;
     #[test]
@@ -627,10 +615,6 @@ mod test_write_y_display {
 
         writer_stream.seek(SeekFrom::Start(0)).unwrap();
 
-        let mut tree_res = Tree::read_from(&mut writer_stream, 0, "", &hash, &mut logger).unwrap();
-        //assert_eq!(tree_res, Box::new(tree));
-        /* if let Some(tree_new) = tree_res.as_tree() {
-            let x = tree_new.clone();
-        } */
+        let _tree_res = Tree::read_from(&mut writer_stream, 0, "", &hash, &mut logger).unwrap();
     }
 }

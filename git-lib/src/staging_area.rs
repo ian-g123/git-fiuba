@@ -3,19 +3,13 @@ use std::{
     io::{Read, Write},
 };
 
-use chrono::format;
-
 use crate::logger::Logger;
 
 use super::{
     command_errors::CommandError,
     objects::{
-        aux::get_name,
-        git_object::{GitObject, GitObjectTrait},
-        last_commit::build_last_commit_tree,
-        tree::Tree,
+        aux::get_name, git_object::GitObjectTrait, last_commit::build_last_commit_tree, tree::Tree,
     },
-    objects_database,
 };
 
 #[derive(Debug)]

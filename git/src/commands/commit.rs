@@ -1,7 +1,7 @@
 use std::{io::Read, io::Write};
 
 use crate::commands::command::{Command, ConfigAdderFunction};
-use git_lib::{command_errors::CommandError, git_repository::GitRepository, logger::Logger};
+use git_lib::{command_errors::CommandError, git_repository::GitRepository};
 
 /// Hace referencia a un Comando Commit.
 pub struct Commit {
@@ -19,12 +19,10 @@ impl Command for Commit {
         args: &[String],
         stdin: &mut dyn Read,
         output: &mut dyn Write,
-        logger: &mut Logger,
     ) -> Result<(), CommandError> {
         if name != "commit" {
             return Err(CommandError::Name);
         }
-        logger.log(&format!("commit args {:?}", args));
 
         let instance = Commit::new_from(args)?;
 
@@ -290,16 +288,9 @@ mod tests {
 
         let input = "prueba1";
         let mut stdin_mock = Cursor::new(input.as_bytes());
-        let mut logger = Logger::new(".git/logs").unwrap();
 
         let args = ["-no".to_string()];
-        match Commit::run_from(
-            "commit",
-            &args,
-            &mut stdin_mock,
-            &mut stdout_mock,
-            &mut logger,
-        ) {
+        match Commit::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::InvalidArguments),
             Ok(_) => assert!(false),
         }
@@ -312,16 +303,9 @@ mod tests {
 
         let input = "prueba2";
         let mut stdin_mock = Cursor::new(input.as_bytes());
-        let mut logger = Logger::new(".git/logs").unwrap();
 
         let args = ["-m".to_string()];
-        match Commit::run_from(
-            "commit",
-            &args,
-            &mut stdin_mock,
-            &mut stdout_mock,
-            &mut logger,
-        ) {
+        match Commit::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::CommitMessageNoValue),
             Ok(_) => assert!(false),
         }
@@ -334,16 +318,9 @@ mod tests {
 
         let input = "q\n";
         let mut stdin_mock = Cursor::new(input.as_bytes());
-        let mut logger = Logger::new(".git/logs").unwrap();
 
         let args = [];
-        match Commit::run_from(
-            "commit",
-            &args,
-            &mut stdin_mock,
-            &mut stdout_mock,
-            &mut logger,
-        ) {
+        match Commit::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::CommitMessageEmptyValue),
             Ok(_) => assert!(false),
         }
@@ -356,7 +333,6 @@ mod tests {
 
         let input = "\n";
         let mut stdin_mock = Cursor::new(input.as_bytes());
-        let mut logger = Logger::new(".git/logs").unwrap();
 
         let args = [
             "-m".to_string(),
@@ -364,13 +340,7 @@ mod tests {
             "-C".to_string(),
             "hash todavía no se chequea".to_string(),
         ];
-        match Commit::run_from(
-            "commit",
-            &args,
-            &mut stdin_mock,
-            &mut stdout_mock,
-            &mut logger,
-        ) {
+        match Commit::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::MessageAndReuseError),
             Ok(_) => assert!(false),
         }
@@ -383,16 +353,9 @@ mod tests {
 
         let input = "\n";
         let mut stdin_mock = Cursor::new(input.as_bytes());
-        let mut logger = Logger::new(".git/logs").unwrap();
 
         let args = ["-m".to_string(), "message".to_string(), "-C".to_string()];
-        match Commit::run_from(
-            "commit",
-            &args,
-            &mut stdin_mock,
-            &mut stdout_mock,
-            &mut logger,
-        ) {
+        match Commit::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::ReuseMessageNoValue),
             Ok(_) => assert!(false),
         }

@@ -5,7 +5,6 @@ use std::{env, str};
 
 use git_lib::command_errors::CommandError;
 use git_lib::git_repository::GitRepository;
-use git_lib::logger::Logger;
 
 use crate::commands::command::{Command, ConfigAdderFunction};
 
@@ -22,7 +21,6 @@ impl Command for Init {
         args: &[String],
         _stdin: &mut dyn Read,
         output: &mut dyn Write,
-        _logger: &mut Logger,
     ) -> Result<(), CommandError> {
         if name != "init" {
             return Err(CommandError::Name);
