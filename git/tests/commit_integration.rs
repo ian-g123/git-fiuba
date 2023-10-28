@@ -20,7 +20,7 @@ fn test_single_file() {
     let path = "./tests/data/commands/commit/repo1";
     create_test_scene_1(path.clone());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("add")
         .arg("testfile.txt")
         .current_dir(path)
@@ -28,7 +28,7 @@ fn test_single_file() {
         .unwrap();
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("commit")
         .arg("-m")
         .arg("message")
@@ -38,7 +38,7 @@ fn test_single_file() {
 
     assert!(result.status.success());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg("30d74d258442c7c65512eafab474568dd706c430")
         .arg("-p")
@@ -48,7 +48,7 @@ fn test_single_file() {
 
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "test\n");
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg("43a028a569110ece7d1d1ee46f3d1e50fdcf7946")
         .arg("-p")
@@ -66,7 +66,7 @@ fn test_single_file() {
     let branch_ref = branch_ref.trim();
     let ref_path = path.to_owned() + "/.git/" + branch_ref;
     let commit_hash = fs::read_to_string(ref_path).unwrap();
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg(commit_hash)
         .arg("-p")
@@ -99,7 +99,7 @@ fn test_commit_some_changes() {
     let path = "./tests/data/commands/commit/repo2";
     create_test_scene_2(path.clone());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("add")
         .arg("dir/testfile1.txt")
         .current_dir(path)
@@ -107,7 +107,7 @@ fn test_commit_some_changes() {
         .unwrap();
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("commit")
         .arg("-m")
         .arg("message")
@@ -117,7 +117,7 @@ fn test_commit_some_changes() {
 
     assert!(result.status.success());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg("30d74d258442c7c65512eafab474568dd706c430")
         .arg("-p")
@@ -132,7 +132,7 @@ fn test_commit_some_changes() {
     let branch_ref = branch_ref.trim();
     let ref_path = path.to_owned() + "/.git/" + branch_ref;
     let commit_hash = fs::read_to_string(ref_path).unwrap();
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg(commit_hash)
         .arg("-p")
@@ -141,7 +141,7 @@ fn test_commit_some_changes() {
         .unwrap();
     let output = String::from_utf8(result.stdout).unwrap();
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg("4b86ab26030de52e745b22cbf82d372500708089")
         .arg("-p")
@@ -154,7 +154,7 @@ fn test_commit_some_changes() {
         "040000 tree 761f3460563f71d56a3509a761d9c531423c52b8    dir\n"
     );
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg("761f3460563f71d56a3509a761d9c531423c52b8")
         .arg("-p")
@@ -191,7 +191,7 @@ fn test_flag_all() {
     let path = "./tests/data/commands/commit/repo4";
     create_test_scene_2(path.clone());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("add")
         .arg("dir/testfile1.txt")
         .current_dir(path)
@@ -199,7 +199,7 @@ fn test_flag_all() {
         .unwrap();
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("commit")
         .arg("-m")
         .arg("message")
@@ -209,7 +209,7 @@ fn test_flag_all() {
 
     assert!(result.status.success());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg("30d74d258442c7c65512eafab474568dd706c430")
         .arg("-p")
@@ -221,7 +221,7 @@ fn test_flag_all() {
 
     change_dir_testfile1_content(path);
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("hash-object")
         .arg("dir/testfile1.txt")
         .current_dir(path)
@@ -230,7 +230,7 @@ fn test_flag_all() {
 
     let testfile1_hash = String::from_utf8(result.stdout).unwrap();
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("commit")
         .arg("-m")
         .arg("message")
@@ -241,7 +241,7 @@ fn test_flag_all() {
 
     assert!(result.status.success());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg(testfile1_hash.trim())
         .arg("-p")
@@ -256,7 +256,7 @@ fn test_flag_all() {
     let branch_ref = branch_ref.trim();
     let ref_path = path.to_owned() + "/.git/" + branch_ref;
     let commit_hash = fs::read_to_string(ref_path).unwrap();
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg(commit_hash.clone())
         .arg("-p")
@@ -267,7 +267,7 @@ fn test_flag_all() {
 
     let work_tree_hash = output.lines().next().unwrap().split_once(' ').unwrap().1;
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg(work_tree_hash)
         .arg("-p")
@@ -280,7 +280,7 @@ fn test_flag_all() {
         "040000 tree ed3adf248ce4d5fe5d89ac33798e4c92e3693da9    dir\n"
     );
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg("ed3adf248ce4d5fe5d89ac33798e4c92e3693da9")
         .arg("-p")
@@ -303,7 +303,7 @@ fn test_flag_all_with_deleted_files() {
     let path = "./tests/data/commands/commit/repo3";
     create_test_scene_3(path.clone());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("add")
         .arg("dir/testfile1.txt")
         .arg("dir/testfile2.txt")
@@ -312,7 +312,7 @@ fn test_flag_all_with_deleted_files() {
         .unwrap();
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("commit")
         .arg("-m")
         .arg("message")
@@ -324,7 +324,7 @@ fn test_flag_all_with_deleted_files() {
 
     change_dir_testfile1_content_and_remove_dir_testfile2(path);
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("commit")
         .arg("-m")
         .arg("message")
@@ -335,7 +335,7 @@ fn test_flag_all_with_deleted_files() {
 
     assert!(result.status.success());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("hash-object")
         .arg("dir/testfile1.txt")
         .current_dir(path)
@@ -344,7 +344,7 @@ fn test_flag_all_with_deleted_files() {
 
     let testfile1_hash = String::from_utf8(result.stdout).unwrap();
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg(testfile1_hash.trim())
         .arg("-p")
@@ -359,7 +359,7 @@ fn test_flag_all_with_deleted_files() {
     let branch_ref = branch_ref.trim();
     let ref_path = path.to_owned() + "/.git/" + branch_ref;
     let commit_hash = fs::read_to_string(ref_path).unwrap();
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg(commit_hash)
         .arg("-p")
@@ -369,7 +369,7 @@ fn test_flag_all_with_deleted_files() {
     let output = String::from_utf8(result.stdout).unwrap();
     println!("Output: \n{}", output);
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg("8403dbf1a48258117de1aff300010280ce9d4790")
         .arg("-p")
@@ -381,7 +381,7 @@ fn test_flag_all_with_deleted_files() {
         "040000 tree ed3adf248ce4d5fe5d89ac33798e4c92e3693da9    dir\n"
     );
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg("ed3adf248ce4d5fe5d89ac33798e4c92e3693da9")
         .arg("-p")
@@ -403,7 +403,7 @@ fn test_reuse_message() {
     let path = "./tests/data/commands/commit/repo6";
     create_test_scene_2(path.clone());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("add")
         .arg("dir/testfile1.txt")
         .current_dir(path)
@@ -411,7 +411,7 @@ fn test_reuse_message() {
         .unwrap();
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("hash-object")
         .arg("dir/testfile1.txt")
         .current_dir(path)
@@ -420,7 +420,7 @@ fn test_reuse_message() {
 
     let hash1 = String::from_utf8(result.stdout).unwrap();
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("commit")
         .arg("-m")
         .arg("message")
@@ -435,7 +435,7 @@ fn test_reuse_message() {
     let branch_ref = branch_ref.trim();
     let ref_path = path.to_owned() + "/.git/" + branch_ref;
     let commit_hash = fs::read_to_string(ref_path).unwrap();
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg(commit_hash.clone())
         .arg("-p")
@@ -452,7 +452,7 @@ fn test_reuse_message() {
 
     change_dir_testfile1_content(path);
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("add")
         .arg("dir/testfile1.txt")
         .current_dir(path)
@@ -460,7 +460,7 @@ fn test_reuse_message() {
         .unwrap();
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("hash-object")
         .arg("dir/testfile1.txt")
         .current_dir(path)
@@ -469,7 +469,7 @@ fn test_reuse_message() {
 
     let hash2 = String::from_utf8(result.stdout).unwrap();
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("commit")
         .arg("-C")
         .arg(commit_hash)
@@ -484,7 +484,7 @@ fn test_reuse_message() {
     let branch_ref = branch_ref.trim();
     let ref_path = path.to_owned() + "/.git/" + branch_ref;
     let commit_hash = fs::read_to_string(ref_path).unwrap();
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg(commit_hash)
         .arg("-p")
@@ -509,7 +509,7 @@ fn test_commit_paths() {
     let path = "./tests/data/commands/commit/repo7";
     create_test_scene_3(path.clone());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("add")
         .arg("dir/testfile1.txt")
         .arg("dir/testfile2.txt")
@@ -518,7 +518,7 @@ fn test_commit_paths() {
         .unwrap();
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("commit")
         .arg("-m")
         .arg("message")
@@ -528,7 +528,7 @@ fn test_commit_paths() {
 
     assert!(result.status.success());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("hash-object")
         .arg("dir/testfile2.txt")
         .current_dir(path)
@@ -542,7 +542,7 @@ fn test_commit_paths() {
     let branch_ref = branch_ref.trim();
     let ref_path = path.to_owned() + "/.git/" + branch_ref;
     let commit_hash = fs::read_to_string(ref_path).unwrap();
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg(commit_hash.clone())
         .arg("-p")
@@ -557,7 +557,7 @@ fn test_commit_paths() {
     let tree_hash: Vec<&str> = tree_hash.split(" ").collect();
     println!("Tree hash: \n {}", tree_hash[1].trim());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg(tree_hash[1].trim())
         .arg("-p")
@@ -567,7 +567,7 @@ fn test_commit_paths() {
     let output = String::from_utf8(result.stdout).unwrap();
     println!("Output: \n {}", output);
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg("d939d691de20dfedb6f26862d09aec381eb564cd")
         .arg("-p")
@@ -579,7 +579,7 @@ fn test_commit_paths() {
 
     change_dir_testfile1_content_and_remove_dir_testfile2(path);
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("commit")
         .arg("-m")
         .arg("message")
@@ -590,7 +590,7 @@ fn test_commit_paths() {
 
     assert!(result.status.success());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("hash-object")
         .arg("dir/testfile1.txt")
         .current_dir(path)
@@ -604,7 +604,7 @@ fn test_commit_paths() {
     let branch_ref = branch_ref.trim();
     let ref_path = path.to_owned() + "/.git/" + branch_ref;
     let commit_hash = fs::read_to_string(ref_path).unwrap();
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg(commit_hash.clone())
         .arg("-p")
@@ -614,7 +614,7 @@ fn test_commit_paths() {
     let output = String::from_utf8(result.stdout).unwrap();
     println!("Output: \n {}", output);
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg("f10179baba8f747e1ebd03285670677fbcad7249")
         .arg("-p")
@@ -627,7 +627,7 @@ fn test_commit_paths() {
         "040000 tree b97187ddd9b15b87e689b9e6eb5358db7951b9a2    dir\n"
     );
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg("b97187ddd9b15b87e689b9e6eb5358db7951b9a2")
         .arg("-p")
@@ -653,7 +653,7 @@ fn test_commit_paths_fails() {
     let path = "./tests/data/commands/commit/repo8";
     create_test_scene_3(path.clone());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("add")
         .arg("dir/testfile1.txt")
         .arg("dir/testfile2.txt")
@@ -662,7 +662,7 @@ fn test_commit_paths_fails() {
         .unwrap();
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("commit")
         .arg("-m")
         .arg("message")
@@ -674,7 +674,7 @@ fn test_commit_paths_fails() {
 
     change_dir_testfile1_content_and_remove_dir_testfile2(path);
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("commit")
         .arg("-m")
         .arg("message")

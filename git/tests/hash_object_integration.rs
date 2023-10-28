@@ -16,7 +16,7 @@ fn test_hash_object_integration() {
         .status()
         .is_ok());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("hash-object")
         .arg("../testfile.txt")
         .arg("-w")

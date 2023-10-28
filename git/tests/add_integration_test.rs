@@ -7,7 +7,7 @@ fn test_single_file() {
     let path = "./tests/data/commands/add/repo1";
     create_test_scene_1(path.clone());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("add")
         .arg("testfile.txt")
         .current_dir(path)
@@ -15,7 +15,7 @@ fn test_single_file() {
         .unwrap();
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg("-p")
         .arg("30d74d258442c7c65512eafab474568dd706c430")
@@ -44,7 +44,7 @@ fn test_single_file_in_root() {
     let path = "./tests/data/commands/add/repo2";
     create_test_scene_1(path.clone());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("add")
         .arg(".")
         .current_dir(path)
@@ -52,7 +52,7 @@ fn test_single_file_in_root() {
         .unwrap();
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg("30d74d258442c7c65512eafab474568dd706c430")
         .arg("-p")
@@ -81,7 +81,7 @@ fn test_two_files_in_dir() {
     let path = "./tests/data/commands/add/repo3";
     create_test_scene_2(path.clone());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("add")
         .arg(".")
         .current_dir(path)
@@ -89,7 +89,7 @@ fn test_two_files_in_dir() {
         .unwrap();
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg("30d74d258442c7c65512eafab474568dd706c430")
         .arg("-p")
@@ -123,7 +123,7 @@ fn test_two_files_sep_arguments() {
     let path = "./tests/data/commands/add/repo4";
     create_test_scene_2(path.clone());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("add")
         .arg("dir/testfile1.txt")
         .arg("dir/testfile2.txt")
@@ -132,7 +132,7 @@ fn test_two_files_sep_arguments() {
         .unwrap();
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg("30d74d258442c7c65512eafab474568dd706c430")
         .arg("-p")
@@ -167,7 +167,7 @@ fn test_invalid_file() {
     let path = "./tests/data/commands/add/repo5";
     create_test_scene_2(path.clone());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("add")
         .arg("dir/testfile1.txt")
         .arg("dir/testfile.txt")
@@ -175,14 +175,14 @@ fn test_invalid_file() {
         .output()
         .unwrap();
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("hash-object")
         .arg("dir/testfile1.txt")
         .current_dir(path)
         .output()
         .unwrap();
     println!("{}", String::from_utf8(result.stdout).unwrap());
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("hash-object")
         .arg("dir/testfile.txt")
         .current_dir(path)
@@ -190,7 +190,7 @@ fn test_invalid_file() {
         .unwrap();
     println!("{}", String::from_utf8(result.stdout).unwrap());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg("30d74d258442c7c65512eafab474568dd706c430")
         .arg("-p")
