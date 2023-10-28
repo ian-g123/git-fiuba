@@ -4,8 +4,13 @@ use crate::{
 };
 
 use super::{
-    author::Author, aux::get_sha1, blob::Blob, commit_object::CommitObject, mode::Mode,
-    super_string::u8_vec_to_hex_string, tree::Tree,
+    author::Author,
+    aux::get_sha1,
+    blob::Blob,
+    commit_object::{read_from, CommitObject},
+    mode::Mode,
+    super_string::u8_vec_to_hex_string,
+    tree::Tree,
 };
 use std::{
     fmt,
@@ -169,7 +174,7 @@ pub fn read_git_object_from(
         return Tree::read_from(stream, len, path, hash_str, logger);
     };
     if type_str == "commit" {
-        return CommitObject::read_from(stream, logger);
+        return Ok(read_from(stream, logger)?);
     };
 
     Err(CommandError::ObjectTypeError)

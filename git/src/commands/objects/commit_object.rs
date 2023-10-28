@@ -1,13 +1,17 @@
-use std::fmt;
-use std::io::{Cursor, Read, Seek, SeekFrom, Write};
+use std::{
+    fmt,
+    io::{Cursor, Read, Seek, SeekFrom, Write},
+};
 
-use super::aux::get_sha1;
-use super::git_object::{GitObject, GitObjectTrait};
-use super::super_integers::{read_i32_from, read_i64_from, read_u32_from, SuperIntegers};
-use super::super_string::{read_string_from, u8_vec_to_hex_string, SuperStrings};
-use super::{author::Author, tree::Tree};
-use crate::commands::command_errors::CommandError;
-use crate::logger::Logger;
+use super::{
+    author::Author,
+    aux::get_sha1,
+    git_object::{GitObject, GitObjectTrait},
+    super_integers::{read_i32_from, read_i64_from, read_u32_from, SuperIntegers},
+    super_string::{read_string_from, u8_vec_to_hex_string, SuperStrings},
+    tree::Tree,
+};
+use crate::{commands::command_errors::CommandError, logger::Logger};
 
 extern crate chrono;
 use chrono::{prelude::*, DateTime};
@@ -50,23 +54,8 @@ impl CommitObject {
         self.tree.clone()
     }
 
-    /// Crea un Commit a partir de la infromación leída del stream.
-    pub fn read_from(
-        stream: &mut dyn Read,
-        logger: &mut Logger,
-    ) -> Result<GitObject, CommandError> {
-        let (tree_hash, parents, author, author_timestamp, author_offset, committer, _, _, message) =
-            read_commit_info_from(stream, logger)?;
-        logger.log("commit created");
-        Ok(Box::new(Self {
-            tree: tree_hash,
-            parents,
-            author,
-            committer,
-            message,
-            timestamp: author_timestamp,
-            offset: author_offset,
-        }))
+    pub fn get_parents(&self) -> Vec<String> {
+        self.parents.clone()
     }
 
     /// Muestra la información del Commit, escribiéndola en el stream pasado.
@@ -291,6 +280,40 @@ fn get_date(line: &mut Vec<&str>) -> Result<DateTime<Local>, CommandError> {
         utc_datetime,
         offset,
     ))
+}
+
+/// Crea un Commit a partir de la infromación leída del stream.
+pub fn read_from(stream: &mut dyn Read, logger: &mut Logger) -> Result<GitObject, CommandError> {
+    let (tree_hash, parents, author, author_timestamp, author_offset, committer, _, _, message) =
+        read_commit_info_from(stream, logger)?;
+    logger.log("commit created");
+    Ok(Box::new(CommitObject {
+        tree: tree_hash,
+        parents,
+        author,
+        committer,
+        message,
+        timestamp: author_timestamp,
+        offset: author_offset,
+    }))
+}
+
+pub fn read_from_for_log(
+    stream: &mut dyn Read,
+    logger: &mut Logger,
+) -> Result<CommitObject, CommandError> {
+    let (tree_hash, parents, author, author_timestamp, author_offset, committer, _, _, message) =
+        read_commit_info_from(stream, logger)?;
+    logger.log("commit created");
+    Ok(CommitObject {
+        tree: tree_hash,
+        parents,
+        author,
+        committer,
+        message,
+        timestamp: author_timestamp,
+        offset: author_offset,
+    })
 }
 
 #[cfg(test)]

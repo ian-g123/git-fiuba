@@ -102,14 +102,6 @@ impl CatFile {
     }
 
     fn run(&self, output: &mut dyn Write, logger: &mut Logger) -> Result<(), CommandError> {
-        self.show_in_output_bis(output, logger)
-    }
-
-    fn show_in_output_bis(
-        &self,
-        output: &mut dyn Write,
-        logger: &mut Logger,
-    ) -> Result<(), CommandError> {
         if self.exists {
             if self.pretty || self.size || self.type_object {
                 return Err(CommandError::InvalidArguments);
