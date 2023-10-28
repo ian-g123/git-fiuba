@@ -1,8 +1,8 @@
 use std::{
     collections::HashMap,
     fs::{self, File, OpenOptions},
-    io::Read,
     io::Write,
+    io::{Cursor, Read},
     path::{Path, PathBuf},
 };
 
@@ -16,6 +16,7 @@ use git_lib::{
     branch_manager::get_last_commit,
     command_errors::CommandError,
     config::Config,
+    git_repository::GitRepository,
     logger::Logger,
     objects::{
         author::Author,
@@ -263,7 +264,11 @@ impl Commit {
 
             for path in self.files.iter() {
                 if !is_untracked(path, logger, &files)? {
-                    add::run_for_file(path, staging_area, logger)?;
+                    let inner = Vec::new(); // Me obligan a entregar un output
+                    let mut cursor = Cursor::new(inner);
+                    let mut repo = GitRepository::open("", &mut cursor)?;
+                    repo.add_file(path, staging_area)?;
+                    // add::run_for_file(path, staging_area, logger)?;
                 } else {
                     return Err(CommandError::UntrackedError(path.to_owned()));
                 }

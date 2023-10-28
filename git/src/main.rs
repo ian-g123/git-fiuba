@@ -53,26 +53,3 @@ fn run(
     }
     Err(CommandError::Name)
 }
-
-// fn parse_args(args: &[String]) -> Result<(&str, &[String]), ErrorFlags> {
-//     if args.len() == 1 {
-//         return Err(ErrorFlags::ArgsNumber);
-//     }
-//     let command = &args[1];
-//     let command_args = args.split_at(2).1;
-
-//     Ok((command, command_args))
-// }
-
-// fn ejecutar(command_name: &str, command_args: &[String]) -> Result<(), ErrorFlags> {
-//     let commands = [HashObject::run];
-
-//     for command in &commands {
-//         match command(command_name, command_args) {
-//             Ok(()) => return Ok(()),
-//             Err(ErrorFlags::CommandName) => {}
-//             Err(error) => return Err(error),
-//         }
-//     }
-//     Err(ErrorFlags::ArgsNumber)
-// }

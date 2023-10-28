@@ -1,5 +1,5 @@
 use std::{
-    fs::{self, File},
+    fs::{self, DirEntry, File, ReadDir},
     io::Write,
     path::Path,
 };
@@ -9,8 +9,12 @@ use chrono::format;
 use crate::{
     command_errors::CommandError,
     logger::Logger,
-    objects::{git_object::GitObject, super_string::u8_vec_to_hex_string},
+    objects::{
+        blob::Blob, git_object::GitObject, last_commit::get_commit_tree,
+        super_string::u8_vec_to_hex_string, tree::Tree,
+    },
     objects_database,
+    staging_area::StagingArea,
 };
 
 pub struct GitRepository<'a> {
@@ -132,5 +136,120 @@ impl<'a> GitRepository<'a> {
         let _ = writeln!(self.output, "{}", hex_string);
 
         Ok(())
+    }
+
+    pub fn add(&mut self, pathspecs: Vec<String>) -> Result<(), CommandError> {
+        let last_commit = &get_commit_tree(&mut self.logger)?;
+        let mut staging_area = StagingArea::open()?;
+        let mut pathspecs_clone: Vec<String> = pathspecs.clone();
+        let mut position = 0;
+        for pathspec in &pathspecs {
+            if !Path::new(pathspec).exists() {
+                if !self.is_in_last_commit(pathspec, last_commit) {
+                    return Err(CommandError::FileOpenError(format!(
+                        "No existe el archivo o directorio: {:?}",
+                        pathspec
+                    )));
+                }
+                staging_area.remove(pathspec);
+                pathspecs_clone.remove(position);
+                continue;
+            }
+            position += 1;
+        }
+
+        for pathspec in pathspecs_clone.iter() {
+            self.add_path(pathspec, &mut staging_area)?
+        }
+        staging_area.save()?;
+        Ok(())
+    }
+
+    fn add_path(&mut self, path: &str, staging_area: &mut StagingArea) -> Result<(), CommandError> {
+        let path = Path::new(path);
+        let path_str = &Self::get_path_str(path)?;
+
+        if path.is_file() {
+            self.add_file(path_str, staging_area)?;
+            return Ok(());
+        } else {
+            self.add_dir(path_str, staging_area)?;
+        }
+        Ok(())
+    }
+    fn add_dir(
+        &mut self,
+        path_str: &String,
+        staging_area: &mut StagingArea,
+    ) -> Result<(), CommandError> {
+        let read_dir = self.read_dir(path_str)?;
+        for entry in read_dir {
+            match entry {
+                Ok(entry) => self.try_run_for_path(entry, staging_area)?,
+                Err(error) => {
+                    self.logger.log(&format!("Error in entry: {:?}", error));
+                    return Err(CommandError::FileOpenError(error.to_string()));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn should_ignore(&self, path_str: &str) -> bool {
+        path_str == "./.git"
+    }
+
+    fn try_run_for_path(
+        &mut self,
+        entry: DirEntry,
+        staging_area: &mut StagingArea,
+    ) -> Result<(), CommandError> {
+        let path = entry.path();
+        let Some(path_str) = path.to_str() else {
+            return Err(CommandError::FileOpenError(
+                "No se pudo convertir el path a str".to_string(),
+            ));
+        };
+        if self.should_ignore(path_str) {
+            return Ok(());
+        }
+        self.logger.log(&format!("entry: {:?}", path_str));
+        self.add_path(path_str, staging_area)?;
+        Ok(())
+    }
+
+    fn read_dir(&self, path_str: &String) -> Result<ReadDir, CommandError> {
+        match fs::read_dir(path_str) {
+            Ok(read_dir) => Ok(read_dir),
+            Err(error) => Err(CommandError::FileOpenError(error.to_string())),
+        }
+    }
+
+    fn get_path_str(path: &Path) -> Result<String, CommandError> {
+        let Some(path_str) = path.to_str() else {
+            return Err(CommandError::FileOpenError(
+                "No se pudo convertir el path a str".to_string(),
+            ));
+        };
+        Ok(path_str.to_string())
+    }
+
+    pub fn add_file(
+        &mut self,
+        path: &str,
+        staging_area: &mut StagingArea,
+    ) -> Result<(), CommandError> {
+        let blob = Blob::new_from_path(path.to_string())?;
+        let mut git_object: GitObject = Box::new(blob);
+        let hex_str = objects_database::write(&mut self.logger, &mut git_object)?;
+        staging_area.add(path, &hex_str);
+        Ok(())
+    }
+
+    fn is_in_last_commit(&mut self, path: &str, commit_tree: &Option<Tree>) -> bool {
+        if let Some(tree) = commit_tree {
+            return tree.has_blob_from_path(path, &mut self.logger);
+        }
+        false
     }
 }
