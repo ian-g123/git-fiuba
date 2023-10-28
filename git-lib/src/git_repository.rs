@@ -4,6 +4,8 @@ use std::{
     path::Path,
 };
 
+use chrono::format;
+
 use crate::{
     command_errors::CommandError,
     logger::Logger,
@@ -19,12 +21,10 @@ pub struct GitRepository<'a> {
 
 impl<'a> GitRepository<'a> {
     pub fn open(path: &str, output: &'a mut dyn Write) -> Result<GitRepository<'a>, CommandError> {
-        // if !Path::new(path).exists() {
-        //     return Err(CommandError::NotGitRepository);
-        // }
-        // let logs_path_buf = Path::new(path).join(&format!("{}.git/logs-2.txt", path));
+        if !Path::new(&format!("{}.git", path)).exists() {
+            return Err(CommandError::NotGitRepository);
+        }
         let logs_path = format!("{}.git/logs-2.txt", path);
-        // let logs_path = logs_path_buf.to_str().unwrap();
         Ok(GitRepository {
             path: path.to_string(),
             logger: Logger::new(&logs_path)?,
