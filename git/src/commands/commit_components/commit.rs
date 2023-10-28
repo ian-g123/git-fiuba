@@ -232,203 +232,31 @@ impl Commit {
             ));
         }
 
+        let mut repo = GitRepository::open("", output)?;
         if !self.files.is_empty() {
-            self.run_files_config(logger, &mut staging_area)?
-        }
-        if self.all {
-            self.run_all_config(&mut staging_area, logger)?;
-        }
-
-        if !staging_area.has_changes(logger)? {
-            logger.log("Nothing to commit");
-            // show status output + no changes added to commit (use "git add" and/or "git commit -a")
-            return Ok(());
-        } else {
-            self.run_commit(logger, message, &mut staging_area)?;
-        }
-
-        Ok(())
-    }
-
-    /// Si se han introducido paths como argumentos del comando, se eliminan los cambios
-    /// guardados en el Staging Area y se agregan los nuevos.\
-    /// Estos archivos deben ser reconocidos por git.
-    fn run_files_config(
-        &self,
-        logger: &mut Logger,
-        staging_area: &mut StagingArea,
-    ) -> Result<(), CommandError> {
-        if !self.files.is_empty() {
-            logger.log("Running pathspec configuration");
-            let files = staging_area.get_files();
-
-            for path in self.files.iter() {
-                if !is_untracked(path, logger, &files)? {
-                    let inner = Vec::new(); // Me obligan a entregar un output
-                    let mut cursor = Cursor::new(inner);
-                    let mut repo = GitRepository::open("", &mut cursor)?;
-                    repo.add_file(path, staging_area)?;
-                    // add::run_for_file(path, staging_area, logger)?;
-                } else {
-                    return Err(CommandError::UntrackedError(path.to_owned()));
-                }
-            }
-            staging_area.save()?;
-        }
-        Ok(())
-    }
-
-    /// Guarda en el staging area todos los archivos modificados y elimina los borrados.\
-    /// Los archivos untracked no se guardan.
-    fn run_all_config(
-        &self,
-        staging_area: &mut StagingArea,
-        logger: &mut Logger,
-    ) -> Result<(), CommandError> {
-        logger.log("Running 'all' configuration\n");
-        let files = &staging_area.get_files();
-        staging_area.empty(logger)?;
-        for (path, _) in staging_area.get_files() {
-            if !Path::new(&path).exists() {
-                staging_area.remove(&path);
-            }
-        }
-        save_entries("./", staging_area, logger, files)?;
-        staging_area.save()?;
-        Ok(())
-    }
-
-    /// Ejecuta la creación del Commit.
-    fn run_commit(
-        &self,
-        logger: &mut Logger,
-        message: String,
-        staging_area: &mut StagingArea,
-    ) -> Result<(), CommandError> {
-        let last_commit_hash = get_last_commit()?;
-
-        let mut parents: Vec<String> = Vec::new();
-        if let Some(padre) = last_commit_hash {
-            parents.push(padre);
-        }
-
-        logger.log("Creating Index tree");
-
-        let mut staged_tree = {
-            if self.files.is_empty() {
-                staging_area.get_working_tree_staged(logger)?
-            } else {
-                staging_area.get_working_tree_staged_bis(logger, self.files.clone())?
-            }
-        };
-
-        logger.log("Index tree created");
-
-        let commit: CommitObject =
-            self.get_commit(&message, parents, staged_tree.to_owned(), logger)?;
-
-        let mut git_object: GitObject = Box::new(commit);
-        write_commit_tree_to_database(&mut staged_tree, logger)?;
-
-        if !self.dry_run {
-            let commit_hash = objects_database::write(logger, &mut git_object)?;
-            logger.log(&format!("Commit object saved in database {}", commit_hash));
-            logger.log(&format!("Updating last commit to {}", commit_hash));
-
-            update_last_commit(&commit_hash)?;
-            logger.log("Last commit updated");
-            // show commit status
-        }
-
-        // if !self.quiet {
-        //     //self.get_commit_output(commit)
-        // }
-
-        Ok(())
-    }
-
-    /// Obtiene el objeto Commit y lo devuelve.
-    fn get_commit(
-        &self,
-        message: &str,
-        parents: Vec<String>,
-        staged_tree: Tree,
-        logger: &mut Logger,
-    ) -> Result<CommitObject, CommandError> {
-        let commit: CommitObject = {
-            if let Some(commit_hash) = &self.reuse_message {
-                Self::get_reused_commit(commit_hash.to_string(), parents, staged_tree, logger)?
-            } else {
-                Self::create_new_commit(message.to_owned(), parents, staged_tree, logger)?
-            }
-        };
-
-        logger.log("Commit object created");
-        Ok(commit)
-    }
-
-    /// Crea un nuevo objeto Commit a partir de la información pasada.
-    fn create_new_commit(
-        message: String,
-        parents: Vec<String>,
-        mut staged_tree: Tree,
-        logger: &mut Logger,
-    ) -> Result<CommitObject, CommandError> {
-        let staged_tree_hash = staged_tree.get_hash_string()?;
-        let config = Config::open()?;
-
-        let Some(author_email) = config.get("user.email") else {
-            return Err(CommandError::UserConfigurationError);
-        };
-        let Some(author_name) = config.get("user.name") else {
-            return Err(CommandError::UserConfigurationError);
-        };
-
-        let author = Author::new(author_name, author_email);
-        let commiter = Author::new(author_name, author_email);
-
-        let datetime: DateTime<Local> = Local::now();
-        let timestamp = datetime.timestamp();
-        let offset = datetime.offset().local_minus_utc() / 60;
-        logger.log(&format!("offset: {}", offset));
-        let commit = CommitObject::new(
-            parents,
-            message,
-            author,
-            commiter,
-            timestamp,
-            offset,
-            staged_tree,
-            None,
-        )?;
-        Ok(commit)
-    }
-
-    /// Crea un objeto Commit a partir de los datos de otro Commit.
-    fn get_reused_commit(
-        commit_hash: String,
-        parents: Vec<String>,
-        staged_tree: Tree,
-        logger: &mut Logger,
-    ) -> Result<CommitObject, CommandError> {
-        let mut other_commit = objects_database::read_object(&commit_hash, logger)?;
-        let hash_commit = other_commit.get_hash()?;
-        if let Some((message, author, committer, timestamp, offset)) =
-            other_commit.get_info_commit()
-        {
-            let commit = CommitObject::new(
-                parents,
+            repo.commit_files(
                 message,
-                author,
-                committer,
-                timestamp,
-                offset,
-                staged_tree,
-                Some(hash_commit),
-            )?;
-            return Ok(commit);
+                &self.files,
+                self.dry_run,
+                self.reuse_message.clone(),
+            )
+            // self.run_files_config(&self.files, logger, &mut staging_area)?
+        } else if self.all {
+            repo.commit_all(
+                message,
+                &self.files,
+                self.dry_run,
+                self.reuse_message.clone(),
+            )
+            // self.run_all_config(&mut staging_area, logger)?;
+        } else {
+            repo.commit(
+                message,
+                &self.files,
+                self.dry_run,
+                self.reuse_message.clone(),
+            )
         }
-        Err(CommandError::CommitLookUp(commit_hash))
     }
 
     /// Obtiene la salida por stdout del comando Commit.
@@ -488,112 +316,6 @@ fn ignore_commented_lines(message: String) -> String {
         .filter(|line| !line.trim_start().starts_with("#"))
         .collect();
     split_message.join("\n")
-}
-
-/// Devuelve true si Git no reconoce el path pasado.
-fn is_untracked(
-    path: &str,
-    logger: &mut Logger,
-    staging_area: &HashMap<String, String>,
-) -> Result<bool, CommandError> {
-    let mut blob = Blob::new_from_path(path.to_string())?;
-    let hash = &blob.get_hash_string()?;
-    let (is_in_last_commit, name) = is_in_last_commit(hash.to_owned(), logger)?;
-    if staging_area.contains_key(path) || (is_in_last_commit && name == get_name(&path)?) {
-        logger.log("Staging area has this path");
-        return Ok(false);
-    }
-    Ok(true)
-}
-
-/// Guarda en el stagin area el estado actual del working tree, sin tener en cuenta los archivos
-/// nuevos.
-fn save_entries(
-    path_name: &str,
-    staging_area: &mut StagingArea,
-    logger: &mut Logger,
-    files: &HashMap<String, String>,
-) -> Result<(), CommandError> {
-    let path = Path::new(path_name);
-
-    let Ok(entries) = fs::read_dir(path.clone()) else {
-        return Err(CommandError::DirNotFound(path_name.to_owned()));
-    };
-    for entry in entries {
-        let Ok(entry) = entry else {
-            return Err(CommandError::DirNotFound(path_name.to_owned()));
-        };
-        let entry_path = entry.path();
-        let entry_name = get_path_str(entry_path.clone())?;
-        if entry_name.contains(".git") {
-            continue;
-        }
-        logger.log(&format!("Saving entry name: {}", entry_name));
-        if entry_path.is_dir() {
-            save_entries(&entry_name, staging_area, logger, files)?;
-            return Ok(());
-        } else {
-            let blob = Blob::new_from_path(entry_name.to_string())?;
-            let path = &entry_name[2..];
-            if !is_untracked(path, logger, files)? {
-                logger.log(&format!("{} is tracked", entry_name));
-                let mut git_object: GitObject = Box::new(blob);
-                let hex_str = objects_database::write(logger, &mut git_object)?;
-                staging_area.add(path, &hex_str);
-            }
-        }
-    }
-    Ok(())
-}
-
-/// Devuelve el nombre de un archivo o directorio dado un PathBuf.
-fn get_path_str(path: PathBuf) -> Result<String, CommandError> {
-    let Some(path_name) = path.to_str() else {
-        return Err(CommandError::DirNotFound("".to_string())); //cambiar
-    };
-    Ok(path_name.to_string())
-}
-
-/// Actualiza la referencia de la rama actual al nuevo commit.
-fn update_last_commit(commit_hash: &str) -> Result<(), CommandError> {
-    let currect_branch = get_head_ref()?;
-    let branch_path = format!(".git/{}", currect_branch);
-    let mut file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .open(branch_path)
-        .map_err(|_| CommandError::FileOpenError(currect_branch.clone()))?;
-    file.write_all(commit_hash.as_bytes()).map_err(|error| {
-        CommandError::FileWriteError(format!(
-            "Error al escribir en archivo {}: {}",
-            currect_branch,
-            error.to_string()
-        ))
-    })?;
-    Ok(())
-}
-
-/// Opens file in .git/HEAD and returns the branch name
-fn get_head_ref() -> Result<String, CommandError> {
-    let Ok(mut head_file) = File::open(".git/HEAD") else {
-        return Err(CommandError::FileOpenError(".git/HEAD".to_string()));
-    };
-    let mut head_content = String::new();
-    head_file
-        .read_to_string(&mut head_content)
-        .map_err(|error| {
-            CommandError::FileReadError(format!(
-                "Error abriendo .git/HEAD: {:?}",
-                error.to_string()
-            ))
-        })?;
-
-    let Some((_, head_ref)) = head_content.split_once(" ") else {
-        return Err(CommandError::FileReadError(
-            "Error leyendo .git/HEAD".to_string(),
-        ));
-    };
-    Ok(head_ref.trim().to_string())
 }
 
 #[cfg(test)]

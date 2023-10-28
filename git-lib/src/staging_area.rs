@@ -116,15 +116,15 @@ impl StagingArea {
         false
     }
 
-    pub fn empty(&mut self, logger: &mut Logger) -> Result<(), CommandError> {
+    pub fn remove_changes(&mut self, logger: &mut Logger) -> Result<(), CommandError> {
         let mut files = self.files.clone();
 
         let tree_commit = build_last_commit_tree(logger)?;
 
         if let Some(mut tree) = tree_commit {
             for (path, hash) in self.files.iter() {
-                let (is_in_last_commit, _) = tree.has_blob_from_hash(hash, logger)?;
-                if !is_in_last_commit {
+                let (is_in_last_commit, name) = tree.has_blob_from_hash(hash, logger)?;
+                if !is_in_last_commit || (name != get_name(&path)?) {
                     logger.log(&format!("Eliminando del staging area: {}", path));
                     files.remove(path);
                 }
