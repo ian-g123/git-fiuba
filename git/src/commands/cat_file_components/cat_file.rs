@@ -1,5 +1,8 @@
 use crate::commands::command::Command;
-use git_lib::{command_errors::CommandError, logger::Logger, objects::git_object};
+use git_lib::{
+    command_errors::CommandError, git_repository::GitRepository, logger::Logger,
+    objects::git_object,
+};
 
 use std::{
     io::{Read, Write},
@@ -46,7 +49,7 @@ impl Command for CatFile {
 
         let mut cat_file = CatFile::new_default()?;
         cat_file.config(args)?;
-        cat_file.run(output, logger)
+        cat_file.run(output)
     }
 
     fn config_adders(&self) -> Vec<fn(&mut Self, usize, &[String]) -> Result<usize, CommandError>> {
@@ -95,36 +98,31 @@ impl CatFile {
         Ok(i + 1)
     }
 
-    fn run(&self, output: &mut dyn Write, logger: &mut Logger) -> Result<(), CommandError> {
-        self.show_in_output_bis(output, logger)
-    }
+    fn run(&self, output: &mut dyn Write) -> Result<(), CommandError> {
+        {
+            let mut repo = GitRepository::open("", output)?;
+            if self.exists {
+                if self.pretty || self.size || self.type_object {
+                    return Err(CommandError::InvalidArguments);
+                }
+            } else if self.type_object {
+                if self.pretty || self.size {
+                    return Err(CommandError::InvalidArguments);
+                } else {
+                    repo.display_type_from_hash(&self.hash)?;
+                }
+            } else if self.size {
+                if self.pretty {
+                    return Err(CommandError::InvalidArguments);
+                } else {
+                    repo.display_size_from_hash(&self.hash)?;
+                }
+            } else if self.pretty {
+                repo.display_from_hash(&self.hash)?;
+            }
 
-    fn show_in_output_bis(
-        &self,
-        output: &mut dyn Write,
-        logger: &mut Logger,
-    ) -> Result<(), CommandError> {
-        if self.exists {
-            if self.pretty || self.size || self.type_object {
-                return Err(CommandError::InvalidArguments);
-            }
-        } else if self.type_object {
-            if self.pretty || self.size {
-                return Err(CommandError::InvalidArguments);
-            } else {
-                git_object::display_type_from_hash(output, &self.hash, logger)?;
-            }
-        } else if self.size {
-            if self.pretty {
-                return Err(CommandError::InvalidArguments);
-            } else {
-                git_object::display_size_from_hash(output, &self.hash, logger)?;
-            }
-        } else if self.pretty {
-            git_object::display_from_hash(output, &self.hash, logger)?;
+            Ok(())
         }
-
-        Ok(())
     }
 }
 

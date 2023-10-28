@@ -10,8 +10,11 @@ use crate::{
     command_errors::CommandError,
     logger::Logger,
     objects::{
-        blob::Blob, git_object::GitObject, last_commit::get_commit_tree,
-        super_string::u8_vec_to_hex_string, tree::Tree,
+        blob::Blob,
+        git_object::{self, GitObject},
+        last_commit::get_commit_tree,
+        super_string::u8_vec_to_hex_string,
+        tree::Tree,
     },
     objects_database,
     staging_area::StagingArea,
@@ -251,5 +254,17 @@ impl<'a> GitRepository<'a> {
             return tree.has_blob_from_path(path, &mut self.logger);
         }
         false
+    }
+
+    pub fn display_type_from_hash(&mut self, hash: &str) -> Result<(), CommandError> {
+        git_object::display_type_from_hash(self.output, hash, &mut self.logger)
+    }
+
+    pub fn display_size_from_hash(&mut self, hash: &str) -> Result<(), CommandError> {
+        git_object::display_size_from_hash(self.output, hash, &mut self.logger)
+    }
+
+    pub fn display_from_hash(&mut self, hash: &str) -> Result<(), CommandError> {
+        git_object::display_from_hash(self.output, hash, &mut self.logger)
     }
 }
