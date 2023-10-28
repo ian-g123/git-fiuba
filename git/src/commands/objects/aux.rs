@@ -1,7 +1,7 @@
 use std::{fs::File, io::Read};
 
 extern crate sha1;
-use crate::commands::command_errors::CommandError;
+use git_lib::command_errors::CommandError;
 use sha1::{Digest, Sha1};
 
 use super::super_string::u8_vec_to_hex_string;

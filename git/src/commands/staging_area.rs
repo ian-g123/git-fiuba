@@ -5,10 +5,7 @@ use std::{
 
 use chrono::format;
 
-use crate::logger::Logger;
-
 use super::{
-    command_errors::CommandError,
     objects::{
         aux::get_name,
         git_object::{GitObject, GitObjectTrait},
@@ -17,6 +14,8 @@ use super::{
     },
     objects_database,
 };
+use crate::logger::Logger;
+use git_lib::command_errors::CommandError;
 
 #[derive(Debug)]
 pub struct StagingArea {

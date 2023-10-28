@@ -1,11 +1,8 @@
+use crate::commands::objects::{aux::get_name, blob::Blob, tree::Tree};
+use git_lib::command_errors::CommandError;
 use std::{
     fs,
     path::{Path, PathBuf},
-};
-
-use crate::commands::{
-    command_errors::CommandError,
-    objects::{aux::get_name, blob::Blob, tree::Tree},
 };
 
 // build working tree

@@ -1,13 +1,5 @@
-use std::{
-    collections::HashMap,
-    fs::{self, File},
-    io::Read,
-    path::{Path, PathBuf},
-};
-
 use crate::{
     commands::{
-        command_errors::CommandError,
         objects::{
             aux::get_name,
             git_object::GitObject,
@@ -17,6 +9,13 @@ use crate::{
         staging_area::StagingArea,
     },
     logger::Logger,
+};
+use git_lib::command_errors::CommandError;
+use std::{
+    collections::HashMap,
+    fs::{self, File},
+    io::Read,
+    path::{Path, PathBuf},
 };
 
 use super::{

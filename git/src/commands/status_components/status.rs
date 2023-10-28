@@ -7,11 +7,11 @@ use crate::commands::branch_manager::get_current_branch;
 use crate::commands::branch_manager::get_current_branch_name;
 use crate::commands::command::Command;
 use crate::commands::command::ConfigAdderFunction;
-use crate::commands::command_errors::CommandError;
 use crate::commands::status_components::format::Format;
 use crate::commands::status_components::long_format::LongFormat;
 use crate::commands::status_components::short_format::ShortFormat;
 use crate::logger::Logger;
+use git_lib::command_errors::CommandError;
 
 pub struct Status {
     short: bool,

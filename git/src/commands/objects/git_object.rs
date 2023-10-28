@@ -1,7 +1,5 @@
-use crate::{
-    commands::{command_errors::CommandError, objects_database},
-    logger::Logger,
-};
+use crate::{commands::objects_database, logger::Logger};
+use git_lib::command_errors::CommandError;
 
 use super::{
     author::Author, aux::get_sha1, blob::Blob, commit_object::CommitObject, mode::Mode,

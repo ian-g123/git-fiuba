@@ -3,10 +3,10 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::{env, str};
 
+use git_lib::command_errors::CommandError;
 use git_lib::git_repository::GitRepository;
 
 use crate::commands::command::{Command, ConfigAdderFunction};
-use crate::commands::command_errors::CommandError;
 use crate::logger::Logger;
 
 /// Commando init
@@ -114,8 +114,7 @@ impl Init {
 
     fn run(&self, output: &mut dyn Write) -> Result<(), CommandError> {
         for path in &self.paths {
-            // self.run_for_content(path, output)?;
-            GitRepository::init(path, &self.branch_main, self.bare, output);
+            GitRepository::init(path, &self.branch_main, self.bare, output)?;
         }
         Ok(())
     }

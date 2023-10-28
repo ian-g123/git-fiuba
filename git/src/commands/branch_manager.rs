@@ -1,6 +1,5 @@
+use git_lib::command_errors::CommandError;
 use std::{fs::File, io::Read};
-
-use super::command_errors::CommandError;
 
 /// Obtiene la ruta de la rama actual.
 pub fn get_current_branch() -> Result<String, CommandError> {

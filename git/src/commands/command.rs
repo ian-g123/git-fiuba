@@ -1,6 +1,5 @@
 use crate::logger::Logger;
-
-use super::command_errors::CommandError;
+use git_lib::command_errors::CommandError;
 use std::io::{Read, Write};
 
 /// Función que agrega un valor a partir de los argumentos

@@ -7,9 +7,9 @@ use super::git_object::{GitObject, GitObjectTrait};
 use super::super_integers::{read_i32_from, read_i64_from, read_u32_from, SuperIntegers};
 use super::super_string::{u8_vec_to_hex_string, SuperStrings};
 use super::{author::Author, tree::Tree};
-use crate::commands::command_errors::CommandError;
 use crate::commands::objects_database;
 use crate::logger::Logger;
+use git_lib::command_errors::CommandError;
 
 extern crate chrono;
 use chrono::{prelude::*, DateTime};

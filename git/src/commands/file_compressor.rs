@@ -1,7 +1,6 @@
+use git_lib::command_errors::CommandError;
 use libflate::deflate::{Decoder, Encoder};
 use std::io::{Read, Write};
-
-use super::command_errors::CommandError;
 
 /// Comprime un vector de bytes
 pub fn compress(data: &[u8]) -> Result<Vec<u8>, CommandError> {

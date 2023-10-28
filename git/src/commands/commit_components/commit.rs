@@ -13,7 +13,6 @@ use crate::{
         add_components::add::{self},
         branch_manager::get_last_commit,
         command::{Command, ConfigAdderFunction},
-        command_errors::CommandError,
         config::Config,
         objects::{
             author::Author,
@@ -29,6 +28,7 @@ use crate::{
     },
     logger::Logger,
 };
+use git_lib::command_errors::CommandError;
 
 /// Hace referencia a un Comando Commit.
 pub struct Commit {

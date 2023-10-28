@@ -6,7 +6,7 @@ use std::{
     thread,
 };
 
-use crate::commands::command_errors::CommandError;
+use git_lib::command_errors::CommandError;
 
 pub struct Logger {
     logs_sender: Option<Sender<String>>,

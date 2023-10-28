@@ -1,11 +1,11 @@
 use crate::{
     commands::{
         command::Command,
-        command_errors::CommandError,
         objects::git_object::{self},
     },
     logger::Logger,
 };
+use git_lib::command_errors::CommandError;
 
 use std::{
     io::{Read, Write},

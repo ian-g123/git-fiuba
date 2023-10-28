@@ -1,19 +1,18 @@
-use std::{
-    env,
-    fs::{self, DirEntry, ReadDir},
-    io::{Read, Write},
-    path::{Path, PathBuf},
-};
-
 use crate::{
     commands::{
         command::{Command, ConfigAdderFunction},
-        command_errors::CommandError,
         objects::{blob::Blob, git_object::GitObject, last_commit::get_commit_tree, tree::Tree},
         objects_database,
         staging_area::StagingArea,
     },
     logger::Logger,
+};
+use git_lib::command_errors::CommandError;
+use std::{
+    env,
+    fs::{self, DirEntry, ReadDir},
+    io::{Read, Write},
+    path::{Path, PathBuf},
 };
 
 /// Commando Add

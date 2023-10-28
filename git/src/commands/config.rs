@@ -1,6 +1,5 @@
+use git_lib::command_errors::CommandError;
 use std::collections::HashMap;
-
-use super::command_errors::CommandError;
 
 pub struct Config {
     entries: HashMap<String, String>,

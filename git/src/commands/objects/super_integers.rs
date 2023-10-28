@@ -1,6 +1,6 @@
 use std::io::{Read, Write};
 
-use crate::commands::command_errors::CommandError;
+use git_lib::command_errors::CommandError;
 
 /// Incluye funciones relacionadas a Integers.
 pub trait SuperIntegers {

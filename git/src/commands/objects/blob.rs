@@ -4,7 +4,8 @@ use std::{
     io::{Cursor, Read, Write},
 };
 
-use crate::{commands::command_errors::CommandError, logger::Logger};
+use crate::logger::Logger;
+use git_lib::command_errors::CommandError;
 
 use super::{
     author::Author,
