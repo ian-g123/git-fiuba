@@ -13,10 +13,3 @@ hex = "0.4.3"
 flate2 = "1.0.20"
 git-lib = { path = "../git-lib" }
 
-[[bin]]
-name = "git"
-path = "src/main.rs"
-
-[[bin]]
-name = "deflate_tree"
-path = "src/commands/deflate_tree.rs"

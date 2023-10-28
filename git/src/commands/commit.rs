@@ -1,35 +1,7 @@
-use std::{
-    collections::HashMap,
-    fs::{self, File, OpenOptions},
-    io::Write,
-    io::{Cursor, Read},
-    path::{Path, PathBuf},
-};
+use std::{io::Read, io::Write};
 
-use chrono::{DateTime, Local};
-
-use crate::commands::{
-    add_components::add::{self},
-    command::{Command, ConfigAdderFunction},
-};
-use git_lib::{
-    branch_manager::get_last_commit,
-    command_errors::CommandError,
-    config::Config,
-    git_repository::GitRepository,
-    logger::Logger,
-    objects::{
-        author::Author,
-        aux::get_name,
-        blob::Blob,
-        commit_object::{write_commit_tree_to_database, CommitObject},
-        git_object::{GitObject, GitObjectTrait},
-        last_commit::is_in_last_commit,
-        tree::Tree,
-    },
-    objects_database,
-    staging_area::StagingArea,
-};
+use crate::commands::command::{Command, ConfigAdderFunction};
+use git_lib::{command_errors::CommandError, git_repository::GitRepository, logger::Logger};
 
 /// Hace referencia a un Comando Commit.
 pub struct Commit {
@@ -56,7 +28,7 @@ impl Command for Commit {
 
         let instance = Commit::new_from(args)?;
 
-        instance.run(stdin, output, logger)?;
+        instance.run(stdin, output)?;
 
         Ok(())
     }
@@ -209,22 +181,12 @@ impl Commit {
     }
 
     /// Ejecuta el Comando Commit.
-    fn run(
-        &self,
-        stdin: &mut dyn Read,
-        output: &mut dyn Write,
-        logger: &mut Logger,
-    ) -> Result<(), CommandError> {
+    fn run(&self, stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), CommandError> {
         if self.message.is_some() && self.reuse_message.is_some() {
             return Err(CommandError::MessageAndReuseError);
         }
-        logger.log("Retreiving message");
 
         let message = self.get_commit_message(stdin)?;
-        logger.log("Opening stagin_area");
-
-        let mut staging_area = StagingArea::open()?;
-        logger.log("Staging area opened");
 
         if !self.files.is_empty() && self.all {
             return Err(CommandError::AllAndFilesFlagsCombination(
@@ -240,7 +202,6 @@ impl Commit {
                 self.dry_run,
                 self.reuse_message.clone(),
             )
-            // self.run_files_config(&self.files, logger, &mut staging_area)?
         } else if self.all {
             repo.commit_all(
                 message,
@@ -248,7 +209,6 @@ impl Commit {
                 self.dry_run,
                 self.reuse_message.clone(),
             )
-            // self.run_all_config(&mut staging_area, logger)?;
         } else {
             repo.commit(
                 message,
@@ -260,7 +220,7 @@ impl Commit {
     }
 
     /// Obtiene la salida por stdout del comando Commit.
-    fn get_status_output(&self, output: &mut dyn Write) -> Result<(), CommandError> {
+    fn _get_status_output(&self, _output: &mut dyn Write) -> Result<(), CommandError> {
         /*
         si el staging area está vacía, se usa el output de status.
          */

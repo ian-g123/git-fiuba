@@ -1,8 +1,5 @@
 use crate::commands::command::Command;
-use git_lib::{
-    command_errors::CommandError, git_repository::GitRepository, logger::Logger,
-    objects::git_object,
-};
+use git_lib::{command_errors::CommandError, git_repository::GitRepository, logger::Logger};
 
 use std::{
     io::{Read, Write},

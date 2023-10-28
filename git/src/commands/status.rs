@@ -4,8 +4,6 @@ use std::str;
 use std::vec;
 
 use crate::commands::command::Command;
-use crate::commands::command::ConfigAdderFunction;
-use git_lib::branch_manager::get_current_branch_name;
 use git_lib::command_errors::CommandError;
 use git_lib::git_repository::GitRepository;
 use git_lib::logger::Logger;
@@ -26,9 +24,9 @@ impl Command for Status {
             return Err(CommandError::Name);
         }
 
-        let instance = Self::new(args, output)?;
+        let instance = Self::new(args)?;
         logger.log(&format!("status args: {:?}", args));
-        instance.run(output, logger)?;
+        instance.run(output)?;
         Ok(())
     }
 
@@ -39,7 +37,7 @@ impl Command for Status {
 
 impl Status {
     /// Crea un comando Status. Devuelve error si el proceso de creación falla.
-    fn new(args: &[String], output: &mut dyn Write) -> Result<Self, CommandError> {
+    fn new(args: &[String]) -> Result<Self, CommandError> {
         if args.len() > 2 {
             //status -s -b (máximo)
             return Err(CommandError::InvalidArguments);
@@ -53,10 +51,6 @@ impl Status {
 
     fn new_default() -> Self {
         Self { short: false }
-    }
-
-    fn config_adders(&self) -> ConfigAdderFunction<Self> {
-        vec![Self::add_short_config]
     }
 
     /// Configura el flag 'short'. Devuelve error si recibe argumentos o es un flag inválido.
@@ -80,7 +74,7 @@ impl Status {
         Ok(())
     }
 
-    fn run(&self, output: &mut dyn Write, logger: &mut Logger) -> Result<(), CommandError> {
+    fn run(&self, output: &mut dyn Write) -> Result<(), CommandError> {
         //let branch = get_current_branch_name()?;
         let mut repo = GitRepository::open("", output)?;
         if self.short {
@@ -172,13 +166,10 @@ mod tests {
     /// implementación de Command.
     #[test]
     fn new_status_fails_flag() {
-        let mut output_string = Vec::new();
-        let mut stdout_mock = io::Cursor::new(&mut output_string);
-
         let args: &[String] = &["-b".to_string(), "-w".to_string()];
 
         assert!(matches!(
-            Status::new(args, &mut stdout_mock,),
+            Status::new(args),
             Err(CommandError::InvalidArguments)
         ));
     }

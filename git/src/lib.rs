@@ -1,11 +1,11 @@
 pub mod commands {
-    pub mod add_components;
-    pub mod cat_file_components;
+    pub mod add;
+    pub mod cat_file;
     pub mod command;
-    pub mod commit_components;
+    pub mod commit;
 
-    pub mod hash_object_components;
-    pub mod init_components;
+    pub mod hash_object;
+    pub mod init;
 
-    pub mod status_components;
+    pub mod status;
 }

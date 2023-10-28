@@ -33,7 +33,7 @@ impl Command for HashObject {
         let instance = Self::new_from(args)?;
 
         logger.log(&format!("hash-object {:?}", args));
-        instance.run(stdin, output, logger)?;
+        instance.run(stdin, output)?;
         Ok(())
     }
 
@@ -125,12 +125,7 @@ impl HashObject {
         Ok(i + 1)
     }
 
-    fn run(
-        &self,
-        stdin: &mut dyn Read,
-        output: &mut dyn Write,
-        logger: &mut Logger,
-    ) -> Result<(), CommandError> {
+    fn run(&self, stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), CommandError> {
         let mut repo = GitRepository::open("", output)?;
         if self.stdin {
             let mut input = String::new();

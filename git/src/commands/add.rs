@@ -1,18 +1,8 @@
 use crate::commands::command::{Command, ConfigAdderFunction};
+use git_lib::command_errors::CommandError;
 use git_lib::git_repository::GitRepository;
 use git_lib::logger::Logger;
-use git_lib::objects::blob::Blob;
-use git_lib::objects::git_object::GitObject;
-use git_lib::objects::last_commit::get_commit_tree;
-use git_lib::staging_area::StagingArea;
-use git_lib::{command_errors::CommandError, objects::tree::Tree};
-use git_lib::{git_repository, objects_database};
-use std::{
-    env,
-    fs::{self, DirEntry, ReadDir},
-    io::{Read, Write},
-    path::{Path, PathBuf},
-};
+use std::io::{Read, Write};
 
 /// Commando Add
 pub struct Add {
@@ -60,13 +50,6 @@ impl Add {
     fn add_file_config(add: &mut Add, i: usize, args: &[String]) -> Result<usize, CommandError> {
         add.pathspecs.push(args[i].clone());
         Ok(i + 1)
-    }
-
-    fn is_in_last_commit(path: &str, commit_tree: &Option<Tree>, logger: &mut Logger) -> bool {
-        if let Some(tree) = commit_tree {
-            return tree.has_blob_from_path(path, logger);
-        }
-        false
     }
 
     fn run(&self, _stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), CommandError> {

@@ -458,7 +458,7 @@ impl<'a> GitRepository<'a> {
         &mut self,
         message: String,
         parents: Vec<String>,
-        mut staged_tree: Tree,
+        staged_tree: Tree,
     ) -> Result<CommitObject, CommandError> {
         let config = Config::open()?;
 
