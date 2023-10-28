@@ -76,7 +76,7 @@ fn test_sub_dir() {
     let path = "tests/data/commands/init/repo1";
     let absolute_path = inicialize_current_directory(path);
 
-    let output = Command::new("../../../../../target/debug/git")
+    let output = Command::new("../../../../../../target/debug/git")
         .arg("init")
         .arg("./new_dir")
         .current_dir(path.clone())
@@ -101,7 +101,7 @@ fn test_init() {
     let path = "tests/data/commands/init/repo2";
     let absolute_path = inicialize_current_directory(path);
 
-    let output = Command::new("../../../../../target/debug/git")
+    let output = Command::new("../../../../../../target/debug/git")
         .arg("init")
         .current_dir(path.clone())
         .output()
@@ -123,7 +123,7 @@ fn test_bare() {
     let path = "tests/data/commands/init/repo3";
     let absolute_path = inicialize_current_directory(path);
 
-    let output = Command::new("../../../../../target/debug/git")
+    let output = Command::new("../../../../../../target/debug/git")
         .arg("init")
         .arg("--bare")
         .current_dir(path.clone())
@@ -146,7 +146,7 @@ fn test_branch() {
     let path = "tests/data/commands/init/repo4";
     let absolute_path = inicialize_current_directory(path);
 
-    let output = Command::new("../../../../../target/debug/git")
+    let output = Command::new("../../../../../../target/debug/git")
         .arg("init")
         .arg("-b")
         .arg("taller")
@@ -171,7 +171,7 @@ fn test_err_two_dir() {
     let path = "tests/data/commands/init/repo5";
     let absolute_path = inicialize_current_directory(path);
 
-    let output = Command::new("../../../../../target/debug/git")
+    let output = Command::new("../../../../../../target/debug/git")
         .arg("init")
         .arg("./new_dir1")
         .arg("./new_dir2")
