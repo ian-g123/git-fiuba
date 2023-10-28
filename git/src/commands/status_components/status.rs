@@ -5,12 +5,9 @@ use std::vec;
 
 use crate::commands::command::Command;
 use crate::commands::command::ConfigAdderFunction;
-use crate::commands::status_components::format::Format;
-use crate::commands::status_components::long_format::LongFormat;
-use crate::commands::status_components::short_format::ShortFormat;
-
 use git_lib::branch_manager::get_current_branch_name;
 use git_lib::command_errors::CommandError;
+use git_lib::git_repository::GitRepository;
 use git_lib::logger::Logger;
 
 pub struct Status {
@@ -84,16 +81,17 @@ impl Status {
     }
 
     fn run(&self, output: &mut dyn Write, logger: &mut Logger) -> Result<(), CommandError> {
-        let branch = get_current_branch_name()?;
-        logger.log(&format!("Branch: {}", branch));
+        //let branch = get_current_branch_name()?;
+        let mut repo = GitRepository::open("", output)?;
         if self.short {
-            let short_format = ShortFormat;
-            short_format.show(logger, output, &branch)?;
+            repo.status_short_format()
+            // let short_format = ShortFormat;
+            // short_format.show(logger, output, &branch)?;
         } else {
-            let long_format = LongFormat;
-            long_format.show(logger, output, &branch)?;
+            repo.status_long_format()
+            /* let long_format = LongFormat;
+            long_format.show(logger, output, &branch)?; */
         }
-        Ok(())
     }
 }
 

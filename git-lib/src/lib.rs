@@ -1,4 +1,5 @@
 pub mod branch_manager;
+pub mod changes_controller_components;
 pub mod command_errors;
 pub mod config;
 pub mod file_compressor;

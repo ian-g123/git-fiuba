@@ -1,5 +1,5 @@
-use git_lib::command_errors::CommandError;
-use git_lib::objects::{aux::get_name, blob::Blob, tree::Tree};
+use crate::command_errors::CommandError;
+use crate::objects::{aux::get_name, blob::Blob, tree::Tree};
 use std::{
     fs,
     path::{Path, PathBuf},

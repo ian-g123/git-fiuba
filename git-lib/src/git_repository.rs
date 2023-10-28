@@ -8,7 +8,10 @@ use std::{
 use chrono::{format, DateTime, Local};
 
 use crate::{
-    branch_manager::get_last_commit,
+    branch_manager::{get_current_branch_name, get_last_commit},
+    changes_controller_components::{
+        format::Format, long_format::LongFormat, short_format::ShortFormat,
+    },
     command_errors::CommandError,
     config::Config,
     logger::Logger,
@@ -512,6 +515,18 @@ impl<'a> GitRepository<'a> {
             return Ok(commit);
         }
         Err(CommandError::CommitLookUp(commit_hash))
+    }
+
+    pub fn status_long_format(&mut self) -> Result<(), CommandError> {
+        let branch = get_current_branch_name()?;
+        let long_format = LongFormat;
+        long_format.show(&mut self.logger, &mut self.output, &branch)
+    }
+
+    pub fn status_short_format(&mut self) -> Result<(), CommandError> {
+        let branch = get_current_branch_name()?;
+        let short_format = ShortFormat;
+        short_format.show(&mut self.logger, &mut self.output, &branch)
     }
 }
 

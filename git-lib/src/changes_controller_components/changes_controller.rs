@@ -1,4 +1,4 @@
-use git_lib::{
+use crate::{
     command_errors::CommandError,
     logger::Logger,
     objects::{
@@ -6,18 +6,9 @@ use git_lib::{
     },
     staging_area::StagingArea,
 };
-use std::{
-    collections::HashMap,
-    fs::{self, File},
-    io::Read,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashMap, fs::File, io::Read};
 
-use super::{
-    change_object::ChangeObject,
-    changes_types::ChangeType,
-    working_tree::{self, build_working_tree},
-};
+use super::{changes_types::ChangeType, working_tree::build_working_tree};
 
 /// Contiene información acerca de:
 /// - Diferencias entre Index y el último commit, que es lo que está en la Base de datos
@@ -77,7 +68,7 @@ impl ChangesController {
         let Some(mut tree) = last_commit.to_owned() else {
             let changes: HashMap<String, ChangeType> = staging_files
                 .iter()
-                .map(|(path, _)| (path.to_string(), ChangeType::Added)) // Aquí puedes aplicar una función de transformación
+                .map(|(path, _)| (path.to_string(), ChangeType::Added))
                 .collect();
             return Ok(changes);
         };
