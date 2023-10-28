@@ -1,8 +1,8 @@
+use crate::command_errors::CommandError;
 use crate::{
-    commands::{branch_manager::get_last_commit, objects_database},
     logger::Logger,
+    {branch_manager::get_last_commit, objects_database},
 };
-use git_lib::command_errors::CommandError;
 
 use super::{git_object::GitObjectTrait, tree::Tree};
 

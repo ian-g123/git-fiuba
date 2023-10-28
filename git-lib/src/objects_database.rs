@@ -17,10 +17,7 @@ use super::{
 };
 
 /// Escribe un objeto en la base de datos.
-pub(crate) fn write(
-    logger: &mut Logger,
-    git_object: &mut GitObject,
-) -> Result<String, CommandError> {
+pub fn write(logger: &mut Logger, git_object: &mut GitObject) -> Result<String, CommandError> {
     let mut data = Vec::new();
     git_object.write_to(&mut data)?;
     let hex_string = u8_vec_to_hex_string(&git_object.get_hash()?);
@@ -70,7 +67,7 @@ pub(crate) fn write_2(
 }
 
 /// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve el objeto que este representa.
-pub(crate) fn read_object(hash_str: &str, logger: &mut Logger) -> Result<GitObject, CommandError> {
+pub fn read_object(hash_str: &str, logger: &mut Logger) -> Result<GitObject, CommandError> {
     let (path, decompressed_data) = read_file(hash_str, logger)?;
     let mut stream = Cursor::new(decompressed_data);
     read_git_object_from(&mut stream, &path, &hash_str, logger)

@@ -1,4 +1,4 @@
-use git_lib::command_errors::CommandError;
+use crate::command_errors::CommandError;
 use std::{fs::File, io::Read};
 
 /// Obtiene la ruta de la rama actual.

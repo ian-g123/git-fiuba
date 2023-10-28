@@ -1,6 +1,6 @@
 use std::io::{Read, Write};
 
-use git_lib::command_errors::CommandError;
+use crate::command_errors::CommandError;
 
 /// Incluye funciones relacionadas a Strings.
 pub trait SuperStrings {

@@ -3,7 +3,7 @@ use std::{
     io::{Read, Write},
 };
 
-use git_lib::command_errors::CommandError;
+use crate::command_errors::CommandError;
 
 use super::super_string::{read_string_from, SuperStrings};
 

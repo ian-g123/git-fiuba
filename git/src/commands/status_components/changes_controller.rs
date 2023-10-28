@@ -1,16 +1,11 @@
-use crate::{
-    commands::{
-        objects::{
-            aux::get_name,
-            git_object::GitObject,
-            last_commit::{self, build_last_commit_tree},
-            tree::Tree,
-        },
-        staging_area::StagingArea,
-    },
+use git_lib::{
+    command_errors::CommandError,
     logger::Logger,
+    objects::{
+        aux::get_name, git_object::GitObject, last_commit::build_last_commit_tree, tree::Tree,
+    },
+    staging_area::StagingArea,
 };
-use git_lib::command_errors::CommandError;
 use std::{
     collections::HashMap,
     fs::{self, File},

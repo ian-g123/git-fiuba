@@ -1,4 +1,5 @@
 use std::{
+    fmt::format,
     fs::{self, File},
     io::Write,
     path::Path,
@@ -25,7 +26,13 @@ impl Logger {
             .create(true)
             .append(true)
             .open(path)
-            .map_err(|_| CommandError::FileOpenError(path_name.to_string()))?;
+            .map_err(|error| {
+                CommandError::FileOpenError(format!(
+                    "{}: {}",
+                    path_name.to_string(),
+                    error.to_string()
+                ))
+            })?;
         let (tx, rx) = channel::<String>();
 
         let handle = thread::spawn(move || {

@@ -7,9 +7,9 @@ use super::git_object::{GitObject, GitObjectTrait};
 use super::super_integers::{read_i32_from, read_i64_from, read_u32_from, SuperIntegers};
 use super::super_string::{u8_vec_to_hex_string, SuperStrings};
 use super::{author::Author, tree::Tree};
-use crate::commands::objects_database;
+use crate::command_errors::CommandError;
 use crate::logger::Logger;
-use git_lib::command_errors::CommandError;
+use crate::objects_database;
 
 extern crate chrono;
 use chrono::{prelude::*, DateTime};
@@ -347,7 +347,7 @@ pub fn write_commit_tree_to_database(
 mod test {
     use std::{fs::File, io::Write};
 
-    use crate::commands::{
+    use crate::{
         file_compressor::compress,
         objects::{aux::hex_string_to_u8_vec, git_object},
     };

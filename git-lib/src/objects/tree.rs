@@ -5,8 +5,8 @@ use std::{
     io::{Read, Write},
 };
 
-use crate::{commands::objects_database, logger::Logger};
-use git_lib::command_errors::CommandError;
+use crate::command_errors::CommandError;
+use crate::{logger::Logger, objects_database};
 
 use super::{
     author::Author,
@@ -571,7 +571,7 @@ mod tests {
 mod test_write_y_display {
     use std::io::{Cursor, Seek, SeekFrom};
 
-    use crate::commands::objects::git_object::{self, read_git_object_from};
+    use crate::objects::git_object::{self, read_git_object_from};
 
     use super::*;
     #[test]

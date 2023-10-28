@@ -4,7 +4,7 @@ use std::{
     os::unix::prelude::PermissionsExt,
 };
 
-use git_lib::command_errors::CommandError;
+use crate::command_errors::CommandError;
 
 /// Cada archivo y directorio tiene un Modo que es registrado por Git.
 /// Los Tree guardan referencia al Mode de sus subárboles y blobs.

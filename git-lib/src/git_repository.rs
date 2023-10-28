@@ -1,9 +1,15 @@
 use std::{
     fs::{self, File},
     io::Write,
+    path::Path,
 };
 
-use crate::{command_errors::CommandError, logger::Logger};
+use crate::{
+    command_errors::CommandError,
+    logger::Logger,
+    objects::{git_object::GitObject, super_string::u8_vec_to_hex_string},
+    objects_database,
+};
 
 pub struct GitRepository<'a> {
     path: String,
@@ -13,10 +19,15 @@ pub struct GitRepository<'a> {
 
 impl<'a> GitRepository<'a> {
     pub fn open(path: &str, output: &'a mut dyn Write) -> Result<GitRepository<'a>, CommandError> {
-        let path_name = format!("{}/.git/logs", path);
+        // if !Path::new(path).exists() {
+        //     return Err(CommandError::NotGitRepository);
+        // }
+        // let logs_path_buf = Path::new(path).join(&format!("{}.git/logs-2.txt", path));
+        let logs_path = format!("{}.git/logs-2.txt", path);
+        // let logs_path = logs_path_buf.to_str().unwrap();
         Ok(GitRepository {
             path: path.to_string(),
-            logger: Logger::new(&path_name)?,
+            logger: Logger::new(&logs_path)?,
             output,
         })
     }
@@ -27,11 +38,11 @@ impl<'a> GitRepository<'a> {
         bare: bool,
         output: &'a mut dyn Write,
     ) -> Result<GitRepository<'a>, CommandError> {
-        let path_name = format!("{}/.git/logs", path);
+        let logs_path = format!("{}/.git/logs-2", path);
 
         let mut repo = GitRepository {
             path: path.to_string(),
-            logger: Logger::new(&path_name)?,
+            logger: Logger::new(&logs_path)?,
             output,
         };
         repo.create_files_and_dirs(path, branch_name, bare)?;
@@ -108,6 +119,18 @@ impl<'a> GitRepository<'a> {
         } else {
             return Err(CommandError::DirectoryCreationError(path.to_string()));
         }
+        Ok(())
+    }
+
+    pub fn hash_object(&mut self, mut object: GitObject, write: bool) -> Result<(), CommandError> {
+        let hex_string = u8_vec_to_hex_string(&mut object.get_hash()?);
+        if write {
+            objects_database::write(&mut self.logger, &mut object)?;
+            self.logger
+                .log(&format!("Writen object to database in {:?}", hex_string));
+        }
+        let _ = writeln!(self.output, "{}", hex_string);
+
         Ok(())
     }
 }

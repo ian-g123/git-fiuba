@@ -1,12 +1,9 @@
-use git::{
-    commands::{
-        add_components::add::Add, cat_file_components::cat_file::CatFile, command::Command,
-        commit_components::commit::Commit, hash_object_components::hash_object::HashObject,
-        init_components::init::Init, status_components::status::Status,
-    },
-    logger::Logger,
+use git::commands::{
+    add_components::add::Add, cat_file_components::cat_file::CatFile, command::Command,
+    commit_components::commit::Commit, hash_object_components::hash_object::HashObject,
+    init_components::init::Init, status_components::status::Status,
 };
-use git_lib::command_errors::CommandError;
+use git_lib::{command_errors::CommandError, logger::Logger};
 use std::{env, io};
 
 fn main() {

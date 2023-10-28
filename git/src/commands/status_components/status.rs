@@ -3,15 +3,15 @@ use std::io::Write;
 use std::str;
 use std::vec;
 
-use crate::commands::branch_manager::get_current_branch;
-use crate::commands::branch_manager::get_current_branch_name;
 use crate::commands::command::Command;
 use crate::commands::command::ConfigAdderFunction;
 use crate::commands::status_components::format::Format;
 use crate::commands::status_components::long_format::LongFormat;
 use crate::commands::status_components::short_format::ShortFormat;
-use crate::logger::Logger;
+
+use git_lib::branch_manager::get_current_branch_name;
 use git_lib::command_errors::CommandError;
+use git_lib::logger::Logger;
 
 pub struct Status {
     short: bool,
@@ -100,8 +100,6 @@ impl Status {
 #[cfg(test)]
 mod tests {
     use std::io::{self, Cursor};
-
-    use crate::logger::Logger;
 
     use super::*;
 

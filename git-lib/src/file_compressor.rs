@@ -1,4 +1,3 @@
-use libflate::deflate::{Decoder, Encoder};
 use std::io::{Read, Write};
 
 use super::command_errors::CommandError;

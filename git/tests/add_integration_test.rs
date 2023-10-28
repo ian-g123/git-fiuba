@@ -1,6 +1,6 @@
 use std::{fs, path::Path, process::Command};
 
-use git::commands::staging_area::StagingArea;
+use git_lib::staging_area::StagingArea;
 
 #[test]
 fn test_single_file() {

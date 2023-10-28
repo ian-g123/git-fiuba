@@ -1,3 +1,9 @@
+pub mod branch_manager;
 pub mod command_errors;
+pub mod config;
+pub mod file_compressor;
 pub mod git_repository;
 pub mod logger;
+pub mod objects;
+pub mod objects_database;
+pub mod staging_area;

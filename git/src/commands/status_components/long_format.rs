@@ -1,7 +1,7 @@
 use std::{collections::HashMap, io::Write};
 
-use crate::logger::Logger;
 use git_lib::command_errors::CommandError;
+use git_lib::logger::Logger;
 
 use super::{changes_controller::ChangesController, changes_types::ChangeType, format::Format};
 

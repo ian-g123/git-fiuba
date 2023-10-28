@@ -5,9 +5,9 @@ use std::{env, str};
 
 use git_lib::command_errors::CommandError;
 use git_lib::git_repository::GitRepository;
+use git_lib::logger::Logger;
 
 use crate::commands::command::{Command, ConfigAdderFunction};
-use crate::logger::Logger;
 
 /// Commando init
 pub struct Init {

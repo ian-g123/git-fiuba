@@ -1,13 +1,11 @@
-use crate::{
-    commands::{
-        command::{Command, ConfigAdderFunction},
-        objects::{blob::Blob, git_object::GitObject, last_commit::get_commit_tree, tree::Tree},
-        objects_database,
-        staging_area::StagingArea,
-    },
-    logger::Logger,
-};
-use git_lib::command_errors::CommandError;
+use crate::commands::command::{Command, ConfigAdderFunction};
+use git_lib::logger::Logger;
+use git_lib::objects::blob::Blob;
+use git_lib::objects::git_object::GitObject;
+use git_lib::objects::last_commit::get_commit_tree;
+use git_lib::objects_database;
+use git_lib::staging_area::StagingArea;
+use git_lib::{command_errors::CommandError, objects::tree::Tree};
 use std::{
     env,
     fs::{self, DirEntry, ReadDir},
