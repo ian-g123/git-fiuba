@@ -122,9 +122,17 @@ fn rebuild_commits_tree(
     let mut logger_dummy = Logger::new_dummy();
 
     let (_, decompressed_data) = objects_database::read_file(path_to_commit, &mut logger_dummy)?;
+    let output_str = String::from_utf8(decompressed_data).map_err(|error| {
+        logger_dummy.log("Error conviertiendo a utf8 el contenido en log");
+        CommandError::FileReadError(error.to_string())
+    })?;
 
-    let mut deflated_file_reader = Cursor::new(decompressed_data);
+    println!("{}", output_str);
+
+    let mut deflated_file_reader = Cursor::new(output_str);
     let commit_object = read_from_for_log(&mut deflated_file_reader, &mut logger_dummy)?;
+
+    // println!("{}", commit_object);
 
     let parents = commit_object.get_parents();
     for parent in &parents {

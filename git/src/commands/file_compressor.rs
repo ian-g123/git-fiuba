@@ -1,27 +1,21 @@
-use libflate::deflate::{Decoder, Encoder};
 use std::io::{Read, Write};
 
 use super::command_errors::CommandError;
 
 /// Comprime un vector de bytes
 pub fn compress(data: &[u8]) -> Result<Vec<u8>, CommandError> {
-    let mut encoder = Encoder::new(Vec::new());
-    let _ = encoder
-        .write_all(data)
-        .map_err(|_error| CommandError::CompressionError);
-    encoder
-        .finish()
-        .into_result()
-        .map_err(|_| CommandError::CompressionError)
+    // compress data with zlib from flate2 crate
+    let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+    encoder.write_all(data).unwrap();
+    let compressed_data = encoder.finish().unwrap();
+    Ok(compressed_data)
 }
 
 /// Descomprime un vector de bytes
 pub fn extract(data: &[u8]) -> Result<Vec<u8>, CommandError> {
-    let mut decoder = Decoder::new(data);
+    let mut decoder = flate2::read::ZlibDecoder::new(data);
     let mut decompressed_data = Vec::new();
-    let _ = decoder
-        .read_to_end(&mut decompressed_data)
-        .map_err(|_error| CommandError::CompressionError);
+    decoder.read_to_end(&mut decompressed_data).unwrap();
     Ok(decompressed_data)
 }
 
