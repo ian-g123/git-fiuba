@@ -2,13 +2,10 @@ use crate::command_errors::CommandError;
 use crate::{logger::Logger, objects_database};
 
 use super::{
-    author::Author, aux::get_sha1, blob::Blob, commit_object::CommitObject, mode::Mode,
+    author::Author, blob::Blob, commit_object::CommitObject, mode::Mode,
     super_string::u8_vec_to_hex_string, tree::Tree,
 };
-use std::{
-    fmt,
-    io::{Cursor, Read, Write},
-};
+use std::io::{Read, Write};
 
 pub type GitObject = Box<dyn GitObjectTrait>;
 

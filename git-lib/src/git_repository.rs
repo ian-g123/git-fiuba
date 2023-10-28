@@ -1,11 +1,11 @@
 use std::{
     collections::HashMap,
     fs::{self, DirEntry, File, OpenOptions, ReadDir},
-    io::{Cursor, Read, Write},
+    io::{Read, Write},
     path::{Path, PathBuf},
 };
 
-use chrono::{format, DateTime, Local};
+use chrono::{DateTime, Local};
 
 use crate::{
     branch_manager::{get_current_branch_name, get_last_commit},
@@ -460,7 +460,6 @@ impl<'a> GitRepository<'a> {
         parents: Vec<String>,
         mut staged_tree: Tree,
     ) -> Result<CommitObject, CommandError> {
-        let staged_tree_hash = staged_tree.get_hash_string()?;
         let config = Config::open()?;
 
         let Some(author_email) = config.get("user.email") else {
