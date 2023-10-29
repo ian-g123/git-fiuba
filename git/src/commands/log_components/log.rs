@@ -105,6 +105,8 @@ impl Log {
             return Ok(());
         }
 
+        
+
         let mut logger_dummy = Logger::new_dummy();
 
         let (_, decompressed_data) =
