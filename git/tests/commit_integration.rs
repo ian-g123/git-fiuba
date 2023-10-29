@@ -2,7 +2,7 @@ use std::{fs, path::Path, process::Command};
 
 use crate::common::aux::{
     change_dir_testfile1_content, change_dir_testfile1_content_and_remove_dir_testfile2,
-    create_test_scene_1, create_test_scene_2, create_test_scene_3,
+    create_base_scene, create_test_scene_1, create_test_scene_2, create_test_scene_3,
 };
 
 mod common {
@@ -823,5 +823,39 @@ fn test_dry_run() {
     let entries = fs::read_dir(path_obj.clone()).unwrap();
     let n_objects = entries.count();
     assert_eq!(3, n_objects); // testfile, info y pack
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
+#[test]
+fn test_nothing_to_commit() {
+    let path = "./tests/data/commands/commit/repo13";
+    create_base_scene(path);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let commit_result = String::from_utf8(result.stdout).unwrap();
+
+    let expected = "On branch master\n\nInitial commit\n\nnothing to commit (create/copy files and use \"git add\" to track)\n";
+    assert_eq!(commit_result, expected);
+
+    let head = fs::read_to_string(path.to_owned() + "/.git/HEAD").unwrap();
+    let (_, branch_ref) = head.split_once(' ').unwrap();
+    let branch_ref = branch_ref.trim();
+    let ref_path = path.to_owned() + "/.git/" + branch_ref;
+    let result = Path::new(&ref_path).exists();
+    assert!(!result);
+
+    let path_obj_str = path.to_owned() + "/.git/objects/";
+    let path_obj = Path::new(&path_obj_str);
+
+    let entries = fs::read_dir(path_obj.clone()).unwrap();
+    let n_objects = entries.count();
+    assert_eq!(2, n_objects); // info y pack
     _ = fs::remove_dir_all(format!("{}", path));
 }
