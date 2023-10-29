@@ -111,29 +111,44 @@ impl CommitObject {
     }
 }
 
-pub fn sort_commits_descending_date(vec_commits: &mut Vec<CommitObject>) {
-    // ordenamos de forma descendente por fecha y lo ponemos al reves
-    vec_commits.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+pub struct CommmitWithBranch {
+    commit: CommitObject,
+    branch: Option<String>,
 }
+
+impl CommmitWithBranch {
+    pub fn new(commit: CommitObject, branch: Option<String>) -> CommmitWithBranch {
+        CommmitWithBranch { commit, branch }
+    }
+}
+
+pub fn sort_commits_descending_date(vec_commits: &mut Vec<CommmitWithBranch>) {
+    vec_commits.sort_by(|a, b| b.commit.timestamp.cmp(&a.commit.timestamp));
+} 
+
+// pub fn sort_commits_descending_date(vec_commits: &mut  Vec<(CommitObject, Option<String>)>) {
+//     // ordenamos de forma descendente por fecha y lo ponemos al reves
+//     vec_commits.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+// }
 
 pub fn print_for_log(
     stream: &mut dyn Write,
-    vec_commits: &mut Vec<CommitObject>,
+    vec_commits: &mut Vec<CommmitWithBranch>,
 ) -> Result<(), CommandError> {
     let mut buf: Vec<u8> = Vec::new();
     let mut writer_stream = Cursor::new(&mut buf);
-    for commit in vec_commits {
-        if commit.is_merge() {
-            print_merge_commit(&mut writer_stream, commit)?;
+    for commit_with_branch in vec_commits {
+        if commit_with_branch.commit.is_merge() {
+            print_merge_commit_for_log(&mut writer_stream, &mut commit_with_branch.commit)?;
         } else {
-            print_normal_commit(&mut writer_stream, commit)?;
+            print_normal_commit_for_log(&mut writer_stream, &mut commit_with_branch.commit)?;
         }
     }
     _ = stream.write_all(&buf);
     Ok(())
 }
 
-fn print_normal_commit(
+fn print_normal_commit_for_log(
     stream: &mut dyn Write,
     commit: &mut CommitObject,
 ) -> Result<(), CommandError> {
@@ -147,7 +162,7 @@ fn print_normal_commit(
     Ok(())
 }
 
-fn print_merge_commit(
+fn print_merge_commit_for_log(
     stream: &mut dyn Write,
     commit: &mut CommitObject,
 ) -> Result<(), CommandError> {
