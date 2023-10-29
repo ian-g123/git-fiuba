@@ -1,9 +1,9 @@
 use std::fmt;
 
-use crate::commands::command_errors::CommandError;
+use crate::command_errors::CommandError;
 
 #[derive(Debug)]
-pub(crate) enum PackfileObjectType {
+pub enum PackfileObjectType {
     Commit,
     Tree,
     Blob,

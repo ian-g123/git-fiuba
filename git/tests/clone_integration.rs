@@ -6,20 +6,20 @@ use std::{
 };
 
 #[test]
-#[ignore]
 fn test_clone() {
     let path = "./tests/data/commands/clone/test1";
 
-    _ = fs::remove_dir_all(format!("{}/server-repo", path));
+    // _ = fs::remove_dir_all(format!("{}/server-repo", path));
     // let mut handle = create_base_scene_and_start_server(path.clone());
     // let id = handle.id();
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("clone")
         .arg("git://127.1.0.0:9418/server-repo")
         .current_dir(path)
         .output()
         .unwrap();
+    println!("{}", String::from_utf8(result.stderr).unwrap());
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
 
     // match handle.kill() {

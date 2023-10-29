@@ -15,7 +15,7 @@ use super::{
     },
 };
 
-/* pub(crate) fn write(
+pub(crate) fn write(
     logger: &mut Logger,
     git_object: &mut GitObject,
 ) -> Result<String, CommandError> {
@@ -35,37 +35,13 @@ pub fn write_to(
     ));
     let hash_str = u8_vec_to_hex_string(&git_object.get_hash()?);
     save_to(hash_str, data, base_path, logger)
-} */
-
-pub fn write(logger: &mut Logger, git_object: &mut GitObject) -> Result<String, CommandError> {
-    logger.log("Writing to database");
-    let mut data = Vec::new();
-    git_object.write_to(&mut data)?;
-    let hex_string = u8_vec_to_hex_string(&git_object.get_hash()?);
-    let folder_name = &hex_string[0..2];
-    let parent_path = format!(".git/objects/{}", folder_name);
-    let file_name = &hex_string[2..];
-    let path = format!("{}/{}", parent_path, file_name);
-    if let Err(error) = fs::create_dir_all(parent_path) {
-        return Err(CommandError::FileOpenError(error.to_string()));
-    };
-    let Ok(mut file) = File::create(&path) else {
-        return Err(CommandError::FileOpenError(
-            "Error al abrir archivo para escritura".to_string(),
-        ));
-    };
-    let compressed_data = compress(&data)?;
-    if let Err(error) = file.write_all(&compressed_data) {
-        return Err(CommandError::FileWriteError(error.to_string()));
-    };
-    return Ok(hex_string);
 }
 
 fn save_to(
     hash_str: String,
     data: Vec<u8>,
     base_path: &str,
-    logger: &mut Logger,
+    _: &mut Logger,
 ) -> Result<String, CommandError> {
     let folder_name = &hash_str[0..2];
     let parent_path = format!("{}.git/objects/{}", base_path, folder_name);

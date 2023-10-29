@@ -1,4 +1,4 @@
-use crate::{commands::command_errors::CommandError, logger::Logger};
+use crate::{command_errors::CommandError, logger::Logger};
 use std::{
     collections::HashMap,
     io::{Read, Write},
@@ -23,12 +23,10 @@ impl GitServer {
         Ok(GitServer { socket })
     }
 
-    pub fn send(&mut self, line: &str, logger: &mut Logger) -> Result<Vec<String>, CommandError> {
+    pub fn send(&mut self, line: &str) -> Result<Vec<String>, CommandError> {
         let line = line.to_string().to_pkt_format();
-        logger.log(&format!("Sending: {}", line));
         self.write_string_to_socket(&line)?;
-        logger.log(&format!("Sent: {}", line));
-        let lines = get_response(&self.socket, logger)?;
+        let lines = get_response(&self.socket)?;
         Ok(lines)
     }
 
@@ -36,13 +34,12 @@ impl GitServer {
         &mut self,
         repository_path: &str,
         host: &str,
-        logger: &mut Logger,
     ) -> Result<(String, HashMap<String, String>), CommandError> {
         let line = format!(
             "git-upload-pack {}\0host={}\0\0version=1\0\n",
             repository_path, host
         );
-        let mut lines = self.send(&line, logger)?;
+        let mut lines = self.send(&line)?;
         let first_line = lines.remove(0);
         if first_line != "version 1\n" {
             return Err(CommandError::ErrorReadingPkt);
@@ -53,7 +50,7 @@ impl GitServer {
         };
         let mut refs = HashMap::<String, String>::new();
         for line in lines {
-            logger.log(&format!("Line: {}", line));
+            // logger.log(&format!("Line: {}", line));
             let (sha1, ref_name) = line
                 .split_once(' ')
                 .ok_or(CommandError::ErrorReadingPkt)
@@ -63,29 +60,25 @@ impl GitServer {
         Ok((head_branch.to_string(), refs))
     }
 
-    pub(crate) fn fetch_objects(
+    pub fn fetch_objects(
         &mut self,
         wants: Vec<String>,
         haves: Vec<String>,
-        logger: &mut Logger,
     ) -> Result<Vec<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
         for want in wants {
             let line = format!("want {}\n", want);
-            logger.log(&format!("Sending: {}", line));
             self.write_in_tpk_to_socket(&line)?;
         }
         self.write_string_to_socket("0000")?;
         if !haves.is_empty() {
             for have in haves {
                 let line = format!("have {}\n", have);
-                logger.log(&format!("Sending: {}", line));
                 self.write_in_tpk_to_socket(&line)?;
             }
             self.write_string_to_socket("0000")?;
         }
         self.write_in_tpk_to_socket("done\n")?;
 
-        logger.log("Getting response");
         let mut lines = Vec::<String>::new();
         loop {
             match String::read_pkt_format(&mut self.socket)? {
@@ -100,8 +93,7 @@ impl GitServer {
             }
         }
 
-        logger.log("Reading_objects");
-        let objects = self.read_objects(logger)?;
+        let objects = self.read_objects()?;
         Ok(objects)
     }
 
@@ -122,30 +114,21 @@ impl GitServer {
         self.write_string_to_socket(&line)
     }
 
-    fn read_objects(
-        &mut self,
-        logger: &mut Logger,
-    ) -> Result<Vec<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
-        let object_number = self.read_packfile_header(logger)?;
-        logger.log(&format!("Recieved Pack contains: {:?}", object_number));
-        let objects_data = self.read_objects_in_packfile(object_number, logger)?;
+    fn read_objects(&mut self) -> Result<Vec<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
+        let object_number = self.read_packfile_header()?;
+        let objects_data = self.read_objects_in_packfile(object_number)?;
         Ok(objects_data)
     }
 
     fn read_objects_in_packfile(
         &mut self,
         object_number: u32,
-        logger: &mut Logger,
     ) -> Result<Vec<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
         let mut objects_data = Vec::new();
         let mut buffed_reader = TcpStreamBuffedReader::new(&self.socket);
         for _ in 0..object_number {
             let mut buffed_reader: &mut TcpStreamBuffedReader<'_> = &mut buffed_reader;
             let (object_type, len) = read_object_header_from_packfile(buffed_reader)?;
-            logger.log(&format!(
-                "Object of type {} occupies {} bytes",
-                object_type, len
-            ));
 
             buffed_reader.clean_up_to_pos();
             let mut decoder = flate2::read::ZlibDecoder::new(&mut buffed_reader);
@@ -156,17 +139,13 @@ impl GitServer {
             let bytes_used = decoder.total_in() as usize;
             buffed_reader.set_pos(bytes_used);
 
-            logger.log(&format!(
-                "deflated_data_str: {:?}",
-                String::from_utf8_lossy(&deflated_data.clone())
-            ));
             let object = deflated_data;
             objects_data.push((object_type, len, object));
         }
         Ok(objects_data)
     }
 
-    fn read_packfile_header(&mut self, logger: &mut Logger) -> Result<u32, CommandError> {
+    fn read_packfile_header(&mut self) -> Result<u32, CommandError> {
         let signature = self.read_pack_signature()?;
         if signature != "PACK" {
             return Err(CommandError::ErrorReadingPkt);
@@ -175,7 +154,6 @@ impl GitServer {
         if version != 2 {
             return Err(CommandError::ErrorReadingPkt);
         }
-        logger.log(&format!("Signature and version are correct"));
         let object_number = self.read_object_number()?;
         Ok(object_number)
     }
@@ -246,8 +224,7 @@ fn read_object_header_from_packfile(
     Ok((object_type, len))
 }
 
-fn get_response(mut socket: &TcpStream, logger: &mut Logger) -> Result<Vec<String>, CommandError> {
-    logger.log("Getting response");
+fn get_response(mut socket: &TcpStream) -> Result<Vec<String>, CommandError> {
     let mut lines = Vec::<String>::new();
     loop {
         match String::read_pkt_format(&mut socket)? {

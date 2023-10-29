@@ -7,4 +7,5 @@ pub mod git_repository;
 pub mod logger;
 pub mod objects;
 pub mod objects_database;
+pub mod server_components;
 pub mod staging_area;
