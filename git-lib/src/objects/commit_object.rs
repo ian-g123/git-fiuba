@@ -57,38 +57,6 @@ impl CommitObject {
         self.parents.clone()
     }
 
-    /// Crea un Commit a partir de la infromación leída del stream.
-    pub fn read_from(
-        stream: &mut dyn Read,
-        logger: &mut Logger,
-    ) -> Result<GitObject, CommandError> {
-        let (tree_hash, parents, author, author_timestamp, author_offset, committer, _, _, message) =
-            read_commit_info_from(stream)?;
-        let tree_hash_str = u8_vec_to_hex_string(&tree_hash);
-        logger.log(&format!(
-            "Reading tree hash from database: {}",
-            tree_hash_str
-        ));
-        let mut tree = objects_database::read_object(&tree_hash_str, logger)?;
-        logger.log(&format!(
-            "tree content en read_from : {}",
-            String::from_utf8_lossy(&(tree.to_owned().content()?))
-        ));
-        let Some(tree) = tree.as_tree() else {
-            return Err(CommandError::InvalidCommit);
-        };
-        Ok(Box::new(Self {
-            tree,
-            parents,
-            author,
-            committer,
-            message,
-            timestamp: author_timestamp,
-            offset: author_offset,
-            hash: None,
-        }))
-    }
-
     /// Muestra la información del Commit, escribiéndola en el stream pasado.
     pub(crate) fn display_from_stream(
         stream: &mut dyn Read,
@@ -507,23 +475,52 @@ fn get_date(line: &mut Vec<&str>) -> Result<DateTime<Local>, CommandError> {
     Ok(commit_hash)
 } */
 
-pub fn read_from_for_log(
-    stream: &mut dyn Read,
-    logger: &mut Logger,
-) -> Result<CommitObject, CommandError> {
+/// Crea un Commit a partir de la infromación leída del stream.
+pub fn read_from(stream: &mut dyn Read, logger: &mut Logger) -> Result<GitObject, CommandError> {
     let (tree_hash, parents, author, author_timestamp, author_offset, committer, _, _, message) =
-        read_commit_info_from(stream, logger)?;
-    logger.log("commit created");
-    Ok(CommitObject {
-        tree: tree_hash,
+        read_commit_info_from(stream)?;
+    let tree_hash_str = u8_vec_to_hex_string(&tree_hash);
+    logger.log(&format!(
+        "Reading tree hash from database: {}",
+        tree_hash_str
+    ));
+    let mut tree = objects_database::read_object(&tree_hash_str, logger)?;
+    logger.log(&format!(
+        "tree content en read_from : {}",
+        String::from_utf8_lossy(&(tree.to_owned().content()?))
+    ));
+    let Some(tree) = tree.as_tree() else {
+        return Err(CommandError::InvalidCommit);
+    };
+    Ok(Box::new(CommitObject {
+        tree,
         parents,
         author,
         committer,
         message,
         timestamp: author_timestamp,
         offset: author_offset,
-    })
+        hash: None,
+    }))
 }
+
+// pub fn read_from_for_log(
+//     stream: &mut dyn Read,
+//     logger: &mut Logger,
+// ) -> Result<CommitObject, CommandError> {
+//     let (tree_hash, parents, author, author_timestamp, author_offset, committer, _, _, message) =
+//         read_commit_info_from(stream, logger)?;
+//     logger.log("commit created");
+//     Ok(CommitObject {
+//         tree: tree_hash,
+//         parents,
+//         author,
+//         committer,
+//         message,
+//         timestamp: author_timestamp,
+//         offset: author_offset,
+//     })
+// }
 
 pub fn write_commit_tree_to_database(
     tree: &mut Tree,

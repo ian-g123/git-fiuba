@@ -1,6 +1,7 @@
 use crate::command_errors::CommandError;
 use crate::{logger::Logger, objects_database};
 
+use super::commit_object::read_from;
 use super::{
     author::Author, blob::Blob, commit_object::CommitObject, mode::Mode,
     super_string::u8_vec_to_hex_string, tree::Tree,
