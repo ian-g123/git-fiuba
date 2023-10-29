@@ -15,14 +15,37 @@ use super::{
     },
 };
 
-/// Escribe un objeto en la base de datos.
-pub fn write(_: &mut Logger, git_object: &mut GitObject) -> Result<String, CommandError> {
+pub(crate) fn write(
+    logger: &mut Logger,
+    git_object: &mut GitObject,
+) -> Result<String, CommandError> {
+    write_to(logger, git_object, "")
+}
+
+pub fn write_to(
+    logger: &mut Logger,
+    git_object: &mut GitObject,
+    base_path: &str,
+) -> Result<String, CommandError> {
     let mut data = Vec::new();
     git_object.write_to(&mut data)?;
-    let hex_string = u8_vec_to_hex_string(&git_object.get_hash()?);
-    let folder_name = &hex_string[0..2];
-    let parent_path = format!(".git/objects/{}", folder_name);
-    let file_name = &hex_string[2..];
+    logger.log(&format!(
+        "Objeto escrito: {}",
+        String::from_utf8_lossy(&data)
+    ));
+    let hash_str = u8_vec_to_hex_string(&git_object.get_hash()?);
+    save_to(hash_str, data, base_path, logger)
+}
+
+fn save_to(
+    hash_str: String,
+    data: Vec<u8>,
+    base_path: &str,
+    _: &mut Logger,
+) -> Result<String, CommandError> {
+    let folder_name = &hash_str[0..2];
+    let parent_path = format!("{}.git/objects/{}", base_path, folder_name);
+    let file_name = &hash_str[2..];
     let path = format!("{}/{}", parent_path, file_name);
     if let Err(error) = fs::create_dir_all(parent_path) {
         return Err(CommandError::FileOpenError(error.to_string()));
@@ -36,7 +59,7 @@ pub fn write(_: &mut Logger, git_object: &mut GitObject) -> Result<String, Comma
     if let Err(error) = file.write_all(&compressed_data) {
         return Err(CommandError::FileWriteError(error.to_string()));
     };
-    return Ok(hex_string);
+    Ok(hash_str)
 }
 
 /// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve el objeto que este representa.
