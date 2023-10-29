@@ -77,6 +77,23 @@ pub enum CommandError {
     /// Se intentó agregar un archivo dentro de un archivo
     ObjectNotTree,
     StdinError,
+    InvalidArgument(String),
+    /// No se pudo conectar al servidor
+    Connection(String),
+    /// Error al leer un pkt
+    ErrorReadingPkt,
+    /// Error al enviar un mensaje
+    SendingMessage(String),
+    /// Error al intentar abrir el archivo de configuración
+    InvalidConfigFile,
+    /// No se encontró la url del repositorio remoto
+    NoRemoteUrl,
+    /// Nombre de rama inválido
+    InvalidRefName,
+    /// Tipo de objeto desconocido en packfile
+    UnknownObjectType,
+    /// Error al extraer datos de un un packfile
+    ErrorExtractingPackfile,
     CastingError,
     MessageIncomplete(String),
     AllAndFilesFlagsCombination(String),
@@ -188,6 +205,33 @@ impl fmt::Display for CommandError {
             }
             CommandError::StdinError => {
                 write!(f, "No se pudo leer por entrada estándar")
+            }
+            CommandError::InvalidArgument(msg) => {
+                write!(f, "{}", msg)
+            }
+            CommandError::Connection(msg) => {
+                write!(f, "{}", msg)
+            }
+            CommandError::ErrorReadingPkt => {
+                write!(f, "Error al leer un pkt")
+            }
+            CommandError::SendingMessage(msg) => {
+                write!(f, "{}", msg)
+            }
+            CommandError::InvalidConfigFile => {
+                write!(f, "Error al intentar abrir el archivo de configuración")
+            }
+            CommandError::NoRemoteUrl => {
+                write!(f, "No se encontró la url del repositorio remoto")
+            }
+            CommandError::InvalidRefName => {
+                write!(f, "Nombre de rama inválido")
+            }
+            CommandError::UnknownObjectType => {
+                write!(f, "Tipo de objeto desconocido")
+            }
+            CommandError::ErrorExtractingPackfile => {
+                write!(f, "Error al extraer datos de un un packfile")
             }
 
             CommandError::CastingError => {

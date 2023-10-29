@@ -54,7 +54,9 @@ impl Blob {
         path: String,
         mode: Mode,
     ) -> Result<Self, CommandError> {
-        let hash = hash.cast_hex_to_u8_vec()?;
+        let hash_vec = hash.cast_hex_to_u8_vec()?;
+        let mut hash = [0; 20];
+        hash.copy_from_slice(&hash_vec);
         Ok(Blob {
             mode,
             path: Some(path.clone()),

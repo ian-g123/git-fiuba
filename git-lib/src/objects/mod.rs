@@ -5,6 +5,7 @@ pub mod commit_object;
 pub mod git_object;
 pub mod last_commit;
 pub mod mode;
+pub mod proto_object;
 pub mod super_integers;
 pub mod super_string;
 pub mod tree;

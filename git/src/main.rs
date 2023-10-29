@@ -28,6 +28,7 @@ fn run(command_name: &str, command_args: &[String]) -> Result<(), CommandError> 
         CatFile::run_from,
         Commit::run_from,
         Status::run_from,
+        git::commands::clone::Clone::run_from,
     ];
 
     for command in &commands {
