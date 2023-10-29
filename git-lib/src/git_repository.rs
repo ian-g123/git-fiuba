@@ -693,7 +693,7 @@ fn update_last_commit(commit_hash: &str) -> Result<(), CommandError> {
 }
 
 /// Opens file in .git/HEAD and returns the branch name
-fn get_head_ref() -> Result<String, CommandError> {
+pub fn get_head_ref() -> Result<String, CommandError> {
     let Ok(mut head_file) = File::open(".git/HEAD") else {
         return Err(CommandError::FileOpenError(".git/HEAD".to_string()));
     };
@@ -715,7 +715,7 @@ fn get_head_ref() -> Result<String, CommandError> {
     Ok(head_ref.trim().to_string())
 }
 
-fn local_branches(base_path: &str) -> Result<HashMap<String, String>, CommandError> {
+pub fn local_branches(base_path: &str) -> Result<HashMap<String, String>, CommandError> {
     let mut branches = HashMap::<String, String>::new();
     let branches_path = format!("{}/.git/refs/heads/", base_path);
     let paths = fs::read_dir(branches_path).map_err(|error| {

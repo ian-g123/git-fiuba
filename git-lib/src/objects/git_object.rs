@@ -18,7 +18,7 @@ pub trait GitObjectTrait {
         None
     }
 
-    fn as_commit_mut(&mut self) -> Option<&mut CommitObject> {
+    fn as_mut_commit(&mut self) -> Option<&mut CommitObject> {
         None
     }
 

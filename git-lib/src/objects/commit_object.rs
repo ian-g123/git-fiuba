@@ -1,8 +1,7 @@
-use std::io::{Cursor, Read, Seek, SeekFrom, Write};
+use std::io::{Cursor, Read, Write};
 
 use super::aux::{get_sha1, hex_string_to_u8_vec, read_string_until};
 use super::git_object::{GitObject, GitObjectTrait};
-use super::super_integers::{read_i32_from, read_i64_from, read_u32_from, SuperIntegers};
 use super::super_string::{u8_vec_to_hex_string, SuperStrings};
 use super::{author::Author, tree::Tree};
 use crate::command_errors::CommandError;
@@ -339,7 +338,7 @@ impl GitObjectTrait for CommitObject {
         ))
     }
 
-    fn as_commit_mut(&mut self) -> Option<&mut CommitObject> {
+    fn as_mut_commit(&mut self) -> Option<&mut CommitObject> {
         Some(self)
     }
     fn get_path(&self) -> Option<String> {
