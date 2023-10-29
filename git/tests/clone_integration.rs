@@ -9,7 +9,6 @@ use std::{
 use git_lib::file_compressor::extract;
 
 #[test]
-#[ignore]
 fn test_clone() {
     let path = "./tests/data/commands/clone/test1";
 
@@ -25,8 +24,8 @@ fn test_clone() {
         .current_dir(path)
         .output()
         .unwrap();
-    println!("{}", String::from_utf8(result.stderr).unwrap());
     println!("{}", String::from_utf8(result.stdout).unwrap());
+    println!("{}", String::from_utf8(result.stderr).unwrap());
 
     // match handle.kill() {
     //     Ok(_) => {}
@@ -45,15 +44,19 @@ fn test_clone() {
     );
     compare_files(
         &format!("{}/repo/", path),
-        "d58e8558871f7a6001e4cb58b852567ccce91022",
+        "c6dc3ef12a2f816f638276a075c9b88c7a458b0a",
         &format!("{}/server-files/repo/", path),
-        "d58e8558871f7a6001e4cb58b852567ccce91022",
+        "c6dc3ef12a2f816f638276a075c9b88c7a458b0a",
     );
+
+    let ref_path = path.to_owned() + "/repo/.git/refs/remotes/origin/master";
+    println!("{}", ref_path);
+    let commit_hash = fs::read_to_string(ref_path).unwrap();
     compare_files(
         &format!("{}/repo/", path),
-        "c6dc3ef12a2f816f638276a075c9b88c7a458b0a",
+        &commit_hash,
         &format!("{}/server-files/repo/", path),
-        "c6dc3ef12a2f816f638276a075c9b88c7a458b0a",
+        &commit_hash,
     );
     panic!("Pausa");
 

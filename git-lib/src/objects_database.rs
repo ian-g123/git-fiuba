@@ -15,36 +15,80 @@ use super::{
     },
 };
 
+pub struct ObjectsDatabase {
+    base_path: String,
+}
+
+impl ObjectsDatabase {
+    pub fn write(&self, git_object: &mut GitObject) -> Result<String, CommandError> {
+        write_to(git_object, &self.base_path)
+    }
+
+    /// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve el objeto que este representa.
+    pub fn read_object(&self, hash_str: &str) -> Result<GitObject, CommandError> {
+        let (path, decompressed_data) = self.read_file(hash_str)?;
+        let mut stream = Cursor::new(decompressed_data);
+        read_git_object_from(
+            self,
+            &mut stream,
+            &path,
+            &hash_str,
+            &mut Logger::new_dummy(),
+        )
+    }
+
+    /// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve la ruta del objeto y su data descomprimida.
+    pub fn read_file(&self, hash_str: &str) -> Result<(String, Vec<u8>), CommandError> {
+        let path = format!(
+            "{}/.git/objects/{}/{}",
+            self.base_path,
+            &hash_str[0..2],
+            &hash_str[2..]
+        );
+
+        let mut file = File::open(&path).map_err(|error| {
+            CommandError::FileOpenError(format!(
+                "Error al abrir archivo {}: {}",
+                path,
+                error.to_string()
+            ))
+        })?;
+        let mut data = Vec::new();
+        file.read_to_end(&mut data).map_err(|error| {
+            CommandError::FileReadError(format!(
+                "Error al leer archivo {}: {}",
+                path,
+                error.to_string()
+            ))
+        })?;
+        let decompressed_data = extract(&data)?;
+        Ok((path, decompressed_data))
+    }
+
+    pub(crate) fn new(path: &str) -> Result<Self, CommandError> {
+        Ok(ObjectsDatabase {
+            base_path: path.to_string(),
+        })
+    }
+}
+
 pub(crate) fn write(
     logger: &mut Logger,
     git_object: &mut GitObject,
 ) -> Result<String, CommandError> {
-    write_to(logger, git_object, "")
+    write_to(git_object, "")
 }
 
-pub fn write_to(
-    logger: &mut Logger,
-    git_object: &mut GitObject,
-    base_path: &str,
-) -> Result<String, CommandError> {
+pub fn write_to(git_object: &mut GitObject, base_path: &str) -> Result<String, CommandError> {
     let mut data = Vec::new();
     git_object.write_to(&mut data)?;
-    logger.log(&format!(
-        "Objeto escrito: {}",
-        String::from_utf8_lossy(&data)
-    ));
     let hash_str = u8_vec_to_hex_string(&git_object.get_hash()?);
-    save_to(hash_str, data, base_path, logger)
+    save_to(hash_str, data, base_path)
 }
 
-fn save_to(
-    hash_str: String,
-    data: Vec<u8>,
-    base_path: &str,
-    _: &mut Logger,
-) -> Result<String, CommandError> {
+fn save_to(hash_str: String, data: Vec<u8>, base_path: &str) -> Result<String, CommandError> {
     let folder_name = &hash_str[0..2];
-    let parent_path = format!("{}.git/objects/{}", base_path, folder_name);
+    let parent_path = format!("{}/.git/objects/{}", base_path, folder_name);
     let file_name = &hash_str[2..];
     let path = format!("{}/{}", parent_path, file_name);
     if let Err(error) = fs::create_dir_all(parent_path) {
@@ -62,12 +106,12 @@ fn save_to(
     Ok(hash_str)
 }
 
-/// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve el objeto que este representa.
-pub fn read_object(hash_str: &str, logger: &mut Logger) -> Result<GitObject, CommandError> {
-    let (path, decompressed_data) = read_file(hash_str, logger)?;
-    let mut stream = Cursor::new(decompressed_data);
-    read_git_object_from(&mut stream, &path, &hash_str, logger)
-}
+// /// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve el objeto que este representa.
+// pub fn read_object(hash_str: &str, logger: &mut Logger) -> Result<GitObject, CommandError> {
+//     let (path, decompressed_data) = read_file(hash_str, logger)?;
+//     let mut stream = Cursor::new(decompressed_data);
+//     read_git_object_from(&mut stream, &path, &hash_str, logger)
+// }
 
 /// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve la ruta del objeto y su data descomprimida.
 pub(crate) fn read_file(hash_str: &str, _: &mut Logger) -> Result<(String, Vec<u8>), CommandError> {
@@ -92,35 +136,35 @@ pub(crate) fn read_file(hash_str: &str, _: &mut Logger) -> Result<(String, Vec<u
     Ok((path, decompressed_data))
 }
 
-pub(crate) fn read_from_path(path: &str, logger: &mut Logger) -> Result<GitObject, CommandError> {
-    let mut file = File::open(path).map_err(|error| {
-        CommandError::FileOpenError(format!(
-            "Error al abrir archivo {}: {}",
-            path,
-            error.to_string()
-        ))
-    })?;
-    let mut data = Vec::new();
-    file.read_to_end(&mut data).map_err(|error| {
-        CommandError::FileReadError(format!(
-            "Error al leer archivo {}: {}",
-            path,
-            error.to_string()
-        ))
-    })?;
-    let mut hash_str = path.split('/').collect::<Vec<&str>>();
-    let Some(hash_str_2) = hash_str.pop() else {
-        return Err(CommandError::FileReadError(
-            "Error al reconstruir el hash del objeto".to_string(),
-        ));
-    };
-    let Some(hash_str_1) = hash_str.pop() else {
-        return Err(CommandError::FileReadError(
-            "Error al reconstruir el hash del objeto".to_string(),
-        ));
-    };
-    let hash_str = format!("{}{}", hash_str_1, hash_str_2);
-    let decompressed_data = extract(&data)?;
-    let mut stream = Cursor::new(decompressed_data);
-    read_git_object_from(&mut stream, path, &hash_str, logger)
-}
+// pub(crate) fn read_from_path(path: &str, logger: &mut Logger) -> Result<GitObject, CommandError> {
+//     let mut file = File::open(path).map_err(|error| {
+//         CommandError::FileOpenError(format!(
+//             "Error al abrir archivo {}: {}",
+//             path,
+//             error.to_string()
+//         ))
+//     })?;
+//     let mut data = Vec::new();
+//     file.read_to_end(&mut data).map_err(|error| {
+//         CommandError::FileReadError(format!(
+//             "Error al leer archivo {}: {}",
+//             path,
+//             error.to_string()
+//         ))
+//     })?;
+//     let mut hash_str = path.split('/').collect::<Vec<&str>>();
+//     let Some(hash_str_2) = hash_str.pop() else {
+//         return Err(CommandError::FileReadError(
+//             "Error al reconstruir el hash del objeto".to_string(),
+//         ));
+//     };
+//     let Some(hash_str_1) = hash_str.pop() else {
+//         return Err(CommandError::FileReadError(
+//             "Error al reconstruir el hash del objeto".to_string(),
+//         ));
+//     };
+//     let hash_str = format!("{}{}", hash_str_1, hash_str_2);
+//     let decompressed_data = extract(&data)?;
+//     let mut stream = Cursor::new(decompressed_data);
+//     read_git_object_from(&mut stream, path, &hash_str, logger)
+// }

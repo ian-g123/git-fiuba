@@ -6,5 +6,6 @@ pub mod commands {
     pub mod commit;
     pub mod hash_object;
     pub mod init;
+    pub mod merge;
     pub mod status;
 }

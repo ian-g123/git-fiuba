@@ -1,25 +1,8 @@
-use std::{
-    collections::HashMap,
-    fs,
-    io::{Read, Write},
-};
+use std::io::{Read, Write};
 
-use git_lib::{
-    command_errors::CommandError,
-    config::Config,
-    git_repository::GitRepository,
-    logger::Logger,
-    objects::{git_object::GitObject, proto_object::ProtoObject},
-    objects_database,
-    server_components::git_server::GitServer,
-};
+use git_lib::{command_errors::CommandError, git_repository::GitRepository};
 
-use crate::commands::add;
-
-use super::{
-    command::{Command, ConfigAdderFunction},
-    init::Init,
-};
+use super::command::{Command, ConfigAdderFunction};
 /// Commando Clone
 pub struct Clone {
     repository_path: String,
@@ -99,7 +82,7 @@ impl Clone {
         Ok(i + 1)
     }
 
-    fn run(&self, stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), CommandError> {
+    fn run(&self, _stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), CommandError> {
         let mut repo = GitRepository::init(&self.directory, "master", false, output)?;
         let address = self.get_address();
         let url = address + &self.repository_path;
