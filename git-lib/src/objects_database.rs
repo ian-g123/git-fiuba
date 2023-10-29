@@ -72,12 +72,12 @@ impl ObjectsDatabase {
     }
 }
 
-pub(crate) fn write(
-    logger: &mut Logger,
-    git_object: &mut GitObject,
-) -> Result<String, CommandError> {
-    write_to(git_object, "")
-}
+// pub(crate) fn write(
+//     logger: &mut Logger,
+//     git_object: &mut GitObject,
+// ) -> Result<String, CommandError> {
+//     write_to(git_object, "")
+// }
 
 pub fn write_to(git_object: &mut GitObject, base_path: &str) -> Result<String, CommandError> {
     let mut data = Vec::new();
@@ -113,28 +113,28 @@ fn save_to(hash_str: String, data: Vec<u8>, base_path: &str) -> Result<String, C
 //     read_git_object_from(&mut stream, &path, &hash_str, logger)
 // }
 
-/// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve la ruta del objeto y su data descomprimida.
-pub(crate) fn read_file(hash_str: &str, _: &mut Logger) -> Result<(String, Vec<u8>), CommandError> {
-    let path = format!(".git/objects/{}/{}", &hash_str[0..2], &hash_str[2..]);
+// /// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve la ruta del objeto y su data descomprimida.
+// pub(crate) fn read_file(hash_str: &str, _: &mut Logger) -> Result<(String, Vec<u8>), CommandError> {
+//     let path = format!(".git/objects/{}/{}", &hash_str[0..2], &hash_str[2..]);
 
-    let mut file = File::open(&path).map_err(|error| {
-        CommandError::FileOpenError(format!(
-            "Error al abrir archivo {}: {}",
-            path,
-            error.to_string()
-        ))
-    })?;
-    let mut data = Vec::new();
-    file.read_to_end(&mut data).map_err(|error| {
-        CommandError::FileReadError(format!(
-            "Error al leer archivo {}: {}",
-            path,
-            error.to_string()
-        ))
-    })?;
-    let decompressed_data = extract(&data)?;
-    Ok((path, decompressed_data))
-}
+//     let mut file = File::open(&path).map_err(|error| {
+//         CommandError::FileOpenError(format!(
+//             "Error al abrir archivo {}: {}",
+//             path,
+//             error.to_string()
+//         ))
+//     })?;
+//     let mut data = Vec::new();
+//     file.read_to_end(&mut data).map_err(|error| {
+//         CommandError::FileReadError(format!(
+//             "Error al leer archivo {}: {}",
+//             path,
+//             error.to_string()
+//         ))
+//     })?;
+//     let decompressed_data = extract(&data)?;
+//     Ok((path, decompressed_data))
+// }
 
 // pub(crate) fn read_from_path(path: &str, logger: &mut Logger) -> Result<GitObject, CommandError> {
 //     let mut file = File::open(path).map_err(|error| {

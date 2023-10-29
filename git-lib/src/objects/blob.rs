@@ -87,10 +87,10 @@ impl Blob {
 
     pub fn new_from_content_and_path(content: Vec<u8>, path: &str) -> Result<Self, CommandError> {
         let mut data: Vec<u8> = Vec::new();
-        write_to_stream_from_content(&mut data, content, "blob".to_string())?;
+        write_to_stream_from_content(&mut data, content.clone(), "blob".to_string())?;
         let hash = get_sha1(&data);
         let mut instance = Self::new_from_hash_and_path(hash, path)?;
-        instance.content = Some(data);
+        instance.content = Some(content);
         Ok(instance)
     }
 

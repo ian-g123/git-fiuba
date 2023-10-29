@@ -427,15 +427,16 @@ fn get_date(line: &mut Vec<&str>) -> Result<DateTime<Local>, CommandError> {
 } */
 
 pub fn write_commit_tree_to_database(
+    db: &ObjectsDatabase,
     tree: &mut Tree,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
     let mut boxed_tree: Box<dyn GitObjectTrait> = Box::new(tree.clone());
 
-    objects_database::write(logger, &mut boxed_tree)?;
+    db.write(&mut boxed_tree)?;
     for (_, child) in tree.get_objects().iter_mut() {
         if let Some(child_tree) = child.as_mut_tree() {
-            write_commit_tree_to_database(child_tree, logger)?;
+            write_commit_tree_to_database(db, child_tree, logger)?;
         }
     }
     Ok(())

@@ -1,7 +1,7 @@
 use core::panic;
 use std::{
     fs::{self, File},
-    io::{Error, Read},
+    io::{Error, Read, Write},
     path::Path,
     process::{Child, Command},
 };
@@ -38,15 +38,15 @@ fn test_clone() {
     //check if the files are the same in both directories
     compare_files(
         &format!("{}/repo/", path),
-        "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+        "2a293f24ce241ead407caf5bcd23fcde82c63149",
         &format!("{}/server-files/repo/", path),
-        "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
+        "2a293f24ce241ead407caf5bcd23fcde82c63149",
     );
     compare_files(
         &format!("{}/repo/", path),
-        "c6dc3ef12a2f816f638276a075c9b88c7a458b0a",
+        "764df4e2bf5c8afd5ab625cda76bdc30ece1eeef",
         &format!("{}/server-files/repo/", path),
-        "c6dc3ef12a2f816f638276a075c9b88c7a458b0a",
+        "764df4e2bf5c8afd5ab625cda76bdc30ece1eeef",
     );
 
     let ref_path = path.to_owned() + "/repo/.git/refs/remotes/origin/master";
@@ -58,6 +58,13 @@ fn test_clone() {
         &format!("{}/server-files/repo/", path),
         &commit_hash,
     );
+
+    // Read file "testfile" and assert if it contains "contenido"
+    let mut file = File::open(path.to_owned() + "/repo/testfile").unwrap();
+    let mut content = String::new();
+    file.read_to_string(&mut content).unwrap();
+    assert_eq!(content, "contenido\n");
+
     panic!("Pausa");
 
     _ = fs::remove_dir_all(format!("{}", path));
@@ -111,14 +118,20 @@ fn create_base_scene(path: &str) {
         "No se pudo inicializar el repositorio"
     );
 
-    assert!(
-        Command::new("touch")
-            .arg("testfile")
-            .current_dir(path.to_owned() + "/server-files/repo")
-            .status()
-            .is_ok(),
-        "No se pudo crear el archivo testfile"
-    );
+    // assert!(
+    //     Command::new("echo")
+    //         .arg("contenido")
+    //         .arg(">")
+    //         .arg("testfile")
+    //         .current_dir(path.to_owned() + "/server-files/repo")
+    //         .status()
+    //         .is_ok(),
+    //     "No se pudo crear el archivo testfile"
+    // );
+
+    // Write a file "testfile" with content "contenido" in "path.to_owned() + /server-files/repo"
+    let mut file = File::create(path.to_owned() + "/server-files/repo/testfile").unwrap();
+    file.write_all(b"contenido\n").unwrap();
 
     assert!(
         Command::new("git")

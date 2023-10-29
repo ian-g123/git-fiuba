@@ -144,7 +144,7 @@ impl<'a> GitRepository<'a> {
     pub fn hash_object(&mut self, mut object: GitObject, write: bool) -> Result<(), CommandError> {
         let hex_string = u8_vec_to_hex_string(&mut object.get_hash()?);
         if write {
-            objects_database::write(&mut self.logger, &mut object)?;
+            self.db()?.write(&mut object)?;
             self.logger
                 .log(&format!("Writen object to database in {:?}", hex_string));
         }
@@ -256,7 +256,7 @@ impl<'a> GitRepository<'a> {
     ) -> Result<(), CommandError> {
         let blob = Blob::new_from_path(path.to_string())?;
         let mut git_object: GitObject = Box::new(blob);
-        let hex_str = objects_database::write(&mut self.logger, &mut git_object)?;
+        let hex_str = self.db()?.write(&mut git_object)?;
         staging_area.add(path, &hex_str);
         Ok(())
     }
@@ -269,15 +269,15 @@ impl<'a> GitRepository<'a> {
     }
 
     pub fn display_type_from_hash(&mut self, hash: &str) -> Result<(), CommandError> {
-        git_object::display_type_from_hash(self.output, hash, &mut self.logger)
+        git_object::display_type_from_hash(&self.db()?, self.output, hash, &mut self.logger)
     }
 
     pub fn display_size_from_hash(&mut self, hash: &str) -> Result<(), CommandError> {
-        git_object::display_size_from_hash(self.output, hash, &mut self.logger)
+        git_object::display_size_from_hash(&self.db()?, self.output, hash, &mut self.logger)
     }
 
     pub fn display_from_hash(&mut self, hash: &str) -> Result<(), CommandError> {
-        git_object::display_from_hash(self.output, hash, &mut self.logger)
+        git_object::display_from_hash(&self.db()?, self.output, hash, &mut self.logger)
     }
 
     pub fn commit_files(
@@ -431,8 +431,8 @@ impl<'a> GitRepository<'a> {
         let mut git_object: GitObject = Box::new(commit);
 
         if !dry_run {
-            write_commit_tree_to_database(&mut staged_tree, &mut self.logger)?;
-            let commit_hash = objects_database::write(&mut self.logger, &mut git_object)?;
+            write_commit_tree_to_database(&self.db()?, &mut staged_tree, &mut self.logger)?;
+            let commit_hash = self.db()?.write(&mut git_object)?;
             self.logger
                 .log(&format!("Commit object saved in database {}", commit_hash));
             self.logger

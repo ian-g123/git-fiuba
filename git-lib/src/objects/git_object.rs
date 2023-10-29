@@ -101,11 +101,12 @@ pub trait GitObjectTrait {
 }
 
 pub fn display_from_hash(
+    db: &ObjectsDatabase,
     output: &mut dyn Write,
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (_, content) = objects_database::read_file(hash, logger)?;
+    let (_, content) = db.read_file(hash)?;
 
     let mut stream = std::io::Cursor::new(content);
     display_from_stream(&mut stream, logger, output)
@@ -130,11 +131,12 @@ pub fn display_from_stream(
 }
 
 pub fn display_type_from_hash(
+    db: &ObjectsDatabase,
     output: &mut dyn Write,
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (_, content) = objects_database::read_file(hash, logger)?;
+    let (_, content) = db.read_file(hash)?;
     let mut stream = std::io::Cursor::new(content);
     let (type_str, _) = get_type_and_len(&mut stream)?;
     writeln!(output, "{}", type_str)
@@ -143,11 +145,12 @@ pub fn display_type_from_hash(
 }
 
 pub fn display_size_from_hash(
+    db: &ObjectsDatabase,
     output: &mut dyn Write,
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (_, content) = objects_database::read_file(hash, logger)?;
+    let (_, content) = db.read_file(hash)?;
     let mut stream = std::io::Cursor::new(content);
     let (_, len) = get_type_and_len(&mut stream)?;
     writeln!(output, "{}", len).map_err(|error| CommandError::FileWriteError(error.to_string()))?;
