@@ -104,7 +104,7 @@ impl Clone {
         let address = self.get_address();
         let url = address + &self.repository_path;
         repo.update_remote(url)?;
-        repo.fetch()?;
+        repo.pull()?;
         Ok(())
     }
 

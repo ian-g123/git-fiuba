@@ -43,7 +43,7 @@ impl<'a> GitRepository<'a> {
         if !Path::new(&format!("{}.git", path)).exists() {
             return Err(CommandError::NotGitRepository);
         }
-        let logs_path = format!("{}.git/logs-2.txt", path);
+        let logs_path = format!("{}.git/logs", path);
         Ok(GitRepository {
             path: path.to_string(),
             logger: Logger::new(&logs_path)?,
@@ -57,7 +57,7 @@ impl<'a> GitRepository<'a> {
         bare: bool,
         output: &'a mut dyn Write,
     ) -> Result<GitRepository<'a>, CommandError> {
-        let logs_path = format!("{}/.git/logs-2", path);
+        let logs_path = format!("{}/.git/logs", path);
 
         let mut repo = GitRepository {
             path: path.to_string(),
@@ -202,7 +202,7 @@ impl<'a> GitRepository<'a> {
             match entry {
                 Ok(entry) => self.try_run_for_path(entry, staging_area)?,
                 Err(error) => {
-                    self.logger.log(&format!("Error in entry: {:?}", error));
+                    self.log(&format!("Error in entry: {:?}", error));
                     return Err(CommandError::FileOpenError(error.to_string()));
                 }
             }
@@ -228,7 +228,7 @@ impl<'a> GitRepository<'a> {
         if self.should_ignore(path_str) {
             return Ok(());
         }
-        self.logger.log(&format!("entry: {:?}", path_str));
+        self.log(&format!("entry: {:?}", path_str));
         self.add_path(path_str, staging_area)?;
         Ok(())
     }
@@ -325,9 +325,9 @@ impl<'a> GitRepository<'a> {
         dry_run: bool,
         reuse_commit_info: Option<String>,
     ) -> Result<(), CommandError> {
-        self.logger.log("Running commit");
+        self.log("Running commit");
         let mut staging_area = StagingArea::open()?;
-        self.logger.log("StagingArea opened");
+        self.log("StagingArea opened");
         self.commit_priv(
             message,
             &mut staging_area,
@@ -345,7 +345,7 @@ impl<'a> GitRepository<'a> {
         files: &Vec<String>,
         staging_area: &mut StagingArea,
     ) -> Result<(), CommandError> {
-        self.logger.log("Running pathspec configuration");
+        self.log("Running pathspec configuration");
         let staging_area_files = staging_area.get_files();
 
         for path in files.iter() {
@@ -366,7 +366,7 @@ impl<'a> GitRepository<'a> {
     /// Guarda en el staging area todos los archivos modificados y elimina los borrados.\
     /// Los archivos untracked no se guardan.
     fn run_all_config(&mut self, staging_area: &mut StagingArea) -> Result<(), CommandError> {
-        self.logger.log("Running 'all' configuration\n");
+        self.log("Running 'all' configuration\n");
         let files = &staging_area.get_files();
         for (path, _) in files {
             if !Path::new(&path).exists() {
@@ -389,7 +389,7 @@ impl<'a> GitRepository<'a> {
         reuse_commit_info: Option<String>,
     ) -> Result<(), CommandError> {
         if !staging_area.has_changes(&mut self.logger)? {
-            self.logger.log("Nothing to commit");
+            self.log("Nothing to commit");
             // show status output + no changes added to commit (use "git add" and/or "git commit -a")
             return Ok(());
         }
@@ -401,7 +401,7 @@ impl<'a> GitRepository<'a> {
             parents.push(padre);
         }
 
-        self.logger.log("Creating Index tree");
+        self.log("Creating Index tree");
 
         let mut staged_tree = {
             if files.is_empty() {
@@ -411,15 +411,15 @@ impl<'a> GitRepository<'a> {
             }
         };
 
-        self.logger.log("Index tree created");
+        self.log("Index tree created");
 
         let commit: CommitObject =
             self.get_commit(&message, parents, staged_tree.to_owned(), reuse_commit_info)?;
-        self.logger.log("get_commit");
+        self.log("get_commit");
 
         let mut git_object: GitObject = Box::new(commit);
         write_commit_tree_to_database(&mut staged_tree, &mut self.logger)?;
-        self.logger.log("Written commit tree to database");
+        self.log("Written commit tree to database");
 
         if !dry_run {
             let commit_hash = objects_database::write(&mut self.logger, &mut git_object)?;
@@ -429,7 +429,7 @@ impl<'a> GitRepository<'a> {
                 .log(&format!("Updating last commit to {}", commit_hash));
 
             update_last_commit(&commit_hash)?;
-            self.logger.log("Last commit updated");
+            self.log("Last commit updated");
             // show commit status
         }
 
@@ -456,7 +456,7 @@ impl<'a> GitRepository<'a> {
             }
         };
 
-        self.logger.log("Commit object created");
+        self.log("Commit object created");
         Ok(commit)
     }
 
@@ -468,7 +468,7 @@ impl<'a> GitRepository<'a> {
         staged_tree: Tree,
     ) -> Result<CommitObject, CommandError> {
         let config = Config::open(&self.path)?;
-        self.logger.log("Config opened");
+        self.log("Config opened");
         let Some(author_email) = config.get("user", "email") else {
             return Err(CommandError::UserConfigurationError);
         };
@@ -478,12 +478,12 @@ impl<'a> GitRepository<'a> {
 
         let author = Author::new(author_name, author_email);
         let commiter = Author::new(author_name, author_email);
-        self.logger.log("Author and committr created");
+        self.log("Author and committr created");
 
         let datetime: DateTime<Local> = Local::now();
         let timestamp = datetime.timestamp();
         let offset = datetime.offset().local_minus_utc() / 60;
-        self.logger.log(&format!("offset: {}", offset));
+        self.log(&format!("offset: {}", offset));
         let commit = CommitObject::new(
             parents,
             message,
@@ -549,12 +549,7 @@ impl<'a> GitRepository<'a> {
 
     pub fn fetch(&mut self) -> Result<(), CommandError> {
         let config = self.config()?;
-        for (domain, configs) in &config.get_entries() {
-            self.logger.log(&format!("[{}]", domain));
-            for (key, value) in configs {
-                self.logger.log(&format!("\t{} = {}", key, value));
-            }
-        }
+
         let Some(url) = config.get("remote \"origin\"", "url") else {
             return Err(CommandError::NoRemoteUrl);
         };
@@ -572,8 +567,44 @@ impl<'a> GitRepository<'a> {
 
         let mut server = GitServer::connect_to(&address)?;
         update_remote_branches(&mut server, repository_path, repository_url, &self.path)?;
-        fetch_and_save_objects(&mut server, &self.path)?;
+        self.fetch_and_save_objects(&mut server)?;
         Ok(())
+    }
+
+    fn fetch_and_save_objects(&mut self, server: &mut GitServer) -> Result<(), CommandError> {
+        let wants = remote_branches(&self.path)?.into_values().collect();
+        let haves = local_branches(&self.path)?.into_values().collect();
+        let objects_decompressed_data = server.fetch_objects(wants, haves)?;
+        for (obj_type, len, content) in objects_decompressed_data {
+            self.log(&format!(
+                "Saving object of type {} and len {}, with data {:?}",
+                obj_type,
+                len,
+                String::from_utf8_lossy(&content)
+            ));
+            let mut git_object: GitObject =
+                Box::new(ProtoObject::new(content, len, obj_type.to_string()));
+            objects_database::write_to(
+                &mut Logger::new_dummy(),
+                &mut git_object,
+                &format!("{}/", self.path),
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn log(&mut self, content: &str) {
+        self.logger.log(content);
+    }
+
+    pub fn pull(&mut self) -> Result<(), CommandError> {
+        self.fetch()?;
+        self.merge()?;
+        Ok(())
+    }
+
+    fn merge(&self) -> Result<(), CommandError> {
+        todo!()
     }
 }
 
@@ -678,28 +709,6 @@ fn get_head_ref() -> Result<String, CommandError> {
         ));
     };
     Ok(head_ref.trim().to_string())
-}
-
-fn fetch_and_save_objects(server: &mut GitServer, base_path: &str) -> Result<(), CommandError> {
-    let wants = remote_branches(base_path)?.into_values().collect();
-    let haves = local_branches(base_path)?.into_values().collect();
-    let objects_decompressed_data = server.fetch_objects(wants, haves)?;
-    for (obj_type, len, content) in objects_decompressed_data {
-        // logger.log(&format!(
-        //     "Saving object of type {} and len {}, with data {:?}",
-        //     obj_type,
-        //     len,
-        //     String::from_utf8_lossy(&content)
-        // ));
-        let mut git_object: GitObject =
-            Box::new(ProtoObject::new(content, len, obj_type.to_string()));
-        objects_database::write_to(
-            &mut Logger::new_dummy(),
-            &mut git_object,
-            &format!("{}/", base_path),
-        )?;
-    }
-    Ok(())
 }
 
 fn local_branches(base_path: &str) -> Result<HashMap<String, String>, CommandError> {

@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::command_errors::CommandError;
 
-use super::git_object::GitObjectTrait;
+use super::{aux::get_sha1, git_object::GitObjectTrait};
 
 #[derive(Clone, Debug)]
 pub struct ProtoObject {
@@ -47,8 +47,10 @@ impl GitObjectTrait for ProtoObject {
         string.to_string()
     }
 
-    fn get_hash(&mut self) -> Result<[u8; 20], crate::command_errors::CommandError> {
-        todo!()
+    fn get_hash(&mut self) -> Result<[u8; 20], CommandError> {
+        let mut buf: Vec<u8> = Vec::new();
+        self.write_to(&mut buf)?;
+        Ok(get_sha1(&buf))
     }
 
     fn get_info_commit(
