@@ -10,6 +10,7 @@ use crate::objects_database;
 
 extern crate chrono;
 use chrono::{prelude::*, DateTime};
+use flate2::write;
 
 #[derive(Clone)]
 pub struct CommitObject {
@@ -19,7 +20,7 @@ pub struct CommitObject {
     committer: Author,
     timestamp: i64,
     offset: i32,
-    tree: Tree,
+    tree: Option<Tree>,
     hash: Option<[u8; 20]>,
 }
 
@@ -42,14 +43,16 @@ impl CommitObject {
             committer,
             timestamp,
             offset,
-            tree,
+            tree: Some(tree),
             hash,
         })
     }
 
     /// Devuelve el hash del tree del Commit.
     pub fn get_tree_hash(&mut self) -> Result<String, CommandError> {
-        Ok(u8_vec_to_hex_string(&self.tree.get_hash()?))
+        //Ok(u8_vec_to_hex_string(&self.tree.get_hash()?))
+        let tree = &mut self.tree.as_mut().unwrap();
+        Ok(tree.get_hash_string()?)
     }
 
     pub fn get_parents(&self) -> Vec<String> {
@@ -108,7 +111,7 @@ impl CommitObject {
     }
 
     pub fn get_tree(&self) -> &Tree {
-        &self.tree
+        self.tree.as_ref().unwrap()
     }
 }
 
@@ -126,11 +129,6 @@ impl CommmitWithBranch {
 pub fn sort_commits_descending_date(vec_commits: &mut Vec<CommmitWithBranch>) {
     vec_commits.sort_by(|a, b| b.commit.timestamp.cmp(&a.commit.timestamp));
 }
-
-// pub fn sort_commits_descending_date(vec_commits: &mut  Vec<(CommitObject, Option<String>)>) {
-//     // ordenamos de forma descendente por fecha y lo ponemos al reves
-//     vec_commits.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
-// }
 
 pub fn print_for_log(
     stream: &mut dyn Write,
@@ -355,7 +353,11 @@ impl GitObjectTrait for CommitObject {
     fn content(&mut self) -> Result<Vec<u8>, CommandError> {
         let mut buf: Vec<u8> = Vec::new();
         let mut stream = Cursor::new(&mut buf);
-        writeln!(stream, "tree {}", self.tree.get_hash_string()?)
+        // writeln!(stream, "tree {}", self.tree.get_hash_string()?)
+        //     .map_err(|err| CommandError::FileWriteError(err.to_string()))?;
+        let tree = self.tree.as_mut().unwrap();
+
+        writeln!(stream, "tree {}", tree.get_hash_string()?)
             .map_err(|err| CommandError::FileWriteError(err.to_string()))?;
 
         for parent in &self.parents {
@@ -492,7 +494,7 @@ pub fn read_from(stream: &mut dyn Read, logger: &mut Logger) -> Result<GitObject
         return Err(CommandError::InvalidCommit);
     };
     Ok(Box::new(CommitObject {
-        tree,
+        tree: Some(tree),
         parents,
         author,
         committer,
