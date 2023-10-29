@@ -5,7 +5,7 @@ fn test_cat_file_type() {
     let path = "./tests/data/commands/cat_file/repo1";
     create_test_scene(path.clone());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg("30d74d258442c7c65512eafab474568dd706c430")
         .arg("-t")
@@ -23,7 +23,7 @@ fn test_cat_file_size() {
     let path = "./tests/data/commands/cat_file/repo2";
     create_test_scene(path.clone());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg("30d74d258442c7c65512eafab474568dd706c430")
         .arg("-s")
@@ -41,7 +41,7 @@ fn test_cat_file_pretty() {
     let path = "./tests/data/commands/cat_file/repo3";
     create_test_scene(path.clone());
 
-    let result = Command::new("../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
         .arg("30d74d258442c7c65512eafab474568dd706c430")
         .arg("-p")
@@ -71,7 +71,7 @@ fn create_test_scene(path: &str) {
     );
 
     assert!(
-        Command::new("../../../../../target/debug/git")
+        Command::new("../../../../../../target/debug/git")
             .arg("hash-object")
             .arg("../testfile.txt")
             .arg("-w")
