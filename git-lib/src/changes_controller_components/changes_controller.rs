@@ -23,8 +23,10 @@ pub struct ChangesController {
 impl ChangesController {
     /// Crea un nuevo ChangesController que contiene información acerca de todos los tipos de cambios
     /// del index y el working tree desde el último commit.
-    pub fn new(logger: &mut Logger) -> Result<ChangesController, CommandError> {
-        let commit_tree = build_last_commit_tree(logger)?;
+    pub fn new(
+        logger: &mut Logger,
+        commit_tree: Option<Tree>,
+    ) -> Result<ChangesController, CommandError> {
         let index = StagingArea::open()?;
         let working_tree = build_working_tree()?;
         let index_changes = Self::check_staging_area_status(&index, &commit_tree, logger)?;

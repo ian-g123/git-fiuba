@@ -75,11 +75,11 @@ impl Status {
         //let branch = get_current_branch_name()?;
         let mut repo = GitRepository::open("", output)?;
         if self.short {
-            repo.status_short_format()
+            repo.status_short_format(false)
             // let short_format = ShortFormat;
             // short_format.show(logger, output, &branch)?;
         } else {
-            repo.status_long_format()
+            repo.status_long_format(false)
             /* let long_format = LongFormat;
             long_format.show(logger, output, &branch)?; */
         }

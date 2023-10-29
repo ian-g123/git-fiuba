@@ -283,6 +283,7 @@ impl<'a> GitRepository<'a> {
         files: &Vec<String>,
         dry_run: bool,
         reuse_commit_info: Option<String>,
+        quiet: bool,
     ) -> Result<(), CommandError> {
         let mut staging_area = StagingArea::open()?;
         self.update_staging_area_files(&files, &mut staging_area)?;
@@ -293,6 +294,7 @@ impl<'a> GitRepository<'a> {
             files,
             dry_run,
             reuse_commit_info,
+            quiet,
         )
     }
 
@@ -302,6 +304,7 @@ impl<'a> GitRepository<'a> {
         files: &Vec<String>,
         dry_run: bool,
         reuse_commit_info: Option<String>,
+        quiet: bool,
     ) -> Result<(), CommandError> {
         let mut staging_area = StagingArea::open()?;
         self.run_all_config(&mut staging_area)?;
@@ -312,6 +315,7 @@ impl<'a> GitRepository<'a> {
             files,
             dry_run,
             reuse_commit_info,
+            quiet,
         )
     }
 
@@ -321,6 +325,7 @@ impl<'a> GitRepository<'a> {
         files: &Vec<String>,
         dry_run: bool,
         reuse_commit_info: Option<String>,
+        quiet: bool,
     ) -> Result<(), CommandError> {
         let mut staging_area = StagingArea::open()?;
         self.commit_priv(
@@ -329,6 +334,7 @@ impl<'a> GitRepository<'a> {
             files,
             dry_run,
             reuse_commit_info,
+            quiet,
         )
     }
 
@@ -382,10 +388,11 @@ impl<'a> GitRepository<'a> {
         files: &Vec<String>,
         dry_run: bool,
         reuse_commit_info: Option<String>,
+        quiet: bool,
     ) -> Result<(), CommandError> {
         if !staging_area.has_changes(&mut self.logger)? {
             self.logger.log("Nothing to commit");
-            // show status output + no changes added to commit (use "git add" and/or "git commit -a")
+            self.status_long_format(true)?;
             return Ok(());
         }
 
@@ -412,9 +419,9 @@ impl<'a> GitRepository<'a> {
             self.get_commit(&message, parents, staged_tree.to_owned(), reuse_commit_info)?;
 
         let mut git_object: GitObject = Box::new(commit);
-        write_commit_tree_to_database(&mut staged_tree, &mut self.logger)?;
 
         if !dry_run {
+            write_commit_tree_to_database(&mut staged_tree, &mut self.logger)?;
             let commit_hash = objects_database::write(&mut self.logger, &mut git_object)?;
             self.logger
                 .log(&format!("Commit object saved in database {}", commit_hash));
@@ -423,12 +430,11 @@ impl<'a> GitRepository<'a> {
 
             update_last_commit(&commit_hash)?;
             self.logger.log("Last commit updated");
-            // show commit status
         }
 
-        // if !self.quiet {
-        //     //self.get_commit_output(commit)
-        // }
+        if !quiet {
+            self.status_long_format(true)?;
+        }
 
         Ok(())
     }
@@ -516,16 +522,16 @@ impl<'a> GitRepository<'a> {
         Err(CommandError::CommitLookUp(commit_hash))
     }
 
-    pub fn status_long_format(&mut self) -> Result<(), CommandError> {
+    pub fn status_long_format(&mut self, commit_output: bool) -> Result<(), CommandError> {
         let branch = get_current_branch_name()?;
         let long_format = LongFormat;
-        long_format.show(&mut self.logger, &mut self.output, &branch)
+        long_format.show(&mut self.logger, &mut self.output, &branch, commit_output)
     }
 
-    pub fn status_short_format(&mut self) -> Result<(), CommandError> {
+    pub fn status_short_format(&mut self, commit_output: bool) -> Result<(), CommandError> {
         let branch = get_current_branch_name()?;
         let short_format = ShortFormat;
-        short_format.show(&mut self.logger, &mut self.output, &branch)
+        short_format.show(&mut self.logger, &mut self.output, &branch, commit_output)
     }
 }
 
