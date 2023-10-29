@@ -35,7 +35,9 @@ pub fn get_commit_tree(logger: &mut Logger) -> Result<Option<Tree>, CommandError
             "Last commit content : {}",
             String::from_utf8_lossy(&commit.content()?)
         ));
-        let tree = commit.get_tree();
+        let Some(tree) = commit.get_tree() else {
+            return Err(CommandError::InvalidCommit);
+        };
 
         logger.log(&format!(
             "tree content : {}",

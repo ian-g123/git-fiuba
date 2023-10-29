@@ -51,7 +51,9 @@ impl CommitObject {
     /// Devuelve el hash del tree del Commit.
     pub fn get_tree_hash(&mut self) -> Result<String, CommandError> {
         //Ok(u8_vec_to_hex_string(&self.tree.get_hash()?))
-        let tree = &mut self.tree.as_mut().unwrap();
+        let Some(tree) = &mut self.tree.as_mut() else {
+            return Err(CommandError::InvalidCommit);
+        };
         Ok(tree.get_hash_string()?)
     }
 
@@ -110,8 +112,8 @@ impl CommitObject {
         self.parents.len() > 1
     }
 
-    pub fn get_tree(&self) -> &Tree {
-        self.tree.as_ref().unwrap()
+    pub fn get_tree(&self) -> Option<&Tree> {
+        self.tree.as_ref()
     }
 }
 
@@ -355,7 +357,9 @@ impl GitObjectTrait for CommitObject {
         let mut stream = Cursor::new(&mut buf);
         // writeln!(stream, "tree {}", self.tree.get_hash_string()?)
         //     .map_err(|err| CommandError::FileWriteError(err.to_string()))?;
-        let tree = self.tree.as_mut().unwrap();
+        let Some(tree) = self.tree.as_mut() else {
+            return Err(CommandError::InvalidCommit);
+        };
 
         writeln!(stream, "tree {}", tree.get_hash_string()?)
             .map_err(|err| CommandError::FileWriteError(err.to_string()))?;

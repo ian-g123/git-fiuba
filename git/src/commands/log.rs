@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs::File,
-    io::{Read, Write},
+    io::{Read, Write, Cursor},
 };
 
 use crate::commands::command::Command;
@@ -10,7 +10,7 @@ use git_lib::{
     git_repository::{get_head_ref, local_branches},
     logger::Logger,
     objects::commit_object::CommitObject,
-    objects_database,
+    objects_database::read_file,
 };
 
 use super::command::ConfigAdderFunction;
@@ -101,33 +101,38 @@ impl Log {
         }
 
         let logger_dummy = &mut Logger::new_dummy();
-        let mut git_object = objects_database::read_object(hash_commit, logger_dummy)?;
-        let commit_object = git_object
-            .as_mut_commit()
-            .ok_or(CommandError::InvalidCommit)?;
-        let commit_object = commit_object.to_owned();
+        // let mut git_object = objects_database::read_object(hash_commit, logger_dummy)?;
+        // let commit_object = git_object
+        //     .as_mut_commit()
+        //     .ok_or(CommandError::InvalidCommit)?;
+        // let commit_object = commit_object.to_owned();
 
-        let parents_hash = commit_object.get_parents();
+        let (path, decompressed_data) = read_file(hash_commit, logger_dummy)?;
+        let data = String::from_utf8(decompressed_data).unwrap();
+        println!("{}", data);
 
-        let first_parent_hash = &parents_hash[0];
-        let path_to_parent = format!(
-            ".git/objects/{}/{}",
-            &first_parent_hash[..2],
-            &first_parent_hash[2..]
-        );
-        self.rebuild_commits_tree(&path_to_parent, commits_map, branch.clone())?;
 
-        if self.all {
-            for parent in parents_hash.iter().skip(1) {
-                let path_to_parent = format!("../.git/objects/{}/{}", &parent[..2], &parent[2..]);
-                if !commits_map.contains_key(&hash_commit.to_string()) {
-                    self.rebuild_commits_tree(&path_to_parent, commits_map, None)?;
-                }
-            }
-        }
+        // let parents_hash = commit_object.get_parents();
 
-        let commit_with_branch = (commit_object, branch);
-        commits_map.insert(hash_commit.to_string(), commit_with_branch);
+        // let first_parent_hash = &parents_hash[0];
+        // let path_to_parent = format!(
+        //     ".git/objects/{}/{}",
+        //     &first_parent_hash[..2],
+        //     &first_parent_hash[2..]
+        // );
+        // self.rebuild_commits_tree(&path_to_parent, commits_map, branch.clone())?;
+
+        // if self.all {
+        //     for parent in parents_hash.iter().skip(1) {
+        //         let path_to_parent = format!("../.git/objects/{}/{}", &parent[..2], &parent[2..]);
+        //         if !commits_map.contains_key(&hash_commit.to_string()) {
+        //             self.rebuild_commits_tree(&path_to_parent, commits_map, None)?;
+        //         }
+        //     }
+        // }
+
+        // let commit_with_branch = (commit_object, branch);
+        // commits_map.insert(hash_commit.to_string(), commit_with_branch);
         Ok(())
     }
 }
@@ -233,3 +238,4 @@ fn get_commit_hash(refs_branch_name: &String) -> Result<String, CommandError> {
 
     Ok(commit_hash[..commit_hash.len() - 1].to_string())
 }
+

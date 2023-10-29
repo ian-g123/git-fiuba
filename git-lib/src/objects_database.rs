@@ -70,7 +70,7 @@ pub fn read_object(hash_str: &str, logger: &mut Logger) -> Result<GitObject, Com
 }
 
 /// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve la ruta del objeto y su data descomprimida.
-pub(crate) fn read_file(hash_str: &str, _: &mut Logger) -> Result<(String, Vec<u8>), CommandError> {
+pub fn read_file(hash_str: &str, _: &mut Logger) -> Result<(String, Vec<u8>), CommandError> {
     let path = format!(".git/objects/{}/{}", &hash_str[0..2], &hash_str[2..]);
 
     let mut file = File::open(&path).map_err(|error| {
