@@ -5,10 +5,7 @@ use std::{
 
 use crate::command_errors::CommandError;
 
-use super::{
-    aux::read_string_until,
-    super_string::{read_string_from, SuperStrings},
-};
+use super::aux::read_string_until;
 
 /// Un Author realiza cambios en el repositorio y/o los commitea. Su información incluye nombre,
 /// apellido e email.

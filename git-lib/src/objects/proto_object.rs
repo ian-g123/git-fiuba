@@ -1,13 +1,10 @@
-use std::fmt;
-
-use crate::command_errors::CommandError;
-
 use super::{aux::get_sha1, git_object::GitObjectTrait};
+use crate::command_errors::CommandError;
 
 #[derive(Clone, Debug)]
 pub struct ProtoObject {
     content: Vec<u8>,
-    len: usize,
+    _len: usize,
     type_str: String,
 }
 
@@ -15,7 +12,7 @@ impl ProtoObject {
     pub fn new(content: Vec<u8>, len: usize, type_str: String) -> Self {
         ProtoObject {
             content,
-            len,
+            _len: len,
             type_str,
         }
     }

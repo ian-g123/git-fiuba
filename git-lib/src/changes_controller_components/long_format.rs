@@ -15,9 +15,16 @@ impl Format for LongFormat {
         changes_to_be_commited: &HashMap<String, ChangeType>,
         changes_not_staged: &HashMap<String, ChangeType>,
         untracked_files: &Vec<String>,
-        branch: &str,
+        (branch, commit_output, initial_commit): (&str, bool, bool),
     ) -> Result<(), CommandError> {
         let mut output_message = format!("On branch {}", branch);
+        if initial_commit {
+            if commit_output {
+                output_message = format!("{}\n\nInitial commit\n", output_message)
+            } else {
+                output_message = format!("{}\n\nNo commits yet\n", output_message)
+            }
+        }
         let changes_to_be_commited = sort_hashmap(changes_to_be_commited);
         if !changes_to_be_commited.is_empty() {
             output_message = format!(
@@ -52,7 +59,15 @@ impl Format for LongFormat {
             && changes_not_staged.is_empty()
             && untracked_files.is_empty()
         {
-            output_message = format!("{}\nnothing to commit, working tree clean", output_message);
+            if initial_commit {
+                output_message = format!(
+                    "{}\nnothing to commit (create/copy files and use \"git add\" to track)",
+                    output_message
+                );
+            } else {
+                output_message =
+                    format!("{}\nnothing to commit, working tree clean", output_message);
+            }
         } else if changes_to_be_commited.is_empty() {
             output_message = format!(
                 "{}\nno changes added to commit (use \"git add\" and/or \"git commit -a\"",

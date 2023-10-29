@@ -14,7 +14,7 @@ impl Format for ShortFormat {
         changes_to_be_commited: &HashMap<String, ChangeType>,
         changes_not_staged: &HashMap<String, ChangeType>,
         untracked_files: &Vec<String>,
-        _: &str,
+        _: (&str, bool, bool),
     ) -> Result<(), CommandError> {
         let mut changes: HashMap<String, ChangeObject> = HashMap::new();
         logger.log(&format!(

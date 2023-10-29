@@ -16,7 +16,7 @@ fn test_working_tree_clean_long_format() {
 
     create_base_scene(path);
 
-    let expected = "On branch master\nnothing to commit, working tree clean\n";
+    let expected = "On branch master\n\nNo commits yet\n\nnothing to commit (create/copy files and use \"git add\" to track)\n";
 
     let result = Command::new("../../../../../../target/debug/git")
         .arg("status")
@@ -52,7 +52,7 @@ fn test_no_changes_added_to_commit() {
 
     create_test_scene_2(path);
 
-    let expected = "On branch master\nUntracked files:\n  (use \"git add <file>...\" to include in what will be committed)\n	dir/\n\nno changes added to commit (use \"git add\" and/or \"git commit -a\"\n";
+    let expected = "On branch master\n\nNo commits yet\n\nUntracked files:\n  (use \"git add <file>...\" to include in what will be committed)\n	dir/\n\nno changes added to commit (use \"git add\" and/or \"git commit -a\"\n";
 
     let result = Command::new("../../../../../../target/debug/git")
         .arg("status")
@@ -105,7 +105,7 @@ fn general_test_long() {
         .output()
         .unwrap();
 
-    let expected = "On branch master\nChanges to be committed:\n  (use \"git restore --staged <file>...\" to unstage)\n\tnew file:   dir/testfile3.txt\n\tnew file:   testfile.txt\n\nUntracked files:\n  (use \"git add <file>...\" to include in what will be committed)\n\tdir/testfile1.txt\n\tdir/testfile2.txt\n\tdir/testfile4.txt\n\n";
+    let expected = "On branch master\n\nNo commits yet\n\nChanges to be committed:\n  (use \"git restore --staged <file>...\" to unstage)\n\tnew file:   dir/testfile3.txt\n\tnew file:   testfile.txt\n\nUntracked files:\n  (use \"git add <file>...\" to include in what will be committed)\n\tdir/testfile1.txt\n\tdir/testfile2.txt\n\tdir/testfile4.txt\n\n";
     assert_eq!(String::from_utf8(result.stdout).unwrap(), expected);
 
     _ = Command::new("../../../../../../target/debug/git")

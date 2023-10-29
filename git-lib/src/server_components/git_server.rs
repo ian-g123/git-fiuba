@@ -1,4 +1,4 @@
-use crate::{command_errors::CommandError, logger::Logger};
+use crate::command_errors::CommandError;
 use std::{
     collections::HashMap,
     io::{Read, Write},

@@ -229,6 +229,7 @@ impl Commit {
                 &self.files,
                 self.dry_run,
                 self.reuse_message.clone(),
+                self.quiet,
             )
         } else if self.all {
             repo.commit_all(
@@ -236,6 +237,7 @@ impl Commit {
                 &self.files,
                 self.dry_run,
                 self.reuse_message.clone(),
+                self.quiet,
             )
         } else {
             repo.commit(
@@ -243,6 +245,7 @@ impl Commit {
                 &self.files,
                 self.dry_run,
                 self.reuse_message.clone(),
+                self.quiet,
             )
         }
     }
