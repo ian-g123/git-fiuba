@@ -3,14 +3,12 @@ use std::{
     io::{Read, Write},
 };
 
-use crate::{logger::Logger, objects_database::ObjectsDatabase};
-
-use super::{
-    command_errors::CommandError,
-    objects::{
-        aux::get_name, git_object::GitObjectTrait, last_commit::build_last_commit_tree, tree::Tree,
-    },
+use crate::{
+    logger::Logger, objects::git_object::GitObjectTrait, objects_database::ObjectsDatabase,
+    utils::aux::get_name,
 };
+
+use super::{command_errors::CommandError, objects::tree::Tree};
 
 #[derive(Debug)]
 pub struct StagingArea {
@@ -30,12 +28,11 @@ impl StagingArea {
 
     pub fn get_changes(
         &self,
-        db: &ObjectsDatabase,
+        last_commit_tree: &Option<Tree>,
         logger: &mut Logger,
     ) -> Result<HashMap<String, String>, CommandError> {
-        let tree_commit = build_last_commit_tree(db, &mut Logger::new_dummy())?;
         let mut changes: HashMap<String, String> = HashMap::new();
-        if let Some(mut tree) = tree_commit {
+        if let Some(mut tree) = last_commit_tree.clone() {
             for (path, hash) in self.files.iter() {
                 let (is_in_last_commit, name) = tree.has_blob_from_hash(hash, logger)?;
 
@@ -52,17 +49,21 @@ impl StagingArea {
     pub fn has_changes(
         &self,
         db: &ObjectsDatabase,
+        last_commit_tree: &Option<Tree>,
         logger: &mut Logger,
     ) -> Result<bool, CommandError> {
-        let changes = self.get_changes(db, logger)?.len();
-        let deleted_files = self.get_deleted_files(db)?;
+        let changes = self.get_changes(last_commit_tree, logger)?.len();
+        let deleted_files = self.get_deleted_files(db, last_commit_tree)?;
         Ok(changes + deleted_files.len() > 0)
     }
 
-    pub fn get_deleted_files(&self, db: &ObjectsDatabase) -> Result<Vec<String>, CommandError> {
+    pub fn get_deleted_files(
+        &self,
+        db: &ObjectsDatabase,
+        last_commit_tree: &Option<Tree>,
+    ) -> Result<Vec<String>, CommandError> {
         let mut deleted: Vec<String> = Vec::new();
-        let last_commit_tree = build_last_commit_tree(db, &mut Logger::new_dummy())?;
-        if let Some(mut tree) = last_commit_tree {
+        if let Some(mut tree) = last_commit_tree.clone() {
             self.check_deleted_from_commit(&mut tree, &mut deleted, "".to_string())
         }
         Ok(deleted)
@@ -117,14 +118,12 @@ impl StagingArea {
 
     pub fn remove_changes(
         &mut self,
-        db: &ObjectsDatabase,
+        tree_commit: &Option<Tree>,
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
         let mut files = self.files.clone();
 
-        let tree_commit = build_last_commit_tree(db, logger)?;
-
-        if let Some(mut tree) = tree_commit {
+        if let Some(mut tree) = tree_commit.clone() {
             for (path, hash) in self.files.iter() {
                 let (is_in_last_commit, name) = tree.has_blob_from_hash(hash, logger)?;
                 if !is_in_last_commit || (name != get_name(&path)?) {
@@ -239,14 +238,13 @@ impl StagingArea {
 
     pub fn get_working_tree_staged_bis(
         &mut self,
-        db: &ObjectsDatabase,
+        last_commit_tree: &Option<Tree>,
         logger: &mut Logger,
         new_files: Vec<String>,
     ) -> Result<Tree, CommandError> {
         let current_dir_display = "";
         let mut working_tree = Tree::new(current_dir_display.to_string());
         let files = self.sort_files();
-        let last_commit_tree = build_last_commit_tree(db, logger)?;
         for (path, hash) in files.iter() {
             let is_in_last_commit = {
                 if let Some(mut tree) = last_commit_tree.clone() {

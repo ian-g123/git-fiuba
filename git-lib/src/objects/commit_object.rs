@@ -1,10 +1,10 @@
-use super::aux::{get_sha1, hex_string_to_u8_vec, read_string_until};
 use super::git_object::{GitObject, GitObjectTrait};
-use super::super_string::u8_vec_to_hex_string;
 use super::{author::Author, tree::Tree};
 use crate::command_errors::CommandError;
 use crate::logger::Logger;
 use crate::objects_database::ObjectsDatabase;
+use crate::utils::aux::{get_sha1, hex_string_to_u8_vec, read_string_until};
+use crate::utils::super_string::u8_vec_to_hex_string;
 use std::io::{Cursor, Read, Write};
 
 extern crate chrono;
@@ -44,6 +44,13 @@ impl CommitObject {
             tree,
             hash,
         })
+    }
+    pub fn get_parents(&self) -> Vec<String> {
+        self.parents.clone()
+    }
+
+    pub fn get_timestamp(&self) -> i64 {
+        self.timestamp
     }
 
     /// Devuelve el hash del tree del Commit.
@@ -371,11 +378,13 @@ impl GitObjectTrait for CommitObject {
     }
 
     fn get_hash(&mut self) -> Result<[u8; 20], CommandError> {
-        let Some(hash) = self.hash else {
-            let hash = get_sha1(&self.content()?);
-            self.hash = Some(hash);
+        if let Some(hash) = self.hash {
             return Ok(hash);
-        };
+        }
+        let mut buf: Vec<u8> = Vec::new();
+        self.write_to(&mut buf)?;
+        let hash = get_sha1(&buf);
+        self.set_hash(hash);
         Ok(hash)
     }
 }
@@ -445,8 +454,7 @@ mod test {
     use std::{fs::File, io::Write};
 
     use crate::{
-        file_compressor::compress,
-        objects::{aux::hex_string_to_u8_vec, git_object, super_string::SuperStrings},
+        file_compressor::compress, objects::git_object, utils::super_string::SuperStrings,
     };
 
     use super::*;

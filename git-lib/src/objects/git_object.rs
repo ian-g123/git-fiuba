@@ -1,12 +1,10 @@
 use crate::command_errors::CommandError;
 use crate::objects_database::ObjectsDatabase;
+use crate::utils::super_string::u8_vec_to_hex_string;
 use crate::{logger::Logger, objects_database};
 
-use super::aux::hex_string_to_u8_vec;
-use super::{
-    author::Author, blob::Blob, commit_object::CommitObject, mode::Mode,
-    super_string::u8_vec_to_hex_string, tree::Tree,
-};
+use super::{author::Author, blob::Blob, commit_object::CommitObject, mode::Mode, tree::Tree};
+use crate::utils::aux::hex_string_to_u8_vec;
 use std::io::{Read, Write};
 
 pub type GitObject = Box<dyn GitObjectTrait>;

@@ -3,15 +3,16 @@ use std::{
     io::{Cursor, Read, Write},
 };
 
-use crate::command_errors::CommandError;
-use crate::logger::Logger;
+use crate::{
+    command_errors::CommandError,
+    utils::{aux::get_name, super_string::SuperStrings},
+};
+use crate::{logger::Logger, utils::aux::*};
 
 use super::{
     author::Author,
-    aux::*,
     git_object::{write_to_stream_from_content, GitObject, GitObjectTrait},
     mode::Mode,
-    super_string::SuperStrings,
     tree::Tree,
 };
 
@@ -186,17 +187,14 @@ impl GitObjectTrait for Blob {
 
     /// Devuelve el hash del Blob.
     fn get_hash(&mut self) -> Result<[u8; 20], CommandError> {
-        match self.hash {
-            Some(hash) => Ok(hash),
-            None => {
-                let mut buf: Vec<u8> = Vec::new();
-                let mut stream = Cursor::new(&mut buf);
-                self.write_to(&mut stream)?;
-                let sha1 = get_sha1(&buf);
-                self.set_hash(sha1);
-                Ok(sha1)
-            }
+        if let Some(hash) = self.hash {
+            return Ok(hash);
         }
+        let mut buf: Vec<u8> = Vec::new();
+        self.write_to(&mut buf)?;
+        let hash = get_sha1(&buf);
+        self.set_hash(hash);
+        Ok(hash)
     }
 
     fn get_name(&self) -> Option<String> {

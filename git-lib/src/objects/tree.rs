@@ -3,16 +3,18 @@ use std::{
     io::{Read, Write},
 };
 
-use crate::{command_errors::CommandError, objects_database::ObjectsDatabase};
-use crate::{logger::Logger, objects_database};
+use crate::{
+    command_errors::CommandError,
+    objects_database::ObjectsDatabase,
+    utils::{aux::*, super_string::u8_vec_to_hex_string},
+};
+use crate::{join_paths, logger::Logger};
 
 use super::{
     author::Author,
-    aux::*,
     blob::Blob,
     git_object::{GitObject, GitObjectTrait},
     mode::Mode,
-    super_string::u8_vec_to_hex_string,
 };
 
 #[derive(Clone)]
@@ -387,7 +389,9 @@ impl GitObjectTrait for Tree {
 
     fn restore(&mut self, path: &str, logger: &mut Logger) -> Result<(), CommandError> {
         self.objects.iter().try_for_each(|(name, object)| {
-            let path = format!("{}/{}", path, name);
+            let path = join_paths!(path, name).ok_or(CommandError::FileWriteError(
+                "No se pudo encontrar el path".to_string(),
+            ))?;
             object.to_owned().restore(&path, logger)?;
             Ok(())
         })?;

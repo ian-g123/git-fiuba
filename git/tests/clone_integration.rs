@@ -6,36 +6,26 @@ use std::{
     process::{Child, Command},
 };
 
-use git_lib::file_compressor::extract;
+use git_lib::{file_compressor::extract, join_paths};
 
 #[test]
+#[ignore]
 fn test_clone() {
     let path = "./tests/data/commands/clone/test1";
+    let git_bin = "../../../../../../target/debug/git";
 
-    // _ = fs::remove_dir_all(format!("{}/repo", path));
-    // create_base_scene(path.clone());
+    create_base_scene(path.clone());
     // let mut handle = start_deamon(path);
     // let id = handle.id();
     // println!("ID: {}", id);
 
-    let result = Command::new("../../../../../../target/debug/git")
+    let result = Command::new(git_bin)
         .arg("clone")
         .arg("git://127.1.0.0:9418/repo")
         .current_dir(path)
         .output()
         .unwrap();
-    println!("{}", String::from_utf8(result.stdout).unwrap());
-    println!("{}", String::from_utf8(result.stderr).unwrap());
 
-    // match handle.kill() {
-    //     Ok(_) => {}
-    //     Err(error) => {
-    //         panic!("No se pudo matar el proceso {}: {}", id, error);
-    //     }
-    // }
-    // handle.wait().unwrap();
-
-    //check if the files are the same in both directories
     compare_files(
         &format!("{}/repo/", path),
         "2a293f24ce241ead407caf5bcd23fcde82c63149",
@@ -59,15 +49,68 @@ fn test_clone() {
         &commit_hash,
     );
 
-    // Read file "testfile" and assert if it contains "contenido"
-    let mut file = File::open(path.to_owned() + "/repo/testfile").unwrap();
+    let joined_path =
+        join_paths!(path.to_owned(), "repo/testfile").expect("No se pudo unir los paths");
+    println!("joined_path {}", joined_path);
+    let mut file = File::open(joined_path).unwrap();
     let mut content = String::new();
     file.read_to_string(&mut content).unwrap();
     assert_eq!(content, "contenido\n");
 
+    modify_file_and_commit_in_server_repo(&path);
+
+    let result = Command::new("../".to_owned() + git_bin)
+        .arg("fetch")
+        .current_dir(&format!("{}/repo/", path))
+        .output()
+        .unwrap();
+
+    println!("{}", String::from_utf8(result.stdout).unwrap());
+    println!("{}", String::from_utf8(result.stderr).unwrap());
+
+    let result = Command::new("../".to_owned() + git_bin)
+        .arg("merge")
+        .current_dir(&format!("{}/repo/", path))
+        .output()
+        .unwrap();
+
+    println!("{}", String::from_utf8(result.stderr).unwrap());
+
+    let mut file = File::open(path.to_owned() + "/repo/testfile").unwrap();
+    let mut content = String::new();
+    file.read_to_string(&mut content).unwrap();
+    assert_eq!(content, "Primera linea\nSeparador\nTercera linea\n");
+
     panic!("Pausa");
 
     _ = fs::remove_dir_all(format!("{}", path));
+}
+
+fn modify_file_and_commit_in_server_repo(path: &str) {
+    let mut file = File::create(path.to_owned() + "/server-files/repo/testfile").unwrap();
+    file.write_all(b"Primera linea\nSeparador\nTercera linea\n")
+        .unwrap();
+
+    assert!(
+        Command::new("git")
+            .arg("add")
+            .arg("testfile")
+            .current_dir(path.to_owned() + "/server-files/repo")
+            .status()
+            .is_ok(),
+        "No se pudo agregar el archivo testfile"
+    );
+
+    assert!(
+        Command::new("git")
+            .arg("commit")
+            .arg("-m")
+            .arg("hi2")
+            .current_dir(path.to_owned() + "/server-files/repo")
+            .status()
+            .is_ok(),
+        "No se pudo hacer commit"
+    );
 }
 
 fn start_deamon(path: &str) -> Child {
@@ -85,28 +128,16 @@ fn start_deamon(path: &str) -> Child {
 }
 
 fn create_base_scene(path: &str) {
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(format!("{}/server-files/repo", path));
+    _ = fs::remove_dir_all(format!("{}/repo", path));
+
     let Ok(_) = fs::create_dir_all(path.clone()) else {
         panic!("No se pudo crear el directorio")
     };
 
-    assert!(
-        Command::new("mkdir")
-            .arg("server-files")
-            .current_dir(path)
-            .status()
-            .is_ok(),
-        "No se pudo crear el directorio repo"
-    );
-
-    assert!(
-        Command::new("mkdir")
-            .arg("repo")
-            .current_dir(path.to_owned() + "/server-files")
-            .status()
-            .is_ok(),
-        "No se pudo crear el directorio repo"
-    );
+    let Ok(_) = fs::create_dir_all(format!("{}/server-files/repo", path)) else {
+        panic!("No se pudo crear el directorio")
+    };
 
     assert!(
         Command::new("git")
@@ -118,18 +149,6 @@ fn create_base_scene(path: &str) {
         "No se pudo inicializar el repositorio"
     );
 
-    // assert!(
-    //     Command::new("echo")
-    //         .arg("contenido")
-    //         .arg(">")
-    //         .arg("testfile")
-    //         .current_dir(path.to_owned() + "/server-files/repo")
-    //         .status()
-    //         .is_ok(),
-    //     "No se pudo crear el archivo testfile"
-    // );
-
-    // Write a file "testfile" with content "contenido" in "path.to_owned() + /server-files/repo"
     let mut file = File::create(path.to_owned() + "/server-files/repo/testfile").unwrap();
     file.write_all(b"contenido\n").unwrap();
 

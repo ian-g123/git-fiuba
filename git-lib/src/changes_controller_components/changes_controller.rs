@@ -1,11 +1,10 @@
 use crate::{
     command_errors::CommandError,
     logger::Logger,
-    objects::{
-        aux::get_name, git_object::GitObject, last_commit::build_last_commit_tree, tree::Tree,
-    },
+    objects::{git_object::GitObject, tree::Tree},
     objects_database::ObjectsDatabase,
     staging_area::StagingArea,
+    utils::aux::get_name,
 };
 use std::{collections::HashMap, fs::File, io::Read};
 
@@ -66,11 +65,11 @@ impl ChangesController {
     fn check_staging_area_status(
         db: &ObjectsDatabase,
         staging_area: &StagingArea,
-        last_commit: &Option<Tree>,
+        last_commit_tree: &Option<Tree>,
         logger: &mut Logger,
     ) -> Result<HashMap<String, ChangeType>, CommandError> {
         let staging_files = staging_area.get_files();
-        let Some(mut tree) = last_commit.to_owned() else {
+        let Some(mut tree) = last_commit_tree.to_owned() else {
             let changes: HashMap<String, ChangeType> = staging_files
                 .iter()
                 .map(|(path, _)| (path.to_string(), ChangeType::Added))
@@ -79,7 +78,7 @@ impl ChangesController {
         };
         let mut changes: HashMap<String, ChangeType> =
             Self::check_files_in_staging_area(staging_files, logger, &mut tree)?;
-        Self::get_deleted_changes_index(db, staging_area, &mut changes)?;
+        Self::get_deleted_changes_index(db, last_commit_tree, staging_area, &mut changes)?;
         Ok(changes)
     }
 
@@ -157,10 +156,11 @@ impl ChangesController {
     /// Obtiene los archivos eliminados en el index, pero presentes en el último commit.
     fn get_deleted_changes_index(
         db: &ObjectsDatabase,
+        last_commit_tree: &Option<Tree>,
         staging_area: &StagingArea,
         changes: &mut HashMap<String, ChangeType>,
     ) -> Result<(), CommandError> {
-        let deleted_changes = staging_area.get_deleted_files(db)?;
+        let deleted_changes = staging_area.get_deleted_files(db, last_commit_tree)?;
         for deleted_file in deleted_changes.iter() {
             _ = changes.insert(deleted_file.to_string(), ChangeType::Deleted)
         }

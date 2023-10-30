@@ -1,6 +1,6 @@
 use crate::logger::Logger;
 use crate::objects_database::ObjectsDatabase;
-use crate::{command_errors::CommandError, objects::last_commit::build_last_commit_tree};
+use crate::{command_errors::CommandError, objects::tree::Tree};
 use std::{collections::HashMap, io::Write};
 
 use super::{changes_controller::ChangesController, changes_types::ChangeType};
@@ -8,12 +8,13 @@ pub trait Format {
     fn show(
         &self,
         db: &ObjectsDatabase,
+        commit_tree: Option<Tree>,
         logger: &mut Logger,
         output: &mut dyn Write,
         branch: &str,
         commit_output: bool,
     ) -> Result<(), CommandError> {
-        let commit_tree = build_last_commit_tree(db, logger)?;
+        // let commit_tree = build_last_commit_tree(db, logger)?;
         let initial_commit = {
             if commit_tree.is_none() {
                 true

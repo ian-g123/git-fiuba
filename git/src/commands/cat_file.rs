@@ -1,5 +1,5 @@
 use crate::commands::command::Command;
-use git_lib::{command_errors::CommandError, git_repository::GitRepository};
+use git_lib::{command_errors::CommandError, git_repository::GitRepository, join_paths};
 
 use std::{
     io::{Read, Write},
@@ -7,7 +7,6 @@ use std::{
 };
 
 pub struct CatFile {
-    path: String,
     hash: String,
     exists: bool,
     pretty: bool,
@@ -53,7 +52,6 @@ impl Command for CatFile {
 impl CatFile {
     fn new_default() -> Result<CatFile, CommandError> {
         let cat_file = CatFile {
-            path: "".to_string(),
             exists: false,
             pretty: false,
             type_object: false,
@@ -82,11 +80,10 @@ impl CatFile {
             return Ok(i + 1);
         }
 
-        if !self.path.is_empty() {
+        if !self.hash.is_empty() {
             return Err(CommandError::InvalidArguments);
         }
 
-        self.path = format!(".git/objects/{}/{}", &flag[..2], &flag[2..]);
         self.hash = flag.to_string();
         Ok(i + 1)
     }

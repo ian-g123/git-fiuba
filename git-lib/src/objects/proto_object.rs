@@ -1,5 +1,5 @@
-use super::{aux::get_sha1, git_object::GitObjectTrait};
-use crate::command_errors::CommandError;
+use super::git_object::GitObjectTrait;
+use crate::{command_errors::CommandError, utils::aux::get_sha1};
 
 #[derive(Clone, Debug)]
 pub struct ProtoObject {

@@ -1,6 +1,6 @@
 use git::commands::{
-    add::Add, cat_file::CatFile, command::Command, commit::Commit, hash_object::HashObject,
-    init::Init, status::Status,
+    add::Add, cat_file::CatFile, command::Command, commit::Commit, fetch::Fetch,
+    hash_object::HashObject, init::Init, merge::Merge, status::Status,
 };
 use git_lib::command_errors::CommandError;
 use std::{env, io};
@@ -29,6 +29,8 @@ fn run(command_name: &str, command_args: &[String]) -> Result<(), CommandError> 
         Commit::run_from,
         Status::run_from,
         git::commands::clone::Clone::run_from,
+        Fetch::run_from,
+        Merge::run_from,
     ];
 
     for command in &commands {
