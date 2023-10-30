@@ -27,7 +27,7 @@ fn main() {
 
     let commits = git::commands::log::Log::run_for_graph().unwrap();
 
-    let glade_src = include_str!("../../git_interface.glade");
+    let glade_src = include_str!("../../git interface.glade");
     let builder = gtk::Builder::from_string(glade_src);
     let window: gtk::Window = builder.object("window app").unwrap();
 
@@ -35,7 +35,7 @@ fn main() {
 
     let stagin_changes_list: gtk::ListBox = builder.object("lista_staging_changes").unwrap();
 
-    let drawing_area: gtk::DrawingArea = builder.object("grafo_drawing_area").unwrap();
+    let drawing_area: gtk::DrawingArea = builder.object("drawing_area").unwrap();
     let description_list: gtk::ListBox = builder.object("description_list").unwrap();
     let date_list: gtk::ListBox = builder.object("date_list").unwrap();
     let author_list: gtk::ListBox = builder.object("author_list").unwrap();
