@@ -1,7 +1,7 @@
 use std::io::{Cursor, Read, Write};
 
 use super::aux::{get_sha1, hex_string_to_u8_vec, read_string_until};
-use super::git_object::{GitObject, GitObjectTrait};
+use super::git_object::{get_type_and_len, GitObject, GitObjectTrait};
 use super::super_string::{u8_vec_to_hex_string, SuperStrings};
 use super::{author::Author, tree::Tree};
 use crate::command_errors::CommandError;
@@ -10,7 +10,6 @@ use crate::objects_database;
 
 extern crate chrono;
 use chrono::{prelude::*, DateTime};
-use flate2::write;
 
 #[derive(Clone)]
 pub struct CommitObject {
@@ -21,7 +20,7 @@ pub struct CommitObject {
     timestamp: i64,
     offset: i32,
     tree: Option<Tree>,
-    hash: Option<[u8; 20]>,
+    pub hash: Option<[u8; 20]>,
 }
 
 impl CommitObject {
@@ -117,32 +116,21 @@ impl CommitObject {
     }
 }
 
-pub struct CommmitWithBranch {
-    commit: CommitObject,
-    branch: Option<String>,
-}
-
-impl CommmitWithBranch {
-    pub fn new(commit: CommitObject, branch: Option<String>) -> CommmitWithBranch {
-        CommmitWithBranch { commit, branch }
-    }
-}
-
-pub fn sort_commits_descending_date(vec_commits: &mut Vec<CommmitWithBranch>) {
-    vec_commits.sort_by(|a, b| b.commit.timestamp.cmp(&a.commit.timestamp));
+pub fn sort_commits_descending_date(vec_commits: &mut Vec<(CommitObject, Option<String>)>) {
+    vec_commits.sort_by(|a, b| b.0.timestamp.cmp(&a.0.timestamp));
 }
 
 pub fn print_for_log(
     stream: &mut dyn Write,
-    vec_commits: &mut Vec<CommmitWithBranch>,
+    vec_commits: &mut Vec<(CommitObject, Option<String>)>,
 ) -> Result<(), CommandError> {
     let mut buf: Vec<u8> = Vec::new();
     let mut writer_stream = Cursor::new(&mut buf);
     for commit_with_branch in vec_commits {
-        if commit_with_branch.commit.is_merge() {
-            print_merge_commit_for_log(&mut writer_stream, &mut commit_with_branch.commit)?;
+        if commit_with_branch.0.is_merge() {
+            print_merge_commit_for_log(&mut writer_stream, &mut commit_with_branch.0)?;
         } else {
-            print_normal_commit_for_log(&mut writer_stream, &mut commit_with_branch.commit)?;
+            print_normal_commit_for_log(&mut writer_stream, &mut commit_with_branch.0)?;
         }
     }
     _ = stream.write_all(&buf);
@@ -509,22 +497,42 @@ pub fn read_from(stream: &mut dyn Read, logger: &mut Logger) -> Result<GitObject
     }))
 }
 
-// pub fn read_from_for_log(
-//     stream: &mut dyn Read,
-//     logger: &mut Logger,
-// ) -> Result<CommitObject, CommandError> {
-//     let (tree_hash, parents, author, author_timestamp, author_offset, committer, _, _, message) =
-//         read_commit_info_from(stream, logger)?;
-//     logger.log("commit created");
-//     Ok(CommitObject {
-//         tree: tree_hash,
-//         parents,
-//         author,
-//         committer,
-//         message,
-//         timestamp: author_timestamp,
-//         offset: author_offset,
-//     })
+pub fn read_from_for_log(
+    stream: &mut dyn Read,
+    logger: &mut Logger,
+    hash_commit: &String,
+) -> Result<CommitObject, CommandError> {
+    get_type_and_len(stream)?;
+
+    let (_, parents, author, author_timestamp, author_offset, committer, _, _, message) =
+        read_commit_info_from(stream)?;
+
+    Ok(CommitObject {
+        tree: None,
+        parents,
+        author,
+        committer,
+        message,
+        timestamp: author_timestamp,
+        offset: author_offset,
+        hash: Some(hex_string_to_u8_vec(hash_commit)),
+    })
+}
+
+// pub fn read_from_for_log(stream: &mut dyn Read) -> Result<Vec<String>, CommandError> {
+//     read_string_until(stream, '\n')?;
+//     let mut parents = Vec::new();
+
+//     loop {
+//         let line = read_string_until(stream, '\n')?;
+//         let (info_izq, info_der) = line.split_once(' ').unwrap();
+//         if info_izq == "author" {
+//             break;
+//         }
+//         parents.push(info_der.to_string());
+//     }
+
+//     Ok(parents)
 // }
 
 pub fn write_commit_tree_to_database(

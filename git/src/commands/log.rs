@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs::File,
-    io::{Read, Write, Cursor},
+    io::{Cursor, Read, Write},
 };
 
 use crate::commands::command::Command;
@@ -9,7 +9,10 @@ use git_lib::{
     command_errors::CommandError,
     git_repository::{get_head_ref, local_branches},
     logger::Logger,
-    objects::commit_object::CommitObject,
+    objects::{
+        commit_object::{self, read_from_for_log, sort_commits_descending_date, CommitObject},
+        super_string::u8_vec_to_hex_string,
+    },
     objects_database::read_file,
 };
 
@@ -31,9 +34,8 @@ impl Command for Log {
             return Err(CommandError::Name);
         }
 
-        let instance = Self::new(args)?;
-
-        let mut commits = instance.run()?;
+        let mut instance = Self::new(args)?;
+        let commits = instance.run()?;
         // print_for_log(output, &mut commits)?;
         Ok(())
     }
@@ -48,6 +50,17 @@ impl Log {
         let mut log = Self::new_default();
         log.config(args)?;
         Ok(log)
+    }
+
+    fn run_for_graph() {
+        let log = Self::new(["log".to_string(), "--all".to_string()].as_slice()).unwrap();
+        let commits = log.run().unwrap();
+
+        for commit in commits.iter() {
+            let hash = &commit.0.hash.unwrap();
+            let hash = u8_vec_to_hex_string(hash);
+            println!("{:?} {:?}", hash, &commit.1);
+        }
     }
 
     fn new_default() -> Self {
@@ -71,8 +84,7 @@ impl Log {
         } else {
             let current_branch = get_head_ref()?;
             let hash_commit = get_commit_hash(&current_branch)?;
-            let branch_and_hash = (current_branch, hash_commit);
-            branches_with_their_last_hash.push(branch_and_hash);
+            branches_with_their_last_hash.push((current_branch, hash_commit));
         }
 
         for branch_with_commit in branches_with_their_last_hash {
@@ -82,9 +94,16 @@ impl Log {
                 Some(branch_with_commit.0),
             )?;
         }
+
         let mut commits: Vec<_> = commits_map.drain().map(|(_, v)| v).collect();
 
-        // sort_commits_descending_date(&mut commits);
+        sort_commits_descending_date(&mut commits);
+
+        for commit in commits.iter() {
+            let hash = &commit.0.hash.unwrap();
+            let hash = u8_vec_to_hex_string(hash);
+            println!("{:?} {:?}", hash, &commit.1);
+        }
 
         Ok(commits)
     }
@@ -96,43 +115,34 @@ impl Log {
         commits_map: &mut HashMap<String, (CommitObject, Option<String>)>,
         branch: Option<String>,
     ) -> Result<(), CommandError> {
-        if commits_map.contains_key(hash_commit) {
+        if commits_map.contains_key(&hash_commit.to_string()) {
             return Ok(());
         }
 
         let logger_dummy = &mut Logger::new_dummy();
-        // let mut git_object = objects_database::read_object(hash_commit, logger_dummy)?;
-        // let commit_object = git_object
-        //     .as_mut_commit()
-        //     .ok_or(CommandError::InvalidCommit)?;
-        // let commit_object = commit_object.to_owned();
+        let (_, decompressed_data) = read_file(hash_commit, logger_dummy)?;
+        let mut stream = Cursor::new(decompressed_data);
 
-        let (path, decompressed_data) = read_file(hash_commit, logger_dummy)?;
-        let data = String::from_utf8(decompressed_data).unwrap();
-        println!("{}", data);
+        let commit_object = read_from_for_log(&mut stream, logger_dummy, hash_commit)?;
 
+        let parents_hash = commit_object.get_parents();
 
-        // let parents_hash = commit_object.get_parents();
+        if parents_hash.len() > 0 {
+            let principal_parent = &parents_hash[0];
+            self.rebuild_commits_tree(&principal_parent, commits_map, branch.clone())?;
 
-        // let first_parent_hash = &parents_hash[0];
-        // let path_to_parent = format!(
-        //     ".git/objects/{}/{}",
-        //     &first_parent_hash[..2],
-        //     &first_parent_hash[2..]
-        // );
-        // self.rebuild_commits_tree(&path_to_parent, commits_map, branch.clone())?;
+            if self.all {
+                for parent_hash in parents_hash.iter().skip(1) {
+                    self.rebuild_commits_tree(&parent_hash, commits_map, None)?;
+                }
+            }
+        }
+        if commits_map.contains_key(&hash_commit.to_string()) {
+            return Ok(());
+        }
 
-        // if self.all {
-        //     for parent in parents_hash.iter().skip(1) {
-        //         let path_to_parent = format!("../.git/objects/{}/{}", &parent[..2], &parent[2..]);
-        //         if !commits_map.contains_key(&hash_commit.to_string()) {
-        //             self.rebuild_commits_tree(&path_to_parent, commits_map, None)?;
-        //         }
-        //     }
-        // }
-
-        // let commit_with_branch = (commit_object, branch);
-        // commits_map.insert(hash_commit.to_string(), commit_with_branch);
+        let commit_with_branch = (commit_object, branch);
+        commits_map.insert(hash_commit.to_string(), commit_with_branch);
         Ok(())
     }
 }
@@ -141,90 +151,21 @@ impl Log {
 fn push_branch_hashes(
     branches_with_their_commits: &mut Vec<(String, String)>,
 ) -> Result<(), CommandError> {
-    let path_to_heads = "../";
-    let branches_hashes = local_branches(path_to_heads)?;
+    // let path_to_heads = ".";
+    let branches_hashes = local_branches(".")?;
     for branch_hash in branches_hashes {
+        let branch_hash = (
+            branch_hash.0,
+            branch_hash.1[..branch_hash.1.len() - 1].to_string(),
+        );
         branches_with_their_commits.push(branch_hash);
     }
     Ok(())
 }
 
-// /// Agrega al vector de paths_to_commits todos los paths a los últimos commits de sus respectivas ramas y el nombre de la rama
-// fn get_all_branches_and_hashes(
-//     path_to_heads: &str,
-//     path_to_commits: &mut Vec<BranchAndHashCommit>,
-// ) -> Result<(), CommandError> {
-//     Ok(if let Ok(branches) = fs::read_dir(path_to_heads) {
-//         for branch_file in branches {
-//             let branch_file_dir = branch_file.map_err(|_| {
-//                 CommandError::FileNotFound("no se pudo abrir branch en log".to_string())
-//             })?;
-
-//             let path = branch_file_dir.path();
-//             let Some(branch_file_name) = path.to_str() else {
-//                 return Err(CommandError::FileNotFound(format!(
-//                     "No se pudo abrir branch en log"
-//                 )));
-//             };
-
-//             let branch_name = branch_file_name.split('/').last();
-//             let branch_name = branch_name.ok_or_else(|| {
-//                 CommandError::FileNotFound("No se pudo abrir branch en log".to_string())
-//             })?;
-//             let path_and_branch = BranchAndHashCommit {
-//                 branch_commit: branch_name.to_string(),
-//                 hash_commit: get_commit_hash(&branch_file_name.to_string())?,
-//             };
-//             path_to_commits.push(path_and_branch);
-//         }
-//     } else {
-//         return Err(CommandError::FileNotFound(
-//             "No se pudo abrir .git/refs/heads en log".to_string(),
-//         ));
-//     })
-// }
-
-// /// Obtiene el hash del commit al que apunta la rama actual en la que se encuentra el usuario
-// fn get_hash_and_branch_to_actual_branch() -> Result<BranchAndHashCommit, CommandError> {
-//     let mut file = File::open("../.git/HEAD").map_err(|_| {
-//         CommandError::FileNotFound("No se pudo abrir ../.git/HEAD en log".to_string())
-//     })?;
-
-//     let mut refs_heads = String::new();
-//     file.read_to_string(&mut refs_heads).map_err(|_| {
-//         CommandError::FileReadError("No se pudo leer ../.git/HEAD en log".to_string())
-//     })?;
-
-//     let Some((_, path_to_branch)) = refs_heads.split_once(' ') else {
-//         return Err(CommandError::FileNotFound(
-//             "No se pudo abrir ../.git/HEAD en log".to_string(),
-//         ));
-//     };
-
-//     let path_to_branch = if path_to_branch.len() > 0 {
-//         &path_to_branch[..path_to_branch.len() - 1]
-//     } else {
-//         return Err(CommandError::FileNotFound(
-//             "No existe un archivo con nombre vacio en ../.git/objects considere analizarlo"
-//                 .to_string(),
-//         ));
-//     };
-
-//     let name_branch = path_to_branch.split('/').last();
-//     let name_branch = name_branch
-//         .ok_or_else(|| CommandError::FileNotFound("No se pudo abrir branch en log".to_string()))?;
-
-//     let path_and_branch = BranchAndHashCommit {
-//         branch_commit: name_branch.to_string(),
-//         hash_commit: get_commit_hash(&path_to_branch.to_string())?,
-//     };
-
-//     Ok(path_and_branch)
-// }
-
 /// Obtiene el hash del commit al que apunta la rama actual en la que se encuentra el usuario
 fn get_commit_hash(refs_branch_name: &String) -> Result<String, CommandError> {
-    let path_to_heads = ".git/";
+    let path_to_heads = ".git_pruebas/";
     let path_to_branch = format!("{}/{}", path_to_heads, refs_branch_name);
 
     let mut file = File::open(&path_to_branch).map_err(|_| {
@@ -238,4 +179,3 @@ fn get_commit_hash(refs_branch_name: &String) -> Result<String, CommandError> {
 
     Ok(commit_hash[..commit_hash.len() - 1].to_string())
 }
-

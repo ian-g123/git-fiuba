@@ -694,22 +694,22 @@ fn update_last_commit(commit_hash: &str) -> Result<(), CommandError> {
 
 /// Opens file in .git/HEAD and returns the branch name
 pub fn get_head_ref() -> Result<String, CommandError> {
-    let Ok(mut head_file) = File::open(".git/HEAD") else {
-        return Err(CommandError::FileOpenError(".git/HEAD".to_string()));
+    let Ok(mut head_file) = File::open(".git_pruebas/HEAD") else {
+        return Err(CommandError::FileOpenError(".git_pruebas/HEAD".to_string()));
     };
     let mut head_content = String::new();
     head_file
         .read_to_string(&mut head_content)
         .map_err(|error| {
             CommandError::FileReadError(format!(
-                "Error abriendo .git/HEAD: {:?}",
+                "Error abriendo .git_pruebas/HEAD: {:?}",
                 error.to_string()
             ))
         })?;
 
     let Some((_, head_ref)) = head_content.split_once(" ") else {
         return Err(CommandError::FileReadError(
-            "Error leyendo .git/HEAD".to_string(),
+            "Error leyendo .git_pruebas/HEAD".to_string(),
         ));
     };
     Ok(head_ref.trim().to_string())
@@ -717,7 +717,7 @@ pub fn get_head_ref() -> Result<String, CommandError> {
 
 pub fn local_branches(base_path: &str) -> Result<HashMap<String, String>, CommandError> {
     let mut branches = HashMap::<String, String>::new();
-    let branches_path = format!("{}/.git/refs/heads/", base_path);
+    let branches_path = format!("{}/.git_pruebas/refs/heads/", base_path);
     let paths = fs::read_dir(branches_path).map_err(|error| {
         CommandError::FileReadError(format!(
             "Error leyendo directorio de branches: {}",
@@ -757,7 +757,7 @@ pub fn local_branches(base_path: &str) -> Result<HashMap<String, String>, Comman
 
 fn remote_branches(base_path: &str) -> Result<HashMap<String, String>, CommandError> {
     let mut branches = HashMap::<String, String>::new();
-    let branches_path = format!("{}/.git/refs/remotes/origin/", base_path);
+    let branches_path = format!("{}/.git_pruebas/refs/remotes/origin/", base_path);
     let paths = fs::read_dir(branches_path).map_err(|error| {
         CommandError::FileReadError(format!(
             "Error leyendo directorio de branches: {}",
