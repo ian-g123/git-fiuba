@@ -9,7 +9,6 @@ use std::{
 use chrono::{format, DateTime, Local};
 
 use crate::{
-    branch_manager::{get_current_branch_name, get_last_commit},
     changes_controller_components::{
         format::Format, long_format::LongFormat, short_format::ShortFormat,
     },
@@ -22,7 +21,7 @@ use crate::{
         blob::Blob,
         commit_object::{write_commit_tree_to_database, CommitObject},
         git_object::{self, GitObject, GitObjectTrait},
-        last_commit::{get_commit_tree, is_in_last_commit},
+        last_commit,
         proto_object::ProtoObject,
         tree::Tree,
     },
@@ -172,13 +171,13 @@ impl<'a> GitRepository<'a> {
     }
 
     pub fn add(&mut self, pathspecs: Vec<String>) -> Result<(), CommandError> {
-        let last_commit = &get_commit_tree(&self.db()?, &mut self.logger)?;
+        let last_commit = &self.get_last_commit_tree()?;
         let mut staging_area = StagingArea::open()?;
         let mut pathspecs_clone: Vec<String> = pathspecs.clone();
         let mut position = 0;
         for pathspec in &pathspecs {
             if !Path::new(pathspec).exists() {
-                if !self.is_in_last_commit(pathspec, last_commit) {
+                if !self.is_in_last_commit_from_path(pathspec, last_commit) {
                     return Err(CommandError::FileOpenError(format!(
                         "No existe el archivo o directorio: {:?}",
                         pathspec
@@ -279,11 +278,21 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    fn is_in_last_commit(&mut self, path: &str, commit_tree: &Option<Tree>) -> bool {
+    fn is_in_last_commit_from_path(&mut self, path: &str, commit_tree: &Option<Tree>) -> bool {
         if let Some(tree) = commit_tree {
             return tree.has_blob_from_path(path, &mut self.logger);
         }
         false
+    }
+
+    pub fn is_in_last_commit_from_hash(
+        &mut self,
+        blob_hash: String,
+    ) -> Result<(bool, String), CommandError> {
+        if let Some(mut tree) = self.get_last_commit_tree()? {
+            return Ok(tree.has_blob_from_hash(&blob_hash, &mut self.logger)?);
+        }
+        Ok((false, "".to_string()))
     }
 
     pub fn display_type_from_hash(&mut self, hash: &str) -> Result<(), CommandError> {
@@ -397,7 +406,9 @@ impl<'a> GitRepository<'a> {
                 staging_area.remove(&path);
             }
         }
-        staging_area.remove_changes(&self.db()?, &mut self.logger)?;
+        let last_commit_tree = self.get_last_commit_tree()?;
+
+        staging_area.remove_changes(&last_commit_tree, &mut self.logger)?;
         self.save_entries("./", staging_area, files)?;
         staging_area.save()?;
         Ok(())
@@ -413,13 +424,14 @@ impl<'a> GitRepository<'a> {
         reuse_commit_info: Option<String>,
         quiet: bool,
     ) -> Result<(), CommandError> {
-        if !staging_area.has_changes(&self.db()?, &mut self.logger)? {
+        let last_commit_tree = self.get_last_commit_tree()?;
+        if !staging_area.has_changes(&self.db()?, &last_commit_tree, &mut self.logger)? {
             self.logger.log("Nothing to commit");
             self.status_long_format(true)?;
             return Ok(());
         }
 
-        let last_commit_hash = get_last_commit()?;
+        let last_commit_hash = self.get_last_commit()?;
 
         let mut parents: Vec<String> = Vec::new();
         if let Some(padre) = last_commit_hash {
@@ -433,7 +445,7 @@ impl<'a> GitRepository<'a> {
                 staging_area.get_working_tree_staged(&mut self.logger)?
             } else {
                 staging_area.get_working_tree_staged_bis(
-                    &self.db()?,
+                    &last_commit_tree,
                     &mut self.logger,
                     files.clone(),
                 )?
@@ -552,10 +564,12 @@ impl<'a> GitRepository<'a> {
     }
 
     pub fn status_long_format(&mut self, commit_output: bool) -> Result<(), CommandError> {
-        let branch = get_current_branch_name()?;
+        let branch = self.get_current_branch_name()?;
         let long_format = LongFormat;
+        let last_commit_tree = self.get_last_commit_tree()?;
         long_format.show(
             &self.db()?,
+            last_commit_tree,
             &mut self.logger,
             &mut self.output,
             &branch,
@@ -564,10 +578,12 @@ impl<'a> GitRepository<'a> {
     }
 
     pub fn status_short_format(&mut self, commit_output: bool) -> Result<(), CommandError> {
-        let branch = get_current_branch_name()?;
+        let branch = self.get_current_branch_name()?;
         let short_format = ShortFormat;
+        let last_commit_tree = self.get_last_commit_tree()?;
         short_format.show(
             &self.db()?,
+            last_commit_tree,
             &mut self.logger,
             &mut self.output,
             &branch,
@@ -668,15 +684,9 @@ impl<'a> GitRepository<'a> {
             commits.push(self.get_fetch_head_branch_commit_hash()?);
         }
         match self.get_last_commit()? {
-            Some(last_commit) => {
-                self.log("Running merge_commit");
-                // self.merge_commit(&last_commit, &commits)
-            }
-            None => {
-                self.merge_fast_forward(&commits)?;
-            }
+            Some(last_commit) => self.merge_commits(&last_commit, &commits),
+            None => self.merge_fast_forward(&commits),
         }
-        Ok(())
     }
 
     /// Obtiene la ruta de la rama actual.
@@ -963,7 +973,7 @@ impl<'a> GitRepository<'a> {
     }
 
     fn merge_fast_forward(&mut self, commits: &[String]) -> Result<(), CommandError> {
-        self.log("Running merge_fast_forward");
+        self.log("Merge fast forward");
         self.set_head_branch_commit_to(&commits[0])?;
 
         let db = self.db()?;
@@ -977,13 +987,8 @@ impl<'a> GitRepository<'a> {
                 "Error leyendo FETCH_HEAD".to_string(),
             ))?;
         let tree = commit.get_tree().to_owned();
-        // let mut tree_box = db.read_object(&commits[0])?;
-        // let tree = tree_box.as_mut_tree().ok_or(CommandError::FileReadError(
-        //     "Error leyendo FETCH_HEAD".to_string(),
-        // ))?;
-        // let tree = tree.to_owned();
 
-        self.restore("", tree)?;
+        self.restore(tree)?;
         Ok(())
     }
 
@@ -992,7 +997,6 @@ impl<'a> GitRepository<'a> {
         let branch_path = join_paths!(self.path, ".git", branch).ok_or(
             CommandError::FileWriteError("Error guardando FETCH_HEAD:".to_string()),
         )?;
-        // let branch_path = format!("{}/.git/{}", self.path, branch);
         let mut file = fs::OpenOptions::new()
             .create(true)
             .write(true)
@@ -1012,7 +1016,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    fn restore(&mut self, _: &str, mut source_tree: Tree) -> Result<(), CommandError> {
+    fn restore(&mut self, mut source_tree: Tree) -> Result<(), CommandError> {
         self.log("Restoring files");
         source_tree.restore(&self.path, &mut self.logger)?;
         Ok(())
@@ -1030,8 +1034,7 @@ impl<'a> GitRepository<'a> {
     ) -> Result<bool, CommandError> {
         let mut blob = Blob::new_from_path(path.to_string())?;
         let hash = &blob.get_hash_string()?;
-        let (is_in_last_commit, name) =
-            is_in_last_commit(&self.db()?, hash.to_owned(), &mut self.logger)?;
+        let (is_in_last_commit, name) = self.is_in_last_commit_from_hash(hash.to_owned())?;
         if staging_area.contains_key(path) || (is_in_last_commit && name == get_name(&path)?) {
             return Ok(false);
         }
@@ -1073,6 +1076,141 @@ impl<'a> GitRepository<'a> {
                 }
             }
         }
+        Ok(())
+    }
+
+    pub fn get_last_commit_tree(&mut self) -> Result<Option<Tree>, CommandError> {
+        let Some(last_commit) = self.get_last_commit()? else {
+            return Ok(None);
+        };
+        self.log(&format!("Last commit : {}", last_commit));
+
+        let mut commit_box = self.db()?.read_object(&last_commit)?;
+        if let Some(commit) = commit_box.as_commit_mut() {
+            self.log(&format!(
+                "Last commit content : {}",
+                String::from_utf8_lossy(&commit.content()?)
+            ));
+            let tree = commit.get_tree();
+
+            self.log(&format!(
+                "tree content : {}",
+                String::from_utf8_lossy(&(tree.to_owned().content()?))
+            ));
+            return Ok(Some(tree.to_owned()));
+        }
+        Ok(None)
+    }
+
+    fn merge_commits(
+        &mut self,
+        last_commit: &str,
+        commits: &Vec<String>,
+    ) -> Result<(), CommandError> {
+        self.log("Running merge_commits");
+        let (mut common, mut commit_head, commit_destin) =
+            self.get_common_ansestor(&commits, last_commit)?;
+        if common.get_hash()? == commit_head.get_hash()? {
+            return self.merge_fast_forward(&commits);
+        }
+        Ok(())
+    }
+
+    fn get_common_ansestor(
+        &mut self,
+        commits: &Vec<String>,
+        commit_head_str: &str,
+    ) -> Result<(CommitObject, CommitObject, CommitObject), CommandError> {
+        self.log("Get common ansestor inicio");
+        self.log(&format!("commits: {:?}", commits));
+
+        let mut commit_head = self
+            .db()?
+            .read_object(&commit_head_str)?
+            .as_commit_mut()
+            .ok_or(CommandError::FailedToFindCommonAncestor)?
+            .to_owned();
+        self.log(&format!(
+            "commit_head_hash: {:?}",
+            commit_head.get_hash_string()
+        ));
+
+        let commit_destin = self
+            .db()?
+            .read_object(&commits[0])?
+            .as_commit_mut()
+            .ok_or(CommandError::FailedToFindCommonAncestor)?
+            .to_owned();
+
+        let mut head_branch_commits: HashMap<String, CommitObject> = HashMap::new();
+        head_branch_commits.insert(commit_head_str.to_string(), commit_head.clone());
+        let mut destin_branch_commits: HashMap<String, CommitObject> = HashMap::new();
+        destin_branch_commits.insert(commits[0].to_string(), commit_destin.clone());
+
+        let mut head_branch_tips: Vec<CommitObject> = [commit_head.clone()].to_vec();
+        let mut destin_branch_tips: Vec<CommitObject> = [commit_destin.clone()].to_vec();
+        loop {
+            self.log(&format!("head_branch_tips: {:?}", &head_branch_tips.len()));
+            self.log(&format!(
+                "destin_branch_tips: {:?}",
+                &destin_branch_tips.len()
+            ));
+            if head_branch_tips.is_empty() && destin_branch_tips.is_empty() {
+                break;
+            }
+            for tip_commit in head_branch_tips.iter_mut() {
+                let hash_string = tip_commit.get_hash_string()?;
+                self.log(&format!("head_hash_string: {}", hash_string));
+
+                self.log(&format!(
+                    "destin keys: {:?}",
+                    destin_branch_commits.keys().collect::<Vec<&String>>()
+                ));
+                if destin_branch_commits.contains_key(&hash_string) {
+                    return Ok((tip_commit.to_owned(), commit_head, commit_destin));
+                }
+            }
+
+            for tip_commit in destin_branch_tips.iter_mut() {
+                let hash_string = tip_commit.get_hash_string()?;
+                self.log(&format!("destin_hash_string: {}", hash_string));
+                let get_hash_string = tip_commit.get_hash_string()?;
+                self.log(&format!(
+                    "head keys: {:?}",
+                    head_branch_commits.keys().collect::<Vec<&String>>()
+                ));
+                if head_branch_commits.contains_key(&get_hash_string) {
+                    return Ok((tip_commit.to_owned(), commit_head, commit_destin));
+                }
+            }
+            self.read_row(&mut head_branch_tips, &mut head_branch_commits)?;
+            self.read_row(&mut destin_branch_tips, &mut destin_branch_commits)?;
+        }
+        Err(CommandError::FailedToFindCommonAncestor)
+    }
+
+    fn read_row(
+        &self,
+        branch_tips: &mut Vec<CommitObject>,
+        branch_commits: &mut HashMap<String, CommitObject>,
+    ) -> Result<(), CommandError> {
+        let mut new_branch_tips = Vec::<CommitObject>::new();
+        for tip in branch_tips.iter() {
+            let parents_hash = tip.get_parents();
+            for parent_hash in parents_hash {
+                let parent = self
+                    .db()?
+                    .read_object(&parent_hash)?
+                    .as_commit_mut()
+                    .ok_or(CommandError::FailedToFindCommonAncestor)?
+                    .to_owned();
+
+                if branch_commits.insert(parent_hash, parent.clone()).is_none() {
+                    new_branch_tips.push(parent);
+                }
+            }
+        }
+        *branch_tips = new_branch_tips;
         Ok(())
     }
 }

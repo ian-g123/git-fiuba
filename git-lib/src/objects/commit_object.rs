@@ -45,6 +45,13 @@ impl CommitObject {
             hash,
         })
     }
+    pub fn get_parents(&self) -> Vec<String> {
+        self.parents.clone()
+    }
+
+    pub fn get_timestamp(&self) -> i64 {
+        self.timestamp
+    }
 
     /// Devuelve el hash del tree del Commit.
     pub fn get_tree_hash(&mut self) -> Result<String, CommandError> {
@@ -371,11 +378,13 @@ impl GitObjectTrait for CommitObject {
     }
 
     fn get_hash(&mut self) -> Result<[u8; 20], CommandError> {
-        let Some(hash) = self.hash else {
-            let hash = get_sha1(&self.content()?);
-            self.hash = Some(hash);
+        if let Some(hash) = self.hash {
             return Ok(hash);
-        };
+        }
+        let mut buf: Vec<u8> = Vec::new();
+        self.write_to(&mut buf)?;
+        let hash = get_sha1(&buf);
+        self.set_hash(hash);
         Ok(hash)
     }
 }

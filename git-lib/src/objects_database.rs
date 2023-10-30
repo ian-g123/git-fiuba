@@ -7,7 +7,10 @@ use std::{
 use crate::{
     join_paths,
     logger::Logger,
-    utils::{aux::join_paths_m, super_string::u8_vec_to_hex_string},
+    utils::{
+        aux::{get_sha1_str, join_paths_m},
+        super_string::u8_vec_to_hex_string,
+    },
 };
 
 use super::{
@@ -75,7 +78,7 @@ impl ObjectsDatabase {
     fn write_to(&self, git_object: &mut GitObject) -> Result<String, CommandError> {
         let mut data = Vec::new();
         git_object.write_to(&mut data)?;
-        let hash_str = u8_vec_to_hex_string(&git_object.get_hash()?);
+        let hash_str = get_sha1_str(&data);
         self.save_to(hash_str, data)
     }
 

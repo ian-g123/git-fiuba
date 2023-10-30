@@ -101,6 +101,7 @@ pub enum CommandError {
     NoHeadCommit,
     /// Error al intentar unir paths
     JoiningPaths,
+    FailedToFindCommonAncestor,
 }
 
 impl Error for CommandError {}
@@ -260,6 +261,9 @@ impl fmt::Display for CommandError {
             }
             CommandError::JoiningPaths => {
                 write!(f, "Error al intentar unir paths")
+            }
+            CommandError::FailedToFindCommonAncestor => {
+                write!(f, "No se pudo encontrar un ancestro común.")
             }
         }
     }
