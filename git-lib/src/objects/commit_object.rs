@@ -47,7 +47,7 @@ impl CommitObject {
         })
     }
 
-    pub fn get_hash_string(&mut self) -> Result<String, CommandError> {
+    pub fn get_hash_string(&self) -> Result<String, CommandError> {
         if self.hash.is_none() {
             return Err(CommandError::InvalidCommit);
         }
