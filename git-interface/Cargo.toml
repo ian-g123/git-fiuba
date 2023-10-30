@@ -8,3 +8,5 @@ edition = "2021"
 [dependencies]
 gtk = "0.17.1"
 cairo = "0.0.4"
+git = { path = "../git" }
+git-lib = { path = "../git-lib" }

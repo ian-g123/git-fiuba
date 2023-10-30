@@ -52,15 +52,11 @@ impl Log {
         Ok(log)
     }
 
-    fn run_for_graph() {
-        let log = Self::new(["log".to_string(), "--all".to_string()].as_slice()).unwrap();
-        let commits = log.run().unwrap();
+    pub fn run_for_graph() -> Result<Vec<(CommitObject, Option<String>)>, CommandError> {
+        let log = Self::new(["--all".to_string()].as_slice()).unwrap();
+        let commits: Vec<(CommitObject, Option<String>)> = log.run().unwrap();
 
-        for commit in commits.iter() {
-            let hash = &commit.0.hash.unwrap();
-            let hash = u8_vec_to_hex_string(hash);
-            println!("{:?} {:?}", hash, &commit.1);
-        }
+        Ok(commits)
     }
 
     fn new_default() -> Self {
@@ -99,12 +95,6 @@ impl Log {
 
         sort_commits_descending_date(&mut commits);
 
-        for commit in commits.iter() {
-            let hash = &commit.0.hash.unwrap();
-            let hash = u8_vec_to_hex_string(hash);
-            println!("{:?} {:?}", hash, &commit.1);
-        }
-
         Ok(commits)
     }
 
@@ -131,7 +121,7 @@ impl Log {
             let principal_parent = &parents_hash[0];
             self.rebuild_commits_tree(&principal_parent, commits_map, branch.clone())?;
 
-            if self.all {
+            if !self.all {
                 for parent_hash in parents_hash.iter().skip(1) {
                     self.rebuild_commits_tree(&parent_hash, commits_map, None)?;
                 }

@@ -412,6 +412,8 @@ name = "git-interface"
 version = "0.1.0"
 dependencies = [
  "cairo",
+ "git",
+ "git-lib",
  "gtk",
 ]
 

@@ -13,13 +13,13 @@ use chrono::{prelude::*, DateTime};
 
 #[derive(Clone)]
 pub struct CommitObject {
-    parents: Vec<String>,
-    message: String,
-    author: Author,
-    committer: Author,
-    timestamp: i64,
-    offset: i32,
-    tree: Option<Tree>,
+    pub parents: Vec<String>,
+    pub message: String,
+    pub author: Author,
+    pub committer: Author,
+    pub timestamp: i64,
+    pub offset: i32,
+    pub tree: Option<Tree>,
     pub hash: Option<[u8; 20]>,
 }
 
@@ -45,6 +45,13 @@ impl CommitObject {
             tree: Some(tree),
             hash,
         })
+    }
+
+    pub fn get_hash_string(&mut self) -> Result<String, CommandError> {
+        if self.hash.is_none() {
+            return Err(CommandError::InvalidCommit);
+        }
+        Ok(u8_vec_to_hex_string(&self.hash.unwrap()))
     }
 
     /// Devuelve el hash del tree del Commit.
