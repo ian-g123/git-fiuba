@@ -1,10 +1,10 @@
-use super::aux::{get_sha1, hex_string_to_u8_vec, read_string_until};
 use super::git_object::{GitObject, GitObjectTrait};
-use super::super_string::u8_vec_to_hex_string;
 use super::{author::Author, tree::Tree};
 use crate::command_errors::CommandError;
 use crate::logger::Logger;
 use crate::objects_database::ObjectsDatabase;
+use crate::utils::aux::{get_sha1, hex_string_to_u8_vec, read_string_until};
+use crate::utils::super_string::u8_vec_to_hex_string;
 use std::io::{Cursor, Read, Write};
 
 extern crate chrono;
@@ -445,8 +445,7 @@ mod test {
     use std::{fs::File, io::Write};
 
     use crate::{
-        file_compressor::compress,
-        objects::{aux::hex_string_to_u8_vec, git_object, super_string::SuperStrings},
+        file_compressor::compress, objects::git_object, utils::super_string::SuperStrings,
     };
 
     use super::*;

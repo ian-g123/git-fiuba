@@ -1,7 +1,7 @@
-use std::{fs::File, io::Read};
+use std::{fs::File, io::Read, path::Path};
 
 extern crate sha1;
-use git_lib::command_errors::CommandError;
+use crate::command_errors::CommandError;
 use sha1::{Digest, Sha1};
 
 use super::super_string::u8_vec_to_hex_string;
@@ -89,21 +89,13 @@ pub fn read_string_until(stream: &mut dyn Read, char_stop: char) -> Result<Strin
 
 #[cfg(test)]
 mod test {
-    use std::env::current_dir;
 
     use super::*;
 
     /// Prueba que la función get_name() devuelva el nombre correspondiente.
     #[test]
     fn get_name_test() {
-        let Ok(path) = current_dir() else {
-            assert!(false);
-            return;
-        };
-        let Some(path) = path.to_str() else {
-            assert!(false);
-            return;
-        };
+        let path = "dir/git";
 
         let res_expected = "git";
         match get_name(&path.to_string()) {
@@ -147,4 +139,46 @@ mod test {
     //         Ok(_output_string)
     //     ))
     // }
+}
+
+pub fn join_paths_m(base_path_str: &str, relative_path_str: &str) -> Result<String, CommandError> {
+    let base_path: &Path = Path::new(base_path_str);
+    let complete_path = &base_path.join(relative_path_str);
+    let complete_path_str = complete_path.to_str().ok_or(CommandError::JoiningPaths)?;
+    Ok(complete_path_str.to_string())
+}
+
+pub fn join_paths_vec(paths: Vec<String>) -> Result<String, CommandError> {
+    let mut result = String::new();
+    for path in paths {
+        result = join_paths_m(&result, &path)?;
+    }
+    Ok(result)
+}
+
+// create a macro join_paths! that receives a variable number of arguments and returns a String
+// with the paths joined
+#[macro_export]
+macro_rules! join_paths {
+    ($($x:expr),*) => {
+        {
+            let mut result = Some(String::new());
+
+            $(
+                match result {
+                    Some(result_s) => {
+                        let base_path: &std::path::Path = std::path::Path::new(&result_s);
+                        let complete_path = &base_path.join(&$x);
+                        match complete_path.to_str() {
+                            Some(result_res) => result = Some(result_res.to_string()),
+                            None => result = None,
+                        };
+                    }
+                    None => {}
+                }
+            )*
+
+            result
+        }
+    };
 }

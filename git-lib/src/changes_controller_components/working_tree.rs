@@ -1,5 +1,6 @@
 use crate::command_errors::CommandError;
-use crate::objects::{aux::get_name, blob::Blob, tree::Tree};
+use crate::objects::{blob::Blob, tree::Tree};
+use crate::utils::aux::get_name;
 use std::{
     fs,
     path::{Path, PathBuf},

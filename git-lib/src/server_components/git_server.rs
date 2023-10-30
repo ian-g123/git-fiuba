@@ -1,4 +1,9 @@
-use crate::command_errors::CommandError;
+use chrono::format;
+
+use crate::{
+    command_errors::CommandError,
+    logger::{self, Logger},
+};
 use std::{
     collections::HashMap,
     io::{Read, Write},
@@ -64,33 +69,33 @@ impl GitServer {
         &mut self,
         wants: Vec<String>,
         haves: Vec<String>,
+        logger: &mut Logger,
     ) -> Result<Vec<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
+        logger.log("fetch_objects");
+        let mut lines = Vec::<String>::new();
         for want in wants {
             let line = format!("want {}\n", want);
+            logger.log(&format!("Sending: {}", line));
             self.write_in_tpk_to_socket(&line)?;
         }
         self.write_string_to_socket("0000")?;
         if !haves.is_empty() {
             for have in haves {
                 let line = format!("have {}\n", have);
+                logger.log(&format!("Sending:: {}", line));
                 self.write_in_tpk_to_socket(&line)?;
             }
             self.write_string_to_socket("0000")?;
         }
         self.write_in_tpk_to_socket("done\n")?;
+        logger.log("reading objects");
 
-        let mut lines = Vec::<String>::new();
-        loop {
-            match String::read_pkt_format(&mut self.socket)? {
-                Some(line) => {
-                    if line == "NAK\n" {
-                        break;
-                    }
-                    println!("pushing: {:?}", line);
-                    lines.push(line);
-                }
-                None => break,
+        match String::read_pkt_format(&mut self.socket)? {
+            Some(line) => {
+                logger.log(&format!("pushing: {:?}", line));
+                lines.push(line);
             }
+            None => return Err(CommandError::ErrorReadingPkt),
         }
 
         let objects = self.read_objects()?;
@@ -110,7 +115,6 @@ impl GitServer {
 
     fn write_in_tpk_to_socket(&mut self, line: &str) -> Result<(), CommandError> {
         let line = line.to_string().to_pkt_format();
-        println!("Sending: {}", line);
         self.write_string_to_socket(&line)
     }
 
@@ -251,11 +255,9 @@ fn bits_to_usize(bits: &[u8]) -> usize {
 
 fn read_pkt_size(socket: &mut dyn Read) -> Result<usize, CommandError> {
     let mut size_buffer = [0; 4];
-    println!("reading to buffer");
     socket
         .read(&mut size_buffer)
         .map_err(|_| CommandError::ErrorReadingPkt)?;
-    println!("size_buffer: {:?}", size_buffer);
     let from_utf8 =
         &String::from_utf8(size_buffer.to_vec()).map_err(|_| CommandError::ErrorReadingPkt)?;
     let size_vec = hex_string_to_u8_vec_2(from_utf8.as_str())?;
@@ -299,9 +301,7 @@ impl Pkt for String {
     }
 
     fn read_pkt_format(stream: &mut dyn Read) -> Result<Option<String>, CommandError> {
-        println!("reading size");
         let size = read_pkt_size(stream)?;
-        println!("size: {:?}", size);
         if size == 0 {
             return Ok(None);
         }

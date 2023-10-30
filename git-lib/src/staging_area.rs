@@ -3,13 +3,11 @@ use std::{
     io::{Read, Write},
 };
 
-use crate::{logger::Logger, objects_database::ObjectsDatabase};
+use crate::{logger::Logger, objects_database::ObjectsDatabase, utils::aux::get_name};
 
 use super::{
     command_errors::CommandError,
-    objects::{
-        aux::get_name, git_object::GitObjectTrait, last_commit::build_last_commit_tree, tree::Tree,
-    },
+    objects::{git_object::GitObjectTrait, last_commit::build_last_commit_tree, tree::Tree},
 };
 
 #[derive(Debug)]

@@ -1,11 +1,10 @@
 use crate::{
     command_errors::CommandError,
     logger::Logger,
-    objects::{
-        aux::get_name, git_object::GitObject, last_commit::build_last_commit_tree, tree::Tree,
-    },
+    objects::{git_object::GitObject, tree::Tree},
     objects_database::ObjectsDatabase,
     staging_area::StagingArea,
+    utils::aux::get_name,
 };
 use std::{collections::HashMap, fs::File, io::Read};
 

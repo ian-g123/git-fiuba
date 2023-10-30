@@ -3,15 +3,16 @@ use std::{
     io::{Cursor, Read, Write},
 };
 
-use crate::command_errors::CommandError;
-use crate::logger::Logger;
+use crate::{
+    command_errors::CommandError,
+    utils::{aux::get_name, super_string::SuperStrings},
+};
+use crate::{logger::Logger, utils::aux::*};
 
 use super::{
     author::Author,
-    aux::*,
     git_object::{write_to_stream_from_content, GitObject, GitObjectTrait},
     mode::Mode,
-    super_string::SuperStrings,
     tree::Tree,
 };
 

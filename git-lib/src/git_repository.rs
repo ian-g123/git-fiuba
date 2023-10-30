@@ -1,11 +1,12 @@
 use std::{
     collections::HashMap,
+    env::join_paths,
     fs::{self, DirEntry, File, OpenOptions, ReadDir},
     io::{Read, Write},
     path::{Path, PathBuf},
 };
 
-use chrono::{DateTime, Local};
+use chrono::{format, DateTime, Local};
 
 use crate::{
     branch_manager::{get_current_branch_name, get_last_commit},
@@ -14,21 +15,21 @@ use crate::{
     },
     command_errors::CommandError,
     config::Config,
+    join_paths,
     logger::Logger,
     objects::{
         author::Author,
-        aux::get_name,
         blob::Blob,
         commit_object::{write_commit_tree_to_database, CommitObject},
         git_object::{self, GitObject, GitObjectTrait},
         last_commit::{get_commit_tree, is_in_last_commit},
         proto_object::ProtoObject,
-        super_string::u8_vec_to_hex_string,
         tree::Tree,
     },
     objects_database::ObjectsDatabase,
     server_components::git_server::GitServer,
     staging_area::StagingArea,
+    utils::{aux::get_name, super_string::u8_vec_to_hex_string},
 };
 
 pub struct GitRepository<'a> {
@@ -39,10 +40,18 @@ pub struct GitRepository<'a> {
 
 impl<'a> GitRepository<'a> {
     pub fn open(path: &str, output: &'a mut dyn Write) -> Result<GitRepository<'a>, CommandError> {
-        if !Path::new(&format!("{}.git", path)).exists() {
+        if !Path::new(
+            &join_paths!(path, ".git").ok_or(CommandError::DirectoryCreationError(
+                "Error creando directorio .git".to_string(),
+            ))?,
+        )
+        .exists()
+        {
             return Err(CommandError::NotGitRepository);
         }
-        let logs_path = format!("{}.git/logs", path);
+        let logs_path = &join_paths!(path, ".git/logs").ok_or(
+            CommandError::DirectoryCreationError("Error creando directorio .git/logs".to_string()),
+        )?;
         Ok(GitRepository {
             path: path.to_string(),
             logger: Logger::new(&logs_path)?,
@@ -56,8 +65,9 @@ impl<'a> GitRepository<'a> {
         bare: bool,
         output: &'a mut dyn Write,
     ) -> Result<GitRepository<'a>, CommandError> {
-        let logs_path = format!("{}/.git/logs", path);
-
+        let logs_path = &join_paths!(path, ".git/logs").ok_or(
+            CommandError::DirectoryCreationError("Error creando directorio .git/logs".to_string()),
+        )?;
         let mut repo = GitRepository {
             path: path.to_string(),
             logger: Logger::new(&logs_path)?,
@@ -87,7 +97,9 @@ impl<'a> GitRepository<'a> {
         let git_path = if bare {
             path.to_string()
         } else {
-            format!("{}/.git", path.to_string())
+            join_paths!(path.to_string(), ".git").ok_or(CommandError::DirectoryCreationError(
+                "Error creando arc".to_string(),
+            ))?
         };
         self.create_dir(&git_path, "objects".to_string())?;
         self.create_dir(&git_path, "objects/info".to_string())?;
@@ -100,7 +112,9 @@ impl<'a> GitRepository<'a> {
     }
 
     fn create_dir(&self, path: &String, name: String) -> Result<(), CommandError> {
-        let path_complete = format!("{}/{}", path, name);
+        let path_complete = join_paths!(path, name).ok_or(CommandError::DirectoryCreationError(
+            "Error creando directorio".to_string(),
+        ))?;
         if fs::create_dir_all(&path_complete).is_ok() {
             Ok(())
         } else {
@@ -115,7 +129,9 @@ impl<'a> GitRepository<'a> {
         let path_aux = if bare {
             path.to_string()
         } else {
-            format!("{}/.git", path)
+            join_paths!(path, ".git").ok_or(CommandError::FileCreationError(
+                "Error creando arc".to_string(),
+            ))?
         };
         self.create_file(&path_aux, "HEAD".to_string(), branch_name)?;
         Ok(())
@@ -123,7 +139,10 @@ impl<'a> GitRepository<'a> {
 
     fn create_file(&self, path: &str, name: String, branch_name: &str) -> Result<(), CommandError> {
         if fs::create_dir_all(path).is_ok() {
-            let path_complete = format!("{}/{}", path, name);
+            //let path_complete = format!("{}/{}", path, name);
+            let path_complete = join_paths!(path, name).ok_or(CommandError::FileCreationError(
+                "Error creando un archivo".to_string(),
+            ))?;
             match File::create(&path_complete) {
                 Ok(mut archivo) => {
                     let texto = format!("ref: refs/heads/{}", branch_name.to_string());
@@ -567,17 +586,23 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Ejecuta el comando fetch.
     pub fn fetch(&mut self) -> Result<(), CommandError> {
         self.log("Fetching updates");
         let (address, repository_path, repository_url) = self.get_remote_info()?;
-
+        self.log(&format!(
+            "Address: {}, repository_path: {}, repository_url: {}",
+            address, repository_path, repository_url
+        ));
         let mut server = GitServer::connect_to(&address)?;
+
         self.update_remote_branches(&mut server, &repository_path, &repository_url)?;
         let remote_reference = format!("{}:{}", address, repository_path);
         self.fetch_and_save_objects(&mut server, &remote_reference)?;
         Ok(())
     }
 
+    /// Obtiene información de la rama remota.
     fn get_remote_info(&mut self) -> Result<(String, String, String), CommandError> {
         let config = self.config()?;
         let Some(url) = config.get("remote \"origin\"", "url") else {
@@ -604,11 +629,12 @@ impl<'a> GitRepository<'a> {
         server: &mut GitServer,
         remote_reference: &str,
     ) -> Result<(), CommandError> {
-        self.log("Fetching objects");
         let remote_branches = self.remote_branches()?;
         let wants = remote_branches.clone().into_values().collect();
         let haves = self.local_branches()?.into_values().collect();
-        let objects_decompressed_data = server.fetch_objects(wants, haves)?;
+        self.log(&format!("Wants {:#?}", wants));
+        self.log(&format!("haves {:#?}", haves));
+        let objects_decompressed_data = server.fetch_objects(wants, haves, &mut self.logger)?;
         for (obj_type, len, content) in objects_decompressed_data {
             self.log(&format!(
                 "Saving object of type {} and len {}, with data {:?}",
@@ -656,7 +682,10 @@ impl<'a> GitRepository<'a> {
     /// Obtiene la ruta de la rama actual.
     pub fn get_head_branch_path(&mut self) -> Result<String, CommandError> {
         let mut branch = String::new();
-        let path = format!("{}/.git/HEAD", self.path);
+        let path =
+            join_paths!(self.path, ".git/HEAD").ok_or(CommandError::DirectoryCreationError(
+                "Error creando directorio de branches".to_string(),
+            ))?;
         let Ok(mut head) = File::open(&path) else {
             return Err(CommandError::NotGitRepository);
         };
@@ -672,6 +701,7 @@ impl<'a> GitRepository<'a> {
         Ok(branch.to_string())
     }
 
+    /// Obtiene el nombre de la rama actual.
     pub fn get_current_branch_name(&mut self) -> Result<String, CommandError> {
         let branch = self.get_head_branch_path()?;
         let branch_name: Vec<&str> = branch.split_terminator("/").collect();
@@ -682,7 +712,10 @@ impl<'a> GitRepository<'a> {
     pub fn get_last_commit(&mut self) -> Result<Option<String>, CommandError> {
         let mut parent = String::new();
         let branch = self.get_head_branch_path()?;
-        let branch_path = format!(".git/{}", branch);
+        let branch_path =
+            join_paths!(&self.path, ".git", branch).ok_or(CommandError::DirectoryCreationError(
+                "Error creando directorio de branches".to_string(),
+            ))?;
         let Ok(mut branch_file) = File::open(branch_path.clone()) else {
             return Ok(None);
         };
@@ -697,7 +730,11 @@ impl<'a> GitRepository<'a> {
 
     fn local_branches(&mut self) -> Result<HashMap<String, String>, CommandError> {
         let mut branches = HashMap::<String, String>::new();
-        let branches_path = format!("{}/.git/refs/heads/", &self.path);
+        let branches_path = join_paths!(&self.path, ".git/refs/heads/").ok_or(
+            CommandError::DirectoryCreationError(
+                "Error creando directorio de branches".to_string(),
+            ),
+        )?;
         let paths = fs::read_dir(branches_path).map_err(|error| {
             CommandError::FileReadError(format!(
                 "Error leyendo directorio de branches: {}",
@@ -737,7 +774,12 @@ impl<'a> GitRepository<'a> {
 
     fn remote_branches(&mut self) -> Result<HashMap<String, String>, CommandError> {
         let mut branches = HashMap::<String, String>::new();
-        let branches_path = format!("{}/.git/refs/remotes/origin/", &self.path);
+        let branches_path = join_paths!(&self.path, ".git/refs/remotes/origin/").ok_or(
+            CommandError::DirectoryCreationError(
+                "Error creando directorio de branches".to_string(),
+            ),
+        )?;
+        // let branches_path = format!("{}/.git/refs/remotes/origin/", &self.path);
         let paths = fs::read_dir(branches_path).map_err(|error| {
             CommandError::FileReadError(format!(
                 "Error leyendo directorio de branches: {}",
@@ -784,6 +826,7 @@ impl<'a> GitRepository<'a> {
         self.log("Updating remote branches");
         let (_head_branch, branch_remote_refs) =
             server.explore_repository(&("/".to_owned() + repository_path), repository_url)?;
+        self.log(&format!("branch_remote_refs: {:?}", branch_remote_refs));
         Ok(for (sha1, mut ref_path) in branch_remote_refs {
             ref_path.replace_range(0..11, "");
             self.update_ref(&sha1, &ref_path)?;
@@ -791,7 +834,9 @@ impl<'a> GitRepository<'a> {
     }
 
     fn update_ref(&mut self, sha1: &str, ref_name: &str) -> Result<(), CommandError> {
-        let dir_path = format!("{}/.git/refs/remotes/origin/", &self.path);
+        let dir_path = join_paths!(&self.path, ".git/refs/remotes/origin/").ok_or(
+            CommandError::DirectoryCreationError("Error creando directorio de refs".to_string()),
+        )?;
         let file_path = dir_path.to_owned() + ref_name;
 
         fs::create_dir_all(dir_path).map_err(|error| {
@@ -823,7 +868,10 @@ impl<'a> GitRepository<'a> {
         remote_reference: &str,
     ) -> Result<(), CommandError> {
         self.log("Updating FETCH_HEAD");
-        let fetch_head_path = format!("{}/.git/FETCH_HEAD", &self.path);
+        // let fetch_head_path = format!("{}/.git/FETCH_HEAD", &self.path);
+        let fetch_head_path = join_paths!(&self.path, ".git/FETCH_HEAD").ok_or(
+            CommandError::DirectoryCreationError("Error actualizando FETCH_HEAD".to_string()),
+        )?;
         let mut file = fs::OpenOptions::new()
             .create(true)
             .write(true)
@@ -878,8 +926,11 @@ impl<'a> GitRepository<'a> {
         Ok(head_branch_name.to_owned())
     }
 
+    /// Devuelve el hash del commit que apunta la rama que se hizo fetch
     fn get_fetch_head_branch_commit_hash(&self) -> Result<String, CommandError> {
-        let fetch_head_path = format!("{}/.git/FETCH_HEAD", &self.path);
+        let fetch_head_path =
+            join_paths!(&self.path, ".git/FETCH_HEAD").ok_or(CommandError::JoiningPaths)?;
+
         let Ok(mut fetch_head_file) = fs::File::open(fetch_head_path) else {
             return Err(CommandError::FileReadError(
                 "Error leyendo FETCH_HEAD".to_string(),
@@ -938,7 +989,10 @@ impl<'a> GitRepository<'a> {
 
     fn set_head_branch_commit_to(&mut self, commits: &str) -> Result<(), CommandError> {
         let branch = self.get_head_branch_path()?;
-        let branch_path = format!("{}/.git/{}", self.path, branch);
+        let branch_path = join_paths!(self.path, ".git", branch).ok_or(
+            CommandError::FileWriteError("Error guardando FETCH_HEAD:".to_string()),
+        )?;
+        // let branch_path = format!("{}/.git/{}", self.path, branch);
         let mut file = fs::OpenOptions::new()
             .create(true)
             .write(true)
@@ -1034,7 +1088,8 @@ fn get_path_str(path: PathBuf) -> Result<String, CommandError> {
 /// Actualiza la referencia de la rama actual al nuevo commit.
 fn update_last_commit(commit_hash: &str) -> Result<(), CommandError> {
     let currect_branch = get_head_ref()?;
-    let branch_path = format!(".git/{}", currect_branch);
+    let branch_path = join_paths!(".git", currect_branch)
+        .ok_or(CommandError::FileOpenError(currect_branch.clone()))?;
     let mut file = OpenOptions::new()
         .create(true)
         .write(true)

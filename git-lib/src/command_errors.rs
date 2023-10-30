@@ -99,6 +99,8 @@ pub enum CommandError {
     AllAndFilesFlagsCombination(String),
     /// No se pudo obtener el commit de HEAD
     NoHeadCommit,
+    /// Error al intentar unir paths
+    JoiningPaths,
 }
 
 impl Error for CommandError {}
@@ -255,6 +257,9 @@ impl fmt::Display for CommandError {
             }
             CommandError::NoHeadCommit => {
                 write!(f, "fatal: Not a valid object name HEAD")
+            }
+            CommandError::JoiningPaths => {
+                write!(f, "Error al intentar unir paths")
             }
         }
     }

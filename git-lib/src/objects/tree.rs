@@ -3,16 +3,18 @@ use std::{
     io::{Read, Write},
 };
 
-use crate::{command_errors::CommandError, objects_database::ObjectsDatabase};
-use crate::{logger::Logger, objects_database};
+use crate::logger::Logger;
+use crate::{
+    command_errors::CommandError,
+    objects_database::ObjectsDatabase,
+    utils::{aux::*, super_string::u8_vec_to_hex_string},
+};
 
 use super::{
     author::Author,
-    aux::*,
     blob::Blob,
     git_object::{GitObject, GitObjectTrait},
     mode::Mode,
-    super_string::u8_vec_to_hex_string,
 };
 
 #[derive(Clone)]
