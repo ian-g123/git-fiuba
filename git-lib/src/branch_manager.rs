@@ -2,7 +2,7 @@ use crate::command_errors::CommandError;
 use std::{fs::File, io::Read};
 
 /// Obtiene la ruta de la rama actual.
-pub fn get_current_branch() -> Result<String, CommandError> {
+pub fn get_head_branch() -> Result<String, CommandError> {
     let mut branch = String::new();
     let path = ".git/HEAD";
     let Ok(mut head) = File::open(path) else {
@@ -21,7 +21,7 @@ pub fn get_current_branch() -> Result<String, CommandError> {
 }
 
 pub fn get_current_branch_name() -> Result<String, CommandError> {
-    let branch = get_current_branch()?;
+    let branch = get_head_branch()?;
     let branch_name: Vec<&str> = branch.split_terminator("/").collect();
     Ok(branch_name[branch_name.len() - 1].to_string())
 }
@@ -29,7 +29,7 @@ pub fn get_current_branch_name() -> Result<String, CommandError> {
 /// Obtiene el hash del Commit padre.
 pub fn get_last_commit() -> Result<Option<String>, CommandError> {
     let mut parent = String::new();
-    let branch = get_current_branch()?;
+    let branch = get_head_branch()?;
     let branch_path = format!(".git/{}", branch);
     let Ok(mut branch_file) = File::open(branch_path.clone()) else {
         return Ok(None);

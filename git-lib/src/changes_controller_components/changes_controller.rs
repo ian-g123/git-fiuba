@@ -4,6 +4,7 @@ use crate::{
     objects::{
         aux::get_name, git_object::GitObject, last_commit::build_last_commit_tree, tree::Tree,
     },
+    objects_database::ObjectsDatabase,
     staging_area::StagingArea,
 };
 use std::{collections::HashMap, fs::File, io::Read};
@@ -24,12 +25,13 @@ impl ChangesController {
     /// Crea un nuevo ChangesController que contiene información acerca de todos los tipos de cambios
     /// del index y el working tree desde el último commit.
     pub fn new(
+        db: &ObjectsDatabase,
         logger: &mut Logger,
         commit_tree: Option<Tree>,
     ) -> Result<ChangesController, CommandError> {
         let index = StagingArea::open()?;
         let working_tree = build_working_tree()?;
-        let index_changes = Self::check_staging_area_status(&index, &commit_tree, logger)?;
+        let index_changes = Self::check_staging_area_status(db, &index, &commit_tree, logger)?;
         let (working_tree_changes, untracked) = Self::check_working_tree_status(
             working_tree,
             &index,
@@ -62,6 +64,7 @@ impl ChangesController {
 
     /// Obtiene los cambios que se incluirán en el próximo commit.
     fn check_staging_area_status(
+        db: &ObjectsDatabase,
         staging_area: &StagingArea,
         last_commit: &Option<Tree>,
         logger: &mut Logger,
@@ -76,7 +79,7 @@ impl ChangesController {
         };
         let mut changes: HashMap<String, ChangeType> =
             Self::check_files_in_staging_area(staging_files, logger, &mut tree)?;
-        Self::get_deleted_changes_index(staging_area, &mut changes)?;
+        Self::get_deleted_changes_index(db, staging_area, &mut changes)?;
         Ok(changes)
     }
 
@@ -153,10 +156,11 @@ impl ChangesController {
 
     /// Obtiene los archivos eliminados en el index, pero presentes en el último commit.
     fn get_deleted_changes_index(
+        db: &ObjectsDatabase,
         staging_area: &StagingArea,
         changes: &mut HashMap<String, ChangeType>,
     ) -> Result<(), CommandError> {
-        let deleted_changes = staging_area.get_deleted_files()?;
+        let deleted_changes = staging_area.get_deleted_files(db)?;
         for deleted_file in deleted_changes.iter() {
             _ = changes.insert(deleted_file.to_string(), ChangeType::Deleted)
         }

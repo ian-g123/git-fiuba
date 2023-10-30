@@ -1,14 +1,6 @@
 use std::{
     collections::HashMap,
-    fs,
     io::{Read, Write},
-};
-
-use crate::{
-    logger::Logger,
-    objects::{git_object::GitObject, proto_object::ProtoObject},
-    objects_database,
-    server_components::git_server::GitServer,
 };
 
 use super::command_errors::CommandError;

@@ -97,6 +97,8 @@ pub enum CommandError {
     CastingError,
     MessageIncomplete(String),
     AllAndFilesFlagsCombination(String),
+    /// No se pudo obtener el commit de HEAD
+    NoHeadCommit,
 }
 
 impl Error for CommandError {}
@@ -250,9 +252,10 @@ impl fmt::Display for CommandError {
 
             CommandError::AllAndFilesFlagsCombination(path) => {
                 write!(f, "fatal: paths '{} ...' with -a does not make sense", path)
-            } /*
-              fatal: paths 'fil1 ...' with -a does not make sense
-               */
+            }
+            CommandError::NoHeadCommit => {
+                write!(f, "fatal: Not a valid object name HEAD")
+            }
         }
     }
 }

@@ -1,4 +1,5 @@
 use crate::logger::Logger;
+use crate::objects_database::ObjectsDatabase;
 use crate::{command_errors::CommandError, objects::last_commit::build_last_commit_tree};
 use std::{collections::HashMap, io::Write};
 
@@ -6,12 +7,13 @@ use super::{changes_controller::ChangesController, changes_types::ChangeType};
 pub trait Format {
     fn show(
         &self,
+        db: &ObjectsDatabase,
         logger: &mut Logger,
         output: &mut dyn Write,
         branch: &str,
         commit_output: bool,
     ) -> Result<(), CommandError> {
-        let commit_tree = build_last_commit_tree(logger)?;
+        let commit_tree = build_last_commit_tree(db, logger)?;
         let initial_commit = {
             if commit_tree.is_none() {
                 true
@@ -19,7 +21,7 @@ pub trait Format {
                 false
             }
         };
-        let changes_controller = ChangesController::new(logger, commit_tree)?;
+        let changes_controller = ChangesController::new(db, logger, commit_tree)?;
         let changes_to_be_commited = changes_controller.get_changes_to_be_commited();
         let changes_not_staged = changes_controller.get_changes_not_staged();
         let untracked_files = changes_controller.get_untracked_files();
