@@ -3,17 +3,16 @@ use std::{
     fs::{self, DirEntry, File, OpenOptions, ReadDir},
     io::{Read, Write},
     path::{Path, PathBuf},
-    process::Command,
 };
 
-use chrono::{format::format, DateTime, Local};
+use chrono::{DateTime, Local};
 
 use crate::{
     branch_manager::{get_current_branch_name, get_last_commit},
     changes_controller_components::{
         format::Format, long_format::LongFormat, short_format::ShortFormat,
     },
-    command_errors::{self, CommandError},
+    command_errors::CommandError,
     config::Config,
     logger::Logger,
     objects::{
@@ -27,7 +26,7 @@ use crate::{
         super_string::u8_vec_to_hex_string,
         tree::Tree,
     },
-    objects_database::{self, ObjectsDatabase},
+    objects_database::ObjectsDatabase,
     server_components::git_server::GitServer,
     staging_area::StagingArea,
 };
