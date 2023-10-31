@@ -40,10 +40,6 @@ impl ObjectsDatabase {
 
     /// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve la ruta del objeto y su data descomprimida.
     pub fn read_file(&self, hash_str: &str) -> Result<(String, Vec<u8>), CommandError> {
-        // let file_path = join_paths(
-        //     &self.db_path,
-        //     &format!("{}/{}", &hash_str[0..2], &hash_str[2..]),
-        // )?;
         let file_path = join_paths!(&self.db_path, &hash_str[0..2], &hash_str[2..])
             .ok_or(CommandError::JoiningPaths)?;
 
@@ -66,12 +62,15 @@ impl ObjectsDatabase {
         Ok((file_path, decompressed_data))
     }
 
+    /// Dado la ruta del repositorio, crea el objeto `ObjectsDatabase` que contiene métodos útiles para
+    /// acceder a la base de datos de objetos de git, tanto para leer como para escribir.
     pub(crate) fn new(base_path_str: &str) -> Result<Self, CommandError> {
         Ok(ObjectsDatabase {
             db_path: join_paths_m(base_path_str, ".git/objects")?.to_string(),
         })
     }
 
+    // Escribe el objeto en la base de datos de objetos de git.
     fn write_to(&self, git_object: &mut GitObject) -> Result<String, CommandError> {
         let mut data = Vec::new();
         git_object.write_to(&mut data)?;

@@ -148,13 +148,13 @@ pub fn join_paths_m(base_path_str: &str, relative_path_str: &str) -> Result<Stri
     Ok(complete_path_str.to_string())
 }
 
-pub fn join_paths_vec(paths: Vec<String>) -> Result<String, CommandError> {
-    let mut result = String::new();
-    for path in paths {
-        result = join_paths_m(&result, &path)?;
-    }
-    Ok(result)
-}
+// pub fn join_paths_vec(paths: Vec<String>) -> Result<String, CommandError> {
+//     let mut result = String::new();
+//     for path in paths {
+//         result = join_paths_m(&result, &path)?;
+//     }
+//     Ok(result)
+// }
 
 // create a macro join_paths! that receives a variable number of arguments and returns a String
 // with the paths joined

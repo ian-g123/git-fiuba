@@ -11,6 +11,7 @@ pub struct Config {
 }
 
 impl Config {
+    /// Abre el archivo config, guarda los datos en su estructura interna y devuelve la instancia
     pub fn open(path: &str) -> Result<Self, CommandError> {
         let config_path_str = join_paths_m(path, ".git/config")?;
 

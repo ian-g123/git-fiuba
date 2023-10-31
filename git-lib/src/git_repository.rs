@@ -601,7 +601,9 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    /// Ejecuta el comando fetch.
+    /// Ejecuta el comando fetch.\
+    /// Obtiene los objetos del servidor y guarda nuevos objetos en la base de datos.\
+    /// Actualiza la referencia `FETCH_HEAD` con el hash del último commit de cada rama.
     pub fn fetch(&mut self) -> Result<(), CommandError> {
         self.log("Fetching updates");
         let (address, repository_path, repository_url) = self.get_remote_info()?;
@@ -683,7 +685,8 @@ impl<'a> GitRepository<'a> {
 
     pub fn merge(&mut self, commits: &Vec<String>) -> Result<(), CommandError> {
         let mut commits = commits.clone();
-        if commits.is_empty() || (commits.len() == 1 && commits[0] == "FETCH_HEAD") {
+        // if commits.is_empty() || (commits.len() == 1 && commits[0] == "FETCH_HEAD") {
+        if commits.is_empty() {
             self.log("Running merge_head");
             commits.push(self.get_fetch_head_branch_commit_hash()?);
         }
@@ -693,7 +696,8 @@ impl<'a> GitRepository<'a> {
         }
     }
 
-    /// Obtiene la ruta de la rama actual.
+    /// Obtiene la ruta de la rama actual.\
+    /// formato: `refs/heads/branch_name`
     pub fn get_head_branch_path(&mut self) -> Result<String, CommandError> {
         let mut branch = String::new();
         let path =
@@ -888,6 +892,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Actualiza el archivo FETCH_HEAD con los hashes de los commits obtenidos del servidor.
     fn update_fetch_head(
         &mut self,
         remote_branches: HashMap<String, String>,
@@ -904,15 +909,17 @@ impl<'a> GitRepository<'a> {
             .open(&fetch_head_path)
             .map_err(|error| {
                 CommandError::FileWriteError(format!(
-                    "Error guardando FETCH_HEAD en {}: {}",
+                    "Error abriendo FETCH_HEAD en {}: {}",
                     fetch_head_path,
                     &error.to_string()
                 ))
             })?;
+
         let head_branch_name = self.get_head_branch_name()?;
         let head_branch_hash = remote_branches
             .get(&head_branch_name)
             .ok_or(CommandError::NoHeadCommit)?;
+
         let line = format!(
             "{}\t\tbranch '{}' of {}",
             head_branch_hash, head_branch_name, remote_reference
@@ -922,13 +929,13 @@ impl<'a> GitRepository<'a> {
                 "Error guardando FETCH_HEAD:".to_string() + &error.to_string(),
             )
         })?;
-        for (branch_name, sha1) in remote_branches {
+        for (branch_name, hash) in remote_branches {
             if branch_name == head_branch_name {
                 continue;
             }
             let line = format!(
                 "{}\tnot-for-merge\tbranch '{}' of {}",
-                sha1, branch_name, &self.path
+                hash, branch_name, &self.path
             );
             file.write_all(line.as_bytes()).map_err(|error| {
                 CommandError::FileWriteError(
@@ -946,13 +953,13 @@ impl<'a> GitRepository<'a> {
                 .split("/")
                 .last()
                 .ok_or(CommandError::FileWriteError(
-                    "Error guardando FETCH_HEAD:".to_string()
+                    "Error obteniendo la rama en HEAD:".to_string()
                         + "No se pudo obtener el nombre de la rama",
                 ))?;
         Ok(head_branch_name.to_owned())
     }
 
-    /// Devuelve el hash del commit que apunta la rama que se hizo fetch
+    /// Devuelve el hash del commit que apunta la rama que se hizo fetch dentro de `FETCH_HEAD` (commit del remoto).
     fn get_fetch_head_branch_commit_hash(&self) -> Result<String, CommandError> {
         let fetch_head_path =
             join_paths!(&self.path, ".git/FETCH_HEAD").ok_or(CommandError::JoiningPaths)?;
@@ -988,6 +995,8 @@ impl<'a> GitRepository<'a> {
         Ok(branch_hash.to_owned())
     }
 
+    /// Es el merge feliz, donde no hay conflictos. Se reemplaza el working tree por el del commit
+    /// del remoto.
     fn merge_fast_forward(&mut self, commits: &[String]) -> Result<(), CommandError> {
         self.log("Merge fast forward");
         self.set_head_branch_commit_to(&commits[0])?;
@@ -1002,16 +1011,17 @@ impl<'a> GitRepository<'a> {
             .ok_or(CommandError::FileReadError(
                 "Error leyendo FETCH_HEAD".to_string(),
             ))?;
-        let tree = commit.get_tree().to_owned();
+        let working_tree = commit.get_tree().to_owned();
 
-        self.restore(tree)?;
+        self.restore_tree(working_tree)?;
         Ok(())
     }
 
+    /// Guarda en el archivo de la rama actual el hash del commit que se quiere hacer merge.
     fn set_head_branch_commit_to(&mut self, commits: &str) -> Result<(), CommandError> {
         let branch = self.get_head_branch_path()?;
         let branch_path = join_paths!(self.path, ".git", branch).ok_or(
-            CommandError::FileWriteError("Error guardando FETCH_HEAD:".to_string()),
+            CommandError::FileWriteError(format!("Error abriendo {}", branch)),
         )?;
         let mut file = fs::OpenOptions::new()
             .create(true)
@@ -1019,20 +1029,18 @@ impl<'a> GitRepository<'a> {
             .open(&branch_path)
             .map_err(|error| {
                 CommandError::FileWriteError(format!(
-                    "Error guardando FETCH_HEAD en {}: {}",
+                    "Error guardando {}: {}",
                     branch_path,
                     &error.to_string()
                 ))
             })?;
         file.write_all(commits.as_bytes()).map_err(|error| {
-            CommandError::FileWriteError(
-                "Error guardando FETCH_HEAD:".to_string() + &error.to_string(),
-            )
+            CommandError::FileWriteError("Error guardando:".to_string() + &error.to_string())
         })?;
         Ok(())
     }
 
-    fn restore(&mut self, mut source_tree: Tree) -> Result<(), CommandError> {
+    fn restore_tree(&mut self, mut source_tree: Tree) -> Result<(), CommandError> {
         self.log("Restoring files");
         source_tree.restore(&self.path, &mut self.logger)?;
         Ok(())
@@ -1160,11 +1168,13 @@ impl<'a> GitRepository<'a> {
 
         let mut head_branch_commits: HashMap<String, CommitObject> = HashMap::new();
         head_branch_commits.insert(commit_head_str.to_string(), commit_head.clone());
+
         let mut destin_branch_commits: HashMap<String, CommitObject> = HashMap::new();
         destin_branch_commits.insert(commits[0].to_string(), commit_destin.clone());
 
         let mut head_branch_tips: Vec<CommitObject> = [commit_head.clone()].to_vec();
         let mut destin_branch_tips: Vec<CommitObject> = [commit_destin.clone()].to_vec();
+
         loop {
             self.log(&format!("head_branch_tips: {:?}", &head_branch_tips.len()));
             self.log(&format!(

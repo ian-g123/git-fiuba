@@ -1,5 +1,5 @@
 use git::commands::{
-    add::Add, cat_file::CatFile, command::Command, commit::Commit, fetch::Fetch,
+    add::Add, cat_file::CatFile, clone::Clone, command::Command, commit::Commit, fetch::Fetch,
     hash_object::HashObject, init::Init, merge::Merge, status::Status,
 };
 use git_lib::command_errors::CommandError;
@@ -28,7 +28,7 @@ fn run(command_name: &str, command_args: &[String]) -> Result<(), CommandError> 
         CatFile::run_from,
         Commit::run_from,
         Status::run_from,
-        git::commands::clone::Clone::run_from,
+        Clone::run_from,
         Fetch::run_from,
         Merge::run_from,
     ];

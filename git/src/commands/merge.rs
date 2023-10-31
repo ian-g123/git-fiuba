@@ -6,7 +6,7 @@ use super::command::{Command, ConfigAdderFunction};
 
 /// Commando Merge
 pub struct Merge {
-    comits: Vec<String>,
+    commits: Vec<String>,
 }
 
 impl Command for Merge {
@@ -26,7 +26,7 @@ impl Command for Merge {
     }
 
     fn config_adders(&self) -> ConfigAdderFunction<Merge> {
-        vec![Merge::add_comit_config]
+        vec![Merge::add_commit_config]
     }
 }
 
@@ -39,20 +39,23 @@ impl Merge {
     }
 
     fn new_default() -> Merge {
-        Merge { comits: Vec::new() }
+        Merge {
+            commits: Vec::new(),
+        }
     }
-    fn add_comit_config(
+
+    fn add_commit_config(
         merge: &mut Merge,
         i: usize,
         args: &[String],
     ) -> Result<usize, CommandError> {
-        merge.comits.push(args[i].clone());
+        merge.commits.push(args[i].clone());
         Ok(i + 1)
     }
 
     fn run(&self, _stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), CommandError> {
         let mut repo = GitRepository::open("", output)?;
-        repo.merge(&self.comits)?;
+        repo.merge(&self.commits)?;
         Ok(())
     }
 }
