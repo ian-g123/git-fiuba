@@ -470,10 +470,12 @@ impl<'a> GitRepository<'a> {
 
             update_last_commit(&commit_hash)?;
             self.logger.log("Last commit updated");
+        } else {
+            self.status_long_format(true)?;
         }
 
         if !quiet {
-            self.status_long_format(true)?;
+            // salida de commit
         }
 
         Ok(())
@@ -1108,11 +1110,18 @@ impl<'a> GitRepository<'a> {
         commits: &Vec<String>,
     ) -> Result<(), CommandError> {
         self.log("Running merge_commits");
-        let (mut common, mut commit_head, commit_destin) =
+        let (mut common, mut commit_head, mut commit_destin) =
             self.get_common_ansestor(&commits, last_commit)?;
+        self.log(&format!(
+            "common: {:?}, commit_head: {:?}, commit_destin: {:?}",
+            common.get_hash_string().unwrap(),
+            commit_head.get_hash_string().unwrap(),
+            commit_destin.get_hash_string().unwrap()
+        ));
         if common.get_hash()? == commit_head.get_hash()? {
             return self.merge_fast_forward(&commits);
         }
+        todo!("Merge commits");
         Ok(())
     }
 
