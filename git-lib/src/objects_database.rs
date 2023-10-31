@@ -7,10 +7,7 @@ use std::{
 use crate::{
     join_paths,
     logger::Logger,
-    utils::{
-        aux::{get_sha1_str, join_paths_m},
-        super_string::u8_vec_to_hex_string,
-    },
+    utils::aux::{get_sha1_str, join_paths_m},
 };
 
 use super::{

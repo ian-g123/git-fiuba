@@ -1,7 +1,7 @@
-use crate::command_errors::CommandError;
-use crate::objects_database::ObjectsDatabase;
-use crate::utils::super_string::u8_vec_to_hex_string;
-use crate::{logger::Logger, objects_database};
+use crate::{
+    command_errors::CommandError, logger::Logger, objects_database::ObjectsDatabase,
+    utils::super_string::u8_vec_to_hex_string,
+};
 
 use super::{author::Author, blob::Blob, commit_object::CommitObject, mode::Mode, tree::Tree};
 use crate::utils::aux::hex_string_to_u8_vec;

@@ -1,12 +1,11 @@
 use std::{
     collections::HashMap,
-    env::join_paths,
     fs::{self, DirEntry, File, OpenOptions, ReadDir},
     io::{Read, Write},
     path::{Path, PathBuf},
 };
 
-use chrono::{format, DateTime, Local};
+use chrono::{DateTime, Local};
 
 use crate::{
     changes_controller_components::{
@@ -41,7 +40,7 @@ impl<'a> GitRepository<'a> {
     pub fn open(path: &str, output: &'a mut dyn Write) -> Result<GitRepository<'a>, CommandError> {
         if !Path::new(
             &join_paths!(path, ".git").ok_or(CommandError::DirectoryCreationError(
-                "Error creando directorio .git".to_string(),
+                "Error abriendo directorio .git".to_string(),
             ))?,
         )
         .exists()
@@ -591,12 +590,12 @@ impl<'a> GitRepository<'a> {
         )
     }
 
-    pub fn config(&self) -> Result<Config, CommandError> {
+    pub fn open_config(&self) -> Result<Config, CommandError> {
         Config::open(&self.path)
     }
 
     pub fn update_remote(&self, url: String) -> Result<(), CommandError> {
-        let mut config = self.config()?;
+        let mut config = self.open_config()?;
         config.insert("remote \"origin\"", "url", &url);
         config.save()?;
         Ok(())
@@ -612,15 +611,17 @@ impl<'a> GitRepository<'a> {
         ));
         let mut server = GitServer::connect_to(&address)?;
 
-        self.update_remote_branches(&mut server, &repository_path, &repository_url)?;
+        let remote_branches =
+            self.update_remote_branches(&mut server, &repository_path, &repository_url)?;
         let remote_reference = format!("{}:{}", address, repository_path);
-        self.fetch_and_save_objects(&mut server, &remote_reference)?;
+        self.fetch_and_save_objects(&mut server, &remote_reference, remote_branches)?;
         Ok(())
     }
 
-    /// Obtiene información de la rama remota.
+    /// Abre el archivo config de la base de datos\
+    /// obtiene el address, repository_path y repository_url del remote origin\
     fn get_remote_info(&mut self) -> Result<(String, String, String), CommandError> {
-        let config = self.config()?;
+        let config = self.open_config()?;
         let Some(url) = config.get("remote \"origin\"", "url") else {
             return Err(CommandError::NoRemoteUrl);
         };
@@ -640,17 +641,20 @@ impl<'a> GitRepository<'a> {
         ))
     }
 
+    /// Actualiza la base de datos con los nuevos objetos recibidos del servidor.
     fn fetch_and_save_objects(
         &mut self,
         server: &mut GitServer,
         remote_reference: &str,
+        remote_branches: HashMap<String, String>,
     ) -> Result<(), CommandError> {
-        let remote_branches = self.remote_branches()?;
-        let wants = remote_branches.clone().into_values().collect();
-        let haves = self.local_branches()?.into_values().collect();
-        self.log(&format!("Wants {:#?}", wants));
-        self.log(&format!("haves {:#?}", haves));
-        let objects_decompressed_data = server.fetch_objects(wants, haves, &mut self.logger)?;
+        // let remote_branches = self.remote_branches()?;
+        let wants_commits = remote_branches.clone().into_values().collect();
+        let haves_commits = self.local_branches()?.into_values().collect();
+        self.log(&format!("wants {:#?}", wants_commits));
+        self.log(&format!("haves {:#?}", haves_commits));
+        let objects_decompressed_data =
+            server.fetch_objects(wants_commits, haves_commits, &mut self.logger)?;
         for (obj_type, len, content) in objects_decompressed_data {
             self.log(&format!(
                 "Saving object of type {} and len {}, with data {:?}",
@@ -782,67 +786,79 @@ impl<'a> GitRepository<'a> {
         Ok(branches)
     }
 
-    fn remote_branches(&mut self) -> Result<HashMap<String, String>, CommandError> {
-        let mut branches = HashMap::<String, String>::new();
-        let branches_path = join_paths!(&self.path, ".git/refs/remotes/origin/").ok_or(
-            CommandError::DirectoryCreationError(
-                "Error creando directorio de branches".to_string(),
-            ),
-        )?;
-        // let branches_path = format!("{}/.git/refs/remotes/origin/", &self.path);
-        let paths = fs::read_dir(branches_path).map_err(|error| {
-            CommandError::FileReadError(format!(
-                "Error leyendo directorio de branches: {}",
-                error.to_string()
-            ))
-        })?;
-        for path in paths {
-            let path = path.map_err(|error| {
-                CommandError::FileReadError(format!(
-                    "Error leyendo directorio de branches: {}",
-                    error.to_string()
-                ))
-            })?;
-            let file_name = &path.file_name();
-            let Some(file_name) = file_name.to_str() else {
-                return Err(CommandError::FileReadError(
-                    "Error leyendo directorio de branches".to_string(),
-                ));
-            };
-            let mut file = fs::File::open(path.path()).map_err(|error| {
-                CommandError::FileReadError(format!(
-                    "Error leyendo directorio de branches: {}",
-                    error.to_string()
-                ))
-            })?;
-            let mut sha1 = String::new();
-            file.read_to_string(&mut sha1).map_err(|error| {
-                CommandError::FileReadError(format!(
-                    "Error leyendo directorio de branches: {}",
-                    error.to_string()
-                ))
-            })?;
-            branches.insert(file_name.to_string(), sha1);
-        }
-        Ok(branches)
-    }
+    // /// Abre la base de datos en la carpeta . git/refs/remotes/origin y obtiene los hashes de los
+    // /// commits de las branches remotos.\
+    // /// Devuelve un HashMap con el formato: `{nombre_branch: hash_commit}`.
+    // fn remote_branches(&mut self) -> Result<HashMap<String, String>, CommandError> {
+    //     let mut branches = HashMap::<String, String>::new();
+    //     let branches_path = join_paths!(&self.path, ".git/refs/remotes/origin/").ok_or(
+    //         CommandError::DirectoryCreationError(
+    //             "Error creando directorio de branches".to_string(),
+    //         ),
+    //     )?;
+    //     // let branches_path = format!("{}/.git/refs/remotes/origin/", &self.path);
+    //     let paths = fs::read_dir(branches_path).map_err(|error| {
+    //         CommandError::FileReadError(format!(
+    //             "Error leyendo directorio de branches: {}",
+    //             error.to_string()
+    //         ))
+    //     })?;
+    //     for path in paths {
+    //         let path = path.map_err(|error| {
+    //             CommandError::FileReadError(format!(
+    //                 "Error leyendo directorio de branches: {}",
+    //                 error.to_string()
+    //             ))
+    //         })?;
+    //         let file_name = &path.file_name();
+    //         let Some(file_name) = file_name.to_str() else {
+    //             return Err(CommandError::FileReadError(
+    //                 "Error leyendo directorio de branches".to_string(),
+    //             ));
+    //         };
+    //         let mut file = fs::File::open(path.path()).map_err(|error| {
+    //             CommandError::FileReadError(format!(
+    //                 "Error leyendo directorio de branches: {}",
+    //                 error.to_string()
+    //             ))
+    //         })?;
+    //         let mut sha1 = String::new();
+    //         file.read_to_string(&mut sha1).map_err(|error| {
+    //             CommandError::FileReadError(format!(
+    //                 "Error leyendo directorio de branches: {}",
+    //                 error.to_string()
+    //             ))
+    //         })?;
+    //         branches.insert(file_name.to_string(), sha1);
+    //     }
+    //     Ok(branches)
+    // }
 
+    /// Actualiza todas las branches de la carpeta remotes con los hashes de los commits
+    /// obtenidos del servidor.
     fn update_remote_branches(
         &mut self,
         server: &mut GitServer,
         repository_path: &str,
         repository_url: &str,
-    ) -> Result<(), CommandError> {
+    ) -> Result<(HashMap<String, String>), CommandError> {
         self.log("Updating remote branches");
         let (_head_branch, branch_remote_refs) =
             server.explore_repository(&("/".to_owned() + repository_path), repository_url)?;
         self.log(&format!("branch_remote_refs: {:?}", branch_remote_refs));
-        Ok(for (sha1, mut ref_path) in branch_remote_refs {
-            ref_path.replace_range(0..11, "");
-            self.update_ref(&sha1, &ref_path)?;
-        })
+
+        let mut remote_branches = HashMap::<String, String>::new();
+
+        for (hash, mut branch_name) in branch_remote_refs {
+            branch_name.replace_range(0..11, "");
+            self.update_ref(&hash, &branch_name)?;
+            remote_branches.insert(branch_name, hash);
+        }
+
+        Ok(remote_branches)
     }
 
+    /// Actualiza la referencia de la branch con el hash del commit obtenido del servidor.
     fn update_ref(&mut self, sha1: &str, ref_name: &str) -> Result<(), CommandError> {
         let dir_path = join_paths!(&self.path, ".git/refs/remotes/origin/").ok_or(
             CommandError::DirectoryCreationError("Error creando directorio de refs".to_string()),
