@@ -136,6 +136,9 @@ impl Blob {
 }
 
 impl GitObjectTrait for Blob {
+    fn as_mut_blob(&mut self) -> Option<&mut Blob> {
+        Some(self)
+    }
     fn get_info_commit(&self) -> Option<(String, Author, Author, i64, i32)> {
         None
     }

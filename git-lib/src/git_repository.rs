@@ -1,9 +1,10 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     env::join_paths,
     fs::{self, DirEntry, File, OpenOptions, ReadDir},
     io::{Read, Write},
     path::{Path, PathBuf},
+    process::Command,
 };
 
 use chrono::{format, DateTime, Local};
@@ -671,10 +672,16 @@ impl<'a> GitRepository<'a> {
             self.log("Running merge_head");
             commits.push(self.get_fetch_head_branch_commit_hash()?);
         }
-        match self.get_last_commit()? {
-            Some(last_commit) => self.merge_commits(&last_commit, &commits),
-            None => self.merge_fast_forward(&commits),
-        }
+        let merge_commit = match self.get_last_commit()? {
+            Some(last_commit) => self.merge_commits(&last_commit, &commits)?,
+            None => self.merge_fast_forward(&commits)?,
+        };
+        let mut boxed_commit: GitObject = Box::new(merge_commit.clone());
+        let merge_commit_hash_str = self.db()?.write(&mut boxed_commit)?;
+        self.set_head_branch_commit_to(&merge_commit_hash_str)?;
+        let tree = merge_commit.get_tree().to_owned();
+        self.restore(tree)?;
+        Ok(())
     }
 
     /// Obtiene la ruta de la rama actual.
@@ -997,7 +1004,7 @@ impl<'a> GitRepository<'a> {
         Ok(branches)
     }
 
-    fn merge_fast_forward(&mut self, commits: &[String]) -> Result<(), CommandError> {
+    fn merge_fast_forward(&mut self, commits: &[String]) -> Result<CommitObject, CommandError> {
         self.log("Merge fast forward");
         self.set_head_branch_commit_to(&commits[0])?;
 
@@ -1011,10 +1018,8 @@ impl<'a> GitRepository<'a> {
             .ok_or(CommandError::FileReadError(
                 "Error leyendo FETCH_HEAD".to_string(),
             ))?;
-        let tree = commit.get_tree().to_owned();
 
-        self.restore(tree)?;
-        Ok(())
+        Ok(commit.to_owned())
     }
 
     fn set_head_branch_commit_to(&mut self, commits: &str) -> Result<(), CommandError> {
@@ -1131,7 +1136,7 @@ impl<'a> GitRepository<'a> {
         &mut self,
         last_commit: &str,
         commits: &Vec<String>,
-    ) -> Result<(), CommandError> {
+    ) -> Result<CommitObject, CommandError> {
         self.log("Running merge_commits");
         if commits.len() > 1 {
             return Err(CommandError::MergeMultipleCommits);
@@ -1245,7 +1250,7 @@ impl<'a> GitRepository<'a> {
         common: &mut CommitObject,
         head: &mut CommitObject,
         destin: &mut CommitObject,
-    ) -> Result<(), CommandError> {
+    ) -> Result<CommitObject, CommandError> {
         let mut common_tree = common.get_tree().to_owned();
         let mut head_tree = head.get_tree().to_owned();
         let mut destin_tree = destin.get_tree().to_owned();
@@ -1255,8 +1260,69 @@ impl<'a> GitRepository<'a> {
             head_tree.get_hash_string().unwrap(),
             destin_tree.get_hash_string().unwrap()
         ));
-        Ok(())
+        let merged_tree = merge_trees(&mut head_tree, &mut destin_tree)?;
+        let mut boxed_tree: GitObject = Box::new(merged_tree.clone());
+        let _merge_tree_hash_str = self.db()?.write(&mut boxed_tree)?;
+        let message = format!(
+            "Merge branch '[todo branch name]' into [todo branch name]",
+            // self.get_current_branch_name()?,
+            // self.get_current_branch_name()?
+        );
+        let merge_commit = self.create_new_commit(
+            message,
+            [head.get_hash_string()?, destin.get_hash_string()?].to_vec(),
+            merged_tree,
+        )?;
+
+        Ok(merge_commit)
     }
+}
+
+fn merge_trees(head_tree: &mut Tree, destin_tree: &mut Tree) -> Result<Tree, CommandError> {
+    let mut merged_tree = Tree::new("".to_string());
+    let mut head_entries = head_tree.get_objects();
+    let mut destin_entries = destin_tree.get_objects();
+    let all_keys = head_entries
+        .clone()
+        .into_keys()
+        .chain(destin_entries.clone().into_keys())
+        .collect::<HashSet<String>>();
+    for key in all_keys {
+        let head_entry = head_entries.get_mut(&key);
+        let destin_entry = destin_entries.get_mut(&key);
+        match (head_entry, destin_entry) {
+            (Some(head_entry), Some(destin_entry)) => {
+                match (head_entry.as_mut_tree(), destin_entry.as_mut_tree()) {
+                    (Some(mut head_tree), Some(mut destin_tree)) => {
+                        let merged_subtree = merge_trees(&mut head_tree, &mut destin_tree)?;
+                        merged_tree.add_object(key, Box::new(merged_subtree));
+                    }
+                    (_, _) => match (head_entry.as_mut_blob(), destin_entry.as_mut_blob()) {
+                        (Some(head_blob), Some(destin_blob)) => {
+                            if head_blob.get_hash_string()? == destin_blob.get_hash_string()? {
+                                merged_tree.add_object(key, head_entry.to_owned());
+                            } else {
+                                todo!("Overlaping changes")
+                            }
+                        }
+                        (_, _) => {
+                            return Err(CommandError::MergeConflict("".to_string()));
+                        }
+                    },
+                }
+            }
+            (Some(head_entry), None) => {
+                merged_tree.add_object(key, head_entry.to_owned());
+            }
+            (None, Some(destin_entry)) => {
+                merged_tree.add_object(key, destin_entry.to_owned());
+            }
+            (None, None) => {
+                return Err(CommandError::MergeConflict("".to_string()));
+            }
+        }
+    }
+    Ok(merged_tree)
 }
 
 /// Devuelve el nombre de un archivo o directorio dado un PathBuf.

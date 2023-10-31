@@ -75,7 +75,74 @@ fn test_clone() {
     file.read_to_string(&mut content).unwrap();
     assert_eq!(content, "Primera linea\nSeparador\nTercera linea\n");
 
+    modify_file_and_commit_in_both_repos_not_overlaping(&path);
+
+    let result = Command::new("../".to_owned() + git_bin)
+        .arg("fetch")
+        .current_dir(&format!("{}/repo/", path))
+        .output()
+        .unwrap();
+
+    println!(
+        "Fetch stderr\n{}",
+        String::from_utf8(result.stderr).unwrap()
+    );
+    println!(
+        "Fetch stdout\n{}",
+        String::from_utf8(result.stdout).unwrap()
+    );
+
+    let result = Command::new("../".to_owned() + git_bin)
+        .arg("merge")
+        .current_dir(&format!("{}/repo/", path))
+        .output()
+        .unwrap();
+
+    let mut file = File::open(path.to_owned() + "/repo/file-remote").unwrap();
+    let mut content = String::new();
+    file.read_to_string(&mut content).unwrap();
+    assert_eq!(content, "Contenido remoto\n");
+
+    let mut file = File::open(path.to_owned() + "/repo/file-local").unwrap();
+    let mut content = String::new();
+    file.read_to_string(&mut content).unwrap();
+    assert_eq!(content, "Contenido local\n");
+
+    modify_file_and_commit_in_both_repos_none_overlaping_lines(&path);
+
+    let result = Command::new("../".to_owned() + git_bin)
+        .arg("fetch")
+        .current_dir(&format!("{}/repo/", path))
+        .output()
+        .unwrap();
+
+    println!(
+        "Fetch stderr\n{}",
+        String::from_utf8(result.stderr).unwrap()
+    );
+    println!(
+        "Fetch stdout\n{}",
+        String::from_utf8(result.stdout).unwrap()
+    );
+
+    let result = Command::new("../".to_owned() + git_bin)
+        .arg("merge")
+        .current_dir(&format!("{}/repo/", path))
+        .output()
+        .unwrap();
+
+    let mut file = File::open(path.to_owned() + "/repo/testfile").unwrap();
+    let mut content = String::new();
+    file.read_to_string(&mut content).unwrap();
+    assert_eq!(
+        content,
+        "Primera linea modificada en servidor\nSeparador\nTercera linea modificada en local\n"
+    );
+
+    panic!("Pausa");
+
     modify_file_and_commit_in_both_repos(&path);
+
     let result = Command::new("../".to_owned() + git_bin)
         .arg("fetch")
         .current_dir(&format!("{}/repo/", path))
@@ -110,6 +177,58 @@ fn test_clone() {
     panic!("Pausa");
 
     _ = fs::remove_dir_all(format!("{}", path));
+}
+
+fn modify_file_and_commit_in_both_repos_none_overlaping_lines(path: &str) {
+    let mut file = File::create(path.to_owned() + "/server-files/repo/testfile").unwrap();
+    file.write_all(b"Primera linea modificada en servidor\nSeparador\nTercera linea\n")
+        .unwrap();
+
+    assert!(
+        Command::new("git")
+            .arg("add")
+            .arg("testfile")
+            .current_dir(path.to_owned() + "/server-files/repo")
+            .status()
+            .is_ok(),
+        "No se pudo agregar el archivo testfile"
+    );
+
+    assert!(
+        Command::new("git")
+            .arg("commit")
+            .arg("-m")
+            .arg("modificacionservidor")
+            .current_dir(path.to_owned() + "/server-files/repo")
+            .status()
+            .is_ok(),
+        "No se pudo hacer commit"
+    );
+
+    let mut file = File::create(path.to_owned() + "/repo/testfile").unwrap();
+    file.write_all(b"Primera linea\nSeparador\nTercera linea modificada en local\n")
+        .unwrap();
+
+    assert!(
+        Command::new("../../../../../../../target/debug/git")
+            .arg("add")
+            .arg("testfile")
+            .current_dir(path.to_owned() + "/repo")
+            .status()
+            .is_ok(),
+        "No se pudo agregar el archivo testfile"
+    );
+
+    let result = Command::new("../../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("modificacionlocal")
+        .current_dir(path.to_owned() + "/repo")
+        .output()
+        .unwrap();
+
+    println!("{}", String::from_utf8(result.stderr).unwrap());
+    println!("{}", String::from_utf8(result.stdout).unwrap());
 }
 
 fn modify_file_and_commit_in_both_repos(path: &str) {
@@ -158,6 +277,56 @@ fn modify_file_and_commit_in_both_repos(path: &str) {
         .arg("commit")
         .arg("-m")
         .arg("modificacionlocal")
+        .current_dir(path.to_owned() + "/repo")
+        .output()
+        .unwrap();
+
+    println!("{}", String::from_utf8(result.stderr).unwrap());
+    println!("{}", String::from_utf8(result.stdout).unwrap());
+}
+
+fn modify_file_and_commit_in_both_repos_not_overlaping(path: &str) {
+    let mut file = File::create(path.to_owned() + "/server-files/repo/file-remote").unwrap();
+    file.write_all(b"Contenido remoto\n").unwrap();
+
+    assert!(
+        Command::new("git")
+            .arg("add")
+            .arg("file-remote")
+            .current_dir(path.to_owned() + "/server-files/repo")
+            .status()
+            .is_ok(),
+        "No se pudo agregar el archivo file-remote"
+    );
+
+    assert!(
+        Command::new("git")
+            .arg("commit")
+            .arg("-m")
+            .arg("modificacionservidornooverlaping")
+            .current_dir(path.to_owned() + "/server-files/repo")
+            .status()
+            .is_ok(),
+        "No se pudo hacer commit"
+    );
+
+    let mut file = File::create(path.to_owned() + "/repo/file-local").unwrap();
+    file.write_all(b"Contenido local\n").unwrap();
+
+    assert!(
+        Command::new("../../../../../../../target/debug/git")
+            .arg("add")
+            .arg("file-local")
+            .current_dir(path.to_owned() + "/repo")
+            .status()
+            .is_ok(),
+        "No se pudo agregar el archivo file-local"
+    );
+
+    let result = Command::new("../../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("modificacionlocalnooverlaping")
         .current_dir(path.to_owned() + "/repo")
         .output()
         .unwrap();

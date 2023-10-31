@@ -10,6 +10,9 @@ use std::io::{Read, Write};
 pub type GitObject = Box<dyn GitObjectTrait>;
 
 pub trait GitObjectTrait {
+    fn as_mut_blob(&mut self) -> Option<&mut Blob> {
+        None
+    }
     fn as_mut_tree(&mut self) -> Option<&mut Tree>;
 
     /// Devuelve el árbol del objeto si es que corresponde, o sino None

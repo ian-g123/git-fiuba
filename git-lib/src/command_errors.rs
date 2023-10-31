@@ -104,6 +104,8 @@ pub enum CommandError {
     FailedToFindCommonAncestor,
     /// Octopus merge not supported
     MergeMultipleCommits,
+    /// Merge conflict
+    MergeConflict(String),
 }
 
 impl Error for CommandError {}
@@ -269,6 +271,9 @@ impl fmt::Display for CommandError {
             }
             CommandError::MergeMultipleCommits => {
                 write!(f, "Octopus merge not supported")
+            }
+            CommandError::MergeConflict(explanation) => {
+                write!(f, "Merge conflict! Error: {}", explanation)
             }
         }
     }
