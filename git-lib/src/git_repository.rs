@@ -438,8 +438,6 @@ impl<'a> GitRepository<'a> {
             parents.push(padre);
         }
 
-        self.log("Creating Index tree");
-
         let mut staged_tree = {
             if files.is_empty() {
                 staging_area.get_working_tree_staged(&mut self.logger)?
@@ -452,24 +450,15 @@ impl<'a> GitRepository<'a> {
             }
         };
 
-        self.log("Index tree created");
-
         let commit: CommitObject =
             self.get_commit(&message, parents, staged_tree.to_owned(), reuse_commit_info)?;
-        self.log("get_commit");
 
         let mut git_object: GitObject = Box::new(commit);
 
         if !dry_run {
             write_commit_tree_to_database(&self.db()?, &mut staged_tree, &mut self.logger)?;
             let commit_hash = self.db()?.write(&mut git_object)?;
-            self.logger
-                .log(&format!("Commit object saved in database {}", commit_hash));
-            self.logger
-                .log(&format!("Updating last commit to {}", commit_hash));
-
             update_last_commit(&commit_hash)?;
-            self.logger.log("Last commit updated");
         } else {
             self.status_long_format(true)?;
         }
@@ -496,8 +485,6 @@ impl<'a> GitRepository<'a> {
                 self.create_new_commit(message.to_owned(), parents, staged_tree)?
             }
         };
-
-        self.log("Commit object created");
         Ok(commit)
     }
 
@@ -509,22 +496,17 @@ impl<'a> GitRepository<'a> {
         staged_tree: Tree,
     ) -> Result<CommitObject, CommandError> {
         let config = Config::open(&self.path)?;
-        self.log("Config opened");
         let Some(author_email) = config.get("user", "email") else {
             return Err(CommandError::UserConfigurationError);
         };
         let Some(author_name) = config.get("user", "name") else {
             return Err(CommandError::UserConfigurationError);
         };
-
         let author = Author::new(author_name, author_email);
         let commiter = Author::new(author_name, author_email);
-        self.log("Author and committr created");
-
         let datetime: DateTime<Local> = Local::now();
         let timestamp = datetime.timestamp();
         let offset = datetime.offset().local_minus_utc() / 60;
-        self.log(&format!("offset: {}", offset));
         let commit = CommitObject::new(
             parents,
             message,
@@ -649,7 +631,11 @@ impl<'a> GitRepository<'a> {
     ) -> Result<(), CommandError> {
         let remote_branches = self.remote_branches()?;
         let wants = remote_branches.clone().into_values().collect();
-        let haves = self.local_branches()?.into_values().collect();
+        let haves = self
+            .get_fetch_head_commits()?
+            .into_values()
+            .filter_map(|(commit_hash, _should_merge)| Some(commit_hash))
+            .collect();
         self.log(&format!("Wants {:#?}", wants));
         self.log(&format!("haves {:#?}", haves));
         let objects_decompressed_data = server.fetch_objects(wants, haves, &mut self.logger)?;
@@ -791,7 +777,6 @@ impl<'a> GitRepository<'a> {
                 "Error creando directorio de branches".to_string(),
             ),
         )?;
-        // let branches_path = format!("{}/.git/refs/remotes/origin/", &self.path);
         let paths = fs::read_dir(branches_path).map_err(|error| {
             CommandError::FileReadError(format!(
                 "Error leyendo directorio de branches: {}",
@@ -880,7 +865,6 @@ impl<'a> GitRepository<'a> {
         remote_reference: &str,
     ) -> Result<(), CommandError> {
         self.log("Updating FETCH_HEAD");
-        // let fetch_head_path = format!("{}/.git/FETCH_HEAD", &self.path);
         let fetch_head_path = join_paths!(&self.path, ".git/FETCH_HEAD").ok_or(
             CommandError::DirectoryCreationError("Error actualizando FETCH_HEAD".to_string()),
         )?;
@@ -932,8 +916,7 @@ impl<'a> GitRepository<'a> {
                 .split("/")
                 .last()
                 .ok_or(CommandError::FileWriteError(
-                    "Error guardando FETCH_HEAD:".to_string()
-                        + "No se pudo obtener el nombre de la rama",
+                    "No se pudo obtener el nombre de la rama".to_string(),
                 ))?;
         Ok(head_branch_name.to_owned())
     }
@@ -972,6 +955,46 @@ impl<'a> GitRepository<'a> {
                     "Error leyendo FETCH_HEAD".to_string(),
                 ))?;
         Ok(branch_hash.to_owned())
+    }
+
+    /// Devuelve el hash del commit que apunta la rama que se hizo fetch
+    fn get_fetch_head_commits(&self) -> Result<HashMap<String, (String, bool)>, CommandError> {
+        let fetch_head_path =
+            join_paths!(&self.path, ".git/FETCH_HEAD").ok_or(CommandError::JoiningPaths)?;
+
+        let mut branches = HashMap::<String, (String, bool)>::new();
+        let Ok(mut fetch_head_file) = fs::File::open(fetch_head_path) else {
+            return Ok(branches);
+        };
+        let mut fetch_head_content = String::new();
+        fetch_head_file
+            .read_to_string(&mut fetch_head_content)
+            .map_err(|error| {
+                CommandError::FileReadError(format!(
+                    "Error leyendo FETCH_HEAD: {:?}",
+                    error.to_string()
+                ))
+            })?;
+        let mut lines = fetch_head_content.lines();
+        while let Some(line) = lines.next() {
+            let branch_data: Vec<&str> = line.split('\t').collect();
+            let commit_hash = branch_data[0];
+            let should_merge_str = branch_data[1];
+            let branch_info = branch_data[2].to_string();
+            let (branch_name, _remote_info) =
+                branch_info
+                    .split_once("\' of")
+                    .ok_or(CommandError::FileReadError(
+                        "Error leyendo FETCH_HEAD".to_string(),
+                    ))?;
+            let should_merge = !(should_merge_str == "not-for-merge");
+            branches.insert(
+                branch_name.to_owned(),
+                (commit_hash.to_owned(), should_merge),
+            );
+        }
+
+        Ok(branches)
     }
 
     fn merge_fast_forward(&mut self, commits: &[String]) -> Result<(), CommandError> {
@@ -1110,8 +1133,13 @@ impl<'a> GitRepository<'a> {
         commits: &Vec<String>,
     ) -> Result<(), CommandError> {
         self.log("Running merge_commits");
+        if commits.len() > 1 {
+            return Err(CommandError::MergeMultipleCommits);
+        }
+        let destin_commit = commits[0].to_string();
+
         let (mut common, mut commit_head, mut commit_destin) =
-            self.get_common_ansestor(&commits, last_commit)?;
+            self.get_common_ansestor(&destin_commit, last_commit)?;
         self.log(&format!(
             "common: {:?}, commit_head: {:?}, commit_destin: {:?}",
             common.get_hash_string().unwrap(),
@@ -1121,32 +1149,26 @@ impl<'a> GitRepository<'a> {
         if common.get_hash()? == commit_head.get_hash()? {
             return self.merge_fast_forward(&commits);
         }
-        todo!("Merge commits");
-        Ok(())
+        self.log("True merge");
+        self.true_merge(&mut common, &mut commit_head, &mut commit_destin)
     }
 
     fn get_common_ansestor(
         &mut self,
-        commits: &Vec<String>,
+        commit_destin_str: &str,
         commit_head_str: &str,
     ) -> Result<(CommitObject, CommitObject, CommitObject), CommandError> {
         self.log("Get common ansestor inicio");
-        self.log(&format!("commits: {:?}", commits));
 
-        let mut commit_head = self
+        let commit_head = self
             .db()?
             .read_object(&commit_head_str)?
             .as_commit_mut()
             .ok_or(CommandError::FailedToFindCommonAncestor)?
             .to_owned();
-        self.log(&format!(
-            "commit_head_hash: {:?}",
-            commit_head.get_hash_string()
-        ));
-
         let commit_destin = self
             .db()?
-            .read_object(&commits[0])?
+            .read_object(commit_destin_str)?
             .as_commit_mut()
             .ok_or(CommandError::FailedToFindCommonAncestor)?
             .to_owned();
@@ -1154,16 +1176,11 @@ impl<'a> GitRepository<'a> {
         let mut head_branch_commits: HashMap<String, CommitObject> = HashMap::new();
         head_branch_commits.insert(commit_head_str.to_string(), commit_head.clone());
         let mut destin_branch_commits: HashMap<String, CommitObject> = HashMap::new();
-        destin_branch_commits.insert(commits[0].to_string(), commit_destin.clone());
+        destin_branch_commits.insert(commit_destin_str.to_string(), commit_destin.clone());
 
         let mut head_branch_tips: Vec<CommitObject> = [commit_head.clone()].to_vec();
         let mut destin_branch_tips: Vec<CommitObject> = [commit_destin.clone()].to_vec();
         loop {
-            self.log(&format!("head_branch_tips: {:?}", &head_branch_tips.len()));
-            self.log(&format!(
-                "destin_branch_tips: {:?}",
-                &destin_branch_tips.len()
-            ));
             if head_branch_tips.is_empty() && destin_branch_tips.is_empty() {
                 break;
             }
@@ -1220,6 +1237,24 @@ impl<'a> GitRepository<'a> {
             }
         }
         *branch_tips = new_branch_tips;
+        Ok(())
+    }
+
+    fn true_merge(
+        &mut self,
+        common: &mut CommitObject,
+        head: &mut CommitObject,
+        destin: &mut CommitObject,
+    ) -> Result<(), CommandError> {
+        let mut common_tree = common.get_tree().to_owned();
+        let mut head_tree = head.get_tree().to_owned();
+        let mut destin_tree = destin.get_tree().to_owned();
+        self.log(&format!(
+            "common_tree: {:?}, head_tree: {:?}, destin_tree: {:?}",
+            common_tree.get_hash_string().unwrap(),
+            head_tree.get_hash_string().unwrap(),
+            destin_tree.get_hash_string().unwrap()
+        ));
         Ok(())
     }
 }

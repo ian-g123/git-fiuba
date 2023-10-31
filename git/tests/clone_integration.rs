@@ -82,6 +82,15 @@ fn test_clone() {
         .output()
         .unwrap();
 
+    println!(
+        "Fetch stderr\n{}",
+        String::from_utf8(result.stderr).unwrap()
+    );
+    println!(
+        "Fetch stdout\n{}",
+        String::from_utf8(result.stdout).unwrap()
+    );
+
     let result = Command::new("../".to_owned() + git_bin)
         .arg("merge")
         .current_dir(&format!("{}/repo/", path))

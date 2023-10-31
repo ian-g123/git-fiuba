@@ -102,6 +102,8 @@ pub enum CommandError {
     /// Error al intentar unir paths
     JoiningPaths,
     FailedToFindCommonAncestor,
+    /// Octopus merge not supported
+    MergeMultipleCommits,
 }
 
 impl Error for CommandError {}
@@ -264,6 +266,9 @@ impl fmt::Display for CommandError {
             }
             CommandError::FailedToFindCommonAncestor => {
                 write!(f, "No se pudo encontrar un ancestro común.")
+            }
+            CommandError::MergeMultipleCommits => {
+                write!(f, "Octopus merge not supported")
             }
         }
     }
