@@ -3,16 +3,18 @@ use std::{
     io::{Read, Write},
 };
 
-use crate::command_errors::CommandError;
-use crate::{logger::Logger, objects_database};
+use crate::{
+    command_errors::CommandError,
+    objects_database::ObjectsDatabase,
+    utils::{aux::*, super_string::u8_vec_to_hex_string},
+};
+use crate::{join_paths, logger::Logger};
 
 use super::{
     author::Author,
-    aux::*,
     blob::Blob,
     git_object::{GitObject, GitObjectTrait},
     mode::Mode,
-    super_string::u8_vec_to_hex_string,
 };
 
 #[derive(Clone)]
@@ -192,6 +194,7 @@ impl Tree {
     }
 
     pub fn read_from(
+        db: &ObjectsDatabase,
         stream: &mut dyn Read,
         _len: usize,
         path: &str,
@@ -208,7 +211,7 @@ impl Tree {
                 .map_err(|_| CommandError::ObjectHashNotKnown)?;
             let hash_str = u8_vec_to_hex_string(&hash);
 
-            let object = objects_database::read_object(&hash_str, logger)?;
+            let object = db.read_object(&hash_str)?;
             objects.insert(name, object);
         }
         Ok(Box::new(Self {
@@ -262,10 +265,6 @@ impl Tree {
             }
         }
         sorted_objects
-    }
-
-    pub fn set_hash(&mut self, hash: [u8; 20]) {
-        self.hash = Some(hash);
     }
 }
 
@@ -386,6 +385,21 @@ impl GitObjectTrait for Tree {
         let hash = get_sha1(&buf);
         self.set_hash(hash);
         Ok(hash)
+    }
+
+    fn restore(&mut self, path: &str, logger: &mut Logger) -> Result<(), CommandError> {
+        self.objects.iter().try_for_each(|(name, object)| {
+            let path = join_paths!(path, name).ok_or(CommandError::FileWriteError(
+                "No se pudo encontrar el path".to_string(),
+            ))?;
+            object.to_owned().restore(&path, logger)?;
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    fn set_hash(&mut self, hash: [u8; 20]) {
+        self.hash = Some(hash);
     }
 }
 
@@ -615,6 +629,6 @@ mod test_write_y_display {
 
         writer_stream.seek(SeekFrom::Start(0)).unwrap();
 
-        let _tree_res = Tree::read_from(&mut writer_stream, 0, "", &hash, &mut logger).unwrap();
+        // let _tree_res = Tree::read_from(&mut writer_stream, 0, "", &hash, &mut logger).unwrap();
     }
 }

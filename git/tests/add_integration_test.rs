@@ -13,6 +13,8 @@ fn test_single_file() {
         .current_dir(path)
         .output()
         .unwrap();
+
+    println!("{}", String::from_utf8(result.stderr).unwrap());
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
 
     let result = Command::new("../../../../../../target/debug/git")

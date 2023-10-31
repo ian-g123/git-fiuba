@@ -1,8 +1,8 @@
-use std::{fs, process::Command};
+use std::{fs, path::Path, process::Command};
 
 use crate::common::aux::{
     change_dir_testfile1_content, change_dir_testfile1_content_and_remove_dir_testfile2,
-    create_test_scene_1, create_test_scene_2, create_test_scene_3,
+    create_base_scene, create_test_scene_1, create_test_scene_2, create_test_scene_3,
 };
 
 mod common {
@@ -664,5 +664,198 @@ fn test_commit_paths_fails() {
     let expected = "error: pathspec 'dir/testfile3.txt' did not match any file(s) known to git\n";
     assert_eq!(String::from_utf8(result.stderr).unwrap(), expected);
 
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
+#[test]
+fn test_long_message_fails_simple() {
+    let path = "./tests/data/commands/commit/repo9";
+    create_test_scene_1(path.clone());
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("testfile.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("'message")
+        .arg("message continues")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let expected = format!("The message must end with '\n");
+    assert_eq!(String::from_utf8(result.stderr).unwrap(), expected);
+
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
+#[test]
+fn test_long_message() {
+    let path = "./tests/data/commands/commit/repo10";
+    create_test_scene_1(path.clone());
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("testfile.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("\"this")
+        .arg("message")
+        .arg("has")
+        .arg("many")
+        .arg("words\"")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let expected = format!("");
+    assert_eq!(String::from_utf8(result.stderr).unwrap(), expected);
+
+    let head = fs::read_to_string(path.to_owned() + "/.git/HEAD").unwrap();
+    let (_, branch_ref) = head.split_once(' ').unwrap();
+    let branch_ref = branch_ref.trim();
+    let ref_path = path.to_owned() + "/.git/" + branch_ref;
+    let commit_hash = fs::read_to_string(ref_path).unwrap();
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("cat-file")
+        .arg(commit_hash)
+        .arg("-p")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    let output = String::from_utf8(result.stdout).unwrap();
+    let output_lines: Vec<&str> = output.split('\n').collect();
+
+    assert_eq!(output_lines[4], "this message has many words");
+
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
+#[test]
+fn test_long_message_fails_double() {
+    let path = "./tests/data/commands/commit/repo11";
+    create_test_scene_1(path);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("testfile.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("\"message")
+        .arg("message continues")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let expected = format!("The message must end with \"\n");
+    assert_eq!(String::from_utf8(result.stderr).unwrap(), expected);
+
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
+#[test]
+fn test_dry_run() {
+    let path = "./tests/data/commands/commit/repo12";
+    create_test_scene_1(path);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("testfile.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .arg("--dry-run")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let commit_result = String::from_utf8(result.stdout).unwrap();
+
+    println!("{}", commit_result);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("status")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let status_result = String::from_utf8(result.stdout).unwrap();
+    assert_ne!(commit_result, status_result);
+    let expected = "On branch master\n\nInitial commit\n\nChanges to be committed:\n  (use \"git restore --staged <file>...\" to unstage)\n\tnew file:   testfile.txt\n\n";
+    assert_eq!(commit_result, expected);
+
+    let expected = "On branch master\n\nNo commits yet\n\nChanges to be committed:\n  (use \"git restore --staged <file>...\" to unstage)\n\tnew file:   testfile.txt\n\n";
+    assert_eq!(status_result, expected);
+    let head = fs::read_to_string(path.to_owned() + "/.git/HEAD").unwrap();
+    let (_, branch_ref) = head.split_once(' ').unwrap();
+    let branch_ref = branch_ref.trim();
+    let ref_path = path.to_owned() + "/.git/" + branch_ref;
+    let result = Path::new(&ref_path).exists();
+    assert!(!result);
+
+    let path_obj_str = path.to_owned() + "/.git/objects/";
+    let path_obj = Path::new(&path_obj_str);
+
+    let entries = fs::read_dir(path_obj.clone()).unwrap();
+    let n_objects = entries.count();
+    assert_eq!(3, n_objects); // testfile, info y pack
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
+#[test]
+fn test_nothing_to_commit() {
+    let path = "./tests/data/commands/commit/repo13";
+    create_base_scene(path);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let commit_result = String::from_utf8(result.stdout).unwrap();
+
+    let expected = "On branch master\n\nInitial commit\n\nnothing to commit (create/copy files and use \"git add\" to track)\n";
+    assert_eq!(commit_result, expected);
+
+    let head = fs::read_to_string(path.to_owned() + "/.git/HEAD").unwrap();
+    let (_, branch_ref) = head.split_once(' ').unwrap();
+    let branch_ref = branch_ref.trim();
+    let ref_path = path.to_owned() + "/.git/" + branch_ref;
+    let result = Path::new(&ref_path).exists();
+    assert!(!result);
+
+    let path_obj_str = path.to_owned() + "/.git/objects/";
+    let path_obj = Path::new(&path_obj_str);
+
+    let entries = fs::read_dir(path_obj.clone()).unwrap();
+    let n_objects = entries.count();
+    assert_eq!(2, n_objects); // info y pack
     _ = fs::remove_dir_all(format!("{}", path));
 }

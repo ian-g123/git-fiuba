@@ -19,6 +19,15 @@ pub fn extract(data: &[u8]) -> Result<Vec<u8>, CommandError> {
     Ok(decompressed_data)
 }
 
+/// Descomprime un vector de bytes
+pub fn extract_2(data: &mut dyn Read) -> Result<(Vec<u8>, u64), CommandError> {
+    let mut decoder = flate2::read::ZlibDecoder::new(data);
+    let mut decompressed_data = Vec::new();
+    decoder.read_to_end(&mut decompressed_data).unwrap();
+    let num = decoder.total_in();
+    Ok((decompressed_data, num))
+}
+
 #[cfg(test)]
 mod test_compress_and_extract {
     use super::*;

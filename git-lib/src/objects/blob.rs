@@ -3,20 +3,22 @@ use std::{
     io::{Cursor, Read, Write},
 };
 
-use crate::command_errors::CommandError;
-use crate::logger::Logger;
+use crate::{
+    command_errors::CommandError,
+    utils::{aux::get_name, super_string::SuperStrings},
+};
+use crate::{logger::Logger, utils::aux::*};
 
 use super::{
     author::Author,
-    aux::*,
     git_object::{write_to_stream_from_content, GitObject, GitObjectTrait},
     mode::Mode,
-    super_string::SuperStrings,
     tree::Tree,
 };
 
 #[derive(Clone, Debug)]
 pub struct Blob {
+    content: Option<Vec<u8>>,
     mode: Mode,
     path: Option<String>,
     hash: Option<[u8; 20]>,
@@ -27,7 +29,8 @@ impl Blob {
     /// Crea un Blob a partir de su ruta. Si la ruta no existe, devuelve Error.
     pub fn new_from_path(path: String) -> Result<Self, CommandError> {
         let mode = Mode::get_mode(path.clone())?;
-        Ok(Blob {
+        Ok(Self {
+            content: None,
             mode: mode,
             path: Some(path.clone()),
             hash: None,
@@ -41,7 +44,8 @@ impl Blob {
         mode: Mode,
     ) -> Result<Self, CommandError> {
         let hash = hash.cast_hex_to_u8_vec()?;
-        Ok(Blob {
+        Ok(Self {
+            content: None,
             mode,
             path: None,
             hash: Some(hash),
@@ -54,8 +58,11 @@ impl Blob {
         path: String,
         mode: Mode,
     ) -> Result<Self, CommandError> {
-        let hash = hash.cast_hex_to_u8_vec()?;
-        Ok(Blob {
+        let hash_vec = hash.cast_hex_to_u8_vec()?;
+        let mut hash = [0; 20];
+        hash.copy_from_slice(&hash_vec);
+        Ok(Self {
+            content: None,
             mode,
             path: Some(path.clone()),
             hash: Some(hash),
@@ -70,7 +77,8 @@ impl Blob {
         } else {
             Mode::RegularFile
         };
-        Ok(Blob {
+        Ok(Self {
+            content: None,
             mode: mode,
             path: Some(path.to_string()),
             hash: Some(hash),
@@ -80,9 +88,11 @@ impl Blob {
 
     pub fn new_from_content_and_path(content: Vec<u8>, path: &str) -> Result<Self, CommandError> {
         let mut data: Vec<u8> = Vec::new();
-        write_to_stream_from_content(&mut data, content, "blob".to_string())?;
+        write_to_stream_from_content(&mut data, content.clone(), "blob".to_string())?;
         let hash = get_sha1(&data);
-        Self::new_from_hash_and_path(hash, path)
+        let mut instance = Self::new_from_hash_and_path(hash, path)?;
+        instance.content = Some(content);
+        Ok(instance)
     }
 
     pub fn read_from(
@@ -102,7 +112,7 @@ impl Blob {
             String::from_utf8(content.clone()).unwrap()
         ));
 
-        let blob = Blob::new_from_content_and_path(content, path)?;
+        let mut blob = Blob::new_from_content_and_path(content, path)?;
         logger.log("blob created");
         Ok(Box::new(blob))
     }
@@ -145,6 +155,9 @@ impl GitObjectTrait for Blob {
     }
 
     fn content(&mut self) -> Result<Vec<u8>, CommandError> {
+        if let Some(content) = &self.content {
+            return Ok(content.to_owned());
+        }
         match &self.path {
             Some(path) => {
                 let content = read_file_contents(path)?;
@@ -174,21 +187,46 @@ impl GitObjectTrait for Blob {
 
     /// Devuelve el hash del Blob.
     fn get_hash(&mut self) -> Result<[u8; 20], CommandError> {
-        match self.hash {
-            Some(hash) => Ok(hash),
-            None => {
-                let mut buf: Vec<u8> = Vec::new();
-                let mut stream = Cursor::new(&mut buf);
-                self.write_to(&mut stream)?;
-                let sha1 = get_sha1(&buf);
-                self.hash = Some(sha1.clone());
-                Ok(sha1)
-            }
+        if let Some(hash) = self.hash {
+            return Ok(hash);
         }
+        let mut buf: Vec<u8> = Vec::new();
+        self.write_to(&mut buf)?;
+        let hash = get_sha1(&buf);
+        self.set_hash(hash);
+        Ok(hash)
     }
 
     fn get_name(&self) -> Option<String> {
         self.name.clone()
+    }
+
+    fn restore(&mut self, path: &str, logger: &mut Logger) -> Result<(), CommandError> {
+        let mut file = File::create(path).map_err(|error| {
+            CommandError::FileOpenError(format!(
+                "Error al crear archivo {}: {}",
+                path,
+                error.to_string()
+            ))
+        })?;
+        let content = self.content()?;
+        logger.log(&format!(
+            "Writing in {} the following content:\n{}",
+            path,
+            String::from_utf8(content.clone()).unwrap()
+        ));
+        file.write_all(&content).map_err(|error| {
+            CommandError::FileWriteError(format!(
+                "Error al escribir archivo {}: {}",
+                path,
+                error.to_string()
+            ))
+        })?;
+        Ok(())
+    }
+
+    fn set_hash(&mut self, sha1: [u8; 20]) {
+        self.hash = Some(sha1.clone());
     }
 }
 

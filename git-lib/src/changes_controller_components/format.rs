@@ -1,16 +1,28 @@
-use crate::command_errors::CommandError;
 use crate::logger::Logger;
+use crate::objects_database::ObjectsDatabase;
+use crate::{command_errors::CommandError, objects::tree::Tree};
 use std::{collections::HashMap, io::Write};
 
 use super::{changes_controller::ChangesController, changes_types::ChangeType};
 pub trait Format {
     fn show(
         &self,
+        db: &ObjectsDatabase,
+        commit_tree: Option<Tree>,
         logger: &mut Logger,
         output: &mut dyn Write,
         branch: &str,
+        commit_output: bool,
     ) -> Result<(), CommandError> {
-        let changes_controller = ChangesController::new(logger)?;
+        // let commit_tree = build_last_commit_tree(db, logger)?;
+        let initial_commit = {
+            if commit_tree.is_none() {
+                true
+            } else {
+                false
+            }
+        };
+        let changes_controller = ChangesController::new(db, logger, commit_tree)?;
         let changes_to_be_commited = changes_controller.get_changes_to_be_commited();
         let changes_not_staged = changes_controller.get_changes_not_staged();
         let untracked_files = changes_controller.get_untracked_files();
@@ -20,7 +32,7 @@ pub trait Format {
             changes_to_be_commited,
             changes_not_staged,
             untracked_files,
-            branch,
+            (branch, commit_output, initial_commit),
         )?;
         Ok(())
     }
@@ -32,7 +44,7 @@ pub trait Format {
         changes_to_be_commited: &HashMap<String, ChangeType>,
         changes_not_staged: &HashMap<String, ChangeType>,
         untracked_files: &Vec<String>,
-        branch: &str,
+        long_info: (&str, bool, bool),
     ) -> Result<(), CommandError>;
 }
 

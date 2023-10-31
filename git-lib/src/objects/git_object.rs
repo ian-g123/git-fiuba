@@ -1,10 +1,10 @@
-use crate::command_errors::CommandError;
-use crate::{logger::Logger, objects_database};
-
-use super::{
-    author::Author, blob::Blob, commit_object::CommitObject, mode::Mode,
-    super_string::u8_vec_to_hex_string, tree::Tree,
+use crate::{
+    command_errors::CommandError, logger::Logger, objects_database::ObjectsDatabase,
+    utils::super_string::u8_vec_to_hex_string,
 };
+
+use super::{author::Author, blob::Blob, commit_object::CommitObject, mode::Mode, tree::Tree};
+use crate::utils::aux::hex_string_to_u8_vec;
 use std::io::{Read, Write};
 
 pub type GitObject = Box<dyn GitObjectTrait>;
@@ -90,14 +90,21 @@ pub trait GitObjectTrait {
     fn get_name(&self) -> Option<String> {
         None
     }
+
+    fn restore(&mut self, path: &str, logger: &mut Logger) -> Result<(), CommandError> {
+        Ok(())
+    }
+
+    fn set_hash(&mut self, hash: [u8; 20]) {}
 }
 
 pub fn display_from_hash(
+    db: &ObjectsDatabase,
     output: &mut dyn Write,
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (_, content) = objects_database::read_file(hash, logger)?;
+    let (_, content) = db.read_file(hash)?;
 
     let mut stream = std::io::Cursor::new(content);
     display_from_stream(&mut stream, logger, output)
@@ -122,11 +129,12 @@ pub fn display_from_stream(
 }
 
 pub fn display_type_from_hash(
+    db: &ObjectsDatabase,
     output: &mut dyn Write,
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (_, content) = objects_database::read_file(hash, logger)?;
+    let (_, content) = db.read_file(hash)?;
     let mut stream = std::io::Cursor::new(content);
     let (type_str, _) = get_type_and_len(&mut stream)?;
     writeln!(output, "{}", type_str)
@@ -135,11 +143,12 @@ pub fn display_type_from_hash(
 }
 
 pub fn display_size_from_hash(
+    db: &ObjectsDatabase,
     output: &mut dyn Write,
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (_, content) = objects_database::read_file(hash, logger)?;
+    let (_, content) = db.read_file(hash)?;
     let mut stream = std::io::Cursor::new(content);
     let (_, len) = get_type_and_len(&mut stream)?;
     writeln!(output, "{}", len).map_err(|error| CommandError::FileWriteError(error.to_string()))?;
@@ -147,6 +156,7 @@ pub fn display_size_from_hash(
 }
 
 pub fn read_git_object_from(
+    db: &ObjectsDatabase,
     stream: &mut dyn Read,
     path: &str,
     hash_str: &str,
@@ -156,13 +166,16 @@ pub fn read_git_object_from(
 
     logger.log(&format!("Reading object of type : {}", type_str));
     if type_str == "blob" {
-        return Blob::read_from(stream, len, path, hash_str, logger);
+        let mut blob = Blob::read_from(stream, len, path, hash_str, logger)?;
+        let hash_hex = hex_string_to_u8_vec(hash_str);
+        blob.set_hash(hash_hex);
+        return Ok(blob);
     };
     if type_str == "tree" {
-        return Tree::read_from(stream, len, path, hash_str, logger);
+        return Tree::read_from(db, stream, len, path, hash_str, logger);
     };
     if type_str == "commit" {
-        return CommitObject::read_from(stream, logger);
+        return CommitObject::read_from(db, stream, logger);
     };
 
     Err(CommandError::ObjectTypeError)

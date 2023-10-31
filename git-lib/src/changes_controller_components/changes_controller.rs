@@ -1,10 +1,10 @@
 use crate::{
     command_errors::CommandError,
     logger::Logger,
-    objects::{
-        aux::get_name, git_object::GitObject, last_commit::build_last_commit_tree, tree::Tree,
-    },
+    objects::{git_object::GitObject, tree::Tree},
+    objects_database::ObjectsDatabase,
     staging_area::StagingArea,
+    utils::aux::get_name,
 };
 use std::{collections::HashMap, fs::File, io::Read};
 
@@ -23,11 +23,14 @@ pub struct ChangesController {
 impl ChangesController {
     /// Crea un nuevo ChangesController que contiene información acerca de todos los tipos de cambios
     /// del index y el working tree desde el último commit.
-    pub fn new(logger: &mut Logger) -> Result<ChangesController, CommandError> {
-        let commit_tree = build_last_commit_tree(logger)?;
+    pub fn new(
+        db: &ObjectsDatabase,
+        logger: &mut Logger,
+        commit_tree: Option<Tree>,
+    ) -> Result<ChangesController, CommandError> {
         let index = StagingArea::open()?;
         let working_tree = build_working_tree()?;
-        let index_changes = Self::check_staging_area_status(&index, &commit_tree, logger)?;
+        let index_changes = Self::check_staging_area_status(db, &index, &commit_tree, logger)?;
         let (working_tree_changes, untracked) = Self::check_working_tree_status(
             working_tree,
             &index,
@@ -60,12 +63,13 @@ impl ChangesController {
 
     /// Obtiene los cambios que se incluirán en el próximo commit.
     fn check_staging_area_status(
+        db: &ObjectsDatabase,
         staging_area: &StagingArea,
-        last_commit: &Option<Tree>,
+        last_commit_tree: &Option<Tree>,
         logger: &mut Logger,
     ) -> Result<HashMap<String, ChangeType>, CommandError> {
         let staging_files = staging_area.get_files();
-        let Some(mut tree) = last_commit.to_owned() else {
+        let Some(mut tree) = last_commit_tree.to_owned() else {
             let changes: HashMap<String, ChangeType> = staging_files
                 .iter()
                 .map(|(path, _)| (path.to_string(), ChangeType::Added))
@@ -74,7 +78,7 @@ impl ChangesController {
         };
         let mut changes: HashMap<String, ChangeType> =
             Self::check_files_in_staging_area(staging_files, logger, &mut tree)?;
-        Self::get_deleted_changes_index(staging_area, &mut changes)?;
+        Self::get_deleted_changes_index(db, last_commit_tree, staging_area, &mut changes)?;
         Ok(changes)
     }
 
@@ -151,10 +155,12 @@ impl ChangesController {
 
     /// Obtiene los archivos eliminados en el index, pero presentes en el último commit.
     fn get_deleted_changes_index(
+        db: &ObjectsDatabase,
+        last_commit_tree: &Option<Tree>,
         staging_area: &StagingArea,
         changes: &mut HashMap<String, ChangeType>,
     ) -> Result<(), CommandError> {
-        let deleted_changes = staging_area.get_deleted_files()?;
+        let deleted_changes = staging_area.get_deleted_files(db, last_commit_tree)?;
         for deleted_file in deleted_changes.iter() {
             _ = changes.insert(deleted_file.to_string(), ChangeType::Deleted)
         }

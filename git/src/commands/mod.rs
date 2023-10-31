@@ -1,10 +1,10 @@
-pub mod author;
+pub mod add;
+pub mod cat_file;
+pub mod clone;
 pub mod command;
-pub mod command_errors;
 pub mod commit;
-pub mod config;
-pub mod file_compressor;
+pub mod fetch;
 pub mod hash_object;
 pub mod init;
-pub mod objects;
+pub mod merge;
 pub mod status;
