@@ -15,6 +15,7 @@ use crate::{
     },
     command_errors::CommandError,
     config::Config,
+    diff_components::merge::merge_content,
     join_paths,
     logger::Logger,
     objects::{
@@ -1260,7 +1261,7 @@ impl<'a> GitRepository<'a> {
             head_tree.get_hash_string().unwrap(),
             destin_tree.get_hash_string().unwrap()
         ));
-        let merged_tree = merge_trees(&mut head_tree, &mut destin_tree)?;
+        let merged_tree = merge_trees(&mut head_tree, &mut destin_tree, &mut common_tree)?;
         let mut boxed_tree: GitObject = Box::new(merged_tree.clone());
         let _merge_tree_hash_str = self.db()?.write(&mut boxed_tree)?;
         let message = format!(
@@ -1278,10 +1279,16 @@ impl<'a> GitRepository<'a> {
     }
 }
 
-fn merge_trees(head_tree: &mut Tree, destin_tree: &mut Tree) -> Result<Tree, CommandError> {
+fn merge_trees(
+    head_tree: &mut Tree,
+    destin_tree: &mut Tree,
+    common_tree: &mut Tree,
+) -> Result<Tree, CommandError> {
     let mut merged_tree = Tree::new("".to_string());
     let mut head_entries = head_tree.get_objects();
     let mut destin_entries = destin_tree.get_objects();
+    let mut common_entries = common_tree.get_objects();
+
     let all_keys = head_entries
         .clone()
         .into_keys()
@@ -1290,39 +1297,124 @@ fn merge_trees(head_tree: &mut Tree, destin_tree: &mut Tree) -> Result<Tree, Com
     for key in all_keys {
         let head_entry = head_entries.get_mut(&key);
         let destin_entry = destin_entries.get_mut(&key);
-        match (head_entry, destin_entry) {
-            (Some(head_entry), Some(destin_entry)) => {
-                match (head_entry.as_mut_tree(), destin_entry.as_mut_tree()) {
-                    (Some(mut head_tree), Some(mut destin_tree)) => {
-                        let merged_subtree = merge_trees(&mut head_tree, &mut destin_tree)?;
-                        merged_tree.add_object(key, Box::new(merged_subtree));
-                    }
-                    (_, _) => match (head_entry.as_mut_blob(), destin_entry.as_mut_blob()) {
-                        (Some(head_blob), Some(destin_blob)) => {
-                            if head_blob.get_hash_string()? == destin_blob.get_hash_string()? {
-                                merged_tree.add_object(key, head_entry.to_owned());
-                            } else {
-                                todo!("Overlaping changes")
-                            }
-                        }
-                        (_, _) => {
-                            return Err(CommandError::MergeConflict("".to_string()));
-                        }
-                    },
-                }
+        let common_entry = common_entries.get_mut(&key);
+        match common_entry {
+            Some(common_entry) => {
+                merged_tree.add_object(key, is_in_common(head_entry, destin_entry, common_entry)?);
             }
-            (Some(head_entry), None) => {
-                merged_tree.add_object(key, head_entry.to_owned());
-            }
-            (None, Some(destin_entry)) => {
-                merged_tree.add_object(key, destin_entry.to_owned());
-            }
-            (None, None) => {
-                return Err(CommandError::MergeConflict("".to_string()));
+            None => {
+                merged_tree.add_object(key, is_not_in_common(head_entry, destin_entry)?);
             }
         }
     }
     Ok(merged_tree)
+}
+
+fn is_in_common(
+    head_entry: Option<&mut GitObject>,
+    destin_entry: Option<&mut GitObject>,
+    common_entry: &mut GitObject,
+) -> Result<GitObject, CommandError> {
+    match (head_entry, destin_entry) {
+        (Some(head_entry), Some(destin_entry)) => {
+            match (head_entry.as_mut_tree(), destin_entry.as_mut_tree()) {
+                (Some(mut head_tree), Some(mut destin_tree)) => {
+                    let mut common_tree = match common_entry.as_mut_tree() {
+                        Some(common_tree) => common_tree.to_owned(),
+                        None => Tree::new("".to_string()),
+                    };
+                    let merged_subtree =
+                        merge_trees(&mut head_tree, &mut destin_tree, &mut common_tree)?;
+                    let boxed_subtree = Box::new(merged_subtree);
+                    return Ok(boxed_subtree);
+                }
+                (_, _) => match (head_entry.as_mut_blob(), destin_entry.as_mut_blob()) {
+                    (Some(head_blob), Some(destin_blob)) => {
+                        if head_blob.get_hash_string()? == destin_blob.get_hash_string()? {
+                            return Ok(head_entry.to_owned());
+                        } else {
+                            let mut common_blob = match common_entry.as_mut_blob() {
+                                Some(common_blob) => common_blob.to_owned(),
+                                None => Blob::new_from_content(vec![])?,
+                            };
+                            let (merged_blob, merge_conflicts) =
+                                merge_blobs(head_blob, destin_blob, &mut common_blob)?;
+                            return Ok(Box::new(merged_blob.to_owned()));
+                        }
+                    }
+                    (_, _) => {
+                        return Err(CommandError::MergeConflict("".to_string()));
+                    }
+                },
+            }
+        }
+        (Some(head_entry), None) => return Ok(head_entry.to_owned()),
+        (None, Some(destin_entry)) => return Ok(destin_entry.to_owned()),
+        (None, None) => {
+            return Err(CommandError::MergeConflict("".to_string()));
+        }
+    };
+}
+
+fn is_not_in_common(
+    head_entry: Option<&mut GitObject>,
+    destin_entry: Option<&mut GitObject>,
+) -> Result<GitObject, CommandError> {
+    match (head_entry, destin_entry) {
+        (Some(head_entry), Some(destin_entry)) => {
+            match (head_entry.as_mut_tree(), destin_entry.as_mut_tree()) {
+                (Some(mut head_tree), Some(mut destin_tree)) => {
+                    let mut common_tree = Tree::new("".to_string());
+                    let merged_subtree =
+                        merge_trees(&mut head_tree, &mut destin_tree, &mut common_tree)?;
+                    let boxed_subtree = Box::new(merged_subtree);
+                    return Ok(boxed_subtree);
+                }
+                (_, _) => match (head_entry.as_mut_blob(), destin_entry.as_mut_blob()) {
+                    (Some(head_blob), Some(destin_blob)) => {
+                        if head_blob.get_hash_string()? == destin_blob.get_hash_string()? {
+                            return Ok(head_entry.to_owned());
+                        } else {
+                            let mut common_blob = Blob::new_from_content(vec![])?;
+                            let (merged_blob, merge_conflicts) =
+                                merge_blobs(head_blob, destin_blob, &mut common_blob)?;
+                            return Ok(Box::new(merged_blob.to_owned()));
+                        }
+                    }
+                    (_, _) => {
+                        return Err(CommandError::MergeConflict("".to_string()));
+                    }
+                },
+            }
+        }
+        (Some(head_entry), None) => return Ok(head_entry.to_owned()),
+        (None, Some(destin_entry)) => return Ok(destin_entry.to_owned()),
+        (None, None) => {
+            return Err(CommandError::MergeConflict("".to_string()));
+        }
+    };
+}
+
+fn merge_blobs(
+    head_blob: &mut Blob,
+    destin_blob: &mut Blob,
+    common_blob: &mut Blob,
+) -> Result<(Blob, bool), CommandError> {
+    let head_content = head_blob.content()?;
+    let destin_content = destin_blob.content()?;
+    let common_content = common_blob.content()?;
+    let head_content_str =
+        String::from_utf8(head_content).map_err(|_| CommandError::CastingError)?;
+    let destin_content_str =
+        String::from_utf8(destin_content).map_err(|_| CommandError::CastingError)?;
+    let common_content_str =
+        String::from_utf8(common_content).map_err(|_| CommandError::CastingError)?;
+
+    let (merged_content_str, merge_conflicts) =
+        merge_content(head_content_str, destin_content_str, common_content_str)?;
+    let merged_content = merged_content_str.as_bytes().to_owned();
+    let mut merged_blob = Blob::new_from_content(merged_content)?;
+    Ok((merged_blob, merge_conflicts))
 }
 
 /// Devuelve el nombre de un archivo o directorio dado un PathBuf.

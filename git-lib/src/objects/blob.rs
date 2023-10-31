@@ -1,11 +1,15 @@
 use std::{
     fs::File,
     io::{Cursor, Read, Write},
+    process::Command,
 };
 
 use crate::{
     command_errors::CommandError,
-    utils::{aux::get_name, super_string::SuperStrings},
+    utils::{
+        aux::get_name,
+        super_string::{u8_vec_to_hex_string, SuperStrings},
+    },
 };
 use crate::{logger::Logger, utils::aux::*};
 
@@ -53,7 +57,7 @@ impl Blob {
         })
     }
 
-    pub fn new_from_hash_and_mode(
+    pub fn new_from_hash_path_and_mode(
         hash: String,
         path: String,
         mode: Mode,
@@ -67,6 +71,23 @@ impl Blob {
             path: Some(path.clone()),
             hash: Some(hash),
             name: Some(get_name(&path)?),
+        })
+    }
+
+    pub fn new_from_hash_content_and_mode(
+        hash: String,
+        content: Vec<u8>,
+        mode: Mode,
+    ) -> Result<Self, CommandError> {
+        let hash_vec = hash.cast_hex_to_u8_vec()?;
+        let mut hash = [0; 20];
+        hash.copy_from_slice(&hash_vec);
+        Ok(Self {
+            content: Some(content),
+            mode,
+            path: None,
+            hash: Some(hash),
+            name: None,
         })
     }
 
@@ -92,6 +113,16 @@ impl Blob {
         let hash = get_sha1(&data);
         let mut instance = Self::new_from_hash_and_path(hash, path)?;
         instance.content = Some(content);
+        Ok(instance)
+    }
+
+    pub fn new_from_content(content: Vec<u8>) -> Result<Blob, CommandError> {
+        let mut data: Vec<u8> = Vec::new();
+        write_to_stream_from_content(&mut data, content.clone(), "blob".to_string())?;
+        let hash = get_sha1(&data);
+        let hash_str = u8_vec_to_hex_string(&hash);
+        let mut instance =
+            Self::new_from_hash_content_and_mode(hash_str, content, Mode::RegularFile)?;
         Ok(instance)
     }
 

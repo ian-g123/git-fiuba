@@ -164,7 +164,7 @@ impl Tree {
     ) -> Result<(), CommandError> {
         // let blob = Blob::new_from_hash(hash.clone(), path_name.clone())?;
         let blob =
-            Blob::new_from_hash_and_mode(hash.clone(), path_name.clone(), Mode::RegularFile)?;
+            Blob::new_from_hash_path_and_mode(hash.clone(), path_name.clone(), Mode::RegularFile)?;
         let blob_name = get_name(&path_name)?;
         _ = self.objects.insert(blob_name.to_string(), Box::new(blob));
         Ok(())
