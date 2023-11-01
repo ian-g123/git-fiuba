@@ -1,6 +1,6 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, process::Command};
 
-use crate::command_errors::CommandError;
+use crate::{changes_controller_components::merge_conflicts, command_errors::CommandError};
 
 pub fn merge_content(
     head_content: String,
@@ -8,42 +8,24 @@ pub fn merge_content(
     common_content: String,
 ) -> Result<(String, bool), CommandError> {
     let (common_not_changed_in_head, head_diffs) = get_diffs(&common_content, &head_content)?;
+    let (common_not_changed_in_destin, destin_diffs) = get_diffs(&common_content, &destin_content)?;
 
-    // let mut merged_lines = Vec::<String>::new();
-    // let head_lines = head_content.lines().collect::<Vec<&str>>();
-    // let destin_lines = destin_content.lines().collect::<Vec<&str>>();
-    // let common_lines = common_content.lines().collect::<Vec<&str>>();
+    let (merged_content, merge_conflicts) = merge_difs(
+        common_not_changed_in_head,
+        head_diffs,
+        common_not_changed_in_destin,
+        destin_diffs,
+    )?;
+    Ok((merged_content, merge_conflicts))
+}
 
-    // let mut head_index = 0;
-    // let mut destin_index = 0;
-    // let mut head_buf = Vec::<&str>::new();
-    // let mut destin_buf = Vec::<&str>::new();
-    // while (head_index < head_lines.len()) && (destin_index < destin_lines.len()) {
-    //     let head_line = head_lines[head_index];
-    //     let destin_line = destin_lines[destin_index];
-    //     if head_line == destin_line {
-    //         merged_lines.push(head_line.to_string());
-    //         head_index += 1;
-    //         destin_index += 1;
-    //     } else {
-    //         if let Some(matching_head_line_index) = head_buf
-    //             .clone()
-    //             .into_iter()
-    //             .position(|head_line| head_line == destin_line)
-    //         {
-    //             let mut head_changes = head_buf[0..matching_head_line_index].to_vec();
-    //             let mut destin_changes = destin_buf[0..destin_index].to_vec();
-    //             merged_lines.push("<<<<<<< HEAD".to_string());
-    //             merged_lines.append(&mut head_changes.iter().map(|s| s.to_string()).collect());
-    //             merged_lines.push("=======".to_string());
-    //             merged_lines.append(&mut destin_changes.iter().map(|s| s.to_string()).collect());
-    //             merged_lines.push(">>>>>>>".to_string());
-    //         }
-    //         head_buf.push(head_line);
-    //         destin_buf.push(destin_line);
-    //     }
-    // }
-    todo!();
+fn merge_difs(
+    common_not_changed_in_head: HashMap<usize, String>,
+    head_diffs: HashMap<usize, (Vec<String>, Vec<String>)>,
+    common_not_changed_in_destin: HashMap<usize, String>,
+    destin_diffs: HashMap<usize, (Vec<String>, Vec<String>)>,
+) -> Result<(String, bool), CommandError> {
+    todo!()
 }
 
 /// Devuelve una tupla de dos HashMaps. El primero contiene las líneas que no cambiaron en "otro"
@@ -63,13 +45,10 @@ fn get_diffs(
 > {
     let mut common_not_changed_in_other = HashMap::<usize, String>::new();
     let mut other_diffs = HashMap::<usize, (Vec<String>, Vec<String>)>::new(); // index, (new_lines, discarted_lines)
-
     let common_lines: Vec<&str> = common_content.lines().collect::<Vec<&str>>();
     let other_lines = other_content.lines().collect::<Vec<&str>>();
-
     let mut common_index = 0;
     let mut other_index = 0;
-
     let mut common_buf = Vec::<String>::new();
     let mut other_buf = Vec::<String>::new();
 
@@ -99,8 +78,7 @@ fn get_diffs(
                     {
                         let new_lines = other_buf[..other_line_index].to_vec();
                         let discarted_lines = common_buf.clone();
-                        // common_index -= 1;
-                        other_index = first_diff_other_index + new_lines.len() /*- 1*/;
+                        other_index = first_diff_other_index + new_lines.len();
                         other_diffs.insert(first_diff_common_index, (new_lines, discarted_lines));
                         break;
                     }
@@ -113,8 +91,7 @@ fn get_diffs(
                     {
                         let new_lines = other_buf.clone();
                         let discarted_lines = common_buf[..common_line_index].to_vec();
-                        // other_index -= 1;
-                        common_index = first_diff_common_index + discarted_lines.len() /*- 1*/;
+                        common_index = first_diff_common_index + discarted_lines.len();
                         other_diffs.insert(first_diff_common_index, (new_lines, discarted_lines));
                         break;
                     }
