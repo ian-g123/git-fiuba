@@ -14,7 +14,6 @@ pub trait Format {
         branch: &str,
         commit_output: bool,
     ) -> Result<(), CommandError> {
-        // let commit_tree = build_last_commit_tree(db, logger)?;
         let initial_commit = {
             if commit_tree.is_none() {
                 true

@@ -859,3 +859,63 @@ fn test_nothing_to_commit() {
     assert_eq!(2, n_objects); // info y pack
     _ = fs::remove_dir_all(format!("{}", path));
 }
+
+#[test]
+fn test_commit_output() {
+    let path = "./tests/data/commands/commit/repo14";
+    create_test_scene_2(path);
+
+    // new file
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("dir/testfile1.txt")
+        .arg("dir/testfile2.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let result = String::from_utf8(result.stdout).unwrap();
+    println!("Commit output:\n{}", result);
+    let result: Vec<&str> = result.lines().collect();
+    let expected = [
+        " 2 files changed, 2 insertions(+)",
+        " create mode 100644 dir/testfile1.txt",
+        " create mode 100644 dir/testfile2.txt",
+    ]
+    .to_vec();
+    assert_eq!(result[1..], expected);
+
+    //delete file
+    change_dir_testfile1_content_and_remove_dir_testfile2(path);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message2")
+        .arg("dir/testfile2.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    println!("stderr:\n{}", String::from_utf8(result.stderr).unwrap());
+
+    let result = String::from_utf8(result.stdout).unwrap();
+    println!("Commit output:\n{}", result);
+    let result: Vec<&str> = result.lines().collect();
+    let expected = [
+        " 1 file changed, 1 deletion(-)",
+        " delete mode 100644 dir/testfile2.txt",
+    ]
+    .to_vec();
+    assert_eq!(result[1..], expected);
+
+    _ = fs::remove_dir_all(format!("{}", path));
+}
