@@ -1252,6 +1252,8 @@ impl<'a> GitRepository<'a> {
         head: &mut CommitObject,
         destin: &mut CommitObject,
     ) -> Result<CommitObject, CommandError> {
+        let head_name = "HEAD";
+        let destin_name: &str = "origin";
         let mut common_tree = common.get_tree().to_owned();
         let mut head_tree = head.get_tree().to_owned();
         let mut destin_tree = destin.get_tree().to_owned();
@@ -1261,7 +1263,13 @@ impl<'a> GitRepository<'a> {
             head_tree.get_hash_string().unwrap(),
             destin_tree.get_hash_string().unwrap()
         ));
-        let merged_tree = merge_trees(&mut head_tree, &mut destin_tree, &mut common_tree)?;
+        let merged_tree = merge_trees(
+            &mut head_tree,
+            &mut destin_tree,
+            &mut common_tree,
+            head_name,
+            destin_name,
+        )?;
         let mut boxed_tree: GitObject = Box::new(merged_tree.clone());
         let _merge_tree_hash_str = self.db()?.write(&mut boxed_tree)?;
         let message = format!(
@@ -1283,6 +1291,8 @@ fn merge_trees(
     head_tree: &mut Tree,
     destin_tree: &mut Tree,
     common_tree: &mut Tree,
+    head_name: &str,
+    destin_name: &str,
 ) -> Result<Tree, CommandError> {
     let mut merged_tree = Tree::new("".to_string());
     let mut head_entries = head_tree.get_objects();
@@ -1300,10 +1310,22 @@ fn merge_trees(
         let common_entry = common_entries.get_mut(&key);
         match common_entry {
             Some(common_entry) => {
-                merged_tree.add_object(key, is_in_common(head_entry, destin_entry, common_entry)?);
+                merged_tree.add_object(
+                    key,
+                    is_in_common(
+                        head_entry,
+                        destin_entry,
+                        common_entry,
+                        head_name,
+                        destin_name,
+                    )?,
+                );
             }
             None => {
-                merged_tree.add_object(key, is_not_in_common(head_entry, destin_entry)?);
+                merged_tree.add_object(
+                    key,
+                    is_not_in_common(head_entry, destin_entry, head_name, destin_name)?,
+                );
             }
         }
     }
@@ -1314,6 +1336,8 @@ fn is_in_common(
     head_entry: Option<&mut GitObject>,
     destin_entry: Option<&mut GitObject>,
     common_entry: &mut GitObject,
+    head_name: &str,
+    destin_name: &str,
 ) -> Result<GitObject, CommandError> {
     match (head_entry, destin_entry) {
         (Some(head_entry), Some(destin_entry)) => {
@@ -1323,8 +1347,13 @@ fn is_in_common(
                         Some(common_tree) => common_tree.to_owned(),
                         None => Tree::new("".to_string()),
                     };
-                    let merged_subtree =
-                        merge_trees(&mut head_tree, &mut destin_tree, &mut common_tree)?;
+                    let merged_subtree = merge_trees(
+                        &mut head_tree,
+                        &mut destin_tree,
+                        &mut common_tree,
+                        head_name,
+                        destin_name,
+                    )?;
                     let boxed_subtree = Box::new(merged_subtree);
                     return Ok(boxed_subtree);
                 }
@@ -1337,8 +1366,13 @@ fn is_in_common(
                                 Some(common_blob) => common_blob.to_owned(),
                                 None => Blob::new_from_content(vec![])?,
                             };
-                            let (merged_blob, merge_conflicts) =
-                                merge_blobs(head_blob, destin_blob, &mut common_blob)?;
+                            let (merged_blob, merge_conflicts) = merge_blobs(
+                                head_blob,
+                                destin_blob,
+                                &mut common_blob,
+                                head_name,
+                                destin_name,
+                            )?;
                             return Ok(Box::new(merged_blob.to_owned()));
                         }
                     }
@@ -1359,14 +1393,21 @@ fn is_in_common(
 fn is_not_in_common(
     head_entry: Option<&mut GitObject>,
     destin_entry: Option<&mut GitObject>,
+    head_name: &str,
+    destin_name: &str,
 ) -> Result<GitObject, CommandError> {
     match (head_entry, destin_entry) {
         (Some(head_entry), Some(destin_entry)) => {
             match (head_entry.as_mut_tree(), destin_entry.as_mut_tree()) {
                 (Some(mut head_tree), Some(mut destin_tree)) => {
                     let mut common_tree = Tree::new("".to_string());
-                    let merged_subtree =
-                        merge_trees(&mut head_tree, &mut destin_tree, &mut common_tree)?;
+                    let merged_subtree = merge_trees(
+                        &mut head_tree,
+                        &mut destin_tree,
+                        &mut common_tree,
+                        head_name,
+                        destin_name,
+                    )?;
                     let boxed_subtree = Box::new(merged_subtree);
                     return Ok(boxed_subtree);
                 }
@@ -1376,8 +1417,13 @@ fn is_not_in_common(
                             return Ok(head_entry.to_owned());
                         } else {
                             let mut common_blob = Blob::new_from_content(vec![])?;
-                            let (merged_blob, merge_conflicts) =
-                                merge_blobs(head_blob, destin_blob, &mut common_blob)?;
+                            let (merged_blob, merge_conflicts) = merge_blobs(
+                                head_blob,
+                                destin_blob,
+                                &mut common_blob,
+                                head_name,
+                                destin_name,
+                            )?;
                             return Ok(Box::new(merged_blob.to_owned()));
                         }
                     }
@@ -1399,6 +1445,8 @@ fn merge_blobs(
     head_blob: &mut Blob,
     destin_blob: &mut Blob,
     common_blob: &mut Blob,
+    head_name: &str,
+    destin_name: &str,
 ) -> Result<(Blob, bool), CommandError> {
     let head_content = head_blob.content()?;
     let destin_content = destin_blob.content()?;
@@ -1410,8 +1458,13 @@ fn merge_blobs(
     let common_content_str =
         String::from_utf8(common_content).map_err(|_| CommandError::CastingError)?;
 
-    let (merged_content_str, merge_conflicts) =
-        merge_content(head_content_str, destin_content_str, common_content_str)?;
+    let (merged_content_str, merge_conflicts) = merge_content(
+        head_content_str,
+        destin_content_str,
+        common_content_str,
+        head_name,
+        destin_name,
+    )?;
     let merged_content = merged_content_str.as_bytes().to_owned();
     let mut merged_blob = Blob::new_from_content(merged_content)?;
     Ok((merged_blob, merge_conflicts))

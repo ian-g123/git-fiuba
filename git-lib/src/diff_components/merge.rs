@@ -1,31 +1,179 @@
-use std::{collections::HashMap, process::Command};
+use std::collections::HashMap;
 
-use crate::{changes_controller_components::merge_conflicts, command_errors::CommandError};
+use crate::command_errors::CommandError;
 
 pub fn merge_content(
     head_content: String,
     destin_content: String,
     common_content: String,
+    head_name: &str,
+    destin_name: &str,
 ) -> Result<(String, bool), CommandError> {
     let (common_not_changed_in_head, head_diffs) = get_diffs(&common_content, &head_content)?;
     let (common_not_changed_in_destin, destin_diffs) = get_diffs(&common_content, &destin_content)?;
 
-    let (merged_content, merge_conflicts) = merge_difs(
+    let line_count = common_content.split('\n').count();
+    let (no_conflicts_content, conflicts_content) = merge_diffs(
         common_not_changed_in_head,
         head_diffs,
         common_not_changed_in_destin,
         destin_diffs,
+        line_count,
+    )?;
+
+    let (merged_content, merge_conflicts) = build_output(
+        no_conflicts_content,
+        conflicts_content,
+        head_name,
+        destin_name,
     )?;
     Ok((merged_content, merge_conflicts))
 }
 
-fn merge_difs(
+fn build_output(
+    no_conflicts_content: HashMap<usize, String>,
+    conflicts_content: HashMap<usize, (Vec<String>, Vec<String>)>,
+    head_name: &str,
+    destin_name: &str,
+) -> Result<(String, bool), CommandError> {
+    let max_iter = no_conflicts_content
+        .keys()
+        .max()
+        .ok_or(CommandError::MergeConflict("Error imposible".to_string()))?
+        .to_owned()
+        + 1;
+    let mut merged_content = String::new();
+    let merge_conflicts = !conflicts_content.is_empty();
+    for i in 0..max_iter {
+        match conflicts_content.get(&i) {
+            Some((head_lines, destin_lines)) => {
+                merged_content.push_str(&format!("<<<<<<< {}\n", head_name.to_string()));
+                merged_content.push_str(&head_lines.join("\n"));
+                merged_content.push_str(&format!("\n=======\n"));
+                merged_content.push_str(&destin_lines.join("\n"));
+                merged_content.push_str(&format!("\n>>>>>>> {}\n", destin_name.to_string()));
+            }
+            _ => {}
+        };
+        match no_conflicts_content.get(&i) {
+            Some(line) => merged_content.push_str(&(line.to_owned() + "\n")),
+            _ => {}
+        };
+    }
+    merged_content.pop();
+    Ok((merged_content, merge_conflicts))
+}
+
+fn merge_diffs(
     common_not_changed_in_head: HashMap<usize, String>,
     head_diffs: HashMap<usize, (Vec<String>, Vec<String>)>,
     common_not_changed_in_destin: HashMap<usize, String>,
     destin_diffs: HashMap<usize, (Vec<String>, Vec<String>)>,
-) -> Result<(String, bool), CommandError> {
-    todo!()
+    common_len: usize,
+) -> Result<
+    (
+        HashMap<usize, String>,
+        HashMap<usize, (Vec<String>, Vec<String>)>, //index line in common, (head line, destin line)
+    ),
+    CommandError,
+> {
+    // find intersection of common_not_changed_in_head and common_not_changed_in_destin
+    let mut no_conflicts_content = HashMap::<usize, String>::new();
+    let mut conflicts_content = HashMap::<usize, (Vec<String>, Vec<String>)>::new();
+    let mut line_index = 0;
+    let mut merge_index = 0;
+    loop {
+        let head_diffs_line_op = head_diffs.get(&line_index);
+        let destin_diffs_line_op = destin_diffs.get(&line_index);
+
+        match (head_diffs_line_op, destin_diffs_line_op) {
+            (Some(head_diffs_line), Some(destin_diffs_line)) => {
+                if head_diffs_line == destin_diffs_line {
+                    for line in &head_diffs_line.0 {
+                        no_conflicts_content.insert(merge_index, line.to_owned());
+                        merge_index += 1;
+                    }
+                } else if just_adds(head_diffs_line) && just_adds(destin_diffs_line) {
+                    for line in &head_diffs_line.0 {
+                        no_conflicts_content.insert(merge_index, line.to_owned());
+                        merge_index += 1;
+                    }
+                    for line in &destin_diffs_line.0 {
+                        no_conflicts_content.insert(merge_index, line.to_owned());
+                        merge_index += 1;
+                    }
+                } else {
+                    let mut head_diff_buf = Vec::<String>::new();
+                    let mut destin_diff_buf = Vec::<String>::new();
+                    loop {
+                        let head_common_line_op = common_not_changed_in_head.get(&line_index);
+                        let destin_common_line_op = common_not_changed_in_destin.get(&line_index);
+                        if let Some(head_diffs_line) = head_diffs.get(&line_index) {
+                            for line in &head_diffs_line.0 {
+                                head_diff_buf.push(line.to_owned());
+                            }
+                        };
+                        if let Some(destin_diffs_line) = destin_diffs.get(&line_index) {
+                            for line in &destin_diffs_line.0 {
+                                destin_diff_buf.push(line.to_owned());
+                            }
+                        };
+
+                        match (head_common_line_op, destin_common_line_op) {
+                            (Some(head_comon_line), Some(destin_comon_line)) => {
+                                conflicts_content
+                                    .insert(merge_index, (head_diff_buf, destin_diff_buf));
+                                merge_index += 1;
+                                break;
+                            }
+                            (Some(head_comon_line), None) => {
+                                head_diff_buf.push(head_comon_line.to_string());
+                            }
+                            (None, Some(destin_comon_line)) => {
+                                destin_diff_buf.push(destin_comon_line.to_string());
+                            }
+                            (None, None) => {}
+                        };
+                        line_index += 1;
+                    }
+                }
+            }
+            (None, Some(destin_diffs_line)) => {
+                for line in &destin_diffs_line.0 {
+                    no_conflicts_content.insert(merge_index, line.to_owned());
+                    merge_index += 1;
+                }
+            }
+            (Some(head_diffs_line), None) => {
+                for line in &head_diffs_line.0 {
+                    no_conflicts_content.insert(merge_index, line.to_owned());
+                    merge_index += 1;
+                }
+            }
+            (None, None) => {}
+        }
+        if line_index >= common_len {
+            break;
+        }
+        let head_common_line_op = common_not_changed_in_head.get(&line_index);
+        let destin_common_line_op = common_not_changed_in_destin.get(&line_index);
+
+        match (head_common_line_op, destin_common_line_op) {
+            (Some(head_comon_line), Some(_destin_comon_line)) => {
+                no_conflicts_content.insert(merge_index, head_comon_line.to_string());
+                merge_index += 1;
+            }
+            (_, _) => return Err(CommandError::MergeConflict("Error imposible".to_string())),
+        }
+
+        line_index += 1;
+    }
+
+    Ok((no_conflicts_content, conflicts_content))
+}
+
+fn just_adds(diff_line: &(Vec<String>, Vec<String>)) -> bool {
+    diff_line.1.is_empty()
 }
 
 /// Devuelve una tupla de dos HashMaps. El primero contiene las líneas que no cambiaron en "otro"
@@ -45,8 +193,8 @@ fn get_diffs(
 > {
     let mut common_not_changed_in_other = HashMap::<usize, String>::new();
     let mut other_diffs = HashMap::<usize, (Vec<String>, Vec<String>)>::new(); // index, (new_lines, discarted_lines)
-    let common_lines: Vec<&str> = common_content.lines().collect::<Vec<&str>>();
-    let other_lines = other_content.lines().collect::<Vec<&str>>();
+    let common_lines: Vec<&str> = common_content.split('\n').collect::<Vec<&str>>();
+    let other_lines = other_content.split('\n').collect::<Vec<&str>>();
     let mut common_index = 0;
     let mut other_index = 0;
     let mut common_buf = Vec::<String>::new();
@@ -300,5 +448,74 @@ mod tests {
         assert_eq!(common_not_changed_in_other.get(&1).unwrap(), "linea 3");
         assert_eq!(other_diffs.get(&0).unwrap().0[0], "linea 1".to_string());
         assert!(other_diffs.get(&0).unwrap().1.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn no_changes() {
+        assert_merge_case(
+            "linea 1\nlinea 2\nlinea 3",
+            "linea 1\nlinea 2\nlinea 3",
+            "linea 1\nlinea 2\nlinea 3",
+            "linea 1\nlinea 2\nlinea 3",
+            false,
+        );
+    }
+
+    #[test]
+    fn none_conflicting_changes() {
+        assert_merge_case(
+            "linea 1\nlinea 2\nlinea 3",
+            "linea 1\nlinea 2\nlinea 3\nlinea 4",
+            "linea 0\nlinea 1\nlinea 2\nlinea 3",
+            "linea 0\nlinea 1\nlinea 2\nlinea 3\nlinea 4",
+            false,
+        );
+    }
+
+    #[test]
+    fn conflicting_change_in_middle_line() {
+        assert_merge_case(
+            "linea 1\nlinea 2\nlinea 3",
+            "linea 1\nlinea 5\nlinea 3",
+            "linea 1\nlinea 6\nlinea 3",
+            "linea 1\n<<<<<<< HEAD\nlinea 5\n=======\nlinea 6\n>>>>>>> origin\nlinea 3",
+            true,
+        );
+    }
+
+    // #[test]
+    // fn none_conflicting_changes() {
+    //     assert_merge_case(
+    //         "linea 1\nlinea 2\nlinea 3",
+    //         "linea 0\nlinea 1\nlinea 2\nlinea 3",
+    //         "linea 1\nlinea 2\nlinea 3\nlinea 4",
+    //         "linea 0\nlinea 1\nlinea 2\nlinea 3\nlinea 4",
+    //         false,
+    //     );
+    // }
+
+    fn assert_merge_case(
+        common_content: &str,
+        head_content: &str,
+        destin_content: &str,
+        expected_output: &str,
+        expect_merge_conflicts: bool,
+    ) {
+        let (merged_content, merge_conflicts) = merge_content(
+            head_content.to_string(),
+            destin_content.to_string(),
+            common_content.to_string(),
+            "HEAD",
+            "origin",
+        )
+        .unwrap();
+
+        assert_eq!(merged_content, expected_output.to_string());
+        assert_eq!(merge_conflicts, expect_merge_conflicts);
     }
 }
