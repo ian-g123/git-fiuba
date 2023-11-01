@@ -73,65 +73,92 @@ fn get_diffs(
     let mut common_buf = Vec::<String>::new();
     let mut other_buf = Vec::<String>::new();
 
-    while (common_index < common_lines.len()) && (other_index < other_lines.len()) {
-        let mut common_line = common_lines[common_index];
-        let mut other_line = other_lines[other_index];
-
-        if common_line == other_line {
-            common_not_changed_in_other.insert(common_index, common_line.to_string());
-        } else {
-            loop {
-                if let Some(other_line_index) = other_buf
-                    .iter()
-                    .position(|other_line| other_line == common_line)
-                {
-                    let discarted_lines = other_buf[..other_line_index].to_vec();
-                    // other_index = other_index - other_buf.len() + other_line_index;
-                    other_index = other_index - other_buf.len() + other_line_index;
-                    common_index -= 1;
-                    other_diffs.insert(common_index, (discarted_lines.clone(), common_buf.clone()));
-                    break;
-                } else if let Some(common_line_index) = common_buf
-                    .iter()
-                    .position(|other_line| other_line == common_line)
-                {
-                    let discarted_lines = common_buf[..common_line_index].to_vec();
-                    common_index -= common_buf.len() - common_line_index;
-                    // common_index = common_index - common_buf.len() + common_line_index;
-                    other_index -= 1;
-                    other_diffs.insert(common_index, (discarted_lines.clone(), common_buf.clone()));
-                    break;
-                }
-
-                common_buf.push(common_line.to_string());
-                other_buf.push(other_line.to_string());
-
-                if !(common_index < common_lines.len() || other_index < other_lines.len()) {
-                    break;
-                }
-
-                if common_index < common_lines.len() - 1 {
-                    common_index += 1;
-                    common_line = common_lines[common_index];
-                }
-                if other_index < other_lines.len() - 1 {
-                    other_index += 1;
-                    other_line = other_lines[other_index];
-                }
-            }
+    loop {
+        let mut common_line_op = get_element(&common_lines, common_index);
+        let mut other_line_op = get_element(&other_lines, other_index);
+        if common_line_op.is_none() && other_line_op.is_none() {
+            break;
         }
-        common_index += 1;
-        other_index += 1;
+        if common_line_op == other_line_op {
+            common_not_changed_in_other.insert(
+                common_index,
+                common_line_op
+                    .ok_or(CommandError::MergeConflict("Error imposible".to_string()))?
+                    .to_string(),
+            );
+            common_index += 1;
+            other_index += 1;
+        } else {
+            let first_diff_other_index = other_index;
+            let first_diff_common_index = common_index;
+            loop {
+                if let Some(common_line) = &common_line_op {
+                    if let Some(other_line_index) = other_buf
+                        .iter()
+                        .position(|other_line| other_line == common_line)
+                    {
+                        let new_lines = other_buf[..other_line_index].to_vec();
+                        let discarted_lines = common_buf.clone();
+                        // common_index -= 1;
+                        other_index = first_diff_other_index + new_lines.len() /*- 1*/;
+                        other_diffs.insert(first_diff_common_index, (new_lines, discarted_lines));
+                        break;
+                    }
+                    common_buf.push(common_line.to_string());
+                }
+                if let Some(other_line) = &other_line_op {
+                    if let Some(common_line_index) = common_buf
+                        .iter()
+                        .position(|common_line| common_line == other_line)
+                    {
+                        let new_lines = other_buf.clone();
+                        let discarted_lines = common_buf[..common_line_index].to_vec();
+                        // other_index -= 1;
+                        common_index = first_diff_common_index + discarted_lines.len() /*- 1*/;
+                        other_diffs.insert(first_diff_common_index, (new_lines, discarted_lines));
+                        break;
+                    }
+                    other_buf.push(other_line.to_string());
+                }
+                if common_line_op.is_none() && other_line_op.is_none() {
+                    let new_lines = other_buf.clone();
+                    let discarted_lines = common_buf.clone();
+                    common_index = first_diff_common_index + discarted_lines.len();
+                    other_index = first_diff_other_index + new_lines.len();
+                    other_diffs.insert(first_diff_common_index, (new_lines, discarted_lines));
+                    break;
+                }
+
+                if common_index < common_lines.len() {
+                    common_index += 1;
+                }
+                if other_index < other_lines.len() {
+                    other_index += 1;
+                }
+                common_line_op = get_element(&common_lines, common_index);
+                other_line_op = get_element(&other_lines, other_index);
+            }
+            common_buf.clear();
+            other_buf.clear();
+        }
     }
 
     Ok((common_not_changed_in_other, other_diffs))
+}
+
+fn get_element(vector: &Vec<&str>, index: usize) -> Option<String> {
+    if index >= vector.len() {
+        None
+    } else {
+        Some(vector[index].to_string())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
-    fn get_diffs_test() {
+    fn no_differences() {
         let common_content = "linea 1\nlinea 2".to_string();
         let other_content = "linea 1\nlinea 2".to_string();
         let (common_not_changed_in_other, other_diffs) =
@@ -143,7 +170,7 @@ mod tests {
     }
 
     #[test]
-    fn get_diffs_test_2() {
+    fn difference_in_middle_line() {
         let common_content = "linea 1\nlinea 2\nlinea 3".to_string();
         let other_content = "linea 1\nlinea 2 mod\nlinea 3".to_string();
 
@@ -155,11 +182,11 @@ mod tests {
         assert_eq!(common_not_changed_in_other.get(&0).unwrap(), "linea 1");
         assert_eq!(common_not_changed_in_other.get(&2).unwrap(), "linea 3");
         assert_eq!(other_diffs.get(&1).unwrap().0[0], "linea 2 mod".to_string());
-        //assert_eq!(other_diffs.get(&1).unwrap().1[0], "linea 2".to_string());
+        assert_eq!(other_diffs.get(&1).unwrap().1[0], "linea 2".to_string());
     }
 
     #[test]
-    fn get_diffs_test_3() {
+    fn difference_in_last_line() {
         let common_content = "linea 1\nlinea 2".to_string();
         let other_content = "linea 1\nlinea 2 mod".to_string();
 
@@ -172,124 +199,129 @@ mod tests {
         assert_eq!(other_diffs.get(&1).unwrap().0[0], "linea 2 mod".to_string());
         assert_eq!(other_diffs.get(&1).unwrap().1[0], "linea 2".to_string());
     }
+
+    #[test]
+    fn common_ends_before_with_matching_line() {
+        let common_content = "linea 1".to_string();
+        let other_content = "linea 1\nlinea 2 extra".to_string();
+
+        let (common_not_changed_in_other, other_diffs) =
+            get_diffs(&common_content, &other_content).unwrap();
+
+        assert_eq!(common_not_changed_in_other.len(), 1);
+        assert_eq!(other_diffs.len(), 1);
+        assert_eq!(common_not_changed_in_other.get(&0).unwrap(), "linea 1");
+        assert_eq!(
+            other_diffs.get(&1).unwrap().0[0],
+            "linea 2 extra".to_string()
+        );
+        assert!(other_diffs.get(&1).unwrap().1.is_empty());
+    }
+
+    #[test]
+    fn other_ends_before_with_matching_line() {
+        let common_content = "linea 1\nlinea 2 extra".to_string();
+        let other_content = "linea 1".to_string();
+
+        let (common_not_changed_in_other, other_diffs) =
+            get_diffs(&common_content, &other_content).unwrap();
+
+        assert_eq!(common_not_changed_in_other.len(), 1);
+        assert_eq!(other_diffs.len(), 1);
+        assert_eq!(common_not_changed_in_other.get(&0).unwrap(), "linea 1");
+        assert_eq!(
+            other_diffs.get(&1).unwrap().1[0],
+            "linea 2 extra".to_string()
+        );
+        assert!(other_diffs.get(&1).unwrap().0.is_empty());
+    }
+
+    #[test]
+    fn other_ends_before_with_not_matching_line() {
+        let common_content = "linea 1\nlinea 2 common\nlinea 3 extra".to_string();
+        let other_content = "linea 1\nlinea 2 other".to_string();
+
+        let (common_not_changed_in_other, other_diffs) =
+            get_diffs(&common_content, &other_content).unwrap();
+
+        assert_eq!(common_not_changed_in_other.len(), 1);
+        assert_eq!(other_diffs.len(), 1);
+        assert_eq!(common_not_changed_in_other.get(&0).unwrap(), "linea 1");
+        assert_eq!(
+            other_diffs.get(&1).unwrap().0[0],
+            "linea 2 other".to_string()
+        );
+        assert_eq!(
+            other_diffs.get(&1).unwrap().1[0],
+            "linea 2 common".to_string()
+        );
+        assert_eq!(
+            other_diffs.get(&1).unwrap().1[1],
+            "linea 3 extra".to_string()
+        );
+    }
+
+    #[test]
+    fn middle_line_missing_in_other() {
+        let common_content = "linea 1\nlinea 2\nlinea 3".to_string();
+        let other_content = "linea 1\nlinea 3".to_string();
+
+        let (common_not_changed_in_other, other_diffs) =
+            get_diffs(&common_content, &other_content).unwrap();
+
+        assert_eq!(common_not_changed_in_other.len(), 2);
+        assert_eq!(other_diffs.len(), 1);
+        assert_eq!(common_not_changed_in_other.get(&0).unwrap(), "linea 1");
+        assert_eq!(common_not_changed_in_other.get(&2).unwrap(), "linea 3");
+        assert!(other_diffs.get(&1).unwrap().0.is_empty());
+        assert_eq!(other_diffs.get(&1).unwrap().1[0], "linea 2".to_string());
+    }
+
+    #[test]
+    fn middle_line_missing_in_common() {
+        let common_content = "linea 1\nlinea 3".to_string();
+        let other_content = "linea 1\nlinea 2\nlinea 3".to_string();
+
+        let (common_not_changed_in_other, other_diffs) =
+            get_diffs(&common_content, &other_content).unwrap();
+
+        assert_eq!(common_not_changed_in_other.len(), 2);
+        assert_eq!(other_diffs.len(), 1);
+        assert_eq!(common_not_changed_in_other.get(&0).unwrap(), "linea 1");
+        assert_eq!(common_not_changed_in_other.get(&1).unwrap(), "linea 3");
+        assert!(other_diffs.get(&1).unwrap().1.is_empty());
+        assert_eq!(other_diffs.get(&1).unwrap().0[0], "linea 2".to_string());
+    }
+
+    #[test]
+    fn initial_line_missing_in_other() {
+        let common_content = "linea 1\nlinea 2\nlinea 3".to_string();
+        let other_content = "linea 2\nlinea 3".to_string();
+
+        let (common_not_changed_in_other, other_diffs) =
+            get_diffs(&common_content, &other_content).unwrap();
+
+        assert_eq!(common_not_changed_in_other.len(), 2);
+        assert_eq!(other_diffs.len(), 1);
+        assert_eq!(common_not_changed_in_other.get(&1).unwrap(), "linea 2");
+        assert_eq!(common_not_changed_in_other.get(&2).unwrap(), "linea 3");
+        assert_eq!(other_diffs.get(&0).unwrap().1[0], "linea 1".to_string());
+        assert!(other_diffs.get(&0).unwrap().0.is_empty());
+    }
+
+    #[test]
+    fn initial_line_missing_in_common() {
+        let common_content = "linea 2\nlinea 3".to_string();
+        let other_content = "linea 1\nlinea 2\nlinea 3".to_string();
+
+        let (common_not_changed_in_other, other_diffs) =
+            get_diffs(&common_content, &other_content).unwrap();
+
+        assert_eq!(common_not_changed_in_other.len(), 2);
+        assert_eq!(other_diffs.len(), 1);
+        assert_eq!(common_not_changed_in_other.get(&0).unwrap(), "linea 2");
+        assert_eq!(common_not_changed_in_other.get(&1).unwrap(), "linea 3");
+        assert_eq!(other_diffs.get(&0).unwrap().0[0], "linea 1".to_string());
+        assert!(other_diffs.get(&0).unwrap().1.is_empty());
+    }
 }
-
-// fn common_line_differs_other_line(common_lines, other_lines, common_index, other_index){
-
-// }
-
-// fn flush_buffers(
-//     common_buf: &mut Vec<String>,
-//     matching_common_line_index: usize,
-//     other_buf: &mut Vec<String>,
-//     other_diffs: &mut HashMap<usize, (Vec<String>, Vec<String>)>,
-//     common_index: &mut usize,
-//     common_not_changed_in_other: &mut HashMap<usize, String>,
-//     other_line: &str,
-// ) {
-//     let discarted_lines = common_buf[..matching_common_line_index].to_vec();
-//     let new_lines = other_buf.to_vec();
-//     other_diffs.insert(
-//         *common_index - common_buf.len(),
-//         (new_lines.clone(), discarted_lines.clone()),
-//     );
-//     common_buf.clear();
-//     other_buf.clear();
-//     *common_index -= common_buf.len() - matching_common_line_index;
-//     common_not_changed_in_other.insert(*common_index, other_line.to_string());
-// }
-
-// fn get_diffs(
-//     common_content: &String,
-//     other_content: &String,
-// ) -> Result<
-//     (
-//         HashMap<usize, String>,
-//         HashMap<usize, (Vec<String>, Vec<String>)>,
-//     ),
-//     CommandError,
-// > {
-//     let mut common_not_changed_in_other = HashMap::<usize, String>::new();
-//     let mut other_diffs = HashMap::<usize, (Vec<String>, Vec<String>)>::new();
-
-//     let other_lines = other_content.lines().collect::<Vec<&str>>();
-//     let common_lines: Vec<&str> = common_content.lines().collect::<Vec<&str>>();
-
-//     let mut other_index = 0;
-//     let mut common_index = 0;
-
-//     let mut common_buf = Vec::<String>::new();
-//     let mut other_buf = Vec::<String>::new();
-
-//     while (common_index < common_lines.len()) && (other_index < other_lines.len()) {
-//         let mut common_line = common_lines[common_index];
-//         let mut other_line = other_lines[other_index];
-//         if common_line == other_line {
-//             common_not_changed_in_other.insert(common_index, common_line.to_string());
-//         } else {
-//             loop {
-//                 if common_line == other_line {
-//                     let discarted_lines = common_buf.to_vec();
-//                     let new_lines = other_buf.to_vec();
-//                     other_diffs.insert(
-//                         common_index - common_buf.len(),
-//                         (new_lines.clone(), discarted_lines.clone()),
-//                     );
-//                     common_buf.clear();
-//                     other_buf.clear();
-//                     common_index -= common_buf.len();
-//                     common_not_changed_in_other.insert(common_index, common_line.to_string());
-//                     break;
-//                 }
-//                 if let Some(matching_common_line_index) = common_buf
-//                     .iter()
-//                     .position(|common_line| common_line == other_line)
-//                 {
-//                     flush_buffers(
-//                         &mut common_buf,
-//                         matching_common_line_index,
-//                         &mut other_buf,
-//                         &mut other_diffs,
-//                         &mut common_index,
-//                         &mut common_not_changed_in_other,
-//                         other_line,
-//                     );
-//                     break;
-//                 } else if let Some(matching_other_line_index) = other_buf
-//                     .iter()
-//                     .position(|other_line| other_line == common_line)
-//                 {
-//                     flush_buffers(
-//                         &mut other_buf,
-//                         matching_other_line_index,
-//                         &mut common_buf,
-//                         &mut other_diffs,
-//                         &mut other_index,
-//                         &mut common_not_changed_in_other,
-//                         common_line,
-//                     );
-//                     break;
-//                 } else {
-//                     common_buf.push(common_line.to_string());
-//                     other_buf.push(other_line.to_string());
-//                 }
-
-//                 if !(common_index < common_lines.len() || other_index < other_lines.len()) {
-//                     break;
-//                 }
-//                 common_index += 1;
-//                 other_index += 1;
-//                 if common_index < common_lines.len() {
-//                     common_line = common_lines[common_index];
-//                 }
-//                 if other_index < other_lines.len() {
-//                     other_line = other_lines[other_index];
-//                 }
-//             }
-//         }
-//         common_index += 1;
-//         other_index += 1;
-//     }
-
-//     Ok((common_not_changed_in_other, other_diffs))
-// }
