@@ -163,7 +163,7 @@ fn merge_diffs(
                 no_conflicts_content.insert(merge_index, head_comon_line.to_string());
                 merge_index += 1;
             }
-            (_, _) => return Err(CommandError::MergeConflict("Error imposible".to_string())),
+            (_) => {}
         }
 
         line_index += 1;
@@ -488,16 +488,16 @@ mod test {
         );
     }
 
-    // #[test]
-    // fn none_conflicting_changes() {
-    //     assert_merge_case(
-    //         "linea 1\nlinea 2\nlinea 3",
-    //         "linea 0\nlinea 1\nlinea 2\nlinea 3",
-    //         "linea 1\nlinea 2\nlinea 3\nlinea 4",
-    //         "linea 0\nlinea 1\nlinea 2\nlinea 3\nlinea 4",
-    //         false,
-    //     );
-    // }
+    #[test]
+    fn deleted_first_line_in_both_branches() {
+        assert_merge_case(
+            "linea 0\nlinea 1\nlinea 2\nlinea 3",
+            "linea 1\nlinea 2\nlinea 3",
+            "linea 1\nlinea 2\nlinea 3",
+            "linea 1\nlinea 2\nlinea 3",
+            false,
+        );
+    }
 
     fn assert_merge_case(
         common_content: &str,
