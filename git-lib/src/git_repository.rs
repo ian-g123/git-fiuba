@@ -596,7 +596,9 @@ impl<'a> GitRepository<'a> {
 
     pub fn update_remote(&self, url: String) -> Result<(), CommandError> {
         let mut config = self.open_config()?;
+        let fetch = format!("+refs/heads/*:refs/remotes/origin/*");
         config.insert("remote \"origin\"", "url", &url);
+        config.insert("remote \"origin\"", "fetch", &fetch);
         config.save()?;
         Ok(())
     }
@@ -1239,6 +1241,17 @@ impl<'a> GitRepository<'a> {
         *branch_tips = new_branch_tips;
         Ok(())
     }
+
+    /// Actualiza en `.git/config` una nueva conexión remota.
+    pub fn add_remote(
+        &mut self,
+        repository_path: &str,
+        repository_url: &str,
+    ) -> Result<(), CommandError> {
+        let mut config = self.open_config()?;
+        Ok(())
+    }
+
 }
 
 /// Devuelve el nombre de un archivo o directorio dado un PathBuf.

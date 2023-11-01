@@ -52,7 +52,6 @@ impl GitServer {
         };
         let mut refs = HashMap::<String, String>::new();
         for line in lines {
-            // logger.log(&format!("Line: {}", line));
             let (hash, ref_name) = line
                 .split_once(' ')
                 .ok_or(CommandError::ErrorReadingPkt)

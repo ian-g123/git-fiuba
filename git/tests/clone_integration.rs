@@ -26,7 +26,10 @@ fn test_clone() {
         .output()
         .unwrap();
 
-    println!("hhhhhhhhhhhhhh\n\n{}", String::from_utf8(result.stdout).unwrap());
+    println!(
+        "hhhhhhhhhhhhhh\n\n{}",
+        String::from_utf8(result.stdout).unwrap()
+    );
 
     compare_files(
         &format!("{}/repo/", path),
