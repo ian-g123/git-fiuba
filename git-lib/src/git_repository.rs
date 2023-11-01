@@ -489,6 +489,7 @@ impl<'a> GitRepository<'a> {
                     current_branch,
                     &message,
                     &mut self.output,
+                    &self.path,
                 )?;
             }
         } else {

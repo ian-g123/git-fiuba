@@ -138,5 +138,12 @@ pub fn create_test_scene_5(path: &str) {
 }
 
 pub fn create_test_scene_6(path: &str) {
-    create_test_scene_1(path);
+    create_base_scene(path);
+    let mut file = File::create(path.to_owned() + "/testfile.txt").unwrap();
+    write!(file, "{}", "line1\nline2\nline3").unwrap();
+}
+
+pub fn change_lines_scene6(path: &str) {
+    let mut file = File::create(path.to_owned() + "/testfile.txt").unwrap();
+    write!(file, "{}", "line3\nline2\nline1").unwrap();
 }

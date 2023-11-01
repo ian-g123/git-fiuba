@@ -25,6 +25,7 @@ impl CommitFormat {
         branch_name: &str,
         message: &str,
         output: &mut dyn Write,
+        curr_path: &str,
     ) -> Result<(), CommandError> {
         let changes_controller = ChangesController::new(db, logger, commit_tree.clone())?;
         let changes_to_be_commited = changes_controller.get_changes_to_be_commited();
@@ -34,6 +35,7 @@ impl CommitFormat {
             logger,
             commit_tree.clone(),
             changes_to_be_commited,
+            curr_path,
         )?;
         let is_root = if commit_tree.is_none() { true } else { false };
         let changes_to_be_commited = &sort_hashmap(changes_to_be_commited);
@@ -47,9 +49,11 @@ impl CommitFormat {
             message,
             is_root,
         )?;
+        logger.log("before output commit");
+
         write!(output, "{}", output_message)
             .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-
+        logger.log("after output commit");
         Ok(())
     }
 }

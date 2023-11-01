@@ -1,6 +1,10 @@
-use std::{collections::HashMap, fs};
+use std::env::join_paths;
+use std::fs::File;
+use std::{collections::HashMap, fs, io::Read};
 
-use crate::objects::git_object::GitObjectTrait;
+use crate::file_compressor::extract;
+use crate::join_paths;
+use crate::objects::git_object::{self, GitObjectTrait};
 use crate::{
     command_errors::CommandError, logger::Logger, objects::tree::Tree,
     objects_database::ObjectsDatabase,
@@ -17,13 +21,15 @@ impl CommitChanges {
         logger: &mut Logger,
         commit_tree: Option<Tree>,
         changes_to_be_commited: &HashMap<String, ChangeType>,
+        curr_path: &str,
     ) -> Result<(usize, usize, usize), CommandError> {
         let (files_changed, insertions, deletions) = Self::get_changes_insertions_deletions(
             staging_area_changes,
             db,
             logger,
-            commit_tree,
+            &commit_tree,
             changes_to_be_commited,
+            curr_path,
         )?;
         Ok((files_changed, insertions, deletions))
     }
@@ -32,23 +38,48 @@ impl CommitChanges {
         staging_area_changes: HashMap<String, String>,
         db: &ObjectsDatabase,
         logger: &mut Logger,
-        commit_tree: Option<Tree>,
+        commit_tree: &Option<Tree>,
         changes_to_be_commited: &HashMap<String, ChangeType>,
+        curr_path: &str,
     ) -> Result<(usize, usize, usize), CommandError> {
         let mut insertions = 0;
         let mut deletions = 0;
         let mut files_changed = 0;
         for (path, change_type) in changes_to_be_commited.iter() {
             logger.log(&format!("Checking for insertions/deletions: {}", path));
+            let hash = staging_area_changes.get(path);
             match change_type {
                 ChangeType::Added | ChangeType::Renamed => {
-                    insertions += count_insertions(path)?;
-                    files_changed += 1;
+                    logger.log(&format!("added: {}", path));
+
+                    if let Some(hash) = hash {
+                        logger.log(&format!("Hash: {}", hash));
+
+                        logger.log(&format!("Counting insertions"));
+
+                        insertions += count_insertions(&hash, logger, db)?;
+                        logger.log(&format!("insertions counted"));
+
+                        files_changed += 1;
+                    }
                 }
                 ChangeType::Deleted => {
-                    if let Some(tree) = &commit_tree {
-                        deletions += count_deletions(path, logger, tree)?;
+                    if let Some(tree) = commit_tree {
+                        logger.log(&format!("deleted: {}", path));
+
+                        deletions += count_deletions(path, logger, &tree)?;
                         files_changed += 1;
+                    }
+                }
+                ChangeType::Modified => {
+                    logger.log(&format!("modified: {}", path));
+
+                    if let (Some(hash), Some(tree)) = (hash, commit_tree) {
+                        let (inserted, deleted) =
+                            count_modifications(path, hash, logger, &tree, db)?;
+                        files_changed += 1;
+                        insertions += inserted;
+                        deletions += deleted;
                     }
                 }
                 _ => {}
@@ -59,10 +90,12 @@ impl CommitChanges {
     }
 }
 
-fn count_insertions(path: &str) -> Result<usize, CommandError> {
-    let content =
-        fs::read_to_string(path).map_err(|error| CommandError::FileReadError(error.to_string()))?;
-    let lines: Vec<&str> = content.lines().collect();
+fn count_insertions(
+    path: &str,
+    logger: &mut Logger,
+    db: &ObjectsDatabase,
+) -> Result<usize, CommandError> {
+    let lines = read_content(path, logger, db)?;
     Ok(lines.len())
 }
 
@@ -71,6 +104,47 @@ fn count_deletions(
     logger: &mut Logger,
     commit_tree: &Tree,
 ) -> Result<usize, CommandError> {
+    let lines = read_blob_content(path, logger, commit_tree)?;
+    Ok(lines.len())
+}
+
+fn count_modifications(
+    path: &str,
+    data_base_path: &str,
+    logger: &mut Logger,
+    commit_tree: &Tree,
+    db: &ObjectsDatabase,
+) -> Result<(usize, usize), CommandError> {
+    let last_commit_content = read_blob_content(path, logger, commit_tree)?;
+    let current_content = read_content(data_base_path, logger, db)?;
+    Ok(compare_content(
+        last_commit_content,
+        current_content,
+        logger,
+    ))
+}
+
+fn read_content(
+    hash: &str,
+    logger: &mut Logger,
+    db: &ObjectsDatabase,
+) -> Result<Vec<String>, CommandError> {
+    let mut object = db.read_object(hash)?;
+    let content = object.content()?;
+    let content = String::from_utf8(content)
+        .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+    logger.log(&format!("content {:?}", content));
+    let content_vec: Vec<&str> = content.lines().collect();
+    logger.log(&format!("Vec {:?}", content_vec));
+    let content_vec: Vec<String> = content_vec.iter().map(|s| s.to_string()).collect();
+    Ok(content_vec)
+}
+
+fn read_blob_content(
+    path: &str,
+    logger: &mut Logger,
+    commit_tree: &Tree,
+) -> Result<Vec<String>, CommandError> {
     let Some(mut object) = commit_tree.get_blob(path, logger) else {
         return Err(CommandError::FileNameError);
     };
@@ -79,13 +153,90 @@ fn count_deletions(
     };
     let content = blob.content()?;
     let content_str: String = format!("{}", String::from_utf8_lossy(&content));
-    let lines: Vec<&str> = content_str.lines().collect();
-    Ok(lines.len())
+    let content_vec: Vec<&str> = content_str.lines().collect();
+    let content_vec: Vec<String> = content_vec.iter().map(|s| s.to_string()).collect();
+    Ok(content_vec)
 }
 
-fn read_contents(db: &ObjectsDatabase, commit_tree: Option<Tree>) {}
+fn compare_content(file1: Vec<String>, file2: Vec<String>, logger: &mut Logger) -> (usize, usize) {
+    let insertions;
+    let deletions;
 
+    let mut file1_read: Vec<String> = Vec::new();
+    let mut file2_read: Vec<String> = Vec::new();
+    let mut index1 = 0;
+    let mut index2 = 0;
+
+    loop {
+        let line1 = get_element(&file1, index1);
+        let line2 = get_element(&file2, index2);
+
+        match (line1, line2) {
+            (None, None) => {
+                break;
+            }
+            (Some(line1), Some(line2)) => {
+                logger.log(&format!("Line1: {:?}, Line2: {:?}", line1, line2));
+                if line1 != line2 {
+                    if let Some(index) = file2_read.iter().position(|line| line == &line1) {
+                        logger.log(&format!("Index1: {}", index));
+                        _ = file2_read.drain(..index + 1);
+                        file2_read.push(line2.to_string());
+                    } else if let Some(index) = file1_read.iter().position(|line| line == &line2) {
+                        logger.log(&format!("Index2: {}", index));
+
+                        _ = file1_read.drain(..index + 1);
+                        file1_read.push(line1.to_string());
+                    } else {
+                        file1_read.push(line1.to_string());
+                        file2_read.push(line2.to_string());
+                    }
+                } else {
+                    if !file1_read.is_empty() || !file2_read.is_empty() {
+                        file1_read.push(line1.to_string());
+                        file2_read.push(line2.to_string());
+                    }
+                }
+            }
+            (Some(line1), None) => {
+                if let Some(index) = file2_read.iter().position(|line| line == &line1) {
+                    logger.log(&format!("Index3: {}", index));
+                    _ = file2_read.drain(..index + 1);
+                } else {
+                    file1_read.push(line1.to_string());
+                }
+            }
+
+            (None, Some(line2)) => {
+                if let Some(index) = file1_read.iter().position(|line| line == &line2) {
+                    logger.log(&format!("Index4: {}", index));
+
+                    _ = file1_read.drain(..index + 1);
+                } else {
+                    file2_read.push(line2.to_string());
+                }
+            }
+        }
+
+        index1 += 1;
+        index2 += 1;
+    }
+
+    insertions = file2_read.len();
+    deletions = file1_read.len();
+
+    (insertions, deletions)
+}
+
+fn get_element(vector: &Vec<String>, index: usize) -> Option<String> {
+    if index >= vector.len() {
+        None
+    } else {
+        Some(vector[index].to_string())
+    }
+}
 /*
+
 fn merge_difs(
     common_not_changed_in_head: HashMap<usize, String>,
     head_diffs: HashMap<usize, (Vec<String>, Vec<String>)>,
@@ -112,7 +263,7 @@ fn get_diffs(
 > {
     let mut common_not_changed_in_other = HashMap::<usize, String>::new();
     let mut other_diffs = HashMap::<usize, (Vec<String>, Vec<String>)>::new(); // index, (new_lines, discarted_lines)
-    let common_lines: Vec<&str> = common_content.lines().collect::<Vec<&str>>();
+    let common_lines: Vec<String> = common_content.lines().collect::<Vec<&str>>();
     let other_lines = other_content.lines().collect::<Vec<&str>>();
     let mut common_index = 0;
     let mut other_index = 0;
