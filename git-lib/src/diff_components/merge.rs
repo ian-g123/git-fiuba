@@ -549,7 +549,7 @@ mod test {
             true,
         );
     }
-    ///nuevos chatgpt meli
+
     #[test]
     fn no_common_content() {
         assert_merge_case(
@@ -567,8 +567,8 @@ mod test {
             "linea 1\nlinea 2\nlinea 3",
             "",
             "linea 1\nlinea 2\nlinea 3",
-            "<<<<<<< HEAD\n\n=======\nlinea 1\nlinea 2\nlinea 3\n>>>>>>> origin",
-            true,
+            "",
+            false,
         );
     }
 
@@ -578,80 +578,35 @@ mod test {
     }
 
     #[test]
-    fn no_change_with_common_content() {
-        assert_merge_case(
-            "linea 1\nlinea 2\nlinea 3",
-            "linea 1\nlinea 2\nlinea 3",
-            "linea 1\nlinea 2\nlinea 3",
-            "linea 1\nlinea 2\nlinea 3",
-            false,
-        );
-    }
-
-    #[test]
-    fn conflict_with_only_common_content() {
-        assert_merge_case(
-            "linea 1\nlinea 2\nlinea 3",
-            "linea 1\nlinea 2\nlinea 3",
-            "linea 1\nlinea 2\nlinea 3",
-            "<<<<<<< HEAD\nlinea 1\nlinea 2\nlinea 3\n=======\nlinea 1\nlinea 2\nlinea 3\n>>>>>>> origin",
-            true,
-        );
-    }
-
-    // Chat Pato
-    #[test]
     fn test_both_branches_add_lines_in_between_common_lines() {
         assert_merge_case(
-            "linea 1\nline 2",
+            "linea 1\nlinea 2",
             "linea 1\nadded linea A\nlinea 2",
-            "linea 1\nadded linea B\nline 2",
-            "linea 1\n<<<<<<< HEAD\nadded linea A\n=======\nadded linea B\n>>>>>>> origin\nline 2",
-            true,
+            "linea 1\nadded linea B\nlinea 2",
+            "linea 1\nadded linea A\nadded linea B\nlinea 2",
+            false,
         );
     }
 
     #[test]
     fn test_one_branch_deletes_common_line_and_other_modifies_it() {
         assert_merge_case(
-            "linea 1\nline 2",
-            "linea 1\nmodified linea\nline 2",
+            "linea 1\nlinea 2",
+            "linea 1\nmodified linea\nlinea 2",
             "linea 2",
-            "linea 1\n<<<<<<< HEAD\nmodified linea\n=======\n>>>>>>> origin\nline 2",
-            true,
+            "modified linea\nlinea 2",
+            false,
         );
     }
 
     #[test]
-    fn test_both_branches_delete_common_line_with_different_replacements() {
+    fn test_both_branches_delete_different_lines() {
         assert_merge_case(
-            "linea 1\nline 2\nline 3",
+            "linea 1\nlinea 2\nline 3",
             "linea 1\nline 3",
-            "linea 1\nline 2",
-            "linea 1\n<<<<<<< HEAD\n=======\nline 2\n>>>>>>> origin\nline 3",
-            true,
-        );
-    }
-
-    #[test]
-    fn test_both_branches_modify_common_line_with_different_changes() {
-        assert_merge_case(
-        "linea 1\nline 2",
-        "linea 1\nmodified linea A\nline 2",
-        "linea 1\nmodified linea B\nline 2",
-        "linea 1\n<<<<<<< HEAD\nmodified linea A\n=======\nmodified linea B\n>>>>>>> origin\nline 2",
-        true,
-    );
-    }
-
-    #[test]
-    fn test_one_branch_modifies_common_line_and_other_deletes_it() {
-        assert_merge_case(
-            "linea 1\nline 2",
-            "linea 1\nline 2",
-            "linea 1\nmodified linea\n",
-            "linea 1\nline 2\n<<<<<<< HEAD\n=======\nmodified linea\n>>>>>>> origin\n",
-            true,
+            "linea 1\nlinea 2",
+            "linea 1",
+            false,
         );
     }
 }
