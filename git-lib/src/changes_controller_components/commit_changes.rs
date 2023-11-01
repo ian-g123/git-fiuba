@@ -159,8 +159,8 @@ fn read_blob_content(
 }
 
 fn compare_content(file1: Vec<String>, file2: Vec<String>, logger: &mut Logger) -> (usize, usize) {
-    let insertions;
-    let deletions;
+    let mut insertions: usize = 0;
+    let mut deletions: usize = 0;
 
     let mut file1_read: Vec<String> = Vec::new();
     let mut file2_read: Vec<String> = Vec::new();
@@ -170,38 +170,43 @@ fn compare_content(file1: Vec<String>, file2: Vec<String>, logger: &mut Logger) 
     loop {
         let line1 = get_element(&file1, index1);
         let line2 = get_element(&file2, index2);
-
+        logger.log(&format!("f1: {:?}, f2: {:?}", file1_read, file2_read));
         match (line1, line2) {
             (None, None) => {
                 break;
             }
             (Some(line1), Some(line2)) => {
                 logger.log(&format!("Line1: {:?}, Line2: {:?}", line1, line2));
-                if line1 != line2 {
-                    if let Some(index) = file2_read.iter().position(|line| line == &line1) {
-                        logger.log(&format!("Index1: {}", index));
-                        _ = file2_read.drain(..index + 1);
-                        file2_read.push(line2.to_string());
-                    } else if let Some(index) = file1_read.iter().position(|line| line == &line2) {
-                        logger.log(&format!("Index2: {}", index));
 
-                        _ = file1_read.drain(..index + 1);
-                        file1_read.push(line1.to_string());
-                    } else {
-                        file1_read.push(line1.to_string());
-                        file2_read.push(line2.to_string());
-                    }
-                } else {
-                    if !file1_read.is_empty() || !file2_read.is_empty() {
-                        file1_read.push(line1.to_string());
-                        file2_read.push(line2.to_string());
-                    }
+                if let Some(index) = file2_read.iter().position(|line| line == &line1) {
+                    logger.log(&format!("Index1: {}", index));
+                    _ = file2_read.drain(..index + 1);
+                    file2_read.push(line2.to_string());
+                    insertions += index;
+                } else if let Some(index) = file1_read.iter().position(|line| line == &line2) {
+                    logger.log(&format!("Index2: {}", index));
+
+                    _ = file1_read.drain(..index + 1);
+                    file1_read.push(line1.to_string());
+
+                    deletions += index;
+                } else if line1 == line2 {
+                    insertions += file2_read.len();
+                    deletions += file1_read.len();
+                    file1_read = Vec::new();
+                    file2_read = Vec::new();
+                } else if line1 != line2
+                    || (line1 == line2 && (!file1_read.is_empty() || !file2_read.is_empty()))
+                {
+                    file1_read.push(line1.to_string());
+                    file2_read.push(line2.to_string());
                 }
             }
             (Some(line1), None) => {
                 if let Some(index) = file2_read.iter().position(|line| line == &line1) {
                     logger.log(&format!("Index3: {}", index));
                     _ = file2_read.drain(..index + 1);
+                    insertions += index;
                 } else {
                     file1_read.push(line1.to_string());
                 }
@@ -212,6 +217,7 @@ fn compare_content(file1: Vec<String>, file2: Vec<String>, logger: &mut Logger) 
                     logger.log(&format!("Index4: {}", index));
 
                     _ = file1_read.drain(..index + 1);
+                    deletions += index;
                 } else {
                     file2_read.push(line2.to_string());
                 }
@@ -222,8 +228,8 @@ fn compare_content(file1: Vec<String>, file2: Vec<String>, logger: &mut Logger) 
         index2 += 1;
     }
 
-    insertions = file2_read.len();
-    deletions = file1_read.len();
+    insertions += file2_read.len();
+    deletions += file1_read.len();
 
     (insertions, deletions)
 }

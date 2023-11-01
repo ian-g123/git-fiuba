@@ -143,7 +143,7 @@ pub fn create_test_scene_6(path: &str) {
     write!(file, "{}", "line1\nline2\nline3").unwrap();
 }
 
-pub fn change_lines_scene6(path: &str) {
+pub fn change_lines_scene6(path: &str, lines: &str) {
     let mut file = File::create(path.to_owned() + "/testfile.txt").unwrap();
-    write!(file, "{}", "line3\nline2\nline1").unwrap();
+    write!(file, "{}", lines).unwrap();
 }
