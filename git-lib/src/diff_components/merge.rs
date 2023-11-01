@@ -36,12 +36,10 @@ fn build_output(
     head_name: &str,
     destin_name: &str,
 ) -> Result<(String, bool), CommandError> {
-    let max_iter = no_conflicts_content
-        .keys()
-        .max()
-        .ok_or(CommandError::MergeConflict("Error imposible".to_string()))?
-        .to_owned()
-        + 1;
+    let max_iter = match no_conflicts_content.keys().max() {
+        Some(max) => max + 1,
+        None => 1,
+    };
     let mut merged_content = String::new();
     let merge_conflicts = !conflicts_content.is_empty();
     for i in 0..max_iter {
@@ -108,12 +106,16 @@ fn merge_diffs(
                     loop {
                         let head_common_line_op = common_not_changed_in_head.get(&line_index);
                         let destin_common_line_op = common_not_changed_in_destin.get(&line_index);
-                        if let Some(head_diffs_line) = head_diffs.get(&line_index) {
+
+                        let head_diff_line_op = head_diffs.get(&line_index);
+                        let destin_diff_line_op = destin_diffs.get(&line_index);
+
+                        if let Some(head_diffs_line) = head_diff_line_op {
                             for line in &head_diffs_line.0 {
                                 head_diff_buf.push(line.to_owned());
                             }
                         };
-                        if let Some(destin_diffs_line) = destin_diffs.get(&line_index) {
+                        if let Some(destin_diffs_line) = destin_diff_line_op {
                             for line in &destin_diffs_line.0 {
                                 destin_diff_buf.push(line.to_owned());
                             }
@@ -132,7 +134,14 @@ fn merge_diffs(
                             (None, Some(destin_comon_line)) => {
                                 destin_diff_buf.push(destin_comon_line.to_string());
                             }
-                            (None, None) => {}
+                            (None, None) => {
+                                if (head_diff_line_op.is_none() && destin_diff_line_op.is_none()) {
+                                    conflicts_content
+                                        .insert(merge_index, (head_diff_buf, destin_diff_buf));
+                                    merge_index += 1;
+                                    break;
+                                }
+                            }
                         };
                         line_index += 1;
                     }
@@ -455,6 +464,26 @@ mod tests {
 mod test {
     use super::*;
 
+    fn assert_merge_case(
+        common_content: &str,
+        head_content: &str,
+        destin_content: &str,
+        expected_output: &str,
+        expect_merge_conflicts: bool,
+    ) {
+        let (merged_content, merge_conflicts) = merge_content(
+            head_content.to_string(),
+            destin_content.to_string(),
+            common_content.to_string(),
+            "HEAD",
+            "origin",
+        )
+        .unwrap();
+
+        assert_eq!(merged_content, expected_output.to_string());
+        assert_eq!(merge_conflicts, expect_merge_conflicts);
+    }
+
     #[test]
     fn no_changes() {
         assert_merge_case(
@@ -499,23 +528,130 @@ mod test {
         );
     }
 
-    fn assert_merge_case(
-        common_content: &str,
-        head_content: &str,
-        destin_content: &str,
-        expected_output: &str,
-        expect_merge_conflicts: bool,
-    ) {
-        let (merged_content, merge_conflicts) = merge_content(
-            head_content.to_string(),
-            destin_content.to_string(),
-            common_content.to_string(),
-            "HEAD",
-            "origin",
-        )
-        .unwrap();
+    #[test]
+    fn delete_lines_and_begining_and_end_not_conflicting() {
+        assert_merge_case(
+            "linea 0\nlinea 1\nlinea 2\nlinea 3\nlinea 4",
+            "linea 1\nlinea 2\nlinea 3\nlinea 4",
+            "linea 0\nlinea 1\nlinea 2\nlinea 3",
+            "linea 1\nlinea 2\nlinea 3",
+            false,
+        );
+    }
 
-        assert_eq!(merged_content, expected_output.to_string());
-        assert_eq!(merge_conflicts, expect_merge_conflicts);
+    #[test]
+    fn delete_and_modify_line_conflict() {
+        assert_merge_case(
+            "linea 0\nlinea 1",
+            "linea 1",
+            "linea 0 mod\nlinea 1",
+            "<<<<<<< HEAD\n\n=======\nlinea 0 mod\n>>>>>>> origin\nlinea 1",
+            true,
+        );
+    }
+    ///nuevos chatgpt meli
+    #[test]
+    fn no_common_content() {
+        assert_merge_case(
+            "linea 1\nlinea 2\nlinea 3",
+            "linea 4\nlinea 5",
+            "linea 6\nlinea 7",
+            "<<<<<<< HEAD\nlinea 4\nlinea 5\n=======\nlinea 6\nlinea 7\n>>>>>>> origin",
+            true,
+        );
+    }
+
+    #[test]
+    fn conflict_with_empty_head_content() {
+        assert_merge_case(
+            "linea 1\nlinea 2\nlinea 3",
+            "",
+            "linea 1\nlinea 2\nlinea 3",
+            "<<<<<<< HEAD\n\n=======\nlinea 1\nlinea 2\nlinea 3\n>>>>>>> origin",
+            true,
+        );
+    }
+
+    #[test]
+    fn no_change_with_empty_head_and_destin_content() {
+        assert_merge_case("", "", "", "", false);
+    }
+
+    #[test]
+    fn no_change_with_common_content() {
+        assert_merge_case(
+            "linea 1\nlinea 2\nlinea 3",
+            "linea 1\nlinea 2\nlinea 3",
+            "linea 1\nlinea 2\nlinea 3",
+            "linea 1\nlinea 2\nlinea 3",
+            false,
+        );
+    }
+
+    #[test]
+    fn conflict_with_only_common_content() {
+        assert_merge_case(
+            "linea 1\nlinea 2\nlinea 3",
+            "linea 1\nlinea 2\nlinea 3",
+            "linea 1\nlinea 2\nlinea 3",
+            "<<<<<<< HEAD\nlinea 1\nlinea 2\nlinea 3\n=======\nlinea 1\nlinea 2\nlinea 3\n>>>>>>> origin",
+            true,
+        );
+    }
+
+    // Chat Pato
+    #[test]
+    fn test_both_branches_add_lines_in_between_common_lines() {
+        assert_merge_case(
+            "linea 1\nline 2",
+            "linea 1\nadded linea A\nlinea 2",
+            "linea 1\nadded linea B\nline 2",
+            "linea 1\n<<<<<<< HEAD\nadded linea A\n=======\nadded linea B\n>>>>>>> origin\nline 2",
+            true,
+        );
+    }
+
+    #[test]
+    fn test_one_branch_deletes_common_line_and_other_modifies_it() {
+        assert_merge_case(
+            "linea 1\nline 2",
+            "linea 1\nmodified linea\nline 2",
+            "linea 2",
+            "linea 1\n<<<<<<< HEAD\nmodified linea\n=======\n>>>>>>> origin\nline 2",
+            true,
+        );
+    }
+
+    #[test]
+    fn test_both_branches_delete_common_line_with_different_replacements() {
+        assert_merge_case(
+            "linea 1\nline 2\nline 3",
+            "linea 1\nline 3",
+            "linea 1\nline 2",
+            "linea 1\n<<<<<<< HEAD\n=======\nline 2\n>>>>>>> origin\nline 3",
+            true,
+        );
+    }
+
+    #[test]
+    fn test_both_branches_modify_common_line_with_different_changes() {
+        assert_merge_case(
+        "linea 1\nline 2",
+        "linea 1\nmodified linea A\nline 2",
+        "linea 1\nmodified linea B\nline 2",
+        "linea 1\n<<<<<<< HEAD\nmodified linea A\n=======\nmodified linea B\n>>>>>>> origin\nline 2",
+        true,
+    );
+    }
+
+    #[test]
+    fn test_one_branch_modifies_common_line_and_other_deletes_it() {
+        assert_merge_case(
+            "linea 1\nline 2",
+            "linea 1\nline 2",
+            "linea 1\nmodified linea\n",
+            "linea 1\nline 2\n<<<<<<< HEAD\n=======\nmodified linea\n>>>>>>> origin\n",
+            true,
+        );
     }
 }
