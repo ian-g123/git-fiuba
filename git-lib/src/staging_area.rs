@@ -8,7 +8,7 @@ use crate::{
     logger::Logger,
     objects::git_object::{GitObject, GitObjectTrait},
     objects_database::ObjectsDatabase,
-    utils::aux::get_name,
+    utils::{aux::get_name, super_string::SuperStrings},
 };
 
 use super::{command_errors::CommandError, objects::tree::Tree};
@@ -16,6 +16,7 @@ use super::{command_errors::CommandError, objects::tree::Tree};
 #[derive(Debug)]
 pub struct StagingArea {
     files: HashMap<String, String>,
+    conflicting_files: HashMap<String, (Option<String>, String, String)>,
     index_path: String,
 }
 
@@ -23,6 +24,7 @@ impl StagingArea {
     pub fn new(index_path: &str) -> Self {
         Self {
             files: HashMap::new(),
+            conflicting_files: HashMap::new(),
             index_path: index_path.to_string(),
         }
     }
@@ -145,22 +147,40 @@ impl StagingArea {
 
     pub fn write_to(&self, stream: &mut dyn Write) -> Result<(), CommandError> {
         for (path, hash) in &self.files {
-            let size_be = (path.len() as u32).to_be_bytes();
+            path.write_to(stream)?;
             stream
-                .write(&size_be)
+                .write(&[0])
                 .map_err(|error| CommandError::FailToSaveStaginArea(error.to_string()))?;
+            write_hash_str_to(stream, hash)?;
+        }
+        for (path, (common_hash, head_hash, destin_hash)) in &self.conflicting_files {
+            path.write_to(stream)?;
             stream
-                .write(path.as_bytes())
+                .write(&[1])
                 .map_err(|error| CommandError::FailToSaveStaginArea(error.to_string()))?;
-            stream
-                .write(&hash.as_bytes())
-                .map_err(|error| CommandError::FailToSaveStaginArea(error.to_string()))?;
+            match common_hash {
+                Some(common_hash) => {
+                    stream
+                        .write(&[1])
+                        .map_err(|error| CommandError::FailToSaveStaginArea(error.to_string()))?;
+
+                    write_hash_str_to(stream, common_hash)?;
+                }
+                None => {
+                    stream
+                        .write(&[0])
+                        .map_err(|error| CommandError::FailToSaveStaginArea(error.to_string()))?;
+                }
+            };
+            write_hash_str_to(stream, head_hash)?;
+            write_hash_str_to(stream, destin_hash)?;
         }
         Ok(())
     }
 
     pub fn read_from(stream: &mut dyn Read, index_path: &str) -> Result<StagingArea, CommandError> {
         let mut files = HashMap::<String, String>::new();
+        let mut conflicting_files = HashMap::<String, (Option<String>, String, String)>::new();
         loop {
             let mut size_be = [0; 4];
             match stream.read(&mut size_be) {
@@ -173,26 +193,42 @@ impl StagingArea {
             stream
                 .read(&mut path_be)
                 .map_err(|error| CommandError::FailToOpenStaginArea(error.to_string()))?;
-            let mut hash_be = vec![0; 40];
-            stream
-                .read(&mut hash_be)
-                .map_err(|error| CommandError::FailToOpenStaginArea(error.to_string()))?;
             let path = String::from_utf8(path_be).map_err(|error| {
                 CommandError::FileReadError(format!(
                     "Error convirtiendo path a string{}",
                     error.to_string()
                 ))
             })?;
-            let hash = String::from_utf8(hash_be).map_err(|error| {
-                CommandError::FileReadError(format!(
-                    "Error convirtiendo hash a string{}",
-                    error.to_string()
-                ))
-            })?;
-            files.insert(path, hash);
+            let is_conflict_byte = {
+                let mut is_conflict_byte = [0; 1];
+                stream
+                    .read_exact(&mut is_conflict_byte)
+                    .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+                is_conflict_byte[0]
+            };
+            if is_conflict_byte == 0 {
+                let hash = read_hash_str_from(stream)?;
+                _ = files.insert(path, hash);
+            } else {
+                let mut is_some_byte = [0; 1];
+                stream
+                    .read_exact(&mut is_some_byte)
+                    .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+
+                let common_hash = if is_some_byte[0] == 0 {
+                    None
+                } else {
+                    let common_hash = read_hash_str_from(stream)?;
+                    Some(common_hash)
+                };
+                let head_hash = read_hash_str_from(stream)?;
+                let destin_hash = read_hash_str_from(stream)?;
+                _ = conflicting_files.insert(path, (common_hash, head_hash, destin_hash));
+            }
         }
         Ok(Self {
             files,
+            conflicting_files,
             index_path: index_path.to_string(),
         })
     }
@@ -220,6 +256,9 @@ impl StagingArea {
         } else {
             path.to_string()
         };
+        if self.conflicting_files.contains_key(path) {
+            _ = self.conflicting_files.remove(path);
+        }
         self.files.insert(key, hash.to_string());
     }
 
@@ -298,7 +337,17 @@ impl StagingArea {
         sorted_files
     }
 
-    pub fn update_to(&mut self, working_dir: &Tree) -> Result<(), CommandError> {
+    pub fn update_to_conflictings(
+        &mut self,
+        not_conflicting_files: HashMap<String, String>,
+        conflicting_files: HashMap<String, (Option<String>, String, String)>,
+    ) {
+        self.files = not_conflicting_files;
+        self.conflicting_files = conflicting_files;
+    }
+
+    pub fn update_to_tree(&mut self, working_dir: &Tree) -> Result<(), CommandError> {
+        self.files.clear();
         let mut boxed_working_dir: GitObject = Box::new(working_dir.to_owned());
         self.add_object(&mut boxed_working_dir, "")
     }
@@ -316,6 +365,31 @@ impl StagingArea {
         }
         Ok(())
     }
+
+    pub fn has_conflicts(&self) -> bool {
+        !self.conflicting_files.is_empty()
+    }
+}
+
+fn write_hash_str_to(stream: &mut dyn Write, hash: &String) -> Result<(), CommandError> {
+    stream
+        .write(&hash.as_bytes())
+        .map_err(|error| CommandError::FailToSaveStaginArea(error.to_string()))?;
+    Ok(())
+}
+
+fn read_hash_str_from(stream: &mut dyn Read) -> Result<String, CommandError> {
+    let mut hash_be = vec![0; 40];
+    stream
+        .read(&mut hash_be)
+        .map_err(|error| CommandError::FailToOpenStaginArea(error.to_string()))?;
+    let hash = String::from_utf8(hash_be).map_err(|error| {
+        CommandError::FileReadError(format!(
+            "Error convirtiendo hash a string{}",
+            error.to_string()
+        ))
+    })?;
+    Ok(hash)
 }
 
 // Unit tests
@@ -328,6 +402,8 @@ mod tests {
     fn test_write_read() {
         let mut staging_area = StagingArea {
             files: HashMap::new(),
+            conflicting_files: HashMap::new(),
+
             index_path: "".to_string(),
         };
 
@@ -352,6 +428,7 @@ mod tests {
     fn test_write_read_2() {
         let mut staging_area = StagingArea {
             files: HashMap::new(),
+            conflicting_files: HashMap::new(),
             index_path: "".to_string(),
         };
 
@@ -374,6 +451,7 @@ mod tests {
     fn test_write_read_two_values() {
         let mut staging_area = StagingArea {
             files: HashMap::new(),
+            conflicting_files: HashMap::new(),
             index_path: "".to_string(),
         };
 

@@ -1,13 +1,11 @@
 use std::{
     collections::{HashMap, HashSet},
-    env::join_paths,
     fs::{self, DirEntry, File, OpenOptions, ReadDir},
     io::{Read, Write},
     path::{Path, PathBuf},
-    process::Command,
 };
 
-use chrono::{format, DateTime, Local};
+use chrono::{DateTime, Local};
 
 use crate::{
     changes_controller_components::{
@@ -23,13 +21,12 @@ use crate::{
         blob::Blob,
         commit_object::{write_commit_tree_to_database, CommitObject},
         git_object::{self, GitObject, GitObjectTrait},
-        last_commit,
         proto_object::ProtoObject,
         tree::Tree,
     },
     objects_database::ObjectsDatabase,
     server_components::git_server::GitServer,
-    staging_area::{self, StagingArea},
+    staging_area::StagingArea,
     utils::{aux::get_name, super_string::u8_vec_to_hex_string},
 };
 
@@ -1026,8 +1023,25 @@ impl<'a> GitRepository<'a> {
     fn restore(&mut self, mut source_tree: Tree) -> Result<(), CommandError> {
         self.log("Restoring files");
         source_tree.restore(&self.path, &mut self.logger)?;
-        let mut staging_area = StagingArea::open(&self.path)?;
-        staging_area.update_to(&source_tree)?;
+        let mut staging_area = self.staging_area()?;
+        staging_area.update_to_tree(&source_tree)?;
+        staging_area.save()?;
+        Ok(())
+    }
+
+    fn restore_merge_conflict(
+        &mut self,
+        mut source_tree: Tree,
+        not_conflicting_files: &mut HashMap<String, String>,
+        conflicting_files: &mut HashMap<String, (Option<String>, String, String)>,
+    ) -> Result<(), CommandError> {
+        self.log("Restoring files");
+        source_tree.restore(&self.path, &mut self.logger)?;
+        let mut staging_area = self.staging_area()?;
+        staging_area.update_to_conflictings(
+            not_conflicting_files.to_owned(),
+            conflicting_files.to_owned(),
+        );
         staging_area.save()?;
         Ok(())
     }
@@ -1248,14 +1262,21 @@ impl<'a> GitRepository<'a> {
             head_tree.get_hash_string().unwrap(),
             destin_tree.get_hash_string().unwrap()
         ));
-        let (merged_tree, merge_conflicts) = merge_trees(
+        let mut not_conflicting_files: HashMap<String, String> = HashMap::new();
+        let mut conflicting_files: HashMap<String, (Option<String>, String, String)> =
+            HashMap::new();
+
+        let merged_tree = merge_trees(
             &mut head_tree,
             &mut destin_tree,
             &mut common_tree,
             head_name,
             destin_name,
+            &self.path,
+            &mut not_conflicting_files,
+            &mut conflicting_files,
         )?;
-        if merge_conflicts {
+        if !conflicting_files.is_empty() {
             let mut boxed_tree: GitObject = Box::new(merged_tree.clone());
             let merge_tree_hash_str = self.db()?.write(&mut boxed_tree, true, &mut self.logger)?;
             let message = format!(
@@ -1267,7 +1288,11 @@ impl<'a> GitRepository<'a> {
             self.write_to_file("AUTO_MERGE", &merge_tree_hash_str)?;
             self.write_to_file("MERGE_HEAD", &destin.get_hash_string()?)?;
 
-            self.restore(merged_tree)?;
+            self.restore_merge_conflict(
+                merged_tree,
+                &mut not_conflicting_files,
+                &mut conflicting_files,
+            )?;
             Ok(())
         } else {
             let mut boxed_tree: GitObject = Box::new(merged_tree.clone());
@@ -1312,6 +1337,10 @@ impl<'a> GitRepository<'a> {
     /// Tries to continue from failed merged
     pub fn merge_continue(&mut self) -> Result<(), CommandError> {
         let (message, merge_tree_hash_str, destin) = self.get_failed_merge_info()?;
+        let staging_area = self.staging_area()?;
+        if staging_area.has_conflicts() {
+            return Err(CommandError::UnmergedFiles);
+        }
         let get_last_commit_hash = self
             .get_last_commit_hash()?
             .ok_or(CommandError::FailedToResumeMerge)?;
@@ -1333,6 +1362,10 @@ impl<'a> GitRepository<'a> {
         self.delete_file("AUTO_MERGE")?;
         self.delete_file("MERGE_HEAD")?;
         Ok(())
+    }
+
+    fn staging_area(&mut self) -> Result<StagingArea, CommandError> {
+        Ok(StagingArea::open(&self.path)?)
     }
 
     fn get_failed_merge_info(&mut self) -> Result<(String, String, String), CommandError> {
@@ -1381,13 +1414,14 @@ fn merge_trees(
     common_tree: &mut Tree,
     head_name: &str,
     destin_name: &str,
-) -> Result<(Tree, bool), CommandError> {
-    let mut found_merge_conflicts = false;
+    parent_path: &str,
+    not_conflicting_files: &mut HashMap<String, String>,
+    conflicting_files: &mut HashMap<String, (Option<String>, String, String)>,
+) -> Result<Tree, CommandError> {
     let mut merged_tree = Tree::new("".to_string());
     let mut head_entries = head_tree.get_objects();
     let mut destin_entries = destin_tree.get_objects();
     let mut common_entries = common_tree.get_objects();
-
     let all_keys = head_entries
         .clone()
         .into_keys()
@@ -1397,27 +1431,36 @@ fn merge_trees(
         let head_entry = head_entries.get_mut(&key);
         let destin_entry = destin_entries.get_mut(&key);
         let common_entry = common_entries.get_mut(&key);
+        let joint_path = join_paths!(parent_path, key).ok_or(CommandError::JoiningPaths)?;
         match common_entry {
             Some(common_entry) => {
-                let (merged_object, merge_conflicts) = is_in_common(
+                let merged_object = is_in_common(
                     head_entry,
                     destin_entry,
                     common_entry,
                     head_name,
                     destin_name,
+                    &joint_path,
+                    not_conflicting_files,
+                    conflicting_files,
                 )?;
-                found_merge_conflicts |= merge_conflicts;
                 merged_tree.add_object(key, merged_object);
             }
             None => {
-                let (object, merge_conflicts) =
-                    is_not_in_common(head_entry, destin_entry, head_name, destin_name)?;
-                found_merge_conflicts |= merge_conflicts;
+                let object = is_not_in_common(
+                    head_entry,
+                    destin_entry,
+                    head_name,
+                    destin_name,
+                    &joint_path,
+                    not_conflicting_files,
+                    conflicting_files,
+                )?;
                 merged_tree.add_object(key, object);
             }
         }
     }
-    Ok((merged_tree, found_merge_conflicts))
+    Ok(merged_tree)
 }
 
 fn is_in_common(
@@ -1426,7 +1469,10 @@ fn is_in_common(
     common_entry: &mut GitObject,
     head_name: &str,
     destin_name: &str,
-) -> Result<(GitObject, bool), CommandError> {
+    parent_path: &str,
+    not_conflicting_files: &mut HashMap<String, String>,
+    conflicting_files: &mut HashMap<String, (Option<String>, String, String)>,
+) -> Result<GitObject, CommandError> {
     match (head_entry, destin_entry) {
         (Some(head_entry), Some(destin_entry)) => {
             match (head_entry.as_mut_tree(), destin_entry.as_mut_tree()) {
@@ -1435,20 +1481,23 @@ fn is_in_common(
                         Some(common_tree) => common_tree.to_owned(),
                         None => Tree::new("".to_string()),
                     };
-                    let (merged_subtree, merge_conflicts) = merge_trees(
+                    let merged_subtree = merge_trees(
                         &mut head_tree,
                         &mut destin_tree,
                         &mut common_tree,
                         head_name,
                         destin_name,
+                        parent_path,
+                        not_conflicting_files,
+                        conflicting_files,
                     )?;
                     let boxed_subtree = Box::new(merged_subtree);
-                    return Ok((boxed_subtree, merge_conflicts));
+                    return Ok(boxed_subtree);
                 }
                 (_, _) => match (head_entry.as_mut_blob(), destin_entry.as_mut_blob()) {
                     (Some(head_blob), Some(destin_blob)) => {
                         if head_blob.get_hash_string()? == destin_blob.get_hash_string()? {
-                            return Ok((head_entry.to_owned(), false));
+                            return Ok(head_entry.to_owned());
                         } else {
                             let mut common_blob = match common_entry.as_mut_blob() {
                                 Some(common_blob) => common_blob.to_owned(),
@@ -1461,7 +1510,20 @@ fn is_in_common(
                                 head_name,
                                 destin_name,
                             )?;
-                            return Ok((Box::new(merged_blob.to_owned()), merge_conflicts));
+                            if merge_conflicts {
+                                _ = conflicting_files.insert(
+                                    parent_path.to_string(),
+                                    (
+                                        Some(common_blob.get_hash_string()?),
+                                        head_blob.get_hash_string()?,
+                                        destin_blob.get_hash_string()?,
+                                    ),
+                                );
+                            } else {
+                                _ = not_conflicting_files
+                                    .insert(parent_path.to_string(), head_blob.get_hash_string()?);
+                            }
+                            return Ok(Box::new(merged_blob.to_owned()));
                         }
                     }
                     (_, _) => {
@@ -1470,8 +1532,8 @@ fn is_in_common(
                 },
             }
         }
-        (Some(head_entry), None) => return Ok((head_entry.to_owned(), false)),
-        (None, Some(destin_entry)) => return Ok((destin_entry.to_owned(), false)),
+        (Some(head_entry), None) => return Ok(head_entry.to_owned()),
+        (None, Some(destin_entry)) => return Ok(destin_entry.to_owned()),
         (None, None) => {
             return Err(CommandError::MergeConflict("".to_string()));
         }
@@ -1483,36 +1545,55 @@ fn is_not_in_common(
     destin_entry: Option<&mut GitObject>,
     head_name: &str,
     destin_name: &str,
-) -> Result<(GitObject, bool), CommandError> {
+    parent_path: &str,
+    not_conflicting_files: &mut HashMap<String, String>,
+    conflicting_files: &mut HashMap<String, (Option<String>, String, String)>,
+) -> Result<GitObject, CommandError> {
     match (head_entry, destin_entry) {
         (Some(head_entry), Some(destin_entry)) => {
             match (head_entry.as_mut_tree(), destin_entry.as_mut_tree()) {
                 (Some(mut head_tree), Some(mut destin_tree)) => {
                     let mut common_tree = Tree::new("".to_string());
-                    let (merged_subtree, merge_conflicts) = merge_trees(
+                    let merged_subtree = merge_trees(
                         &mut head_tree,
                         &mut destin_tree,
                         &mut common_tree,
                         head_name,
                         destin_name,
+                        parent_path,
+                        not_conflicting_files,
+                        conflicting_files,
                     )?;
                     let boxed_subtree = Box::new(merged_subtree);
-                    return Ok((boxed_subtree, merge_conflicts));
+                    return Ok(boxed_subtree);
                 }
                 (_, _) => match (head_entry.as_mut_blob(), destin_entry.as_mut_blob()) {
                     (Some(head_blob), Some(destin_blob)) => {
                         if head_blob.get_hash_string()? == destin_blob.get_hash_string()? {
-                            return Ok((head_entry.to_owned(), false));
+                            return Ok(head_entry.to_owned());
                         } else {
                             let mut common_blob = Blob::new_from_content(vec![])?;
-                            let (merged_blob, merge_conflicts) = merge_blobs(
+                            let (mut merged_blob, merge_conflicts) = merge_blobs(
                                 head_blob,
                                 destin_blob,
                                 &mut common_blob,
                                 head_name,
                                 destin_name,
                             )?;
-                            return Ok((Box::new(merged_blob.to_owned()), merge_conflicts));
+                            if merge_conflicts {
+                                _ = conflicting_files.insert(
+                                    parent_path.to_string(),
+                                    (
+                                        None,
+                                        head_blob.get_hash_string()?,
+                                        destin_blob.get_hash_string()?,
+                                    ),
+                                );
+                            } else {
+                                let hash_str = merged_blob.get_hash_string()?;
+                                _ = not_conflicting_files.insert(parent_path.to_string(), hash_str);
+                            }
+                            return Ok(Box::new(merged_blob.to_owned()));
                         }
                     }
                     (_, _) => {
@@ -1521,8 +1602,8 @@ fn is_not_in_common(
                 },
             }
         }
-        (Some(head_entry), None) => return Ok((head_entry.to_owned(), false)),
-        (None, Some(destin_entry)) => return Ok((destin_entry.to_owned(), false)),
+        (Some(head_entry), None) => return Ok(head_entry.to_owned()),
+        (None, Some(destin_entry)) => return Ok(destin_entry.to_owned()),
         (None, None) => {
             return Err(CommandError::MergeConflict("".to_string()));
         }
@@ -1554,7 +1635,7 @@ fn merge_blobs(
         destin_name,
     )?;
     let merged_content = merged_content_str.as_bytes().to_owned();
-    let mut merged_blob = Blob::new_from_content(merged_content)?;
+    let merged_blob = Blob::new_from_content(merged_content)?;
     Ok((merged_blob, merge_conflicts))
 }
 

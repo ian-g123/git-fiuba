@@ -1,7 +1,7 @@
 use crate::command_errors::CommandError;
+use crate::logger::Logger;
 use crate::objects_database::ObjectsDatabase;
 use crate::utils::super_string::u8_vec_to_hex_string;
-use crate::{logger::Logger, objects_database};
 
 use super::{author::Author, blob::Blob, commit_object::CommitObject, mode::Mode, tree::Tree};
 use crate::utils::aux::hex_string_to_u8_vec;
@@ -51,10 +51,10 @@ pub trait GitObjectTrait {
     /// Si el objeto no es un Tree, devuelve un error
     fn add_path(
         &mut self,
-        logger: &mut Logger,
-        vector_path: Vec<&str>,
-        current_depth: usize,
-        hash: &String,
+        _logger: &mut Logger,
+        _vector_path: Vec<&str>,
+        _current_depth: usize,
+        _hash: &String,
     ) -> Result<(), CommandError> {
         Err(CommandError::ObjectNotTree)
     }
@@ -77,12 +77,7 @@ pub trait GitObjectTrait {
     fn to_string_priv(&mut self) -> String;
 
     /// Devuelve el hash del objeto
-    fn get_hash(&mut self) -> Result<[u8; 20], CommandError>; /*  {
-                                                                  let mut buf: Vec<u8> = Vec::new();
-                                                                  let mut stream = Cursor::new(&mut buf);
-                                                                  self.write_to(&mut stream)?;
-                                                                  Ok(get_sha1(&buf))
-                                                              } */
+    fn get_hash(&mut self) -> Result<[u8; 20], CommandError>;
 
     /// Devuelve el hash del objeto
     fn get_hash_string(&mut self) -> Result<String, CommandError> {
@@ -98,11 +93,11 @@ pub trait GitObjectTrait {
         None
     }
 
-    fn restore(&mut self, path: &str, logger: &mut Logger) -> Result<(), CommandError> {
+    fn restore(&mut self, _path: &str, _logger: &mut Logger) -> Result<(), CommandError> {
         Ok(())
     }
 
-    fn set_hash(&mut self, hash: [u8; 20]) {}
+    fn set_hash(&mut self, _hash: [u8; 20]) {}
 }
 
 pub fn display_from_hash(

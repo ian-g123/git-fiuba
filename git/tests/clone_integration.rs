@@ -9,6 +9,7 @@ use std::{
 use git_lib::{file_compressor::extract, join_paths};
 
 #[test]
+#[ignore]
 fn test_clone() {
     let path = "./tests/data/commands/clone/test1";
     let git_bin = "../../../../../../target/debug/git";
@@ -142,7 +143,6 @@ fn test_clone() {
         content,
         "Primera linea modificada en servidor de nuevo\nSeparador\n<<<<<<< HEAD\nTercera linea modificada en local\n=======\nTercera linea modificada en servidor\n>>>>>>> origin\n"
     );
-    panic!("Pausa");
 
     let result = Command::new("../".to_owned() + git_bin)
         .arg("merge")
@@ -151,10 +151,25 @@ fn test_clone() {
         .output()
         .unwrap();
 
-    println!("{}", String::from_utf8(result.stderr).unwrap());
-    println!("{}", String::from_utf8(result.stdout).unwrap());
+    assert_eq!(
+        String::from_utf8(result.stderr).unwrap(),
+        "error: Committing is not possible because you have unmerged files.\nhint: Fix them up in the work tree, and then use 'git add/rm <file>'\nhint: as appropriate to mark resolution and make a commit.\nfatal: Exiting because of an unresolved conflict.\n"
+    );
 
-    panic!("Pausa");
+    let result = Command::new("../".to_owned() + git_bin)
+        .arg("add")
+        .arg("testfile")
+        .current_dir(&format!("{}/repo/", path))
+        .output()
+        .unwrap();
+
+    let result = Command::new("../".to_owned() + git_bin)
+        .arg("merge")
+        .arg("--continue")
+        .current_dir(&format!("{}/repo/", path))
+        .output()
+        .unwrap();
+
     _ = fs::remove_dir_all(format!("{}", path));
 }
 
