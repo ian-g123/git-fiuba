@@ -1,5 +1,7 @@
-use std::io::{Read, Result};
-use std::net::TcpStream;
+use std::{
+    io::{Read, Result},
+    net::TcpStream,
+};
 
 pub struct TcpStreamBuffedReader<'a> {
     stream: &'a TcpStream,

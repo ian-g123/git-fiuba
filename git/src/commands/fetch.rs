@@ -32,7 +32,6 @@ impl Command for Fetch {
 
 impl Fetch {
     fn new(args: &[String]) -> Result<Fetch, CommandError> {
-        println!("fetch args: {:?}", args);
         let mut fetch = Fetch::new_default();
         fetch.config(args)?;
 
@@ -42,6 +41,7 @@ impl Fetch {
     fn new_default() -> Fetch {
         Fetch { repository: None }
     }
+
     fn add_repository_config(
         fetch: &mut Fetch,
         i: usize,

@@ -5,8 +5,7 @@ use std::{
     net::TcpStream,
 };
 
-use super::packfile_object_type::PackfileObjectType;
-use super::reader::TcpStreamBuffedReader;
+use super::{packfile_object_type::PackfileObjectType, reader::TcpStreamBuffedReader};
 
 pub struct GitServer {
     socket: TcpStream,
@@ -23,13 +22,16 @@ impl GitServer {
         Ok(GitServer { socket })
     }
 
-    pub fn send(&mut self, line: &str) -> Result<Vec<String>, CommandError> {
+    /// envía un mensaje al servidor y devuelve la respuesta
+    fn send(&mut self, line: &str) -> Result<Vec<String>, CommandError> {
         let line = line.to_string().to_pkt_format();
         self.write_string_to_socket(&line)?;
         let lines = get_response(&self.socket)?;
         Ok(lines)
     }
 
+    /// explora el repositorio remoto y devuelve el hash del commit del branch head
+    /// y un hashmap con: hash del commit -> nombre de la referencia
     pub fn explore_repository(
         &mut self,
         repository_path: &str,
@@ -45,37 +47,65 @@ impl GitServer {
             return Err(CommandError::ErrorReadingPkt);
         }
         let head_branch_line = lines.remove(0);
-        let Some((head_branch, _other_words)) = head_branch_line.split_once(' ') else {
+        let Some((head_branch_commit, _)) = head_branch_line.split_once(' ') else {
             return Err(CommandError::ErrorReadingPkt);
         };
         let mut refs = HashMap::<String, String>::new();
         for line in lines {
             // logger.log(&format!("Line: {}", line));
-            let (sha1, ref_name) = line
+            let (hash, ref_name) = line
                 .split_once(' ')
                 .ok_or(CommandError::ErrorReadingPkt)
                 .map(|(sha1, ref_name)| (sha1.trim().to_string(), ref_name.trim().to_string()))?;
-            refs.insert(sha1, ref_name);
+            refs.insert(hash, ref_name);
         }
-        Ok((head_branch.to_string(), refs))
+        Ok((head_branch_commit.to_string(), refs))
     }
 
+    /// explora el repositorio remoto y devuelve el hash del commit del branch head
+    /// y un hashmap con: hash del commit -> nombre de la referencia
+    pub fn explore_repository_receive(
+        &mut self,
+        repository_path: &str,
+        host: &str,
+    ) -> Result<HashMap<String, String>, CommandError> {
+        let line = format!(
+            "git-receive-pack {}\0host={}\0\0version=1\0\n",
+            repository_path, host
+        );
+
+        let lines = self.send(&line)?;
+        let mut refs = HashMap::<String, String>::new();
+
+        for line in lines {
+            let (hash, ref_name) = line
+                .split_once(' ')
+                .ok_or(CommandError::ErrorReadingPkt)
+                .map(|(hash, ref_name)| (hash.trim().to_string(), ref_name.trim().to_string()))?;
+            refs.insert(ref_name, hash);
+        }
+        Ok(refs)
+    }
+
+    /// envía un mensaje al servidor para que envíe los objetos del repositorio
+    /// y devuelve un vector con tuplas que contienen:\
+    /// `(tipo de objeto, tamaño del objeto, contenido del objeto en bytes)`
     pub fn fetch_objects(
         &mut self,
-        wants: Vec<String>,
-        haves: Vec<String>,
+        wants_commits: Vec<String>,
+        haves_commits: Vec<String>,
         logger: &mut Logger,
     ) -> Result<Vec<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
         logger.log("fetch_objects");
         let mut lines = Vec::<String>::new();
-        for want in wants {
-            let line = format!("want {}\n", want);
+        for want_commit in wants_commits {
+            let line = format!("want {}\n", want_commit);
             logger.log(&format!("Sending: {}", line));
             self.write_in_tpk_to_socket(&line)?;
         }
         self.write_string_to_socket("0000")?;
-        if !haves.is_empty() {
-            for have in haves {
+        if !haves_commits.is_empty() {
+            for have in haves_commits {
                 let line = format!("have {}\n", have);
                 logger.log(&format!("Sending:: {}", line));
                 self.write_in_tpk_to_socket(&line)?;
@@ -92,39 +122,46 @@ impl GitServer {
             }
             None => return Err(CommandError::ErrorReadingPkt),
         }
-
-        let objects = self.read_objects()?;
-        Ok(objects)
+        Ok(self.read_objects()?)
     }
 
     fn write_string_to_socket(&mut self, line: &str) -> Result<(), CommandError> {
-        self.write_to_socket(line.as_bytes())
-    }
-
-    fn write_to_socket(&mut self, message: &[u8]) -> Result<(), CommandError> {
+        // self.write_to_socket(line.as_bytes());
+        let message = line.as_bytes();
         self.socket
             .write_all(message)
             .map_err(|error| CommandError::SendingMessage(error.to_string()))?;
         Ok(())
     }
 
+    // fn write_to_socket(&mut self, message: &[u8]) -> Result<(), CommandError> {
+    //     self.socket
+    //         .write_all(message)
+    //         .map_err(|error| CommandError::SendingMessage(error.to_string()))?;
+    //     Ok(())
+    // }
+
     fn write_in_tpk_to_socket(&mut self, line: &str) -> Result<(), CommandError> {
         let line = line.to_string().to_pkt_format();
         self.write_string_to_socket(&line)
     }
 
+    /// Lee los objetos del socket, primero lee el header del packfile y luego lee los objetos
     fn read_objects(&mut self) -> Result<Vec<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
         let object_number = self.read_packfile_header()?;
         let objects_data = self.read_objects_in_packfile(object_number)?;
         Ok(objects_data)
     }
 
+    /// Lee todos los objetos del packfile y devuelve un vector que contiene tuplas con:\
+    /// `(tipo de objeto, tamaño del objeto, contenido del objeto en bytes)`
     fn read_objects_in_packfile(
         &mut self,
         object_number: u32,
     ) -> Result<Vec<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
         let mut objects_data = Vec::new();
         let mut buffed_reader = TcpStreamBuffedReader::new(&self.socket);
+
         for _ in 0..object_number {
             let mut buffed_reader: &mut TcpStreamBuffedReader<'_> = &mut buffed_reader;
             let (object_type, len) = read_object_header_from_packfile(buffed_reader)?;
@@ -132,6 +169,7 @@ impl GitServer {
             buffed_reader.clean_up_to_pos();
             let mut decoder = flate2::read::ZlibDecoder::new(&mut buffed_reader);
             let mut deflated_data = Vec::new();
+
             decoder
                 .read_to_end(&mut deflated_data)
                 .map_err(|_| CommandError::ErrorExtractingPackfile)?;
@@ -157,6 +195,7 @@ impl GitServer {
         Ok(object_number)
     }
 
+    /// lee la firma del packfile, los primeros 4 bytes del socket
     fn read_pack_signature(&mut self) -> Result<String, CommandError> {
         let signature_buf = &mut [0; 4];
         self.socket
@@ -167,6 +206,7 @@ impl GitServer {
         Ok(signature)
     }
 
+    /// lee la versión del packfile, los siguientes 4 bytes del socket
     fn read_version_number(&mut self) -> Result<u32, CommandError> {
         let mut version_buf = [0; 4];
         self.socket
@@ -176,6 +216,7 @@ impl GitServer {
         Ok(version)
     }
 
+    /// lee la cantidad de objetos en el packfile, los siguientes 4 bytes del socket
     fn read_object_number(&mut self) -> Result<u32, CommandError> {
         let mut object_number_buf = [0; 4];
         self.socket
@@ -193,15 +234,19 @@ fn read_object_header_from_packfile(
     buffed_reader
         .read_exact(&mut first_byte_buf)
         .map_err(|_| CommandError::ErrorExtractingPackfile)?;
+
     let object_type_u8 = first_byte_buf[0] >> 4 & 0b00000111;
     let object_type = PackfileObjectType::from_u8(object_type_u8)?;
+
     let mut bits = Vec::new();
     let first_byte_buf_len_bits = first_byte_buf[0] & 0b00001111;
+
     let mut bit_chunk = Vec::new();
     for i in (0..4).rev() {
         let bit = (first_byte_buf_len_bits >> i) & 1;
         bit_chunk.push(bit);
     }
+
     bits.splice(0..0, bit_chunk);
     let mut is_last_byte: bool = first_byte_buf[0] >> 7 == 0;
     while !is_last_byte {
@@ -211,14 +256,15 @@ fn read_object_header_from_packfile(
             .read_exact(&mut current_byte_buf)
             .map_err(|_| CommandError::ErrorExtractingPackfile)?;
         let current_byte = current_byte_buf[0];
-        is_last_byte = current_byte >> 7 == 0;
         let seven_bit_chunk_with_zero = current_byte & 0b01111111;
         for i in (0..7).rev() {
             let bit = (seven_bit_chunk_with_zero >> i) & 1;
             seven_bit_chunk.push(bit);
         }
         bits.splice(0..0, seven_bit_chunk);
+        is_last_byte = current_byte >> 7 == 0;
     }
+
     let len = bits_to_usize(&bits);
     Ok((object_type, len))
 }
@@ -295,6 +341,7 @@ impl Pkt for String {
         output
     }
 
+    /// lee una línea en formato pkt-line del stream
     fn read_pkt_format(stream: &mut dyn Read) -> Result<Option<String>, CommandError> {
         let size = read_pkt_size(stream)?;
         if size == 0 {

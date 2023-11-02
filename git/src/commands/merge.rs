@@ -6,7 +6,7 @@ use super::command::{Command, ConfigAdderFunction};
 
 /// Commando Merge
 pub struct Merge {
-    comits: Vec<String>,
+    commits: Vec<String>,
     continue_: bool,
     abort: bool,
     quit: bool,
@@ -48,7 +48,7 @@ impl Merge {
 
     fn new_default() -> Merge {
         Merge {
-            comits: Vec::new(),
+            commits: Vec::new(),
             continue_: false,
             abort: false,
             quit: false,
@@ -98,7 +98,7 @@ impl Merge {
         i: usize,
         args: &[String],
     ) -> Result<usize, CommandError> {
-        merge.comits.push(args[i].clone());
+        merge.commits.push(args[i].clone());
         Ok(i + 1)
     }
 
@@ -114,7 +114,7 @@ impl Merge {
             // return repo.merge_quit();
         }
 
-        repo.merge(&self.comits)?;
+        repo.merge(&self.commits)?;
         Ok(())
     }
 }

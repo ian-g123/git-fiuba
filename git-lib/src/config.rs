@@ -3,15 +3,15 @@ use std::{
     io::{Read, Write},
 };
 
-use super::command_errors::CommandError;
-use super::utils::aux::join_paths_m;
+use super::{command_errors::CommandError, utils::aux::join_paths_m};
 
 pub struct Config {
-    entries: HashMap<String, HashMap<String, String>>,
+    entries: HashMap<String, HashMap<String, String>>, // domain, branches, ubicación
     config_path: String,
 }
 
 impl Config {
+    /// Abre el archivo config, guarda los datos en su estructura interna y devuelve la instancia
     pub fn open(path: &str) -> Result<Self, CommandError> {
         let config_path_str = join_paths_m(path, ".git/config")?;
 

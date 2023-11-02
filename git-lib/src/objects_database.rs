@@ -4,6 +4,8 @@ use std::{
     io::{Cursor, Read, Write},
 };
 
+use sha1::digest::block_buffer::Error;
+
 use crate::{
     join_paths,
     logger::Logger,
@@ -82,6 +84,8 @@ impl ObjectsDatabase {
         Ok((file_path, decompressed_data))
     }
 
+    /// Dado la ruta del repositorio, crea el objeto `ObjectsDatabase` que contiene métodos útiles para
+    /// acceder a la base de datos de objetos de git, tanto para leer como para escribir.
     pub(crate) fn new(base_path_str: &str) -> Result<Self, CommandError> {
         Ok(ObjectsDatabase {
             db_path: join_paths_m(base_path_str, ".git/objects")?.to_string(),
