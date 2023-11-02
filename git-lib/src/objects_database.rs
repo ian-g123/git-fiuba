@@ -7,10 +7,7 @@ use std::{
 use crate::{
     join_paths,
     logger::Logger,
-    utils::{
-        aux::{get_sha1_str, join_paths_m},
-        super_string::u8_vec_to_hex_string,
-    },
+    utils::aux::{get_sha1_str, join_paths_m},
 };
 
 use super::{
@@ -28,7 +25,7 @@ impl ObjectsDatabase {
         &mut self,
         git_object: &mut GitObject,
         recursive: bool,
-        logger: &mut Logger,
+        _logger: &mut Logger,
     ) -> Result<String, CommandError> {
         let mut data = Vec::new();
         if recursive {

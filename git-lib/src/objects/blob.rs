@@ -1,7 +1,6 @@
 use std::{
     fs::File,
-    io::{Cursor, Read, Write},
-    process::Command,
+    io::{Read, Write},
 };
 
 use crate::{
@@ -24,7 +23,7 @@ use super::{
 #[derive(Clone, Debug)]
 pub struct Blob {
     content: Option<Vec<u8>>,
-    mode: Mode,
+    _mode: Mode,
     path: Option<String>,
     hash: Option<[u8; 20]>,
     name: Option<String>,
@@ -36,7 +35,7 @@ impl Blob {
         let mode = Mode::get_mode(path.clone())?;
         Ok(Self {
             content: None,
-            mode: mode,
+            _mode: mode,
             path: Some(path.clone()),
             hash: None,
             name: Some(get_name(&path)?),
@@ -51,7 +50,7 @@ impl Blob {
         let hash = hash.cast_hex_to_u8_vec()?;
         Ok(Self {
             content: None,
-            mode,
+            _mode: mode,
             path: None,
             hash: Some(hash),
             name: Some(name),
@@ -68,7 +67,7 @@ impl Blob {
         hash.copy_from_slice(&hash_vec);
         Ok(Self {
             content: None,
-            mode,
+            _mode: mode,
             path: Some(path.clone()),
             hash: Some(hash),
             name: Some(get_name(&path)?),
@@ -85,7 +84,7 @@ impl Blob {
         hash.copy_from_slice(&hash_vec);
         Ok(Self {
             content: Some(content),
-            mode,
+            _mode: mode,
             path: None,
             hash: Some(hash),
             name: None,
@@ -101,7 +100,7 @@ impl Blob {
         };
         Ok(Self {
             content: None,
-            mode: mode,
+            _mode: mode,
             path: Some(path.to_string()),
             hash: Some(hash),
             name: Some(get_name(&path.to_string())?),
@@ -122,8 +121,7 @@ impl Blob {
         write_to_stream_from_content(&mut data, content.clone(), "blob".to_string())?;
         let hash = get_sha1(&data);
         let hash_str = u8_vec_to_hex_string(&hash);
-        let mut instance =
-            Self::new_from_hash_content_and_mode(hash_str, content, Mode::RegularFile)?;
+        let instance = Self::new_from_hash_content_and_mode(hash_str, content, Mode::RegularFile)?;
         Ok(instance)
     }
 
@@ -144,7 +142,7 @@ impl Blob {
             String::from_utf8(content.clone()).unwrap()
         ));
 
-        let mut blob = Blob::new_from_content_and_path(content, path)?;
+        let blob = Blob::new_from_content_and_path(content, path)?;
         logger.log("blob created");
         Ok(Box::new(blob))
     }
@@ -153,7 +151,7 @@ impl Blob {
         stream: &mut dyn Read,
         len: usize,
         output: &mut dyn Write,
-        logger: &mut Logger,
+        _logger: &mut Logger,
     ) -> Result<(), CommandError> {
         let mut content = vec![0; len as usize];
         stream
@@ -189,7 +187,7 @@ impl GitObjectTrait for Blob {
         "blob".to_string()
     }
 
-    fn content(&mut self, db: Option<&mut ObjectsDatabase>) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self, _db: Option<&mut ObjectsDatabase>) -> Result<Vec<u8>, CommandError> {
         if let Some(content) = &self.content {
             return Ok(content.to_owned());
         }

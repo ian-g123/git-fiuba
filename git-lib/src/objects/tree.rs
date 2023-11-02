@@ -158,7 +158,7 @@ impl Tree {
     /// Crea un Blob a partir de su hash y lo añade al Tree.
     pub fn add_blob(
         &mut self,
-        logger: &mut Logger,
+        _logger: &mut Logger,
         path_name: &String,
         hash: &String,
     ) -> Result<(), CommandError> {
@@ -203,7 +203,7 @@ impl Tree {
     ) -> Result<GitObject, CommandError> {
         let mut objects = HashMap::<String, GitObject>::new();
 
-        while let Ok(mode) = read_mode(stream) {
+        while let Ok(_mode) = read_mode(stream) {
             let name = read_string_until(stream, '\0')?;
             let mut hash = vec![0; 20];
             stream
@@ -225,7 +225,7 @@ impl Tree {
         stream: &mut dyn Read,
         _: usize,
         output: &mut dyn Write,
-        logger: &mut Logger,
+        _logger: &mut Logger,
     ) -> Result<(), CommandError> {
         let mut objects = Vec::<(Mode, String, String, String)>::new();
         loop {

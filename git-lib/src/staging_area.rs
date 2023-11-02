@@ -66,7 +66,7 @@ impl StagingArea {
 
     pub fn get_deleted_files(
         &self,
-        db: &ObjectsDatabase,
+        _db: &ObjectsDatabase,
         last_commit_tree: &Option<Tree>,
     ) -> Result<Vec<String>, CommandError> {
         let mut deleted: Vec<String> = Vec::new();

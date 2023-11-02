@@ -2,14 +2,12 @@ use core::panic;
 use std::{
     fs::{self, File},
     io::{Error, Read, Write},
-    path::Path,
     process::{Child, Command},
 };
 
 use git_lib::{file_compressor::extract, join_paths};
 
 #[test]
-#[ignore]
 fn test_clone() {
     let path = "./tests/data/commands/clone/test1";
     let git_bin = "../../../../../../target/debug/git";
@@ -169,7 +167,7 @@ fn test_clone() {
         .current_dir(&format!("{}/repo/", path))
         .output()
         .unwrap();
-
+    panic!("Pausa");
     _ = fs::remove_dir_all(format!("{}", path));
 }
 

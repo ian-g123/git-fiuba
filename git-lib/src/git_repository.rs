@@ -668,14 +668,59 @@ impl<'a> GitRepository<'a> {
     }
 
     pub fn merge(&mut self, commits: &Vec<String>) -> Result<(), CommandError> {
-        let mut commits = commits.clone();
-        if commits.is_empty() || (commits.len() == 1 && commits[0] == "FETCH_HEAD") {
-            self.log("Running merge_head");
-            commits.push(self.get_fetch_head_branch_commit_hash()?);
+        let mut head_name = "HEAD".to_string();
+        let mut destin_name = "origin".to_string();
+        if commits.len() > 1 {
+            return Err(CommandError::MergeMultipleCommits);
         }
+        let (destin_commit, is_remote) = match commits.first() {
+            Some(commit) if commit != "FETCH_HEAD" => (commit.to_owned(), false),
+            _ => (self.get_fetch_head_branch_commit_hash()?, true),
+        };
+
         match self.get_last_commit_hash()? {
-            Some(last_commit) => self.merge_commits(&last_commit, &commits),
-            None => self.merge_fast_forward(&commits),
+            Some(last_commit) => {
+                let mut destin_branch_name = "".to_string();
+                let mut head_branch_name = "".to_string();
+                for (branch_name, branch_hash) in self.remote_branches()? {
+                    if branch_hash == destin_commit {
+                        destin_branch_name = branch_name;
+                        break;
+                    }
+                }
+                for (branch_name, branch_hash) in self.local_branches()? {
+                    if branch_hash == last_commit {
+                        head_branch_name = branch_name;
+                        break;
+                    }
+                }
+
+                if destin_branch_name != head_branch_name
+                    || destin_branch_name.is_empty()
+                    || destin_branch_name.is_empty()
+                {
+                    if destin_branch_name.is_empty() {
+                        destin_name = destin_commit.to_owned();
+                    } else {
+                        if is_remote {
+                            destin_name = format!("{}/origin", destin_branch_name);
+                        } else {
+                            destin_name = destin_branch_name;
+                        };
+                    }
+                    if head_branch_name.is_empty() {
+                        head_name = last_commit.to_owned();
+                    } else {
+                        if is_remote {
+                            head_name = format!("{}/HEAD", head_branch_name);
+                        } else {
+                            head_name = head_branch_name;
+                        };
+                    }
+                }
+                self.merge_two_commits(&last_commit, &destin_commit, &head_name, &destin_name)
+            }
+            None => self.merge_fast_forward(&destin_commit),
         }
     }
 
@@ -999,9 +1044,9 @@ impl<'a> GitRepository<'a> {
         Ok(branches)
     }
 
-    fn merge_fast_forward(&mut self, commits: &[String]) -> Result<(), CommandError> {
+    fn merge_fast_forward(&mut self, destin_commit: &str) -> Result<(), CommandError> {
         self.log("Merge fast forward");
-        self.set_head_branch_commit_to(&commits[0])?;
+        self.set_head_branch_commit_to(destin_commit)?;
         let tree = self
             .get_last_commit_tree()?
             .ok_or(CommandError::FileWriteError(
@@ -1133,25 +1178,29 @@ impl<'a> GitRepository<'a> {
         Ok(None)
     }
 
-    fn merge_commits(
+    fn merge_two_commits(
         &mut self,
-        last_commit: &str,
-        commits: &Vec<String>,
+        head_commit: &str,
+        destin_commit: &str,
+        head_name: &str,
+        destin_name: &str,
     ) -> Result<(), CommandError> {
         self.log("Running merge_commits");
-        if commits.len() > 1 {
-            return Err(CommandError::MergeMultipleCommits);
-        }
-        let destin_commit = commits[0].to_string();
 
         let (mut common, mut commit_head, mut commit_destin) =
-            self.get_common_ansestor(&destin_commit, last_commit)?;
+            self.get_common_ansestor(&destin_commit, head_commit)?;
 
         if common.get_hash()? == commit_head.get_hash()? {
-            return self.merge_fast_forward(&commits);
+            return self.merge_fast_forward(&destin_commit);
         }
         self.log("True merge");
-        self.true_merge(&mut common, &mut commit_head, &mut commit_destin)
+        self.true_merge(
+            &mut common,
+            &mut commit_head,
+            &mut commit_destin,
+            &head_name,
+            &destin_name,
+        )
     }
 
     fn get_common_ansestor(
@@ -1250,18 +1299,13 @@ impl<'a> GitRepository<'a> {
         common: &mut CommitObject,
         head: &mut CommitObject,
         destin: &mut CommitObject,
+        head_name: &str,
+        destin_name: &str,
     ) -> Result<(), CommandError> {
-        let head_name = "HEAD";
-        let destin_name: &str = "origin";
         let mut common_tree = common.get_tree().to_owned();
         let mut head_tree = head.get_tree().to_owned();
         let mut destin_tree = destin.get_tree().to_owned();
-        self.log(&format!(
-            "common_tree: {:?}, head_tree: {:?}, destin_tree: {:?}",
-            common_tree.get_hash_string().unwrap(),
-            head_tree.get_hash_string().unwrap(),
-            destin_tree.get_hash_string().unwrap()
-        ));
+
         let mut not_conflicting_files: HashMap<String, String> = HashMap::new();
         let mut conflicting_files: HashMap<String, (Option<String>, String, String)> =
             HashMap::new();
@@ -1276,14 +1320,11 @@ impl<'a> GitRepository<'a> {
             &mut not_conflicting_files,
             &mut conflicting_files,
         )?;
+        let message = format!("Merge branch '{}' into {}", destin_name, head_name);
         if !conflicting_files.is_empty() {
             let mut boxed_tree: GitObject = Box::new(merged_tree.clone());
             let merge_tree_hash_str = self.db()?.write(&mut boxed_tree, true, &mut self.logger)?;
-            let message = format!(
-                "Merge branch '[todo branch name]' into [todo branch name]",
-                // self.get_current_branch_name()?,
-                // self.get_current_branch_name()?
-            );
+
             self.write_to_file("MERGE_MSG", &message)?;
             self.write_to_file("AUTO_MERGE", &merge_tree_hash_str)?;
             self.write_to_file("MERGE_HEAD", &destin.get_hash_string()?)?;
@@ -1297,11 +1338,6 @@ impl<'a> GitRepository<'a> {
         } else {
             let mut boxed_tree: GitObject = Box::new(merged_tree.clone());
             let _merge_tree_hash_str = self.db()?.write(&mut boxed_tree, true, &mut self.logger)?;
-            let message = format!(
-                "Merge branch '[todo branch name]' into [todo branch name]",
-                // self.get_current_branch_name()?,
-                // self.get_current_branch_name()?
-            );
             let merge_commit = self.create_new_commit(
                 message,
                 [head.get_hash_string()?, destin.get_hash_string()?].to_vec(),

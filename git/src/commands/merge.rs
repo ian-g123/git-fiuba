@@ -75,19 +75,20 @@ impl Merge {
         if self.continue_ || self.quit {
             return Err(CommandError::MergeOneOperation);
         }
+        todo!("merge --abort no está hecho");
         self.abort = true;
         Ok(i + 1)
     }
 
     /// Configura el flag --quit.
     fn add_quit_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
-        todo!("merge --quit no está hecho");
         if args[i] != "--quit" {
             return Err(CommandError::WrongFlag);
         }
         if self.abort || self.continue_ {
             return Err(CommandError::MergeOneOperation);
         }
+        todo!("merge --quit no está hecho");
         self.quit = true;
         Ok(i + 1)
     }

@@ -122,7 +122,7 @@ fn merge_diffs(
                         };
 
                         match (head_common_line_op, destin_common_line_op) {
-                            (Some(head_comon_line), Some(destin_comon_line)) => {
+                            (Some(_), Some(_)) => {
                                 conflicts_content
                                     .insert(merge_index, (head_diff_buf, destin_diff_buf));
                                 merge_index += 1;
@@ -135,7 +135,7 @@ fn merge_diffs(
                                 destin_diff_buf.push(destin_comon_line.to_string());
                             }
                             (None, None) => {
-                                if (head_diff_line_op.is_none() && destin_diff_line_op.is_none()) {
+                                if head_diff_line_op.is_none() && destin_diff_line_op.is_none() {
                                     conflicts_content
                                         .insert(merge_index, (head_diff_buf, destin_diff_buf));
                                     merge_index += 1;
@@ -172,7 +172,7 @@ fn merge_diffs(
                 no_conflicts_content.insert(merge_index, head_comon_line.to_string());
                 merge_index += 1;
             }
-            (_) => {}
+            _ => {}
         }
 
         line_index += 1;

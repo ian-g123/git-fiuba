@@ -309,7 +309,7 @@ impl GitObjectTrait for CommitObject {
         todo!()
     }
 
-    fn content(&mut self, db: Option<&mut ObjectsDatabase>) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self, _db: Option<&mut ObjectsDatabase>) -> Result<Vec<u8>, CommandError> {
         let mut buf: Vec<u8> = Vec::new();
         let mut stream = Cursor::new(&mut buf);
         writeln!(stream, "tree {}", self.tree.get_hash_string()?)
@@ -451,46 +451,10 @@ pub fn write_commit_tree_to_database(
 
 #[cfg(test)]
 mod test {
-    use std::{fs::File, io::Write};
 
-    use crate::{
-        file_compressor::compress, objects::git_object, utils::super_string::SuperStrings,
-    };
+    use crate::{objects::git_object, utils::super_string::SuperStrings};
 
     use super::*;
-
-    fn write() -> Result<(), CommandError> {
-        let Ok(mut file) = File::create(".git/objects/e3/540872766f87b1de467a5e867d656a6e6fe959")
-        else {
-            return Err(CommandError::CompressionError);
-        };
-
-        // Contenido que deseas escribir en el archivo
-        let contenido = "100644 blob 09c857543fc52cd4267c3825644b4fd7f437dc3f .gitignore\n040000 tree d3a471637c78c8f67cca05221a942bd7efabb58c git".as_bytes();
-        let contenido = compress(&contenido)?;
-
-        // Escribe el contenido en el archivo
-        if file.write_all(&contenido).is_err() {
-            return Err(CommandError::CompressionError);
-        }
-
-        //
-
-        let Ok(mut file) = File::create(".git/objects/d3/a471637c78c8f67cca05221a942bd7efabb58c")
-        else {
-            return Err(CommandError::CompressionError);
-        };
-
-        // Contenido que deseas escribir en el archivo
-        let contenido = "100644 blob f0e37a3b70089bf8ead6970f2d4339527dc628a Cargo.lock\n100644 blob 5da01b81e6f2c1926d9e6df32dc160dfe5326239 Cargo.toml".as_bytes();
-        let contenido = compress(&contenido)?;
-
-        // Escribe el contenido en el archivo
-        if file.write_all(&contenido).is_err() {
-            return Err(CommandError::CompressionError);
-        }
-        Ok(())
-    }
 
     #[test]
     #[ignore]
@@ -512,7 +476,7 @@ mod test {
         let mut buf: Vec<u8> = Vec::new();
         let mut writer_stream = Cursor::new(&mut buf);
         commit.write_to(&mut writer_stream, None).unwrap();
-        let mut reader_stream = Cursor::new(&mut buf);
+        let _reader_stream = Cursor::new(&mut buf);
         // let mut fetched_commit = git_object::read_git_object_from(
         //     &mut reader_stream,
         //     "",
