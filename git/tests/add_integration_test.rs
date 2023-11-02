@@ -29,7 +29,7 @@ fn test_single_file() {
 
     match fs::File::open(format!("{}/.git/index", path)) {
         Err(error) => panic!("No se pudo abrir el archivo: {:?}", error),
-        Ok(mut file) => match StagingArea::read_from(&mut file) {
+        Ok(mut file) => match StagingArea::read_from(&mut file, "") {
             Ok(stagin_area) => assert_eq!(
                 stagin_area.get_files().get("testfile.txt").unwrap(),
                 "30d74d258442c7c65512eafab474568dd706c430"
@@ -66,7 +66,7 @@ fn test_single_file_in_root() {
 
     match fs::File::open(format!("{}/.git/index", path)) {
         Err(error) => panic!("No se pudo abrir el archivo: {:?}", error),
-        Ok(mut file) => match StagingArea::read_from(&mut file) {
+        Ok(mut file) => match StagingArea::read_from(&mut file, "") {
             Ok(stagin_area) => assert_eq!(
                 stagin_area.get_files().get("testfile.txt").unwrap(),
                 "30d74d258442c7c65512eafab474568dd706c430"
@@ -103,7 +103,7 @@ fn test_two_files_in_dir() {
 
     match fs::File::open(format!("{}/.git/index", path)) {
         Err(error) => panic!("No se pudo abrir el archivo: {:?}", error),
-        Ok(mut file) => match StagingArea::read_from(&mut file) {
+        Ok(mut file) => match StagingArea::read_from(&mut file, "") {
             Ok(stagin_area) => {
                 assert_eq!(
                     stagin_area.get_files().get("dir/testfile1.txt").unwrap(),
@@ -146,7 +146,7 @@ fn test_two_files_sep_arguments() {
 
     match fs::File::open(format!("{}/.git/index", path)) {
         Err(error) => panic!("No se pudo abrir el archivo: {:?}", error),
-        Ok(mut file) => match StagingArea::read_from(&mut file) {
+        Ok(mut file) => match StagingArea::read_from(&mut file, "") {
             Ok(stagin_area) => {
                 assert_eq!(
                     stagin_area.get_files().get("dir/testfile1.txt").unwrap(),

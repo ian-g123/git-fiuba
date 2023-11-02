@@ -29,7 +29,7 @@ use crate::{
     },
     objects_database::ObjectsDatabase,
     server_components::git_server::GitServer,
-    staging_area::StagingArea,
+    staging_area::{self, StagingArea},
     utils::{aux::get_name, super_string::u8_vec_to_hex_string},
 };
 
@@ -174,7 +174,7 @@ impl<'a> GitRepository<'a> {
 
     pub fn add(&mut self, pathspecs: Vec<String>) -> Result<(), CommandError> {
         let last_commit = &self.get_last_commit_tree()?;
-        let mut staging_area = StagingArea::open()?;
+        let mut staging_area = StagingArea::open(&self.path)?;
         let mut pathspecs_clone: Vec<String> = pathspecs.clone();
         let mut position = 0;
         for pathspec in &pathspecs {
@@ -317,7 +317,7 @@ impl<'a> GitRepository<'a> {
         reuse_commit_info: Option<String>,
         quiet: bool,
     ) -> Result<(), CommandError> {
-        let mut staging_area = StagingArea::open()?;
+        let mut staging_area = StagingArea::open(&self.path)?;
         self.update_staging_area_files(&files, &mut staging_area)?;
 
         self.commit_priv(
@@ -338,7 +338,7 @@ impl<'a> GitRepository<'a> {
         reuse_commit_info: Option<String>,
         quiet: bool,
     ) -> Result<(), CommandError> {
-        let mut staging_area = StagingArea::open()?;
+        let mut staging_area = StagingArea::open(&self.path)?;
         self.run_all_config(&mut staging_area)?;
 
         self.commit_priv(
@@ -360,7 +360,7 @@ impl<'a> GitRepository<'a> {
         quiet: bool,
     ) -> Result<(), CommandError> {
         self.log("Running commit");
-        let mut staging_area = StagingArea::open()?;
+        let mut staging_area = StagingArea::open(&self.path)?;
         self.log("StagingArea opened");
         self.commit_priv(
             message,
@@ -556,6 +556,7 @@ impl<'a> GitRepository<'a> {
         let last_commit_tree = self.get_last_commit_tree()?;
         long_format.show(
             &self.db()?,
+            &self.path,
             last_commit_tree,
             &mut self.logger,
             &mut self.output,
@@ -570,6 +571,7 @@ impl<'a> GitRepository<'a> {
         let last_commit_tree = self.get_last_commit_tree()?;
         short_format.show(
             &self.db()?,
+            &self.path,
             last_commit_tree,
             &mut self.logger,
             &mut self.output,
@@ -1008,6 +1010,8 @@ impl<'a> GitRepository<'a> {
             .ok_or(CommandError::FileWriteError(
                 "Error en restore:".to_string(),
             ))?;
+
+        self.log("updated stagin area for merge fast foward");
         self.restore(tree)?;
         Ok(())
     }
@@ -1022,6 +1026,9 @@ impl<'a> GitRepository<'a> {
     fn restore(&mut self, mut source_tree: Tree) -> Result<(), CommandError> {
         self.log("Restoring files");
         source_tree.restore(&self.path, &mut self.logger)?;
+        let mut staging_area = StagingArea::open(&self.path)?;
+        staging_area.update_to(&source_tree)?;
+        staging_area.save()?;
         Ok(())
     }
 
@@ -1125,12 +1132,7 @@ impl<'a> GitRepository<'a> {
 
         let (mut common, mut commit_head, mut commit_destin) =
             self.get_common_ansestor(&destin_commit, last_commit)?;
-        self.log(&format!(
-            "common: {:?}, commit_head: {:?}, commit_destin: {:?}",
-            common.get_hash_string().unwrap(),
-            commit_head.get_hash_string().unwrap(),
-            commit_destin.get_hash_string().unwrap()
-        ));
+
         if common.get_hash()? == commit_head.get_hash()? {
             return self.merge_fast_forward(&commits);
         }

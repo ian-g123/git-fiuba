@@ -142,6 +142,7 @@ fn test_clone() {
         content,
         "Primera linea modificada en servidor de nuevo\nSeparador\n<<<<<<< HEAD\nTercera linea modificada en local\n=======\nTercera linea modificada en servidor\n>>>>>>> origin\n"
     );
+    panic!("Pausa");
 
     let result = Command::new("../".to_owned() + git_bin)
         .arg("merge")

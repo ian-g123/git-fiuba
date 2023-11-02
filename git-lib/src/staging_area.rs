@@ -4,7 +4,10 @@ use std::{
 };
 
 use crate::{
-    logger::Logger, objects::git_object::GitObjectTrait, objects_database::ObjectsDatabase,
+    join_paths,
+    logger::Logger,
+    objects::git_object::{GitObject, GitObjectTrait},
+    objects_database::ObjectsDatabase,
     utils::aux::get_name,
 };
 
@@ -13,12 +16,14 @@ use super::{command_errors::CommandError, objects::tree::Tree};
 #[derive(Debug)]
 pub struct StagingArea {
     files: HashMap<String, String>,
+    index_path: String,
 }
 
 impl StagingArea {
-    pub fn new() -> Self {
+    pub fn new(index_path: &str) -> Self {
         Self {
             files: HashMap::new(),
+            index_path: index_path.to_string(),
         }
     }
 
@@ -154,7 +159,7 @@ impl StagingArea {
         Ok(())
     }
 
-    pub fn read_from(stream: &mut dyn Read) -> Result<StagingArea, CommandError> {
+    pub fn read_from(stream: &mut dyn Read, index_path: &str) -> Result<StagingArea, CommandError> {
         let mut files = HashMap::<String, String>::new();
         loop {
             let mut size_be = [0; 4];
@@ -186,18 +191,24 @@ impl StagingArea {
             })?;
             files.insert(path, hash);
         }
-        Ok(Self { files })
+        Ok(Self {
+            files,
+            index_path: index_path.to_string(),
+        })
     }
 
-    pub fn open() -> Result<StagingArea, CommandError> {
-        match std::fs::File::open(".git/index") {
-            Err(_) => Ok(StagingArea::new()),
-            Ok(mut file) => StagingArea::read_from(&mut file),
+    pub fn open(base_path: &str) -> Result<StagingArea, CommandError> {
+        let index_path = join_paths!(base_path, ".git/index").ok_or(
+            CommandError::FailToOpenStaginArea("No se pudo abrir el archivo index".to_string()),
+        )?;
+        match std::fs::File::open(&index_path) {
+            Err(_) => Ok(StagingArea::new(&index_path)),
+            Ok(mut file) => StagingArea::read_from(&mut file, &index_path),
         }
     }
 
     pub fn save(&self) -> Result<(), CommandError> {
-        match std::fs::File::create(".git/index") {
+        match std::fs::File::create(&self.index_path) {
             Err(error) => Err(CommandError::FailToSaveStaginArea(error.to_string())),
             Ok(mut file) => self.write_to(&mut file),
         }
@@ -286,6 +297,25 @@ impl StagingArea {
         }
         sorted_files
     }
+
+    pub fn update_to(&mut self, working_dir: &Tree) -> Result<(), CommandError> {
+        let mut boxed_working_dir: GitObject = Box::new(working_dir.to_owned());
+        self.add_object(&mut boxed_working_dir, "")
+    }
+
+    fn add_object(&mut self, object: &mut GitObject, obj_path: &str) -> Result<(), CommandError> {
+        if let Some(blob) = object.as_mut_blob() {
+            self.add(&obj_path, &blob.get_hash_string()?);
+        } else if let Some(tree) = object.as_mut_tree() {
+            for (name, mut child_object) in tree.get_objects() {
+                let path = join_paths!(obj_path, name).ok_or(
+                    CommandError::FailToSaveStaginArea("Fail to join paths".to_string()),
+                )?;
+                self.add_object(&mut child_object, &path)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 // Unit tests
@@ -298,6 +328,7 @@ mod tests {
     fn test_write_read() {
         let mut staging_area = StagingArea {
             files: HashMap::new(),
+            index_path: "".to_string(),
         };
 
         let mut file_content_mock: Vec<u8> = Vec::new();
@@ -308,7 +339,7 @@ mod tests {
         staging_area.write_to(&mut file_writer_mock).unwrap();
 
         let mut file_reader_mock = Cursor::new(file_content_mock);
-        let new_staging_area = StagingArea::read_from(&mut file_reader_mock).unwrap();
+        let new_staging_area = StagingArea::read_from(&mut file_reader_mock, "").unwrap();
         println!("files: {:?}", new_staging_area.get_files());
 
         assert_eq!(
@@ -321,6 +352,7 @@ mod tests {
     fn test_write_read_2() {
         let mut staging_area = StagingArea {
             files: HashMap::new(),
+            index_path: "".to_string(),
         };
 
         let mut file_content_mock: Vec<u8> = Vec::new();
@@ -330,7 +362,7 @@ mod tests {
         staging_area.write_to(&mut file_writer_mock).unwrap();
 
         let mut file_reader_mock = Cursor::new(file_content_mock);
-        let new_staging_area = StagingArea::read_from(&mut file_reader_mock).unwrap();
+        let new_staging_area = StagingArea::read_from(&mut file_reader_mock, "").unwrap();
 
         assert_eq!(
             new_staging_area.get_files().get("test.txt").unwrap(),
@@ -342,6 +374,7 @@ mod tests {
     fn test_write_read_two_values() {
         let mut staging_area = StagingArea {
             files: HashMap::new(),
+            index_path: "".to_string(),
         };
 
         let mut file_content_mock: Vec<u8> = Vec::new();
@@ -352,7 +385,7 @@ mod tests {
         staging_area.write_to(&mut file_writer_mock).unwrap();
 
         let mut file_reader_mock = Cursor::new(file_content_mock);
-        let new_staging_area = StagingArea::read_from(&mut file_reader_mock).unwrap();
+        let new_staging_area = StagingArea::read_from(&mut file_reader_mock, "").unwrap();
 
         assert_eq!(
             new_staging_area.get_files().get("test2.txt").unwrap(),
