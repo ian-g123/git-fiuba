@@ -168,6 +168,7 @@ fn test_clone() {
         .output()
         .unwrap();
     panic!("Pausa");
+
     _ = fs::remove_dir_all(format!("{}", path));
 }
 

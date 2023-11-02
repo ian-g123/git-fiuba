@@ -114,6 +114,8 @@ pub enum CommandError {
     FailedToResumeMerge,
     /// error: Committing is not possible because you have unmerged files.
     UnmergedFiles,
+    /// There cannot be a file and a folder with the same name
+    CannotHaveFileAndFolderWithSameName(String),
 }
 
 impl Error for CommandError {}
@@ -297,6 +299,13 @@ impl fmt::Display for CommandError {
             }
             CommandError::UnmergedFiles => {
                 write!(f, "error: Committing is not possible because you have unmerged files.\nhint: Fix them up in the work tree, and then use 'git add/rm <file>'\nhint: as appropriate to mark resolution and make a commit.\nfatal: Exiting because of an unresolved conflict.")
+            }
+            CommandError::CannotHaveFileAndFolderWithSameName(path) => {
+                write!(
+                    f,
+                    "There cannot be a file and a folder with the same name: {}",
+                    path
+                )
             }
         }
     }

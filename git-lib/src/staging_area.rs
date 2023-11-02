@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    f32::consts::E,
     io::{Read, Write},
 };
 
@@ -16,7 +17,7 @@ use super::{command_errors::CommandError, objects::tree::Tree};
 #[derive(Debug)]
 pub struct StagingArea {
     files: HashMap<String, String>,
-    conflicting_files: HashMap<String, (Option<String>, String, String)>,
+    unmerged_files: HashMap<String, (Option<String>, Option<String>, Option<String>)>,
     index_path: String,
 }
 
@@ -24,7 +25,7 @@ impl StagingArea {
     pub fn new(index_path: &str) -> Self {
         Self {
             files: HashMap::new(),
-            conflicting_files: HashMap::new(),
+            unmerged_files: HashMap::new(),
             index_path: index_path.to_string(),
         }
     }
@@ -153,34 +154,44 @@ impl StagingArea {
                 .map_err(|error| CommandError::FailToSaveStaginArea(error.to_string()))?;
             write_hash_str_to(stream, hash)?;
         }
-        for (path, (common_hash, head_hash, destin_hash)) in &self.conflicting_files {
+        for (path, (common_hash, head_hash, destin_hash)) in &self.unmerged_files {
             path.write_to(stream)?;
             stream
                 .write(&[1])
                 .map_err(|error| CommandError::FailToSaveStaginArea(error.to_string()))?;
-            match common_hash {
-                Some(common_hash) => {
-                    stream
-                        .write(&[1])
-                        .map_err(|error| CommandError::FailToSaveStaginArea(error.to_string()))?;
+            self.write_hash(stream, common_hash)?;
+            self.write_hash(stream, head_hash)?;
+            self.write_hash(stream, destin_hash)?;
+        }
+        Ok(())
+    }
 
-                    write_hash_str_to(stream, common_hash)?;
-                }
-                None => {
-                    stream
-                        .write(&[0])
-                        .map_err(|error| CommandError::FailToSaveStaginArea(error.to_string()))?;
-                }
-            };
-            write_hash_str_to(stream, head_hash)?;
-            write_hash_str_to(stream, destin_hash)?;
+    fn write_hash(
+        &self,
+        stream: &mut dyn Write,
+        hash: &Option<String>,
+    ) -> Result<(), CommandError> {
+        match hash {
+            Some(hash) => {
+                stream
+                    .write(&[1])
+                    .map_err(|error| CommandError::FailToSaveStaginArea(error.to_string()))?;
+
+                write_hash_str_to(stream, hash)?;
+            }
+            None => {
+                stream
+                    .write(&[0])
+                    .map_err(|error| CommandError::FailToSaveStaginArea(error.to_string()))?;
+            }
         }
         Ok(())
     }
 
     pub fn read_from(stream: &mut dyn Read, index_path: &str) -> Result<StagingArea, CommandError> {
         let mut files = HashMap::<String, String>::new();
-        let mut conflicting_files = HashMap::<String, (Option<String>, String, String)>::new();
+        let mut unmerged_files =
+            HashMap::<String, (Option<String>, Option<String>, Option<String>)>::new();
         loop {
             let mut size_be = [0; 4];
             match stream.read(&mut size_be) {
@@ -210,27 +221,33 @@ impl StagingArea {
                 let hash = read_hash_str_from(stream)?;
                 _ = files.insert(path, hash);
             } else {
-                let mut is_some_byte = [0; 1];
-                stream
-                    .read_exact(&mut is_some_byte)
-                    .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+                let common_hash = Self::read_hash(stream)?;
+                let head_hash = Self::read_hash(stream)?;
+                let destin_hash = Self::read_hash(stream)?;
 
-                let common_hash = if is_some_byte[0] == 0 {
-                    None
-                } else {
-                    let common_hash = read_hash_str_from(stream)?;
-                    Some(common_hash)
-                };
-                let head_hash = read_hash_str_from(stream)?;
-                let destin_hash = read_hash_str_from(stream)?;
-                _ = conflicting_files.insert(path, (common_hash, head_hash, destin_hash));
+                _ = unmerged_files.insert(path, (common_hash, head_hash, destin_hash));
             }
         }
         Ok(Self {
             files,
-            conflicting_files,
+            unmerged_files,
             index_path: index_path.to_string(),
         })
+    }
+
+    fn read_hash(stream: &mut dyn Read) -> Result<Option<String>, CommandError> {
+        let mut is_some_byte = [0; 1];
+        stream
+            .read_exact(&mut is_some_byte)
+            .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+
+        let hash = if is_some_byte[0] == 0 {
+            None
+        } else {
+            let hash = read_hash_str_from(stream)?;
+            Some(hash)
+        };
+        Ok(hash)
     }
 
     pub fn open(base_path: &str) -> Result<StagingArea, CommandError> {
@@ -256,10 +273,26 @@ impl StagingArea {
         } else {
             path.to_string()
         };
-        if self.conflicting_files.contains_key(path) {
-            _ = self.conflicting_files.remove(path);
+        if self.unmerged_files.contains_key(path) {
+            _ = self.unmerged_files.remove(path);
         }
         self.files.insert(key, hash.to_string());
+    }
+
+    pub fn add_unmerged_file(
+        &mut self,
+        path: &str,
+        common_hash: Option<String>,
+        head_hash: Option<String>,
+        destin_hash: Option<String>,
+    ) {
+        let key: String = if path.to_string().starts_with("./") {
+            path[2..].to_string()
+        } else {
+            path.to_string()
+        };
+        self.unmerged_files
+            .insert(key, (common_hash, head_hash, destin_hash));
     }
 
     pub fn remove(&mut self, path: &str) {
@@ -298,17 +331,8 @@ impl StagingArea {
         for (path, hash) in files.iter() {
             let is_in_last_commit = {
                 if let Some(mut tree) = last_commit_tree.clone() {
-                    logger.log(&format!(
-                        "Last commit tree : {}",
-                        String::from_utf8_lossy(&tree.content(None)?)
-                    ));
                     let (has_hash, name) = tree.has_blob_from_hash(hash, logger)?;
-                    logger.log(&format!(
-                        "Has hash: {}, name_in_commit: {}, name: {}",
-                        has_hash,
-                        name,
-                        get_name(path)?
-                    ));
+
                     has_hash && get_name(path)? == name
                 } else {
                     false
@@ -337,13 +361,18 @@ impl StagingArea {
         sorted_files
     }
 
+    pub fn clear(&mut self) {
+        self.files.clear();
+        self.unmerged_files.clear();
+    }
+
     pub fn update_to_conflictings(
         &mut self,
-        not_conflicting_files: HashMap<String, String>,
-        conflicting_files: HashMap<String, (Option<String>, String, String)>,
+        merged_files: HashMap<String, String>,
+        unmerged_files: HashMap<String, (Option<String>, Option<String>, Option<String>)>,
     ) {
-        self.files = not_conflicting_files;
-        self.conflicting_files = conflicting_files;
+        self.files = merged_files;
+        self.unmerged_files = unmerged_files;
     }
 
     pub fn update_to_tree(&mut self, working_dir: &Tree) -> Result<(), CommandError> {
@@ -352,7 +381,11 @@ impl StagingArea {
         self.add_object(&mut boxed_working_dir, "")
     }
 
-    fn add_object(&mut self, object: &mut GitObject, obj_path: &str) -> Result<(), CommandError> {
+    pub fn add_object(
+        &mut self,
+        object: &mut GitObject,
+        obj_path: &str,
+    ) -> Result<(), CommandError> {
         if let Some(blob) = object.as_mut_blob() {
             self.add(&obj_path, &blob.get_hash_string()?);
         } else if let Some(tree) = object.as_mut_tree() {
@@ -366,8 +399,64 @@ impl StagingArea {
         Ok(())
     }
 
+    pub fn add_unmerged_object(
+        &mut self,
+        original_object: &mut GitObject,
+        modiffied_object: &mut GitObject,
+        obj_path: &str,
+        modiffied_object_is_head: bool,
+    ) -> Result<(), CommandError> {
+        if let Some(modiffied_object_blob) = modiffied_object.as_mut_blob() {
+            let Some(original_object_blob) = original_object.as_mut_blob() else {
+                return Err(CommandError::CannotHaveFileAndFolderWithSameName(
+                    obj_path.to_string(),
+                ));
+            };
+            if modiffied_object_is_head {
+                self.add_unmerged_file(
+                    &obj_path,
+                    Some(original_object_blob.get_hash_string()?),
+                    Some(modiffied_object_blob.get_hash_string()?),
+                    None,
+                );
+            } else {
+                self.add_unmerged_file(
+                    &obj_path,
+                    Some(original_object.get_hash_string()?),
+                    None,
+                    Some(modiffied_object.get_hash_string()?),
+                );
+            }
+        } else if let Some(modiffied_object_tree) = modiffied_object.as_mut_tree() {
+            let Some(original_object_tree) = original_object.as_mut_tree() else {
+                return Err(CommandError::CannotHaveFileAndFolderWithSameName(
+                    obj_path.to_string(),
+                ));
+            };
+            for (name, mut modiffied_object_child) in modiffied_object_tree.get_objects() {
+                let path = join_paths!(obj_path, name).ok_or(
+                    CommandError::FailToSaveStaginArea("Fail to join paths".to_string()),
+                )?;
+                let mut original_object_child = original_object_tree
+                    .get_objects()
+                    .get(&name)
+                    .ok_or(CommandError::CannotHaveFileAndFolderWithSameName(
+                        obj_path.to_string(),
+                    ))?
+                    .to_owned();
+                self.add_unmerged_object(
+                    &mut original_object_child,
+                    &mut modiffied_object_child,
+                    &path,
+                    modiffied_object_is_head,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
     pub fn has_conflicts(&self) -> bool {
-        !self.conflicting_files.is_empty()
+        !self.unmerged_files.is_empty()
     }
 }
 
@@ -402,7 +491,7 @@ mod tests {
     fn test_write_read() {
         let mut staging_area = StagingArea {
             files: HashMap::new(),
-            conflicting_files: HashMap::new(),
+            unmerged_files: HashMap::new(),
 
             index_path: "".to_string(),
         };
@@ -428,7 +517,7 @@ mod tests {
     fn test_write_read_2() {
         let mut staging_area = StagingArea {
             files: HashMap::new(),
-            conflicting_files: HashMap::new(),
+            unmerged_files: HashMap::new(),
             index_path: "".to_string(),
         };
 
@@ -451,7 +540,7 @@ mod tests {
     fn test_write_read_two_values() {
         let mut staging_area = StagingArea {
             files: HashMap::new(),
-            conflicting_files: HashMap::new(),
+            unmerged_files: HashMap::new(),
             index_path: "".to_string(),
         };
 
