@@ -9,9 +9,8 @@ use git_lib::{
     command_errors::CommandError,
     git_repository::{get_head_ref, local_branches},
     logger::Logger,
-    objects::{
-        commit_object::{self, read_from_for_log, sort_commits_descending_date, CommitObject},
-        super_string::u8_vec_to_hex_string,
+    objects::commit_object::{
+        print_for_log, read_from_for_log, sort_commits_descending_date, CommitObject,
     },
     objects_database::read_file,
 };
@@ -34,9 +33,9 @@ impl Command for Log {
             return Err(CommandError::Name);
         }
 
-        let mut instance = Self::new(args)?;
-        let commits = instance.run()?;
-        // print_for_log(output, &mut commits)?;
+        let instance = Self::new(args)?;
+        let mut commits = instance.run()?;
+        print_for_log(output, &mut commits)?;
         Ok(())
     }
 
@@ -72,8 +71,8 @@ impl Log {
     }
 
     fn run(&self) -> Result<Vec<(CommitObject, Option<String>)>, CommandError> {
-        let mut branches_with_their_last_hash: Vec<(String, String)> = Vec::new(); // branch, hashes
-        let mut commits_map: HashMap<String, (CommitObject, Option<String>)> = HashMap::new(); //hash, (commit, branch)
+        let mut branches_with_their_last_hash: Vec<(String, String)> = Vec::new(); // Vec<(branch, hashes)>
+        let mut commits_map: HashMap<String, (CommitObject, Option<String>)> = HashMap::new(); // HashMap<hash, (commit, branch)>
 
         if self.all {
             push_branch_hashes(&mut branches_with_their_last_hash)?;
@@ -102,7 +101,7 @@ impl Log {
     fn rebuild_commits_tree(
         &self,
         hash_commit: &String,
-        commits_map: &mut HashMap<String, (CommitObject, Option<String>)>,
+        commits_map: &mut HashMap<String, (CommitObject, Option<String>)>, // HashMap<hash, (commit, branch)>
         branch: Option<String>,
     ) -> Result<(), CommandError> {
         if commits_map.contains_key(&hash_commit.to_string()) {
@@ -127,6 +126,7 @@ impl Log {
                 }
             }
         }
+
         if commits_map.contains_key(&hash_commit.to_string()) {
             return Ok(());
         }

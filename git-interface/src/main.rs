@@ -28,7 +28,7 @@ fn main() {
     println!("meli2");
     let commits = git::commands::log::Log::run_for_graph().unwrap();
 
-    let glade_src = include_str!("../../git interface.glade");
+    let glade_src = include_str!("../git interface.glade");
     let builder = gtk::Builder::from_string(glade_src);
     let window: gtk::Window = builder.object("window app").unwrap();
 
@@ -59,7 +59,6 @@ fn main() {
     window.show_all();
 
     gtk::main();
-
 }
 
 fn set_graph(
