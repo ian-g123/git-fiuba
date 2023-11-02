@@ -163,7 +163,7 @@ impl<'a> GitRepository<'a> {
     pub fn hash_object(&mut self, mut object: GitObject, write: bool) -> Result<(), CommandError> {
         let hex_string = u8_vec_to_hex_string(&mut object.get_hash()?);
         if write {
-            self.db()?.write(&mut object)?;
+            self.db()?.write(&mut object, false, &mut self.logger)?;
             self.logger
                 .log(&format!("Writen object to database in {:?}", hex_string));
         }
@@ -275,7 +275,7 @@ impl<'a> GitRepository<'a> {
     ) -> Result<(), CommandError> {
         let blob = Blob::new_from_path(path.to_string())?;
         let mut git_object: GitObject = Box::new(blob);
-        let hex_str = self.db()?.write(&mut git_object)?;
+        let hex_str = self.db()?.write(&mut git_object, false, &mut self.logger)?;
         staging_area.add(path, &hex_str);
         Ok(())
     }
@@ -426,6 +426,7 @@ impl<'a> GitRepository<'a> {
         reuse_commit_info: Option<String>,
         quiet: bool,
     ) -> Result<(), CommandError> {
+        self.log("commit_priv");
         let last_commit_tree = self.get_last_commit_tree()?;
         if !staging_area.has_changes(&self.db()?, &last_commit_tree, &mut self.logger)? {
             self.logger.log("Nothing to commit");
@@ -433,7 +434,7 @@ impl<'a> GitRepository<'a> {
             return Ok(());
         }
 
-        let last_commit_hash = self.get_last_commit()?;
+        let last_commit_hash = self.get_last_commit_hash()?;
 
         let mut parents: Vec<String> = Vec::new();
         if let Some(padre) = last_commit_hash {
@@ -458,8 +459,8 @@ impl<'a> GitRepository<'a> {
         let mut git_object: GitObject = Box::new(commit);
 
         if !dry_run {
-            write_commit_tree_to_database(&self.db()?, &mut staged_tree, &mut self.logger)?;
-            let commit_hash = self.db()?.write(&mut git_object)?;
+            write_commit_tree_to_database(&mut self.db()?, &mut staged_tree, &mut self.logger)?;
+            let commit_hash = self.db()?.write(&mut git_object, false, &mut self.logger)?;
             update_last_commit(&commit_hash)?;
         } else {
             self.status_long_format(true)?;
@@ -529,7 +530,7 @@ impl<'a> GitRepository<'a> {
         parents: Vec<String>,
         staged_tree: Tree,
     ) -> Result<CommitObject, CommandError> {
-        let mut other_commit = self.db()?.read_object(&commit_hash)?;
+        let mut other_commit = self.db()?.read_object(&commit_hash, &mut self.logger)?;
         let hash_commit = other_commit.get_hash()?;
         if let Some((message, author, committer, timestamp, offset)) =
             other_commit.get_info_commit()
@@ -650,7 +651,7 @@ impl<'a> GitRepository<'a> {
             ));
             let mut git_object: GitObject =
                 Box::new(ProtoObject::new(content, len, obj_type.to_string()));
-            self.db()?.write(&mut git_object)?;
+            self.db()?.write(&mut git_object, false, &mut self.logger)?;
         }
 
         self.update_fetch_head(remote_branches, remote_reference)?;
@@ -673,16 +674,10 @@ impl<'a> GitRepository<'a> {
             self.log("Running merge_head");
             commits.push(self.get_fetch_head_branch_commit_hash()?);
         }
-        let merge_commit = match self.get_last_commit()? {
-            Some(last_commit) => self.merge_commits(&last_commit, &commits)?,
-            None => self.merge_fast_forward(&commits)?,
-        };
-        let mut boxed_commit: GitObject = Box::new(merge_commit.clone());
-        let merge_commit_hash_str = self.db()?.write(&mut boxed_commit)?;
-        self.set_head_branch_commit_to(&merge_commit_hash_str)?;
-        let tree = merge_commit.get_tree().to_owned();
-        self.restore(tree)?;
-        Ok(())
+        match self.get_last_commit_hash()? {
+            Some(last_commit) => self.merge_commits(&last_commit, &commits),
+            None => self.merge_fast_forward(&commits),
+        }
     }
 
     /// Obtiene la ruta de la rama actual.
@@ -715,7 +710,7 @@ impl<'a> GitRepository<'a> {
     }
 
     /// Obtiene el hash del Commit HEAD.
-    pub fn get_last_commit(&mut self) -> Result<Option<String>, CommandError> {
+    pub fn get_last_commit_hash(&mut self) -> Result<Option<String>, CommandError> {
         let mut parent = String::new();
         let branch = self.get_head_branch_path()?;
         let branch_path =
@@ -1005,45 +1000,22 @@ impl<'a> GitRepository<'a> {
         Ok(branches)
     }
 
-    fn merge_fast_forward(&mut self, commits: &[String]) -> Result<CommitObject, CommandError> {
+    fn merge_fast_forward(&mut self, commits: &[String]) -> Result<(), CommandError> {
         self.log("Merge fast forward");
         self.set_head_branch_commit_to(&commits[0])?;
-
-        let db = self.db()?;
-        self.log("Database opened");
-        self.log(&format!("Reading commit {}", commits[0]));
-        let mut commit_box = db.read_object(&commits[0])?;
-        self.log("Commit read");
-        let commit = commit_box
-            .as_commit_mut()
-            .ok_or(CommandError::FileReadError(
-                "Error leyendo FETCH_HEAD".to_string(),
+        let tree = self
+            .get_last_commit_tree()?
+            .ok_or(CommandError::FileWriteError(
+                "Error en restore:".to_string(),
             ))?;
-
-        Ok(commit.to_owned())
+        self.restore(tree)?;
+        Ok(())
     }
 
     fn set_head_branch_commit_to(&mut self, commits: &str) -> Result<(), CommandError> {
         let branch = self.get_head_branch_path()?;
-        let branch_path = join_paths!(self.path, ".git", branch).ok_or(
-            CommandError::FileWriteError("Error guardando FETCH_HEAD:".to_string()),
-        )?;
-        let mut file = fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .open(&branch_path)
-            .map_err(|error| {
-                CommandError::FileWriteError(format!(
-                    "Error guardando FETCH_HEAD en {}: {}",
-                    branch_path,
-                    &error.to_string()
-                ))
-            })?;
-        file.write_all(commits.as_bytes()).map_err(|error| {
-            CommandError::FileWriteError(
-                "Error guardando FETCH_HEAD:".to_string() + &error.to_string(),
-            )
-        })?;
+
+        self.write_to_file(&branch, commits)?;
         Ok(())
     }
 
@@ -1102,7 +1074,7 @@ impl<'a> GitRepository<'a> {
                 let path = &entry_name[2..];
                 if !self.is_untracked(path, files)? {
                     let mut git_object: GitObject = Box::new(blob);
-                    let hex_str = self.db()?.write(&mut git_object)?;
+                    let hex_str = self.db()?.write(&mut git_object, false, &mut self.logger)?;
                     staging_area.add(path, &hex_str);
                 }
             }
@@ -1111,25 +1083,32 @@ impl<'a> GitRepository<'a> {
     }
 
     pub fn get_last_commit_tree(&mut self) -> Result<Option<Tree>, CommandError> {
-        let Some(last_commit) = self.get_last_commit()? else {
+        self.log("get_last_commit_tree");
+
+        let Some(last_commit) = self.get_last_commit_hash()? else {
             return Ok(None);
         };
-        self.log(&format!("Last commit : {}", last_commit));
+        self.log(&format!(
+            "Last commit found in get_last_commit_tree : {}",
+            last_commit
+        ));
 
-        let mut commit_box = self.db()?.read_object(&last_commit)?;
+        let mut commit_box = self.db()?.read_object(&last_commit, &mut self.logger)?;
+        self.log("Last commit readed");
         if let Some(commit) = commit_box.as_commit_mut() {
             self.log(&format!(
                 "Last commit content : {}",
-                String::from_utf8_lossy(&commit.content()?)
+                String::from_utf8_lossy(&commit.content(None)?)
             ));
             let tree = commit.get_tree();
 
             self.log(&format!(
                 "tree content : {}",
-                String::from_utf8_lossy(&(tree.to_owned().content()?))
+                String::from_utf8_lossy(&(tree.to_owned().content(None)?))
             ));
             return Ok(Some(tree.to_owned()));
         }
+        self.log("not found commit");
         Ok(None)
     }
 
@@ -1137,7 +1116,7 @@ impl<'a> GitRepository<'a> {
         &mut self,
         last_commit: &str,
         commits: &Vec<String>,
-    ) -> Result<CommitObject, CommandError> {
+    ) -> Result<(), CommandError> {
         self.log("Running merge_commits");
         if commits.len() > 1 {
             return Err(CommandError::MergeMultipleCommits);
@@ -1165,20 +1144,24 @@ impl<'a> GitRepository<'a> {
         commit_head_str: &str,
     ) -> Result<(CommitObject, CommitObject, CommitObject), CommandError> {
         self.log("Get common ansestor inicio");
+        self.log(&format!(
+            "commit_destin_str: {}, commit_head_str: {}",
+            commit_destin_str, commit_head_str
+        ));
 
         let commit_head = self
             .db()?
-            .read_object(&commit_head_str)?
+            .read_object(&commit_head_str, &mut self.logger)?
             .as_commit_mut()
             .ok_or(CommandError::FailedToFindCommonAncestor)?
             .to_owned();
         let commit_destin = self
             .db()?
-            .read_object(commit_destin_str)?
+            .read_object(commit_destin_str, &mut self.logger)?
             .as_commit_mut()
             .ok_or(CommandError::FailedToFindCommonAncestor)?
             .to_owned();
-
+        self.log("Found objects");
         let mut head_branch_commits: HashMap<String, CommitObject> = HashMap::new();
         head_branch_commits.insert(commit_head_str.to_string(), commit_head.clone());
         let mut destin_branch_commits: HashMap<String, CommitObject> = HashMap::new();
@@ -1222,7 +1205,7 @@ impl<'a> GitRepository<'a> {
     }
 
     fn read_row(
-        &self,
+        &mut self,
         branch_tips: &mut Vec<CommitObject>,
         branch_commits: &mut HashMap<String, CommitObject>,
     ) -> Result<(), CommandError> {
@@ -1232,7 +1215,7 @@ impl<'a> GitRepository<'a> {
             for parent_hash in parents_hash {
                 let parent = self
                     .db()?
-                    .read_object(&parent_hash)?
+                    .read_object(&parent_hash, &mut self.logger)?
                     .as_commit_mut()
                     .ok_or(CommandError::FailedToFindCommonAncestor)?
                     .to_owned();
@@ -1251,7 +1234,7 @@ impl<'a> GitRepository<'a> {
         common: &mut CommitObject,
         head: &mut CommitObject,
         destin: &mut CommitObject,
-    ) -> Result<CommitObject, CommandError> {
+    ) -> Result<(), CommandError> {
         let head_name = "HEAD";
         let destin_name: &str = "origin";
         let mut common_tree = common.get_tree().to_owned();
@@ -1263,27 +1246,65 @@ impl<'a> GitRepository<'a> {
             head_tree.get_hash_string().unwrap(),
             destin_tree.get_hash_string().unwrap()
         ));
-        let merged_tree = merge_trees(
+        let (merged_tree, merge_conflicts) = merge_trees(
             &mut head_tree,
             &mut destin_tree,
             &mut common_tree,
             head_name,
             destin_name,
         )?;
-        let mut boxed_tree: GitObject = Box::new(merged_tree.clone());
-        let _merge_tree_hash_str = self.db()?.write(&mut boxed_tree)?;
-        let message = format!(
-            "Merge branch '[todo branch name]' into [todo branch name]",
-            // self.get_current_branch_name()?,
-            // self.get_current_branch_name()?
-        );
-        let merge_commit = self.create_new_commit(
-            message,
-            [head.get_hash_string()?, destin.get_hash_string()?].to_vec(),
-            merged_tree,
-        )?;
+        if merge_conflicts {
+            let mut boxed_tree: GitObject = Box::new(merged_tree.clone());
+            let merge_tree_hash_str = self.db()?.write(&mut boxed_tree, true, &mut self.logger)?;
+            let message = format!(
+                "Merge branch '[todo branch name]' into [todo branch name]",
+                // self.get_current_branch_name()?,
+                // self.get_current_branch_name()?
+            );
+            self.write_to_file(&message, "MERGE_MSG")?;
+            self.write_to_file(&merge_tree_hash_str, "AUTO_MERGE")?;
+            self.write_to_file(&destin.get_hash_string()?, "MERGE_HEAD")?;
 
-        Ok(merge_commit)
+            self.restore(merged_tree)?;
+            Ok(())
+        } else {
+            let mut boxed_tree: GitObject = Box::new(merged_tree.clone());
+            let _merge_tree_hash_str = self.db()?.write(&mut boxed_tree, true, &mut self.logger)?;
+            let message = format!(
+                "Merge branch '[todo branch name]' into [todo branch name]",
+                // self.get_current_branch_name()?,
+                // self.get_current_branch_name()?
+            );
+            let merge_commit = self.create_new_commit(
+                message,
+                [head.get_hash_string()?, destin.get_hash_string()?].to_vec(),
+                merged_tree.clone(),
+            )?;
+
+            let mut boxed_commit: GitObject = Box::new(merge_commit.clone());
+            let merge_commit_hash_str =
+                self.db()?
+                    .write(&mut boxed_commit, false, &mut self.logger)?;
+            self.set_head_branch_commit_to(&merge_commit_hash_str)?;
+            self.restore(merged_tree)?;
+            Ok(())
+        }
+    }
+
+    /// Dado un path, crea el archivo correspondiente y escribe el contenido pasado.
+    fn write_to_file(&self, relative_path: &str, content: &str) -> Result<(), CommandError> {
+        let path_f = join_paths!(self.path, ".git", relative_path).ok_or(
+            CommandError::FileWriteError("Error guardando FETCH_HEAD:".to_string()),
+        )?;
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open(&path_f)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        file.write_all(content.as_bytes())
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+
+        Ok(())
     }
 }
 
@@ -1293,7 +1314,8 @@ fn merge_trees(
     common_tree: &mut Tree,
     head_name: &str,
     destin_name: &str,
-) -> Result<Tree, CommandError> {
+) -> Result<(Tree, bool), CommandError> {
+    let mut found_merge_conflicts = false;
     let mut merged_tree = Tree::new("".to_string());
     let mut head_entries = head_tree.get_objects();
     let mut destin_entries = destin_tree.get_objects();
@@ -1310,26 +1332,25 @@ fn merge_trees(
         let common_entry = common_entries.get_mut(&key);
         match common_entry {
             Some(common_entry) => {
-                merged_tree.add_object(
-                    key,
-                    is_in_common(
-                        head_entry,
-                        destin_entry,
-                        common_entry,
-                        head_name,
-                        destin_name,
-                    )?,
-                );
+                let (merged_object, merge_conflicts) = is_in_common(
+                    head_entry,
+                    destin_entry,
+                    common_entry,
+                    head_name,
+                    destin_name,
+                )?;
+                found_merge_conflicts |= merge_conflicts;
+                merged_tree.add_object(key, merged_object);
             }
             None => {
-                merged_tree.add_object(
-                    key,
-                    is_not_in_common(head_entry, destin_entry, head_name, destin_name)?,
-                );
+                let (object, merge_conflicts) =
+                    is_not_in_common(head_entry, destin_entry, head_name, destin_name)?;
+                found_merge_conflicts |= merge_conflicts;
+                merged_tree.add_object(key, object);
             }
         }
     }
-    Ok(merged_tree)
+    Ok((merged_tree, found_merge_conflicts))
 }
 
 fn is_in_common(
@@ -1338,7 +1359,7 @@ fn is_in_common(
     common_entry: &mut GitObject,
     head_name: &str,
     destin_name: &str,
-) -> Result<GitObject, CommandError> {
+) -> Result<(GitObject, bool), CommandError> {
     match (head_entry, destin_entry) {
         (Some(head_entry), Some(destin_entry)) => {
             match (head_entry.as_mut_tree(), destin_entry.as_mut_tree()) {
@@ -1347,7 +1368,7 @@ fn is_in_common(
                         Some(common_tree) => common_tree.to_owned(),
                         None => Tree::new("".to_string()),
                     };
-                    let merged_subtree = merge_trees(
+                    let (merged_subtree, merge_conflicts) = merge_trees(
                         &mut head_tree,
                         &mut destin_tree,
                         &mut common_tree,
@@ -1355,12 +1376,12 @@ fn is_in_common(
                         destin_name,
                     )?;
                     let boxed_subtree = Box::new(merged_subtree);
-                    return Ok(boxed_subtree);
+                    return Ok((boxed_subtree, merge_conflicts));
                 }
                 (_, _) => match (head_entry.as_mut_blob(), destin_entry.as_mut_blob()) {
                     (Some(head_blob), Some(destin_blob)) => {
                         if head_blob.get_hash_string()? == destin_blob.get_hash_string()? {
-                            return Ok(head_entry.to_owned());
+                            return Ok((head_entry.to_owned(), false));
                         } else {
                             let mut common_blob = match common_entry.as_mut_blob() {
                                 Some(common_blob) => common_blob.to_owned(),
@@ -1373,7 +1394,7 @@ fn is_in_common(
                                 head_name,
                                 destin_name,
                             )?;
-                            return Ok(Box::new(merged_blob.to_owned()));
+                            return Ok((Box::new(merged_blob.to_owned()), merge_conflicts));
                         }
                     }
                     (_, _) => {
@@ -1382,8 +1403,8 @@ fn is_in_common(
                 },
             }
         }
-        (Some(head_entry), None) => return Ok(head_entry.to_owned()),
-        (None, Some(destin_entry)) => return Ok(destin_entry.to_owned()),
+        (Some(head_entry), None) => return Ok((head_entry.to_owned(), false)),
+        (None, Some(destin_entry)) => return Ok((destin_entry.to_owned(), false)),
         (None, None) => {
             return Err(CommandError::MergeConflict("".to_string()));
         }
@@ -1395,13 +1416,13 @@ fn is_not_in_common(
     destin_entry: Option<&mut GitObject>,
     head_name: &str,
     destin_name: &str,
-) -> Result<GitObject, CommandError> {
+) -> Result<(GitObject, bool), CommandError> {
     match (head_entry, destin_entry) {
         (Some(head_entry), Some(destin_entry)) => {
             match (head_entry.as_mut_tree(), destin_entry.as_mut_tree()) {
                 (Some(mut head_tree), Some(mut destin_tree)) => {
                     let mut common_tree = Tree::new("".to_string());
-                    let merged_subtree = merge_trees(
+                    let (merged_subtree, merge_conflicts) = merge_trees(
                         &mut head_tree,
                         &mut destin_tree,
                         &mut common_tree,
@@ -1409,12 +1430,12 @@ fn is_not_in_common(
                         destin_name,
                     )?;
                     let boxed_subtree = Box::new(merged_subtree);
-                    return Ok(boxed_subtree);
+                    return Ok((boxed_subtree, merge_conflicts));
                 }
                 (_, _) => match (head_entry.as_mut_blob(), destin_entry.as_mut_blob()) {
                     (Some(head_blob), Some(destin_blob)) => {
                         if head_blob.get_hash_string()? == destin_blob.get_hash_string()? {
-                            return Ok(head_entry.to_owned());
+                            return Ok((head_entry.to_owned(), false));
                         } else {
                             let mut common_blob = Blob::new_from_content(vec![])?;
                             let (merged_blob, merge_conflicts) = merge_blobs(
@@ -1424,7 +1445,7 @@ fn is_not_in_common(
                                 head_name,
                                 destin_name,
                             )?;
-                            return Ok(Box::new(merged_blob.to_owned()));
+                            return Ok((Box::new(merged_blob.to_owned()), merge_conflicts));
                         }
                     }
                     (_, _) => {
@@ -1433,8 +1454,8 @@ fn is_not_in_common(
                 },
             }
         }
-        (Some(head_entry), None) => return Ok(head_entry.to_owned()),
-        (None, Some(destin_entry)) => return Ok(destin_entry.to_owned()),
+        (Some(head_entry), None) => return Ok((head_entry.to_owned(), false)),
+        (None, Some(destin_entry)) => return Ok((destin_entry.to_owned(), false)),
         (None, None) => {
             return Err(CommandError::MergeConflict("".to_string()));
         }
@@ -1448,9 +1469,9 @@ fn merge_blobs(
     head_name: &str,
     destin_name: &str,
 ) -> Result<(Blob, bool), CommandError> {
-    let head_content = head_blob.content()?;
-    let destin_content = destin_blob.content()?;
-    let common_content = common_blob.content()?;
+    let head_content = head_blob.content(None)?;
+    let destin_content = destin_blob.content(None)?;
+    let common_content = common_blob.content(None)?;
     let head_content_str =
         String::from_utf8(head_content).map_err(|_| CommandError::CastingError)?;
     let destin_content_str =

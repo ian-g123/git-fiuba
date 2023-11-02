@@ -609,4 +609,10 @@ mod test {
             false,
         );
     }
+
+    // #[test]
+    // fn test_extraido_de_clone_integration() {
+    //     "Primera linea modificada en servidor\nSeparador\nTercera linea modificada en servidor\n"
+    //     b"Primera linea\nSeparador\nTercera linea modificada en local\n"
+    // }
 }

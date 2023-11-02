@@ -71,10 +71,10 @@ impl CommitObject {
             "Reading tree hash from database: {}",
             tree_hash_str
         ));
-        let mut tree = db.read_object(&tree_hash_str)?;
+        let mut tree = db.read_object(&tree_hash_str, logger)?;
         logger.log(&format!(
             "tree content en read_from : {}",
-            String::from_utf8_lossy(&(tree.to_owned().content()?))
+            String::from_utf8_lossy(&(tree.to_owned().content(None)?))
         ));
         let Some(tree) = tree.as_tree() else {
             return Err(CommandError::InvalidCommit);
@@ -309,7 +309,7 @@ impl GitObjectTrait for CommitObject {
         todo!()
     }
 
-    fn content(&mut self) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self, db: Option<&mut ObjectsDatabase>) -> Result<Vec<u8>, CommandError> {
         let mut buf: Vec<u8> = Vec::new();
         let mut stream = Cursor::new(&mut buf);
         writeln!(stream, "tree {}", self.tree.get_hash_string()?)
@@ -382,7 +382,7 @@ impl GitObjectTrait for CommitObject {
             return Ok(hash);
         }
         let mut buf: Vec<u8> = Vec::new();
-        self.write_to(&mut buf)?;
+        self.write_to(&mut buf, None)?;
         let hash = get_sha1(&buf);
         self.set_hash(hash);
         Ok(hash)
@@ -434,13 +434,13 @@ fn get_date(line: &mut Vec<&str>) -> Result<DateTime<Local>, CommandError> {
 } */
 
 pub fn write_commit_tree_to_database(
-    db: &ObjectsDatabase,
+    db: &mut ObjectsDatabase,
     tree: &mut Tree,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
     let mut boxed_tree: Box<dyn GitObjectTrait> = Box::new(tree.clone());
 
-    db.write(&mut boxed_tree)?;
+    db.write(&mut boxed_tree, false, logger)?;
     for (_, child) in tree.get_objects().iter_mut() {
         if let Some(child_tree) = child.as_mut_tree() {
             write_commit_tree_to_database(db, child_tree, logger)?;
@@ -511,7 +511,7 @@ mod test {
 
         let mut buf: Vec<u8> = Vec::new();
         let mut writer_stream = Cursor::new(&mut buf);
-        commit.write_to(&mut writer_stream).unwrap();
+        commit.write_to(&mut writer_stream, None).unwrap();
         let mut reader_stream = Cursor::new(&mut buf);
         // let mut fetched_commit = git_object::read_git_object_from(
         //     &mut reader_stream,
@@ -551,7 +551,7 @@ mod test {
 
         let mut buf: Vec<u8> = Vec::new();
         let mut writer_stream = Cursor::new(&mut buf);
-        commit.write_to(&mut writer_stream).unwrap();
+        commit.write_to(&mut writer_stream, None).unwrap();
         let mut output: Vec<u8> = Vec::new();
         let mut output_writer = Cursor::new(&mut output);
         let mut reader_stream = Cursor::new(&mut buf);

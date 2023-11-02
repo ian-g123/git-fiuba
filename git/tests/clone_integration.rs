@@ -39,7 +39,6 @@ fn test_clone() {
     );
 
     let ref_path = path.to_owned() + "/repo/.git/refs/remotes/origin/master";
-    println!("{}", ref_path);
     let commit_hash = fs::read_to_string(ref_path).unwrap();
     compare_files(
         &format!("{}/repo/", path),
@@ -50,7 +49,6 @@ fn test_clone() {
 
     let joined_path =
         join_paths!(path.to_owned(), "repo/testfile").expect("No se pudo unir los paths");
-    println!("joined_path {}", joined_path);
     let mut file = File::open(joined_path).unwrap();
     let mut content = String::new();
     file.read_to_string(&mut content).unwrap();
@@ -83,15 +81,6 @@ fn test_clone() {
         .output()
         .unwrap();
 
-    println!(
-        "Fetch stderr\n{}",
-        String::from_utf8(result.stderr).unwrap()
-    );
-    println!(
-        "Fetch stdout\n{}",
-        String::from_utf8(result.stdout).unwrap()
-    );
-
     let result = Command::new("../".to_owned() + git_bin)
         .arg("merge")
         .current_dir(&format!("{}/repo/", path))
@@ -116,15 +105,6 @@ fn test_clone() {
         .output()
         .unwrap();
 
-    println!(
-        "Fetch stderr\n{}",
-        String::from_utf8(result.stderr).unwrap()
-    );
-    println!(
-        "Fetch stdout\n{}",
-        String::from_utf8(result.stdout).unwrap()
-    );
-
     let result = Command::new("../".to_owned() + git_bin)
         .arg("merge")
         .current_dir(&format!("{}/repo/", path))
@@ -139,24 +119,13 @@ fn test_clone() {
         "Primera linea modificada en servidor\nSeparador\nTercera linea modificada en local\n"
     );
 
-    panic!("Pausa");
-
-    modify_file_and_commit_in_both_repos(&path);
+    modify_file_and_commit_in_both_repos_overlaping_changes(&path);
 
     let result = Command::new("../".to_owned() + git_bin)
         .arg("fetch")
         .current_dir(&format!("{}/repo/", path))
         .output()
         .unwrap();
-
-    println!(
-        "Fetch stderr\n{}",
-        String::from_utf8(result.stderr).unwrap()
-    );
-    println!(
-        "Fetch stdout\n{}",
-        String::from_utf8(result.stdout).unwrap()
-    );
 
     let result = Command::new("../".to_owned() + git_bin)
         .arg("merge")
@@ -171,10 +140,8 @@ fn test_clone() {
     file.read_to_string(&mut content).unwrap();
     assert_eq!(
         content,
-        "Primera linea modificada en servidor\nSeparador\n<<<<<<< HEAD\nTercera linea modificada en local\n=======\nTercera linea modificada en servidor\n>>>>>>> master\n"
+        "Primera linea modificada en servidor de nuevo\nSeparador\n<<<<<<< HEAD\nTercera linea modificada en local\n=======\nTercera linea modificada en servidor\n>>>>>>> origin\n"
     );
-
-    panic!("Pausa");
 
     _ = fs::remove_dir_all(format!("{}", path));
 }
@@ -198,7 +165,7 @@ fn modify_file_and_commit_in_both_repos_none_overlaping_lines(path: &str) {
         Command::new("git")
             .arg("commit")
             .arg("-m")
-            .arg("modificacionservidor")
+            .arg("modificacion_servidor_not_overlaping")
             .current_dir(path.to_owned() + "/server-files/repo")
             .status()
             .is_ok(),
@@ -222,7 +189,7 @@ fn modify_file_and_commit_in_both_repos_none_overlaping_lines(path: &str) {
     let result = Command::new("../../../../../../../target/debug/git")
         .arg("commit")
         .arg("-m")
-        .arg("modificacionlocal")
+        .arg("modificacion_local_not_overlaping")
         .current_dir(path.to_owned() + "/repo")
         .output()
         .unwrap();
@@ -231,10 +198,10 @@ fn modify_file_and_commit_in_both_repos_none_overlaping_lines(path: &str) {
     println!("{}", String::from_utf8(result.stdout).unwrap());
 }
 
-fn modify_file_and_commit_in_both_repos(path: &str) {
+fn modify_file_and_commit_in_both_repos_overlaping_changes(path: &str) {
     let mut file = File::create(path.to_owned() + "/server-files/repo/testfile").unwrap();
     file.write_all(
-        b"Primera linea modificada en servidor\nSeparador\nTercera linea modificada en servidor\n",
+        b"Primera linea modificada en servidor de nuevo\nSeparador\nTercera linea modificada en servidor\n",
     )
     .unwrap();
 
@@ -252,7 +219,7 @@ fn modify_file_and_commit_in_both_repos(path: &str) {
         Command::new("git")
             .arg("commit")
             .arg("-m")
-            .arg("modificacionservidor")
+            .arg("modificacion_servidor_overlaping")
             .current_dir(path.to_owned() + "/server-files/repo")
             .status()
             .is_ok(),
@@ -260,8 +227,10 @@ fn modify_file_and_commit_in_both_repos(path: &str) {
     );
 
     let mut file = File::create(path.to_owned() + "/repo/testfile").unwrap();
-    file.write_all(b"Primera linea\nSeparador\nTercera linea modificada en local\n")
-        .unwrap();
+    file.write_all(
+        b"Primera linea modificada en servidor\nSeparador\nTercera linea modificada en local\n",
+    )
+    .unwrap();
 
     assert!(
         Command::new("../../../../../../../target/debug/git")
@@ -276,13 +245,10 @@ fn modify_file_and_commit_in_both_repos(path: &str) {
     let result = Command::new("../../../../../../../target/debug/git")
         .arg("commit")
         .arg("-m")
-        .arg("modificacionlocal")
+        .arg("modificacion_local_overlaping")
         .current_dir(path.to_owned() + "/repo")
         .output()
         .unwrap();
-
-    println!("{}", String::from_utf8(result.stderr).unwrap());
-    println!("{}", String::from_utf8(result.stdout).unwrap());
 }
 
 fn modify_file_and_commit_in_both_repos_not_overlaping(path: &str) {
@@ -303,7 +269,7 @@ fn modify_file_and_commit_in_both_repos_not_overlaping(path: &str) {
         Command::new("git")
             .arg("commit")
             .arg("-m")
-            .arg("modificacionservidornooverlaping")
+            .arg("modificacion_servidor_no_overlaping_files")
             .current_dir(path.to_owned() + "/server-files/repo")
             .status()
             .is_ok(),
@@ -326,7 +292,7 @@ fn modify_file_and_commit_in_both_repos_not_overlaping(path: &str) {
     let result = Command::new("../../../../../../../target/debug/git")
         .arg("commit")
         .arg("-m")
-        .arg("modificacionlocalnooverlaping")
+        .arg("modificacion_local_no_overlaping_files")
         .current_dir(path.to_owned() + "/repo")
         .output()
         .unwrap();

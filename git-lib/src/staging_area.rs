@@ -250,7 +250,7 @@ impl StagingArea {
                 if let Some(mut tree) = last_commit_tree.clone() {
                     logger.log(&format!(
                         "Last commit tree : {}",
-                        String::from_utf8_lossy(&tree.content()?)
+                        String::from_utf8_lossy(&tree.content(None)?)
                     ));
                     let (has_hash, name) = tree.has_blob_from_hash(hash, logger)?;
                     logger.log(&format!(

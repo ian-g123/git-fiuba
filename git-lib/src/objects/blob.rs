@@ -6,6 +6,7 @@ use std::{
 
 use crate::{
     command_errors::CommandError,
+    objects_database::ObjectsDatabase,
     utils::{
         aux::get_name,
         super_string::{u8_vec_to_hex_string, SuperStrings},
@@ -188,7 +189,7 @@ impl GitObjectTrait for Blob {
         "blob".to_string()
     }
 
-    fn content(&mut self) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self, db: Option<&mut ObjectsDatabase>) -> Result<Vec<u8>, CommandError> {
         if let Some(content) = &self.content {
             return Ok(content.to_owned());
         }
@@ -210,7 +211,7 @@ impl GitObjectTrait for Blob {
 
     fn to_string_priv(&mut self) -> String {
         //map content to utf8
-        let Ok(content) = self.content() else {
+        let Ok(content) = self.content(None) else {
             return "Error convirtiendo a utf8".to_string();
         };
         let Ok(string) = String::from_utf8(content.clone()) else {
@@ -225,7 +226,7 @@ impl GitObjectTrait for Blob {
             return Ok(hash);
         }
         let mut buf: Vec<u8> = Vec::new();
-        self.write_to(&mut buf)?;
+        self.write_to(&mut buf, None)?;
         let hash = get_sha1(&buf);
         self.set_hash(hash);
         Ok(hash)
@@ -243,7 +244,7 @@ impl GitObjectTrait for Blob {
                 error.to_string()
             ))
         })?;
-        let content = self.content()?;
+        let content = self.content(None)?;
         logger.log(&format!(
             "Writing in {} the following content:\n{}",
             path,

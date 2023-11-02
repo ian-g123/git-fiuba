@@ -280,7 +280,7 @@ impl ChangesController {
 
 /// Devuelve true si el contenido del objeto y el path pasados difieren.
 fn content_differs(path: &str, object: &mut GitObject) -> Result<bool, CommandError> {
-    let staged_content: String = String::from_utf8(object.content()?)
+    let staged_content: String = String::from_utf8(object.content(None)?)
         .map_err(|error| CommandError::FileReadError(error.to_string()))?;
 
     let Ok(mut current_file) = File::open(path) else {

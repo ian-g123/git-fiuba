@@ -211,7 +211,7 @@ impl Tree {
                 .map_err(|_| CommandError::ObjectHashNotKnown)?;
             let hash_str = u8_vec_to_hex_string(&hash);
 
-            let object = db.read_object(&hash_str)?;
+            let object = db.read_object(&hash_str, logger)?;
             objects.insert(name, object);
         }
         Ok(Box::new(Self {
@@ -327,17 +327,29 @@ impl GitObjectTrait for Tree {
         "tree".to_string()
     }
 
-    fn content(&mut self) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self, db: Option<&mut ObjectsDatabase>) -> Result<Vec<u8>, CommandError> {
         let mut sorted_objects = self.sort_objects();
         let mut content = Vec::new();
-        for (name_object, object) in sorted_objects.iter_mut() {
-            let mode = &object.mode();
-            let mode_id = mode.get_id_mode();
-            // println!("{} {}", mode_id, name_object);
-            write!(content, "{} {}\0", mode_id, name_object)
-                .map_err(|err| CommandError::FileWriteError(format!("{err}")))?;
-            let hash = object.get_hash()?;
-            content.extend_from_slice(&hash);
+
+        if let Some(db) = db {
+            for (name_object, object) in sorted_objects.iter_mut() {
+                let mode = &object.mode();
+                let mode_id = mode.get_id_mode();
+                write!(content, "{} {}\0", mode_id, name_object)
+                    .map_err(|err| CommandError::FileWriteError(format!("{err}")))?;
+                let hash_str = db.write(object, true, &mut Logger::new_dummy())?;
+                let hash = hex_string_to_u8_vec(&hash_str);
+                content.extend_from_slice(&hash);
+            }
+        } else {
+            for (name_object, object) in sorted_objects.iter_mut() {
+                let mode = &object.mode();
+                let mode_id = mode.get_id_mode();
+                write!(content, "{} {}\0", mode_id, name_object)
+                    .map_err(|err| CommandError::FileWriteError(format!("{err}")))?;
+                let hash = object.get_hash()?;
+                content.extend_from_slice(&hash);
+            }
         }
 
         Ok(content)
@@ -381,7 +393,7 @@ impl GitObjectTrait for Tree {
             return Ok(hash);
         }
         let mut buf: Vec<u8> = Vec::new();
-        self.write_to(&mut buf)?;
+        self.write_to(&mut buf, None)?;
         let hash = get_sha1(&buf);
         self.set_hash(hash);
         Ok(hash)
@@ -590,7 +602,7 @@ mod test_write_y_display {
 
         let mut content = Vec::new();
         let mut writer_stream = Cursor::new(&mut content);
-        tree.write_to(&mut writer_stream).unwrap();
+        tree.write_to(&mut writer_stream, None).unwrap();
         assert!(!content.is_empty());
 
         let mut reader_stream = Cursor::new(&mut content);
@@ -625,7 +637,7 @@ mod test_write_y_display {
 
         let mut content = Vec::new();
         let mut writer_stream = Cursor::new(&mut content);
-        tree.write_to(&mut writer_stream).unwrap();
+        tree.write_to(&mut writer_stream, None).unwrap();
 
         writer_stream.seek(SeekFrom::Start(0)).unwrap();
 

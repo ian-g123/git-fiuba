@@ -26,8 +26,12 @@ pub trait GitObjectTrait {
 
     fn clone_object(&self) -> GitObject;
 
-    fn write_to(&mut self, stream: &mut dyn std::io::Write) -> Result<(), CommandError> {
-        let content = self.content()?;
+    fn write_to(
+        &mut self,
+        stream: &mut dyn std::io::Write,
+        db: Option<&mut ObjectsDatabase>,
+    ) -> Result<(), CommandError> {
+        let content = self.content(db)?;
         let type_str = self.type_str();
         write_to_stream_from_content(stream, content, type_str)
 
@@ -62,11 +66,11 @@ pub trait GitObjectTrait {
     fn mode(&self) -> Mode;
 
     /// Devuelve el contenido del objeto
-    fn content(&mut self) -> Result<Vec<u8>, CommandError>;
+    fn content(&mut self, db: Option<&mut ObjectsDatabase>) -> Result<Vec<u8>, CommandError>;
 
     /// Devuelve el tamaño del objeto en bytes
-    fn size(&mut self) -> Result<usize, CommandError> {
-        let content = self.content()?;
+    fn size(&mut self, db: Option<&mut ObjectsDatabase>) -> Result<usize, CommandError> {
+        let content = self.content(db)?;
         Ok(content.len())
     }
 
@@ -107,7 +111,7 @@ pub fn display_from_hash(
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (_, content) = db.read_file(hash)?;
+    let (_, content) = db.read_file(hash, logger)?;
 
     let mut stream = std::io::Cursor::new(content);
     display_from_stream(&mut stream, logger, output)
@@ -137,7 +141,7 @@ pub fn display_type_from_hash(
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (_, content) = db.read_file(hash)?;
+    let (_, content) = db.read_file(hash, logger)?;
     let mut stream = std::io::Cursor::new(content);
     let (type_str, _) = get_type_and_len(&mut stream)?;
     writeln!(output, "{}", type_str)
@@ -151,7 +155,7 @@ pub fn display_size_from_hash(
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (_, content) = db.read_file(hash)?;
+    let (_, content) = db.read_file(hash, logger)?;
     let mut stream = std::io::Cursor::new(content);
     let (_, len) = get_type_and_len(&mut stream)?;
     writeln!(output, "{}", len).map_err(|error| CommandError::FileWriteError(error.to_string()))?;
