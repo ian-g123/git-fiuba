@@ -155,7 +155,7 @@ fn push_branch_hashes(
 
 /// Obtiene el hash del commit al que apunta la rama actual en la que se encuentra el usuario
 fn get_commit_hash(refs_branch_name: &String) -> Result<String, CommandError> {
-    let path_to_heads = ".git_pruebas/";
+    let path_to_heads = ".git/";
     let path_to_branch = format!("{}/{}", path_to_heads, refs_branch_name);
 
     let mut file = File::open(&path_to_branch).map_err(|_| {
