@@ -683,6 +683,51 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    pub fn push(&mut self) -> Result<(), CommandError> {
+        self.log("pushing updates");
+        let (address, repository_path, repository_url) = self.get_remote_info()?;
+
+        self.log(&format!(
+            "Address: {}, repository_path: {}, repository_url: {}",
+            address, repository_path, repository_url
+        ));
+        let mut server = GitServer::connect_to(&address)?;
+
+        let ref_and_hash = self.push2(&mut server, &repository_path, &repository_url)?;
+
+        // self.exists_in_db(&ref_and_hash)?;
+
+        Ok(())
+    }
+
+    /// Obtenemos todas las referencias con los hashes donde apuntan cada una del servidor.\
+    /// Devuelve un HashMap con el formato: `{nombre_branch: hash_commit}`.
+    fn push2(
+        &mut self,
+        server: &mut GitServer,
+        repository_path: &str,
+        repository_url: &str,
+    ) -> Result<HashMap<String, String>, CommandError> {
+        self.log("Updating remote branches");
+
+        let ref_and_hash = server
+            .explore_repository_receive(&("/".to_owned() + repository_path), repository_url)?;
+
+        self.log(&format!("branch_remote_refs: {:?}\n", ref_and_hash));
+
+        Ok(ref_and_hash)
+    }
+
+    // fn exists_in_db(&mut self, ref_and_hash: &HashMap<String, String>) -> Result<(), CommandError> {
+    //     let db = self.db()?;
+    //     for (ref_name, hash) in ref_and_hash {
+    //         if !db.exists(hash) {
+    //             return Err(CommandError::ObjectNotFound(ref_name.to_string()));
+    //         }
+    //     }
+    //     Ok(())
+    // }
+
     pub fn merge(&mut self, commits: &Vec<String>) -> Result<(), CommandError> {
         let mut commits = commits.clone();
         // if commits.is_empty() || (commits.len() == 1 && commits[0] == "FETCH_HEAD") {

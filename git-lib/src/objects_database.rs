@@ -4,6 +4,8 @@ use std::{
     io::{Cursor, Read, Write},
 };
 
+use sha1::digest::block_buffer::Error;
+
 use crate::{
     join_paths,
     logger::Logger,

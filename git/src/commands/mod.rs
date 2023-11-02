@@ -7,4 +7,5 @@ pub mod fetch;
 pub mod hash_object;
 pub mod init;
 pub mod merge;
+pub mod push;
 pub mod status;
