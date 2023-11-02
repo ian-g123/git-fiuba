@@ -3,4 +3,4 @@
 /target/
 /.vscode/
 git/target/
-.git_pruebas
+/git/tests/commands/data/log/.git_pruebas
