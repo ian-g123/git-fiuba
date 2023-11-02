@@ -8,3 +8,4 @@ pub mod hash_object;
 pub mod init;
 pub mod merge;
 pub mod status;
+pub mod push;

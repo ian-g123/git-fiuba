@@ -200,6 +200,52 @@ impl GitServer {
         let object_number = u32::from_be_bytes(object_number_buf);
         Ok(object_number)
     }
+
+    /// explora el repositorio remoto y devuelve el hash del commit del branch head
+    /// y un hashmap con: hash del commit -> nombre de la referencia
+    pub fn explore_repository_receive_pack(
+        &mut self,
+        repository_path: &str,
+        host: &str,
+    ) -> Result<(String, HashMap<String, String>), CommandError> {
+        
+        
+        let line = format!(
+            "git-receive-pack {}\0host={}\0\0version=1\0\n",
+            repository_path, host
+        );
+        
+        println!("repositoryyyy path {}", repository_path);
+        println!("repositoryyyy host {}", host);
+        println!("HHHHHHHHHHHHHHHH");
+        
+        let mut lines = self.send(&line)?;
+        for line in &lines {
+            println!("{}\n\n\n", line);
+        }
+
+        panic!();
+
+        let first_line = lines.remove(0);
+        if first_line != "version 1\n" {
+            return Err(CommandError::ErrorReadingPkt);
+        }
+
+        let head_branch_line = lines.remove(0);
+        let Some((head_branch_commit, _)) = head_branch_line.split_once(' ') else {
+            return Err(CommandError::ErrorReadingPkt);
+        };
+        let mut refs = HashMap::<String, String>::new();
+        for line in lines {
+            // logger.log(&format!("Line: {}", line));
+            let (hash, ref_name) = line
+                .split_once(' ')
+                .ok_or(CommandError::ErrorReadingPkt)
+                .map(|(sha1, ref_name)| (sha1.trim().to_string(), ref_name.trim().to_string()))?;
+            refs.insert(hash, ref_name);
+        }
+        Ok((head_branch_commit.to_string(), refs))
+    }
 }
 
 fn read_object_header_from_packfile(

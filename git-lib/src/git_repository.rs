@@ -596,6 +596,7 @@ impl<'a> GitRepository<'a> {
 
     pub fn update_remote(&self, url: String) -> Result<(), CommandError> {
         let mut config = self.open_config()?;
+        println!("url: {}", url);
         config.insert("remote \"origin\"", "url", &url);
         config.save()?;
         Ok(())
@@ -681,6 +682,45 @@ impl<'a> GitRepository<'a> {
         self.fetch()?;
         self.merge(&Vec::new())?;
         Ok(())
+    }
+
+    pub fn push(&mut self) -> Result<(), CommandError> {
+        self.log("Fetching updates");
+        let (address, repository_path, repository_url) = self.get_remote_info()?;
+        self.log(&format!(
+            "Address: {}, repository_path: {}, repository_url: {}",
+            address, repository_path, repository_url
+        ));
+        let mut server = GitServer::connect_to(&address)?;
+
+        let remote_branches = self.push2(&mut server, &repository_path, &repository_url)?;
+        let remote_reference = format!("{}:{}", address, repository_path);
+        self.fetch_and_save_objects(&mut server, &remote_reference, remote_branches)?;
+        Ok(())
+    }
+
+    /// Actualiza todas las branches de la carpeta remotes con los hashes de los commits
+    /// obtenidos del servidor.
+    fn push2(
+        &mut self,
+        server: &mut GitServer,
+        repository_path: &str,
+        repository_url: &str,
+    ) -> Result<(HashMap<String, String>), CommandError> {
+        self.log("Updating remote branches");
+        let (_head_branch, branch_remote_refs) = server
+            .explore_repository_receive_pack(&("/".to_owned() + repository_path), repository_url)?;
+        self.log(&format!("branch_remote_refs: {:?}", branch_remote_refs));
+
+        let mut remote_branches = HashMap::<String, String>::new();
+
+        for (hash, mut branch_name) in branch_remote_refs {
+            branch_name.replace_range(0..11, "");
+            self.update_ref(&hash, &branch_name)?;
+            remote_branches.insert(branch_name, hash);
+        }
+
+        Ok(remote_branches)
     }
 
     pub fn merge(&mut self, commits: &Vec<String>) -> Result<(), CommandError> {

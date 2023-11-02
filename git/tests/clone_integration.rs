@@ -26,7 +26,7 @@ fn test_clone() {
         .output()
         .unwrap();
 
-    println!("hhhhhhhhhhhhhh\n\n{}", String::from_utf8(result.stdout).unwrap());
+    println!("{}", String::from_utf8(result.stdout).unwrap());
 
     compare_files(
         &format!("{}/repo/", path),
@@ -169,6 +169,30 @@ fn create_base_scene(path: &str) {
             .arg("commit")
             .arg("-m")
             .arg("hi")
+            .current_dir(path.to_owned() + "/server-files/repo")
+            .status()
+            .is_ok(),
+        "No se pudo hacer commit"
+    );
+
+    let mut file = File::create(path.to_owned() + "/server-files/repo/testfile2").unwrap();
+    file.write_all(b"contenido\n").unwrap();
+
+    assert!(
+        Command::new("git")
+            .arg("add")
+            .arg("testfile2")
+            .current_dir(path.to_owned() + "/server-files/repo")
+            .status()
+            .is_ok(),
+        "No se pudo agregar el archivo testfile"
+    );
+
+    assert!(
+        Command::new("git")
+            .arg("commit")
+            .arg("-m")
+            .arg("hi2")
             .current_dir(path.to_owned() + "/server-files/repo")
             .status()
             .is_ok(),
