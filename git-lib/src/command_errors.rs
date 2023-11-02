@@ -106,6 +106,12 @@ pub enum CommandError {
     MergeMultipleCommits,
     /// Merge conflict
     MergeConflict(String),
+    /// You can only use merge with one option --continue | --abort | --quit
+    MergeOneOperation,
+    /// There is no merge to continue, abort or quit
+    NoMergeFound,
+    /// Couldn't continue with automerge
+    FailedToResumeMerge,
 }
 
 impl Error for CommandError {}
@@ -274,6 +280,18 @@ impl fmt::Display for CommandError {
             }
             CommandError::MergeConflict(explanation) => {
                 write!(f, "Merge conflict! Error: {}", explanation)
+            }
+            CommandError::MergeOneOperation => {
+                write!(
+                    f,
+                    "You can only use merge with one option --continue | --abort | --quit"
+                )
+            }
+            CommandError::NoMergeFound => {
+                write!(f, "There is no merge to continue, abort or quit")
+            }
+            CommandError::FailedToResumeMerge => {
+                write!(f, "Couldn't continue with automerge")
             }
         }
     }

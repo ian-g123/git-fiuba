@@ -143,6 +143,17 @@ fn test_clone() {
         "Primera linea modificada en servidor de nuevo\nSeparador\n<<<<<<< HEAD\nTercera linea modificada en local\n=======\nTercera linea modificada en servidor\n>>>>>>> origin\n"
     );
 
+    let result = Command::new("../".to_owned() + git_bin)
+        .arg("merge")
+        .arg("--continue")
+        .current_dir(&format!("{}/repo/", path))
+        .output()
+        .unwrap();
+
+    println!("{}", String::from_utf8(result.stderr).unwrap());
+    println!("{}", String::from_utf8(result.stdout).unwrap());
+
+    panic!("Pausa");
     _ = fs::remove_dir_all(format!("{}", path));
 }
 

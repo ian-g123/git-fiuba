@@ -1261,9 +1261,9 @@ impl<'a> GitRepository<'a> {
                 // self.get_current_branch_name()?,
                 // self.get_current_branch_name()?
             );
-            self.write_to_file(&message, "MERGE_MSG")?;
-            self.write_to_file(&merge_tree_hash_str, "AUTO_MERGE")?;
-            self.write_to_file(&destin.get_hash_string()?, "MERGE_HEAD")?;
+            self.write_to_file("MERGE_MSG", &message)?;
+            self.write_to_file("AUTO_MERGE", &merge_tree_hash_str)?;
+            self.write_to_file("MERGE_HEAD", &destin.get_hash_string()?)?;
 
             self.restore(merged_tree)?;
             Ok(())
@@ -1304,6 +1304,71 @@ impl<'a> GitRepository<'a> {
         file.write_all(content.as_bytes())
             .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
 
+        Ok(())
+    }
+
+    /// Tries to continue from failed merged
+    pub fn merge_continue(&mut self) -> Result<(), CommandError> {
+        let (message, merge_tree_hash_str, destin) = self.get_failed_merge_info()?;
+        let get_last_commit_hash = self
+            .get_last_commit_hash()?
+            .ok_or(CommandError::FailedToResumeMerge)?;
+        let parents = [get_last_commit_hash, destin].to_vec();
+        let merge_tree = self
+            .db()?
+            .read_object(&merge_tree_hash_str, &mut self.logger)?
+            .as_mut_tree()
+            .ok_or(CommandError::FailedToResumeMerge)?
+            .to_owned();
+        let merge_commit = self.create_new_commit(message, parents, merge_tree.clone())?;
+        let mut boxed_commit: GitObject = Box::new(merge_commit.clone());
+        let merge_commit_hash_str = self
+            .db()?
+            .write(&mut boxed_commit, false, &mut self.logger)?;
+        self.set_head_branch_commit_to(&merge_commit_hash_str)?;
+        self.restore(merge_tree)?;
+        self.delete_file("MERGE_MSG")?;
+        self.delete_file("AUTO_MERGE")?;
+        self.delete_file("MERGE_HEAD")?;
+        Ok(())
+    }
+
+    fn get_failed_merge_info(&mut self) -> Result<(String, String, String), CommandError> {
+        let (Ok(message), Ok(merge_tree_hash_str), Ok(destin)) = (
+            self.read_file("MERGE_MSG"),
+            self.read_file("AUTO_MERGE"),
+            self.read_file("MERGE_HEAD"),
+        ) else {
+            return Err(CommandError::NoMergeFound);
+        };
+
+        Ok((message, merge_tree_hash_str, destin))
+    }
+
+    fn read_file(&self, relative_path: &str) -> Result<String, CommandError> {
+        let path = join_paths!(self.path, ".git", relative_path).ok_or(
+            CommandError::FileWriteError("Error guardando FETCH_HEAD:".to_string()),
+        )?;
+        let mut file = fs::OpenOptions::new()
+            .read(true)
+            .open(&path)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        let mut content = String::new();
+        file.read_to_string(&mut content)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        Ok(content)
+    }
+
+    fn delete_file(&self, relative_path: &str) -> Result<(), CommandError> {
+        let path =
+            join_paths!(self.path, ".git", relative_path).ok_or(CommandError::JoiningPaths)?;
+        fs::remove_file(path).map_err(|error| {
+            CommandError::FileWriteError(format!(
+                "Error borrando archivo {}: {}",
+                relative_path,
+                error.to_string()
+            ))
+        })?;
         Ok(())
     }
 }
