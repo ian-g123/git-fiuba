@@ -20,12 +20,12 @@ const GRAPH_COLORS: [(f64, f64, f64); 10] = [
 ];
 
 fn main() {
-    println!("meli");
+
     if gtk::init().is_err() {
         println!("Failed to initialize GTK.");
         return;
     }
-    println!("meli2");
+
     // let commits = git::commands::log::Log::run_for_graph().unwrap();
 
     let glade_src = include_str!("../git interface.glade");
@@ -33,7 +33,7 @@ fn main() {
     let window: gtk::Window = builder.object("window app").unwrap();
 
     set_buttons();
-    println!("meli3");
+  
     let stagin_changes_list: gtk::ListBox = builder.object("lista_staging_changes").unwrap();
 
     let drawing_area: gtk::DrawingArea = builder.object("drawing_area").unwrap();

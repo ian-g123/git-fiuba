@@ -94,6 +94,7 @@ impl Log {
                 Some(branch_with_commit.0),
                 self.all,
                 &None,
+                false,
             )?;
         }
 

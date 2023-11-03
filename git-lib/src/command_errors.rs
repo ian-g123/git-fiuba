@@ -102,6 +102,8 @@ pub enum CommandError {
     /// Error al intentar unir paths
     JoiningPaths,
     FailedToFindCommonAncestor,
+    /// Ocurre un error al encontrar las ramas de los commits en push
+    PushBranchesError,
 }
 
 impl Error for CommandError {}
@@ -264,6 +266,9 @@ impl fmt::Display for CommandError {
             }
             CommandError::FailedToFindCommonAncestor => {
                 write!(f, "No se pudo encontrar un ancestro común.")
+            }
+            CommandError::PushBranchesError => {
+                write!(f, "Ocurre un error al encontrar las ramas de los commits en push")
             }
         }
     }

@@ -6,6 +6,7 @@ use std::{
 use git_lib::{
     command_errors::CommandError,
     git_repository::{push_branch_hashes, GitRepository},
+    objects::commit_object::CommitObject,
     objects_database::get_last_commit_hash_branch,
 };
 
@@ -14,7 +15,7 @@ use super::command::{Command, ConfigAdderFunction};
 /// Commando Clone
 pub struct Push {
     all: bool,
-    remote: String,
+    // remote: String,
     branch: String,
 }
 
@@ -40,11 +41,13 @@ impl Command for Push {
 
 impl Push {
     fn new(args: &[String], output: &mut dyn Write) -> Result<Push, CommandError> {
-        if args.len() > 2 {
+        if args.len() > 1 {
             return Err(CommandError::InvalidArguments);
         }
         let mut push = Push::new_default(output)?;
-        push.config(args)?;
+        if args.len() == 1 {
+            push.config(args)?;
+        }
         Ok(push)
     }
 
@@ -54,20 +57,17 @@ impl Push {
 
         Ok(Push {
             all: false,
-            remote: "origin".to_string(),
+            // remote: "origin".to_string(),
             branch: current_branch,
         })
     }
 
     fn add_all_config(push: &mut Push, i: usize, args: &[String]) -> Result<usize, CommandError> {
         if args[i] == "--all" {
-            if args.len() > 1 {
-                return Err(CommandError::InvalidArguments);
-            }
             push.all = true;
             Ok(i + 1)
         } else {
-            Ok(i)
+            Err(CommandError::InvalidArguments)
         }
     }
 
@@ -82,7 +82,18 @@ impl Push {
             local_branches.push((self.branch.to_owned(), hash_commit));
         }
 
-        let hash_analysis = repo.push_analysis(local_branches)?;
+        let (hash_branch_status, commits_map) = repo.push_analysis(local_branches)?;
+
+        // if hash_branch_status.is_empty() {
+        //     self.log("Everything up-to-date");
+        //     self.output
+        //         .write_all(b"Everything up-to-date")
+        //         .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        //     return Ok(());
+        // }
+
+        // make_packfile_for_push(hash_branch_status, commits_branch)?;
+
         Ok(())
     }
 }

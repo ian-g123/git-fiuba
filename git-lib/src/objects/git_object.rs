@@ -175,7 +175,7 @@ pub fn read_git_object_from(
         return Tree::read_from(db, stream, len, path, hash_str, logger);
     };
     if type_str == "commit" {
-        return CommitObject::read_from(db, stream, logger);
+        return CommitObject::read_from(db, stream, logger, true, None);
     };
 
     Err(CommandError::ObjectTypeError)

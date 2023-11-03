@@ -109,13 +109,6 @@ impl GitServer {
         Ok(())
     }
 
-    // fn write_to_socket(&mut self, message: &[u8]) -> Result<(), CommandError> {
-    //     self.socket
-    //         .write_all(message)
-    //         .map_err(|error| CommandError::SendingMessage(error.to_string()))?;
-    //     Ok(())
-    // }
-
     fn write_in_tpk_to_socket(&mut self, line: &str) -> Result<(), CommandError> {
         let line = line.to_string().to_pkt_format();
         self.write_string_to_socket(&line)
@@ -226,6 +219,17 @@ impl GitServer {
         }
 
         Ok(refs_hash)
+    }
+
+    pub fn comunicate_with_server(
+        &mut self,
+        hash_branch_status: HashMap<String, (String, String)>, // HashMap<branch, (nuevo_hash, viejo_hash)>
+    ) {
+        for (branch, (new_hash, old_hash)) in hash_branch_status {
+            let line = format!("{} {} refs/heads/{}\n", new_hash, old_hash, branch);
+            self.write_in_tpk_to_socket(&line).unwrap();
+        }
+        self.write_string_to_socket("0000").unwrap();
     }
 }
 

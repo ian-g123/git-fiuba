@@ -20,7 +20,7 @@ use super::{
 #[derive(Clone)]
 pub struct Tree {
     path: String,
-    objects: HashMap<String, GitObject>,
+    objects: HashMap<String, GitObject>, // HashMap<name_object, object>
     hash: Option<[u8; 20]>,
 }
 
