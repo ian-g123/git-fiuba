@@ -102,6 +102,20 @@ pub enum CommandError {
     /// Error al intentar unir paths
     JoiningPaths,
     FailedToFindCommonAncestor,
+    /// Octopus merge not supported
+    MergeMultipleCommits,
+    /// Merge conflict
+    MergeConflict(String),
+    /// You can only use merge with one option --continue | --abort | --quit
+    MergeOneOperation,
+    /// There is no merge to continue, abort or quit
+    NoMergeFound,
+    /// Couldn't continue with automerge
+    FailedToResumeMerge,
+    /// error: Committing is not possible because you have unmerged files.
+    UnmergedFiles,
+    /// There cannot be a file and a folder with the same name
+    CannotHaveFileAndFolderWithSameName(String),
 }
 
 impl Error for CommandError {}
@@ -264,6 +278,34 @@ impl fmt::Display for CommandError {
             }
             CommandError::FailedToFindCommonAncestor => {
                 write!(f, "No se pudo encontrar un ancestro común.")
+            }
+            CommandError::MergeMultipleCommits => {
+                write!(f, "Octopus merge not supported")
+            }
+            CommandError::MergeConflict(explanation) => {
+                write!(f, "Merge conflict! Error: {}", explanation)
+            }
+            CommandError::MergeOneOperation => {
+                write!(
+                    f,
+                    "You can only use merge with one option --continue | --abort | --quit"
+                )
+            }
+            CommandError::NoMergeFound => {
+                write!(f, "There is no merge to continue, abort or quit")
+            }
+            CommandError::FailedToResumeMerge => {
+                write!(f, "Couldn't continue with automerge")
+            }
+            CommandError::UnmergedFiles => {
+                write!(f, "error: Committing is not possible because you have unmerged files.\nhint: Fix them up in the work tree, and then use 'git add/rm <file>'\nhint: as appropriate to mark resolution and make a commit.\nfatal: Exiting because of an unresolved conflict.")
+            }
+            CommandError::CannotHaveFileAndFolderWithSameName(path) => {
+                write!(
+                    f,
+                    "There cannot be a file and a folder with the same name: {}",
+                    path
+                )
             }
         }
     }
