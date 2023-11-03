@@ -15,6 +15,7 @@ pub trait Format {
         branch: &str,
         commit_output: bool,
         merge: bool,
+        branches_diverge_info: (bool, usize, usize),
     ) -> Result<(), CommandError> {
         // let commit_tree = build_last_commit_tree(db, logger)?;
         let initial_commit = {
@@ -39,6 +40,7 @@ pub trait Format {
             (branch, commit_output, initial_commit),
             unmerged_paths,
             merge,
+            branches_diverge_info,
         )?;
         Ok(())
     }
@@ -53,6 +55,7 @@ pub trait Format {
         long_info: (&str, bool, bool),
         unmerged_paths: &HashMap<String, ChangeType>,
         merge: bool,
+        branches_diverge_info: (bool, usize, usize),
     ) -> Result<(), CommandError>;
 }
 

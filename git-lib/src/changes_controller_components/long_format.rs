@@ -18,6 +18,7 @@ impl Format for LongFormat {
         (branch, commit_output, initial_commit): (&str, bool, bool),
         unmerged_paths: &HashMap<String, ChangeType>,
         merge: bool,
+        branches_diverge_info: (bool, usize, usize),
     ) -> Result<(), CommandError> {
         let mut output_message = format!("On branch {}", branch);
         if initial_commit {
@@ -26,6 +27,10 @@ impl Format for LongFormat {
             } else {
                 output_message = format!("{}\n\nNo commits yet\n", output_message)
             }
+        }
+        let (remote_exists, ahead, behind) = branches_diverge_info;
+        if remote_exists {
+            output_message += &format!("{}", set_diverge_message(ahead, behind, &branch));
         }
         if merge {
             output_message += &format!("{}", set_unmerged_message(unmerged_paths));
@@ -121,6 +126,22 @@ fn set_unmerged_message(unmerged_paths: &HashMap<String, ChangeType>) -> String 
     for (path, change_type) in unmerged_paths.iter() {
         let change = change_type.get_long_type();
         message += &format!("\t{}:   {}\n", change, path);
+    }
+    message
+}
+
+fn set_diverge_message(ahead: usize, behind: usize, branch: &str) -> String {
+    let mut message = String::new();
+    if ahead == 0 && behind == 0 {
+        message += &format!("\nYour branch is up to date with 'origin/{}'.\n", branch);
+    } else if ahead == 0 {
+        let plural = if behind == 1 { "" } else { "s" };
+        message += &format!("\nYour branch is behind 'origin/{}' by {} commit{}, and can be fast-forwarded.\n  (use \"git pull\" to update your local branch)", branch, behind, plural);
+    } else if behind == 0 {
+        let plural = if ahead == 1 { "" } else { "s" };
+        message += &format!("\nYour branch is ahead 'origin/{}' by {} commit{}.\n  (use \"git push\" to publish tour local commits)\n", branch, ahead, plural);
+    } else {
+        message += &format!("Your branch and 'origin/{}' have diverged, and have {} and {} different commits each, respectively.\n  (use \"git pull\" to merge the remote branch into yours)\n", branch, ahead, behind);
     }
     message
 }

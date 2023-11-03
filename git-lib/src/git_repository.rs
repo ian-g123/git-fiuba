@@ -556,11 +556,36 @@ impl<'a> GitRepository<'a> {
         Ok(false)
     }
 
+    fn get_commits_ahead_and_behind_remote(
+        &mut self,
+        branch: &str,
+    ) -> Result<(bool, usize, usize), CommandError> {
+        let remote_branches = match self.remote_branches() {
+            Ok(remote_branches) => remote_branches,
+            Err(_) => {
+                return Ok((false, 0, 0));
+            }
+        };
+        let commit_head = self.get_last_commit_hash()?;
+        let commit_remote = remote_branches.get(branch);
+        let common_hash = match (commit_head.clone(), commit_remote) {
+            (Some(head), Some(remote)) => {
+                let (mut common, _, _) = self.get_common_ansestor(remote, &head)?;
+                common.get_hash_string()?
+            }
+            _ => "".to_string(),
+        };
+        let (ahead, behind) =
+            self.count_commits_ahead_and_behind(commit_remote, commit_head, &common_hash)?;
+        Ok((true, ahead, behind))
+    }
+
     pub fn status_long_format(&mut self, commit_output: bool) -> Result<(), CommandError> {
         let branch = self.get_current_branch_name()?;
         let long_format = LongFormat;
         let last_commit_tree = self.get_last_commit_tree()?;
         let merge = self.is_merge()?;
+        let diverge_info = self.get_commits_ahead_and_behind_remote(&branch)?;
 
         long_format.show(
             &self.db()?,
@@ -571,6 +596,7 @@ impl<'a> GitRepository<'a> {
             &branch,
             commit_output,
             merge,
+            diverge_info,
         )
     }
 
@@ -579,6 +605,8 @@ impl<'a> GitRepository<'a> {
         let short_format = ShortFormat;
         let last_commit_tree = self.get_last_commit_tree()?;
         let merge = self.is_merge()?;
+        let diverge_info = self.get_commits_ahead_and_behind_remote(&branch)?;
+
         short_format.show(
             &self.db()?,
             &self.path,
@@ -588,7 +616,71 @@ impl<'a> GitRepository<'a> {
             &branch,
             commit_output,
             merge,
+            diverge_info,
         )
+    }
+
+    fn count_commits_ahead_and_behind(
+        &mut self,
+        commit_destin_str: Option<&String>,
+        commit_head_str: Option<String>,
+        common_hash: &str,
+    ) -> Result<(usize, usize), CommandError> {
+        let mut head_branch_tips: Vec<String> = Vec::new();
+        if let Some(head) = commit_head_str {
+            if head != common_hash {
+                head_branch_tips.push(head.to_string())
+            }
+        }
+        let mut destin_branch_tips: Vec<String> = Vec::new();
+
+        if let Some(destin) = commit_destin_str {
+            if destin != common_hash {
+                destin_branch_tips.push(destin.to_string())
+            }
+        }
+        let mut ahead = 0;
+        let mut behind = 0;
+        let db = self.db()?;
+        loop {
+            if head_branch_tips.is_empty() && destin_branch_tips.is_empty() {
+                break;
+            }
+            if !head_branch_tips.is_empty() {
+                ahead += head_branch_tips.len();
+            }
+            if !destin_branch_tips.is_empty() {
+                behind += destin_branch_tips.len();
+            }
+
+            self.get_new_tips(&mut head_branch_tips, &common_hash, &db)?;
+            self.get_new_tips(&mut destin_branch_tips, &common_hash, &db)?;
+        }
+        Ok((ahead, behind))
+    }
+
+    fn get_new_tips(
+        &mut self,
+        branch_tips: &mut Vec<String>,
+        common: &str,
+        db: &ObjectsDatabase,
+    ) -> Result<(), CommandError> {
+        let mut new_branch_tips = Vec::<String>::new();
+        for tip in branch_tips.iter() {
+            let commit = db
+                .read_object(&tip, &mut self.logger)?
+                .as_commit_mut()
+                .ok_or(CommandError::FailedToFindCommonAncestor)?
+                .to_owned();
+            let parents_hash = commit.get_parents();
+            for parent_hash in parents_hash {
+                if !new_branch_tips.contains(&parent_hash) && parent_hash != common.to_string() {
+                    new_branch_tips.push(parent_hash);
+                }
+            }
+        }
+        *branch_tips = new_branch_tips;
+        Ok(())
     }
 
     pub fn open_config(&self) -> Result<Config, CommandError> {

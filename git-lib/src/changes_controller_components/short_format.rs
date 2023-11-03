@@ -17,6 +17,7 @@ impl Format for ShortFormat {
         _: (&str, bool, bool),
         unmerged_paths: &HashMap<String, ChangeType>,
         merge: bool,
+        _: (bool, usize, usize),
     ) -> Result<(), CommandError> {
         let mut changes: HashMap<String, ChangeObject> = HashMap::new();
         logger.log(&format!(
