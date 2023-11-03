@@ -16,6 +16,8 @@ impl Format for LongFormat {
         changes_not_staged: &HashMap<String, ChangeType>,
         untracked_files: &Vec<String>,
         (branch, commit_output, initial_commit): (&str, bool, bool),
+        unmerged_paths: &HashMap<String, ChangeType>,
+        merge: bool,
     ) -> Result<(), CommandError> {
         let mut output_message = format!("On branch {}", branch);
         if initial_commit {
@@ -25,6 +27,10 @@ impl Format for LongFormat {
                 output_message = format!("{}\n\nNo commits yet\n", output_message)
             }
         }
+        if merge {
+            output_message += &format!("{}", set_unmerged_message(unmerged_paths));
+        }
+
         let changes_to_be_commited = sort_hashmap(changes_to_be_commited);
         if !changes_to_be_commited.is_empty() {
             output_message = format!(
@@ -33,7 +39,6 @@ impl Format for LongFormat {
         }
         for (path, change_type) in changes_to_be_commited.iter() {
             let change = change_type.get_long_type();
-            logger.log(&format!("Change to be commited: {}", path));
             output_message = format!("{}	{}:   {}\n", output_message, change, path);
         }
         let changes_not_staged = sort_hashmap(changes_not_staged);
@@ -99,4 +104,23 @@ fn sort_vector(files: &Vec<String>) -> Vec<String> {
     let mut files = files.to_owned();
     files.sort();
     files
+}
+
+fn set_unmerged_message(unmerged_paths: &HashMap<String, ChangeType>) -> String {
+    let mut message = String::new();
+    if unmerged_paths.is_empty() {
+        message += &format!("\nAll conflicts fixed but you are still merging.\n  (use \"git commit\" to conclude merge)\n");
+        return message;
+    }
+    let unmerged_paths = sort_hashmap(unmerged_paths);
+    message += &format!("\nYou have unmerged paths.\n  (fix conflicts and run \"git commit\")\n  (use \"git merge --abort\" to abort the merge)\n\n");
+    message += &format!(
+        "Unmerged paths:\n  (use \"git add/rm <file>...\" as appropriate to mark resolution)\n"
+    );
+
+    for (path, change_type) in unmerged_paths.iter() {
+        let change = change_type.get_long_type();
+        message += &format!("\t{}:   {}\n", change, path);
+    }
+    message
 }

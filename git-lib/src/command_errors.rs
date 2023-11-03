@@ -211,7 +211,7 @@ impl fmt::Display for CommandError {
                 write!(f, "Modo de archivo inválido.")
             }
             CommandError::FileNameError => {
-                write!(f, "No se pudo obtener el nombre del objeto.")
+                write!(f, "No se pudo obtener el nombre del archivo.")
             }
             CommandError::UserConfigurationError => {
                 write!(f, "No existe configuración de ususario.")

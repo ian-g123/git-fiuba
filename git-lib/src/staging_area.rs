@@ -34,6 +34,12 @@ impl StagingArea {
         self.files.clone()
     }
 
+    pub fn get_unmerged_files(
+        &self,
+    ) -> HashMap<String, (Option<String>, Option<String>, Option<String>)> {
+        self.unmerged_files.clone()
+    }
+
     pub fn get_changes(
         &self,
         last_commit_tree: &Option<Tree>,

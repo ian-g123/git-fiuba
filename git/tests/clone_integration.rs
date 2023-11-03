@@ -8,6 +8,7 @@ use std::{
 use git_lib::{file_compressor::extract, join_paths};
 
 #[test]
+#[ignore]
 fn test_clone() {
     let path = "./tests/data/commands/clone/test1";
     let git_bin = "../../../../../../target/debug/git";

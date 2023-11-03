@@ -548,10 +548,20 @@ impl<'a> GitRepository<'a> {
         Err(CommandError::CommitLookUp(commit_hash))
     }
 
+    fn is_merge(&self) -> Result<bool, CommandError> {
+        let path = join_paths!(self.path, ".git/MERGE_HEAD").ok_or(CommandError::FileNameError)?;
+        if Path::new(&path).exists() {
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
     pub fn status_long_format(&mut self, commit_output: bool) -> Result<(), CommandError> {
         let branch = self.get_current_branch_name()?;
         let long_format = LongFormat;
         let last_commit_tree = self.get_last_commit_tree()?;
+        let merge = self.is_merge()?;
+
         long_format.show(
             &self.db()?,
             &self.path,
@@ -560,6 +570,7 @@ impl<'a> GitRepository<'a> {
             &mut self.output,
             &branch,
             commit_output,
+            merge,
         )
     }
 
@@ -567,6 +578,7 @@ impl<'a> GitRepository<'a> {
         let branch = self.get_current_branch_name()?;
         let short_format = ShortFormat;
         let last_commit_tree = self.get_last_commit_tree()?;
+        let merge = self.is_merge()?;
         short_format.show(
             &self.db()?,
             &self.path,
@@ -575,6 +587,7 @@ impl<'a> GitRepository<'a> {
             &mut self.output,
             &branch,
             commit_output,
+            merge,
         )
     }
 
