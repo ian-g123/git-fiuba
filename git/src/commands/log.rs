@@ -7,9 +7,10 @@ use std::{
 use crate::commands::command::Command;
 use git_lib::{
     command_errors::CommandError,
-    git_repository::{self, get_head_ref, local_branches},
+    git_repository::{self, get_head_ref, local_branches, push_branch_hashes},
     logger::Logger,
     objects::commit_object::{print_for_log, sort_commits_descending_date, CommitObject},
+    objects_database::get_last_commit_hash_branch,
 };
 
 use super::command::ConfigAdderFunction;
@@ -78,18 +79,21 @@ impl Log {
             push_branch_hashes(&mut branches_with_their_last_hash)?;
         } else {
             let current_branch = get_head_ref()?;
-            let hash_commit = get_commit_hash(&current_branch)?;
+            let hash_commit = get_last_commit_hash_branch(&current_branch)?;
             branches_with_their_last_hash.push((current_branch, hash_commit));
         }
 
         let mut repo = git_repository::GitRepository::open("", output)?;
+        let db = repo.db()?;
 
         for branch_with_commit in branches_with_their_last_hash {
             repo.rebuild_commits_tree(
+                &db,
                 &branch_with_commit.1,
                 &mut commits_map,
                 Some(branch_with_commit.0),
                 self.all,
+                &None,
             )?;
         }
 
@@ -99,36 +103,4 @@ impl Log {
 
         Ok(commits)
     }
-}
-
-/// Agrega al vector de branches_with_their_commits todos los nombres de las ramas y el hash del commit al que apuntan
-fn push_branch_hashes(
-    branches_with_their_commits: &mut Vec<(String, String)>,
-) -> Result<(), CommandError> {
-    let branches_hashes = local_branches(".")?;
-    for branch_hash in branches_hashes {
-        let branch_hash = (
-            branch_hash.0,
-            branch_hash.1[..branch_hash.1.len() - 1].to_string(),
-        );
-        branches_with_their_commits.push(branch_hash);
-    }
-    Ok(())
-}
-
-/// Obtiene el hash del commit al que apunta la rama actual en la que se encuentra el usuario
-fn get_commit_hash(refs_branch_name: &String) -> Result<String, CommandError> {
-    let path_to_heads = ".git/";
-    let path_to_branch = format!("{}/{}", path_to_heads, refs_branch_name);
-
-    let mut file = File::open(&path_to_branch).map_err(|_| {
-        CommandError::FileNotFound(format!("No se pudo abrir {path_to_branch} en log"))
-    })?;
-
-    let mut commit_hash = String::new();
-    file.read_to_string(&mut commit_hash).map_err(|_| {
-        CommandError::FileReadError(format!("No se pudo leer {path_to_branch} en log"))
-    })?;
-
-    Ok(commit_hash[..commit_hash.len() - 1].to_string())
 }

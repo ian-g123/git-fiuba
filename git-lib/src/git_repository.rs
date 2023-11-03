@@ -5,6 +5,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
+pub enum BranchStatus {
+    Update,
+    Create,
+    Delete,
+}
+
 use chrono::{DateTime, Local};
 
 use crate::{
@@ -23,7 +29,7 @@ use crate::{
         proto_object::ProtoObject,
         tree::Tree,
     },
-    objects_database::ObjectsDatabase,
+    objects_database::{get_last_commit_hash_branch, ObjectsDatabase},
     server_components::git_server::GitServer,
     staging_area::StagingArea,
     utils::{aux::get_name, super_string::u8_vec_to_hex_string},
@@ -682,43 +688,90 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    pub fn push(&mut self) -> Result<(), CommandError> {
-        self.log("Fetching updates");
+    pub fn push_analysis(
+        &mut self,
+        local_branches: Vec<(String, String)>,
+    ) -> Result<
+        (
+            HashMap<String, BranchStatus>,
+            HashMap<String, (CommitObject, Option<String>)>,
+        ),
+        CommandError,
+    > {
+        let mut hash_branch_status = HashMap::<String, BranchStatus>::new();
+        let mut commits_map = HashMap::<String, (CommitObject, Option<String>)>::new();
+        let db = self.db()?;
+        self.log("Pushi updates");
         let (address, repository_path, repository_url) = self.get_remote_info()?;
+
         self.log(&format!(
             "Address: {}, repository_path: {}, repository_url: {}",
             address, repository_path, repository_url
         ));
+
         let mut server = GitServer::connect_to(&address)?;
 
-        let remote_branches = self.push2(&mut server, &repository_path, &repository_url)?;
-        let remote_reference = format!("{}:{}", address, repository_path);
-        self.fetch_and_save_objects(&mut server, &remote_reference, remote_branches)?;
-        Ok(())
+        let mut refs_hash = self.receive_pack(&mut server, &repository_path, &repository_url)?;
+
+        for (local_branch, local_hash) in local_branches {
+            let remote_hash = match refs_hash.get(&local_branch) {
+                Some(remote_hash) => remote_hash.clone(),
+                None => todo!(), //create?
+            };
+
+            self.rebuild_commits_tree(
+                &db,
+                &local_hash,
+                &mut commits_map,
+                Some(local_branch.to_string()),
+                false,
+                &Some(remote_hash.to_string()),
+            )?;
+
+            if local_hash == *remote_hash {
+                refs_hash.remove(&local_branch);
+                if refs_hash.len() == 0 {
+                    self.log("Everything up-to-date");
+                    self.output
+                        .write_all(b"Everything up-to-date")
+                        .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+                    return Ok((hash_branch_status, commits_map));
+                }
+            }
+
+            self.log(&format!(
+                "branch: {}, local_hash: {}\n",
+                &local_branch, &local_hash
+            ));
+
+            if let Some((_, Some(remote_branch))) = commits_map.get(&remote_hash) {
+                if remote_branch == &local_branch {
+                    hash_branch_status.insert(local_branch.clone(), BranchStatus::Update);
+                    todo!(); // update -> push
+                } else {
+                    // error de commits de branches?
+                }
+            } else {
+                todo!(); // error de que el repo local esta desactualizado
+            }
+        }
+
+        Ok((hash_branch_status, commits_map))
     }
 
     /// Actualiza todas las branches de la carpeta remotes con los hashes de los commits
     /// obtenidos del servidor.
-    fn push2(
+    fn receive_pack(
         &mut self,
         server: &mut GitServer,
         repository_path: &str,
         repository_url: &str,
-    ) -> Result<(HashMap<String, String>), CommandError> {
-        self.log("Updating remote branches");
-        let (_head_branch, branch_remote_refs) = server
+    ) -> Result<HashMap<String, String>, CommandError> {
+        self.log("git receive-pack");
+        let hash_refs = server
             .explore_repository_receive_pack(&("/".to_owned() + repository_path), repository_url)?;
-        self.log(&format!("branch_remote_refs: {:?}", branch_remote_refs));
-
-        let mut remote_branches = HashMap::<String, String>::new();
-
-        for (hash, mut branch_name) in branch_remote_refs {
-            branch_name.replace_range(0..11, "");
-            self.update_ref(&hash, &branch_name)?;
-            remote_branches.insert(branch_name, hash);
-        }
-
-        Ok(remote_branches)
+        self.log(&format!("hash_refs: {:?}", hash_refs));
+        Ok(hash_refs)
     }
 
     pub fn merge(&mut self, commits: &Vec<String>) -> Result<(), CommandError> {
@@ -784,7 +837,7 @@ impl<'a> GitRepository<'a> {
         Ok(Some(parent.to_string()))
     }
 
-    fn local_branches(&mut self) -> Result<HashMap<String, String>, CommandError> {
+    pub fn local_branches(&mut self) -> Result<HashMap<String, String>, CommandError> {
         let mut branches = HashMap::<String, String>::new();
         let branches_path = join_paths!(&self.path, ".git/refs/heads/").ok_or(
             CommandError::DirectoryCreationError(
@@ -885,8 +938,8 @@ impl<'a> GitRepository<'a> {
         repository_url: &str,
     ) -> Result<(HashMap<String, String>), CommandError> {
         self.log("Updating remote branches");
-        let (_head_branch, branch_remote_refs) =
-            server.explore_repository(&("/".to_owned() + repository_path), repository_url)?;
+        let (_head_branch, branch_remote_refs) = server
+            .explore_repository_upload_pack(&("/".to_owned() + repository_path), repository_url)?;
         self.log(&format!("branch_remote_refs: {:?}", branch_remote_refs));
 
         let mut remote_branches = HashMap::<String, String>::new();
@@ -1088,7 +1141,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    fn db(&self) -> Result<ObjectsDatabase, CommandError> {
+    pub fn db(&self) -> Result<ObjectsDatabase, CommandError> {
         ObjectsDatabase::new(&self.path)
     }
 
@@ -1290,30 +1343,58 @@ impl<'a> GitRepository<'a> {
     /// Reconstruye el arbol de commits que le preceden a partir de un commit
     pub fn rebuild_commits_tree(
         &mut self,
+        db: &ObjectsDatabase,
         hash_commit: &String,
         commits_map: &mut HashMap<String, (CommitObject, Option<String>)>, // HashMap<hash, (commit, branch)>
         branch: Option<String>,
         log_all: bool,
+        hash_to_look_for: &Option<String>,
     ) -> Result<(), CommandError> {
         if commits_map.contains_key(&hash_commit.to_string()) {
             return Ok(());
         }
 
-        let db = self.db()?;
         let (_, decompressed_data) = db.read_file(hash_commit)?;
         let mut stream = Cursor::new(decompressed_data);
 
         let commit_object = read_from_for_log(&db, &mut stream, &mut self.logger, hash_commit)?;
 
+        if let Some(hash_to_look_for) = &hash_to_look_for {
+            if hash_to_look_for == hash_commit {
+                let commit_with_branch = (commit_object, branch);
+                commits_map.insert(hash_commit.to_string(), commit_with_branch);
+                return Ok(());
+            }
+        }
+
         let parents_hash = commit_object.get_parents();
 
         if parents_hash.len() > 0 {
             let principal_parent = &parents_hash[0];
-            self.rebuild_commits_tree(&principal_parent, commits_map, branch.clone(), log_all)?;
+            self.rebuild_commits_tree(
+                db,
+                &principal_parent,
+                commits_map,
+                branch.clone(),
+                log_all,
+                hash_to_look_for,
+            )?;
 
             if !log_all {
                 for parent_hash in parents_hash.iter().skip(1) {
-                    self.rebuild_commits_tree(&parent_hash, commits_map, branch.clone(), log_all)?;
+                    if let Some(hash_to_look_for) = &hash_to_look_for {
+                        if commits_map.contains_key(&hash_to_look_for.to_string()) {
+                            return Ok(());
+                        }
+                    }
+                    self.rebuild_commits_tree(
+                        db,
+                        &parent_hash,
+                        commits_map,
+                        branch.clone(),
+                        log_all,
+                        hash_to_look_for,
+                    )?;
                 }
             }
         }
@@ -1465,8 +1546,8 @@ fn update_remote_branches(
     repository_url: &str,
     base_path: &str,
 ) -> Result<(), CommandError> {
-    let (_head_branch, branch_remote_refs) =
-        server.explore_repository(&("/".to_owned() + repository_path), repository_url)?;
+    let (_head_branch, branch_remote_refs) = server
+        .explore_repository_upload_pack(&("/".to_owned() + repository_path), repository_url)?;
     Ok(for (sha1, mut ref_path) in branch_remote_refs {
         ref_path.replace_range(0..11, "");
         update_ref(&base_path, &sha1, &ref_path)?;
@@ -1497,5 +1578,20 @@ fn update_ref(base_path: &str, sha1: &str, ref_name: &str) -> Result<(), Command
     file.write_all(sha1.as_bytes()).map_err(|error| {
         CommandError::FileWriteError("Error guardando ref:".to_string() + &error.to_string())
     })?;
+    Ok(())
+}
+
+/// Agrega al vector de branches_with_their_commits todos los nombres de las ramas y el hash del commit al que apuntan
+pub fn push_branch_hashes(
+    branches_with_their_commits: &mut Vec<(String, String)>,
+) -> Result<(), CommandError> {
+    let branches_hashes = local_branches(".")?;
+    for branch_hash in branches_hashes {
+        let branch_hash = (
+            branch_hash.0,
+            branch_hash.1[..branch_hash.1.len() - 1].to_string(),
+        );
+        branches_with_their_commits.push(branch_hash);
+    }
     Ok(())
 }
