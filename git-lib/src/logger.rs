@@ -1,4 +1,5 @@
 use std::{
+    env,
     fs::{self, File},
     io::Write,
     path::Path,
@@ -21,6 +22,7 @@ impl Logger {
         if let Some(dir) = path.parent() {
             let _ = fs::create_dir_all(dir);
         }
+
         let mut file: File = fs::OpenOptions::new()
             .create(true)
             .append(true)

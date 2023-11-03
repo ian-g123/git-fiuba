@@ -17,7 +17,7 @@ pub trait GitObjectTrait {
         None
     }
 
-    fn as_commit_mut(&mut self) -> Option<&mut CommitObject> {
+    fn as_mut_commit(&mut self) -> Option<&mut CommitObject> {
         None
     }
 
@@ -181,7 +181,7 @@ pub fn read_git_object_from(
     Err(CommandError::ObjectTypeError)
 }
 
-fn get_type_and_len(stream: &mut dyn Read) -> Result<(String, usize), CommandError> {
+pub fn get_type_and_len(stream: &mut dyn Read) -> Result<(String, usize), CommandError> {
     let mut bytes = stream.bytes();
     let type_str = get_type(&mut bytes)?;
     let len_str = get_string_up_to_null_byte(&mut bytes)?;

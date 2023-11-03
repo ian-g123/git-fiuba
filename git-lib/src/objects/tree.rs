@@ -333,7 +333,6 @@ impl GitObjectTrait for Tree {
         for (name_object, object) in sorted_objects.iter_mut() {
             let mode = &object.mode();
             let mode_id = mode.get_id_mode();
-            // println!("{} {}", mode_id, name_object);
             write!(content, "{} {}\0", mode_id, name_object)
                 .map_err(|err| CommandError::FileWriteError(format!("{err}")))?;
             let hash = object.get_hash()?;
