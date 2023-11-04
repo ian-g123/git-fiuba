@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     fs::{self, DirEntry, File, OpenOptions, ReadDir},
+    hash,
     io::{Cursor, Read, Write},
     path::{Path, PathBuf},
 };
@@ -13,6 +14,7 @@ use crate::{
     },
     command_errors::CommandError,
     config::Config,
+    file_compressor::compress,
     join_paths,
     logger::Logger,
     objects::{
@@ -24,9 +26,12 @@ use crate::{
         tree::Tree,
     },
     objects_database::ObjectsDatabase,
-    server_components::git_server::GitServer,
+    server_components::{git_server::GitServer, packfile_object_type::PackfileObjectType},
     staging_area::StagingArea,
-    utils::{aux::get_name, super_string::u8_vec_to_hex_string},
+    utils::{
+        aux::{get_name, get_sha1, read_string_until},
+        super_string::u8_vec_to_hex_string,
+    },
 };
 
 pub struct GitRepository<'a> {
@@ -682,36 +687,61 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    pub fn push_analysis(
-        &mut self,
-        local_branches: Vec<(String, String)>,
-    ) -> Result<
-        (
-            HashMap<String, (String, String)>, // HashMap<branch, (nuevo_hash, viejo_hash)>
-            HashMap<String, (CommitObject, Option<String>)>, // HashMap<hash, (CommitObject, Option<branch>)>
-        ),
-        CommandError,
-    > {
-        let mut hash_branch_status = HashMap::<String, (String, String)>::new();
-        let mut commits_map = HashMap::<String, (CommitObject, Option<String>)>::new();
-        let db = self.db()?;
+    pub fn push(&mut self, local_branches: Vec<(String, String)>) -> Result<(), CommandError> {
         self.log("Push updates");
-        let (address, repository_path, repository_url) = self.get_remote_info()?;
+        let db = self.db()?;
 
+        let (address, repository_path, repository_url) = self.get_remote_info()?;
         self.log(&format!(
             "Address: {}, repository_path: {}, repository_url: {}",
             address, repository_path, repository_url
         ));
 
         let mut server = GitServer::connect_to(&address)?;
+        let refs_hash = self.receive_pack(&mut server, &repository_path, &repository_url)?; // ref_hash: HashMap<branch, hash>
 
-        let refs_hash = self.receive_pack(&mut server, &repository_path, &repository_url)?;
+        // verificamos que todas las branches locales esten actualizadas
+
+        let (hash_branch_status, commits_map) = self.get_analysis(local_branches, db, refs_hash)?;
+
+        if hash_branch_status.is_empty() {
+            self.log("Everything up-to-date");
+            self.output
+                .write_all(b"Everything up-to-date")
+                .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+            return Ok(());
+        }
+
+        server.negociate_recieve_pack(hash_branch_status)?;
+
+        server.write_to_socket(&make_packfile(commits_map)?)?;
+        Ok(())
+    }
+
+    fn get_analysis(
+        &mut self,
+        local_branches: Vec<(String, String)>,
+        db: ObjectsDatabase,
+        refs_hash: HashMap<String, String>,
+    ) -> Result<
+        (
+            HashMap<String, (String, String)>,
+            HashMap<String, (CommitObject, Option<String>)>,
+        ),
+        CommandError,
+    > {
+        let mut hash_branch_status = HashMap::<String, (String, String)>::new(); // HashMap<branch, (old_hash, new_hash)>
+        let mut commits_map = HashMap::<String, (CommitObject, Option<String>)>::new(); // HashMap<hash, (CommitObject, Option<branch>)>
 
         for (local_branch, local_hash) in local_branches {
             let remote_hash = match refs_hash.get(&local_branch) {
                 Some(remote_hash) => remote_hash.clone(),
                 None => todo!(), //create?
             };
+
+            if local_hash == *remote_hash {
+                continue;
+            }
 
             self.rebuild_commits_tree(
                 &db,
@@ -723,10 +753,6 @@ impl<'a> GitRepository<'a> {
                 true,
             )?;
 
-            if local_hash == *remote_hash {
-                continue;
-            }
-
             self.log(&format!(
                 "branch: {}, local_hash: {}\n",
                 &local_branch, &local_hash
@@ -736,9 +762,11 @@ impl<'a> GitRepository<'a> {
                 if remote_branch == &local_branch {
                     hash_branch_status.insert(local_branch.to_string(), (remote_hash, local_hash));
                 } else {
-                    // error de commits de branches?
+                    return Err(CommandError::PushBranchesError);
                 }
             } else {
+                let (_address, _repository_path, repository_url) = self.get_remote_info()?;
+                CommandError::PushBranchBehindError(repository_url, local_branch.to_owned());
                 todo!(); // error de que el repo local esta desactualizado
             }
         }
@@ -746,27 +774,19 @@ impl<'a> GitRepository<'a> {
         Ok((hash_branch_status, commits_map))
     }
 
-    pub fn make_packfile_for_push(
-        &self,
-        commits_map: HashMap<String, (CommitObject, Option<String>)>, // HashMap<hash, (CommitObject, Option<branch>)>
-    ) -> Result<(), CommandError> {
-        let hash_objects: HashMap<String, GitObject> = HashMap::new();
+    // fn len_packfile_format(&self, len_bits: Vec<u8>) -> Vec<u8> {
+    //     let result = Vec::new();
+    //     for bit in len_bits {}
+    // }
 
-        for (_hash, (commit_object, branch)) in commits_map {
-            let Some(branch) = branch else {
-                return Err(CommandError::PushBranchesError);
-            };
-            //get_objects_from_tree(&mut hash_objects, &commit_object);
+    fn int_to_bits(&self, num: usize) -> Vec<u8> {
+        let mut result = Vec::new();
+
+        for i in (0..64).rev() {
+            let bit = (num >> i) & 1;
+            result.push(bit as u8);
         }
-
-        Ok(())
-    }
-
-    fn write_packfile_header(&mut self, objects_number: u32) -> Result<String, CommandError> {
-        let signature = "PACK";
-        let version = 2;
-        let header = format!("{}{}{}", signature, version, objects_number);
-        Ok(header)
+        result
     }
 
     /// Actualiza todas las branches de la carpeta remotes con los hashes de los commits
@@ -1369,8 +1389,13 @@ impl<'a> GitRepository<'a> {
         let mut stream = Cursor::new(decompressed_data);
 
         get_type_and_len(&mut stream)?;
-        let mut commit_object_box =
-            CommitObject::read_from(&db, &mut stream, &mut self.logger, build_tree, Some(hash_commit.clone()))?;
+        let mut commit_object_box = CommitObject::read_from(
+            &db,
+            &mut stream,
+            &mut self.logger,
+            build_tree,
+            Some(hash_commit.clone()),
+        )?;
 
         // println!("commit_object_box: {:?}", commit_object_box.content());
         //get_type_and_len(&mut stream)?;
@@ -1432,6 +1457,26 @@ impl<'a> GitRepository<'a> {
         let commit_with_branch = (commit_object.to_owned(), branch);
         commits_map.insert(hash_commit.to_string(), commit_with_branch);
         Ok(())
+    }
+
+    /// Obtiene el hash del commit al que apunta la rama que se le pasa por parámetro
+    pub fn get_last_commit_hash_branch(
+        &self,
+        refs_branch_name: &String,
+    ) -> Result<String, CommandError> {
+        let path_to_branch = join_paths!(self.path, ".git/refs/heads", refs_branch_name)
+            .ok_or(CommandError::FileOpenError(refs_branch_name.clone()))?;
+
+        let mut file = File::open(&path_to_branch).map_err(|_| {
+            CommandError::FileNotFound(format!("No se pudo abrir {path_to_branch} en log"))
+        })?;
+
+        let mut commit_hash = String::new();
+        file.read_to_string(&mut commit_hash).map_err(|_| {
+            CommandError::FileReadError(format!("No se pudo leer {path_to_branch} en log"))
+        })?;
+
+        Ok(commit_hash[..commit_hash.len() - 1].to_string())
     }
 }
 
@@ -1608,9 +1653,8 @@ fn update_ref(base_path: &str, sha1: &str, ref_name: &str) -> Result<(), Command
 }
 
 /// Agrega al vector de branches_with_their_commits todos los nombres de las ramas y el hash del commit al que apuntan
-pub fn push_branch_hashes(
-    branches_with_their_commits: &mut Vec<(String, String)>,
-) -> Result<(), CommandError> {
+pub fn push_all_local_branch_hashes() -> Result<Vec<(String, String)>, CommandError> {
+    let mut branches_with_their_commits: Vec<(String, String)> = Vec::new();
     let branches_hashes = local_branches(".")?;
     for branch_hash in branches_hashes {
         let branch_hash = (
@@ -1619,5 +1663,89 @@ pub fn push_branch_hashes(
         );
         branches_with_their_commits.push(branch_hash);
     }
+    Ok(branches_with_their_commits)
+}
+
+fn get_objects_from_tree(
+    hash_objects: &mut HashMap<String, GitObject>,
+    tree: &Tree,
+) -> Result<(), CommandError> {
+    for (hash_object, mut git_object) in tree.get_objects() {
+        if let Some(son_tree) = git_object.as_tree() {
+            get_objects_from_tree(hash_objects, &son_tree)?;
+        }
+        hash_objects.insert(hash_object, git_object);
+    }
     Ok(())
+}
+
+fn packfile_header(objects_number: u32) -> Vec<u8> {
+    let mut header = Vec::<u8>::new();
+    header.extend("PACK".as_bytes());
+    header.extend(2u32.to_le_bytes());
+    header.extend(objects_number.to_le_bytes());
+    header
+}
+
+fn write_object_to_packfile(
+    mut git_object: GitObject,
+    packfile: &mut Vec<u8>,
+) -> Result<(), CommandError> {
+    let mut object_content = Vec::<u8>::new();
+    let mut cursor = Cursor::new(&mut object_content);
+    git_object.write_to(&mut cursor);
+
+    let type_str = git_object.type_str();
+    let object_len = object_content.len();
+
+    let compressed_object = compress(&object_content)?;
+    let pf_type = PackfileObjectType::from_str(type_str.as_str())?;
+
+    let mut len_temp = object_len;
+    let first_four = (len_temp & 0b00001111) as u8;
+    len_temp >>= 4;
+    let mut len_bytes: Vec<u8> = Vec::new();
+    if len_temp != 0 {
+        loop {
+            let mut byte = (len_temp & 0b01111111) as u8;
+            len_temp >>= 7;
+            if len_temp == 0 {
+                len_bytes.push(byte);
+                break;
+            }
+            byte |= 0b10000000;
+            len_bytes.push(byte);
+        }
+    }
+
+    let type_and_len_byte =
+        (pf_type as u8) << 4 | first_four | if len_bytes.is_empty() { 0 } else { 0b10000000 };
+
+    packfile.push(type_and_len_byte);
+    packfile.extend(len_bytes);
+    packfile.extend(compressed_object);
+    Ok(())
+}
+
+pub fn make_packfile(
+    commits_map: HashMap<String, (CommitObject, Option<String>)>, // HashMap<hash, (CommitObject, Option<branch>)>
+) -> Result<Vec<u8>, CommandError> {
+    let mut hash_objects: HashMap<String, GitObject> = HashMap::new();
+
+    for (hash_commit, (commit_object, _branch)) in commits_map {
+        let Some(tree) = commit_object.get_tree() else {
+            return Err(CommandError::PushTreeError);
+        };
+        get_objects_from_tree(&mut hash_objects, tree)?;
+        hash_objects.insert(hash_commit, Box::new(commit_object));
+    }
+
+    let mut packfile: Vec<u8> = Vec::new();
+    packfile.write(&packfile_header(hash_objects.len() as u32));
+    for (_hash_object, git_object) in hash_objects {
+        write_object_to_packfile(git_object, &mut packfile)?;
+    }
+    packfile.write(&get_sha1(&packfile));
+
+    Ok(packfile)
 }

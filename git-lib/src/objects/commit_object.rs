@@ -102,11 +102,11 @@ impl CommitObject {
         };
 
         let hash_u8: Option<[u8; 20]> = match hash_commit {
-            Some(h) => Some(hex_string_to_u8_vec(&h)),
+            Some(hash) => Some(hex_string_to_u8_vec(&hash)),
             None => None,
         };
 
-        let mut commit = CommitObject {
+        Ok(Box::new(CommitObject {
             tree: option_tree,
             parents,
             author,
@@ -115,21 +115,7 @@ impl CommitObject {
             timestamp: author_timestamp,
             offset: author_offset,
             hash: hash_u8,
-        };
-
-        // println!("commit: {:?}", commit.content()?);
-
-        // Ok(Box::new(CommitObject {
-        //     tree: option_tree,
-        //     parents,
-        //     author,
-        //     committer,
-        //     message,
-        //     timestamp: author_timestamp,
-        //     offset: author_offset,
-        //     hash: None,
-        // }))
-        Ok(Box::new(commit))
+        }))
     }
 
     /// Muestra la información del Commit, escribiéndola en el stream pasado.

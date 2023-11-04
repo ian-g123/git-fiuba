@@ -95,21 +95,6 @@ impl ObjectsDatabase {
         };
         Ok(hash_str)
     }
+    
 }
 
-/// Obtiene el hash del commit al que apunta la rama que se le pasa por parámetro
-pub fn get_last_commit_hash_branch(refs_branch_name: &String) -> Result<String, CommandError> {
-    let path_to_heads = ".git/";
-    let path_to_branch = format!("{}/{}", path_to_heads, refs_branch_name);
-
-    let mut file = File::open(&path_to_branch).map_err(|_| {
-        CommandError::FileNotFound(format!("No se pudo abrir {path_to_branch} en log"))
-    })?;
-
-    let mut commit_hash = String::new();
-    file.read_to_string(&mut commit_hash).map_err(|_| {
-        CommandError::FileReadError(format!("No se pudo leer {path_to_branch} en log"))
-    })?;
-
-    Ok(commit_hash[..commit_hash.len() - 1].to_string())
-}

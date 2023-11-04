@@ -104,6 +104,9 @@ pub enum CommandError {
     FailedToFindCommonAncestor,
     /// Ocurre un error al encontrar las ramas de los commits en push
     PushBranchesError,
+    /// Error al obtener el tree desde el option que debería ser tree en push
+    PushTreeError,
+    PushBranchBehindError(String, String),
 }
 
 impl Error for CommandError {}
@@ -268,7 +271,22 @@ impl fmt::Display for CommandError {
                 write!(f, "No se pudo encontrar un ancestro común.")
             }
             CommandError::PushBranchesError => {
-                write!(f, "Ocurre un error al encontrar las ramas de los commits en push")
+                write!(
+                    f,
+                    "Ocurre un error al encontrar las ramas de los commits en push"
+                )
+            }
+            CommandError::PushTreeError => {
+                write!(
+                    f,
+                    "Error al obtener el tree desde el option que debería ser tree en push"
+                )
+            }
+            CommandError::PushBranchBehindError(url, branch) => {
+                write!(
+                    f,
+                    "! [rejected]        {branch} -> {branch} (non-fast-forward)\nerror: failed to push some refs to '{url}'\n"
+                )
             }
         }
     }

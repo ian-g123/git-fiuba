@@ -5,9 +5,8 @@ use std::{
 
 use git_lib::{
     command_errors::CommandError,
-    git_repository::{push_branch_hashes, GitRepository},
+    git_repository::{push_all_local_branch_hashes, GitRepository},
     objects::commit_object::CommitObject,
-    objects_database::get_last_commit_hash_branch,
 };
 
 use super::command::{Command, ConfigAdderFunction};
@@ -76,23 +75,15 @@ impl Push {
         let mut local_branches: Vec<(String, String)> = Vec::new(); // (branch, hash)
 
         if self.all {
-            push_branch_hashes(&mut local_branches)?;
+            local_branches = push_all_local_branch_hashes()?;
         } else {
-            let hash_commit = get_last_commit_hash_branch(&self.branch)?;
+            let hash_commit = repo.get_last_commit_hash_branch(&self.branch)?;
             local_branches.push((self.branch.to_owned(), hash_commit));
         }
 
-        let (hash_branch_status, commits_map) = repo.push_analysis(local_branches)?;
+        println!("local_branches: {:?}", local_branches);
 
-        // if hash_branch_status.is_empty() {
-        //     self.log("Everything up-to-date");
-        //     self.output
-        //         .write_all(b"Everything up-to-date")
-        //         .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-        //     return Ok(());
-        // }
-
-        // make_packfile_for_push(hash_branch_status, commits_branch)?;
+        repo.push(local_branches)?;
 
         Ok(())
     }

@@ -1,16 +1,13 @@
 use std::{
     collections::HashMap,
-    fs::File,
-    io::{Cursor, Read, Write},
+    io::{Read, Write},
 };
 
 use crate::commands::command::Command;
 use git_lib::{
     command_errors::CommandError,
-    git_repository::{self, get_head_ref, local_branches, push_branch_hashes},
-    logger::Logger,
+    git_repository::{self, get_head_ref, push_all_local_branch_hashes},
     objects::commit_object::{print_for_log, sort_commits_descending_date, CommitObject},
-    objects_database::get_last_commit_hash_branch,
 };
 
 use super::command::ConfigAdderFunction;
@@ -75,16 +72,16 @@ impl Log {
         let mut branches_with_their_last_hash: Vec<(String, String)> = Vec::new(); // Vec<(branch, hashes)>
         let mut commits_map: HashMap<String, (CommitObject, Option<String>)> = HashMap::new(); // HashMap<hash, (commit, branch)>
 
-        if self.all {
-            push_branch_hashes(&mut branches_with_their_last_hash)?;
-        } else {
-            let current_branch = get_head_ref()?;
-            let hash_commit = get_last_commit_hash_branch(&current_branch)?;
-            branches_with_their_last_hash.push((current_branch, hash_commit));
-        }
-
         let mut repo = git_repository::GitRepository::open("", output)?;
         let db = repo.db()?;
+
+        if self.all {
+            branches_with_their_last_hash = push_all_local_branch_hashes()?;
+        } else {
+            let current_branch = get_head_ref()?;
+            let hash_commit = repo.get_last_commit_hash_branch(&current_branch)?;
+            branches_with_their_last_hash.push((current_branch, hash_commit));
+        }
 
         for branch_with_commit in branches_with_their_last_hash {
             repo.rebuild_commits_tree(

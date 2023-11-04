@@ -109,6 +109,13 @@ impl GitServer {
         Ok(())
     }
 
+    pub fn write_to_socket(&mut self, message: &Vec<u8>) -> Result<(), CommandError> {
+        self.socket
+            .write_all(message)
+            .map_err(|error| CommandError::SendingMessage(error.to_string()))?;
+        Ok(())
+    }
+
     fn write_in_tpk_to_socket(&mut self, line: &str) -> Result<(), CommandError> {
         let line = line.to_string().to_pkt_format();
         self.write_string_to_socket(&line)
@@ -208,6 +215,8 @@ impl GitServer {
 
         let lines = self.send(&line)?;
 
+        println!("lines: {:?}", lines);
+
         let mut refs_hash = HashMap::<String, String>::new();
 
         for line in lines.iter() {
@@ -221,15 +230,22 @@ impl GitServer {
         Ok(refs_hash)
     }
 
-    pub fn comunicate_with_server(
+    pub fn negociate_recieve_pack(
         &mut self,
         hash_branch_status: HashMap<String, (String, String)>, // HashMap<branch, (nuevo_hash, viejo_hash)>
-    ) {
+    ) -> Result<(), CommandError> {
         for (branch, (new_hash, old_hash)) in hash_branch_status {
             let line = format!("{} {} refs/heads/{}\n", new_hash, old_hash, branch);
-            self.write_in_tpk_to_socket(&line).unwrap();
+            self.write_in_tpk_to_socket(&line).map_err(|_| {
+                return CommandError::SendingMessage(
+                    "Error al enviar el hash del branch".to_string(),
+                );
+            })?;
         }
-        self.write_string_to_socket("0000").unwrap();
+        self.write_string_to_socket("0000").map_err(|_| {
+            return CommandError::SendingMessage("Error al enviar 0000 al servidor".to_string());
+        })?;
+        return Ok(());
     }
 }
 

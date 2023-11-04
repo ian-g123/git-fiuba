@@ -24,6 +24,16 @@ impl PackfileObjectType {
             _ => Err(CommandError::UnknownObjectType),
         }
     }
+
+    pub fn from_str(name: &str) -> Result<Self, CommandError> {
+        match name {
+            "commit" => Ok(PackfileObjectType::Commit),
+            "tree" => Ok(PackfileObjectType::Tree),
+            "blob" => Ok(PackfileObjectType::Blob),
+            "tag" => Ok(PackfileObjectType::Tag),
+            _ => Err(CommandError::UnknownObjectType),
+        }
+    }
 }
 
 impl fmt::Display for PackfileObjectType {
