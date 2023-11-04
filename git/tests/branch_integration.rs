@@ -188,12 +188,14 @@ fn test_create_branch() {
         .unwrap();
 
     let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = "Branch 'branch5' set up to track remote branch 'remote1' from origin.\n";
     println!("Stderr: {}", stderr);
     let branch5_path = format!("{}/.git/refs/heads/branch5", path);
     println!("Branch5: {}", branch5_path);
 
     assert!(Path::new(&branch5_path).exists());
-
+    assert_eq!(stdout, expected.to_string());
     _ = fs::remove_dir_all(format!("{}", path));
 }
 

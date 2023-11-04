@@ -1600,12 +1600,20 @@ impl<'a> GitRepository<'a> {
         })?;
         self.log(&format!("New branch created: {}", new_branch));
         if new_is_remote {
+            let info: Vec<&str> = new_branch_info[1].split("/").collect();
+            let new = info[2..].join("/");
+            let remote = info[1];
             writeln!(
                 self.output,
-                "Branch '{}' set up to track remote branch '{}'.",
-                new_branch_info[1], new_branch_info[0]
+                "Branch '{}' set up to track remote branch '{}' from {}.",
+                new_branch_info[0], new, remote
             )
             .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+            let mut config = self.open_config()?;
+            config.insert(&new_branch_info[0], "remote", remote);
+            let remote_ref = format!("refs/heads/{}", new);
+            config.insert(&new_branch_info[0], "merge", &remote_ref);
+            config.save()?;
         }
         Ok(())
     }
@@ -1881,9 +1889,7 @@ fn get_branches_paths(
     let mut branches_path = join_paths!(path, dir_path).ok_or(
         CommandError::DirectoryCreationError("Error creando directorio de branches".to_string()),
     )?;
-    /* if branches_path.ends_with("/") {
-        _ = branches_path.pop();
-    } */
+
     logger.log(&format!("Dir path: {}", branches_path));
     let paths = fs::read_dir(branches_path.clone()).map_err(|error| {
         CommandError::FileReadError(format!(
