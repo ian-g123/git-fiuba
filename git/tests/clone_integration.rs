@@ -7,6 +7,7 @@ use std::{
 
 use git_lib::{file_compressor::extract, join_paths};
 
+#[ignore = "Needs server"]
 #[test]
 fn test_clone() {
     let path = "./tests/data/commands/clone/test1";
@@ -17,7 +18,7 @@ fn test_clone() {
     // let id = handle.id();
     // println!("ID: {}", id);
 
-    let result = Command::new(git_bin)
+    let _result = Command::new(git_bin)
         .arg("clone")
         .arg("git://127.1.0.0:9418/repo")
         .current_dir(path)
@@ -55,13 +56,13 @@ fn test_clone() {
 
     modify_file_and_commit_in_server_repo(&path);
 
-    let result = Command::new("../".to_owned() + git_bin)
+    let _result = Command::new("../".to_owned() + git_bin)
         .arg("fetch")
         .current_dir(&format!("{}/repo/", path))
         .output()
         .unwrap();
 
-    let result = Command::new("../".to_owned() + git_bin)
+    let _result = Command::new("../".to_owned() + git_bin)
         .arg("merge")
         .current_dir(&format!("{}/repo/", path))
         .output()
@@ -74,13 +75,13 @@ fn test_clone() {
 
     modify_file_and_commit_in_both_repos_not_overlaping(&path);
 
-    let result = Command::new("../".to_owned() + git_bin)
+    let _result = Command::new("../".to_owned() + git_bin)
         .arg("fetch")
         .current_dir(&format!("{}/repo/", path))
         .output()
         .unwrap();
 
-    let result = Command::new("../".to_owned() + git_bin)
+    let _result = Command::new("../".to_owned() + git_bin)
         .arg("merge")
         .current_dir(&format!("{}/repo/", path))
         .output()
@@ -98,13 +99,13 @@ fn test_clone() {
 
     modify_file_and_commit_in_both_repos_none_overlaping_lines(&path);
 
-    let result = Command::new("../".to_owned() + git_bin)
+    let _result = Command::new("../".to_owned() + git_bin)
         .arg("fetch")
         .current_dir(&format!("{}/repo/", path))
         .output()
         .unwrap();
 
-    let result = Command::new("../".to_owned() + git_bin)
+    let _result = Command::new("../".to_owned() + git_bin)
         .arg("merge")
         .current_dir(&format!("{}/repo/", path))
         .output()
@@ -120,7 +121,7 @@ fn test_clone() {
 
     modify_file_and_commit_in_both_repos_overlaping_changes(&path);
 
-    let result = Command::new("../".to_owned() + git_bin)
+    let _result = Command::new("../".to_owned() + git_bin)
         .arg("fetch")
         .current_dir(&format!("{}/repo/", path))
         .output()
@@ -154,20 +155,21 @@ fn test_clone() {
         "error: Committing is not possible because you have unmerged files.\nhint: Fix them up in the work tree, and then use 'git add/rm <file>'\nhint: as appropriate to mark resolution and make a commit.\nfatal: Exiting because of an unresolved conflict.\n"
     );
 
-    let result = Command::new("../".to_owned() + git_bin)
+    let _result = Command::new("../".to_owned() + git_bin)
         .arg("add")
         .arg("testfile")
         .current_dir(&format!("{}/repo/", path))
         .output()
         .unwrap();
 
-    let result = Command::new("../".to_owned() + git_bin)
+    let _result = Command::new("../".to_owned() + git_bin)
         .arg("merge")
         .arg("--continue")
         .current_dir(&format!("{}/repo/", path))
         .output()
         .unwrap();
 
+    // panic!("STOP");
     _ = fs::remove_dir_all(format!("{}", path));
 }
 
@@ -267,7 +269,7 @@ fn modify_file_and_commit_in_both_repos_overlaping_changes(path: &str) {
         "No se pudo agregar el archivo testfile"
     );
 
-    let result = Command::new("../../../../../../../target/debug/git")
+    let _result = Command::new("../../../../../../../target/debug/git")
         .arg("commit")
         .arg("-m")
         .arg("modificacion_local_overlaping")
@@ -353,7 +355,7 @@ fn modify_file_and_commit_in_server_repo(path: &str) {
     );
 }
 
-fn start_deamon(path: &str) -> Child {
+fn _start_deamon(path: &str) -> Child {
     let handle = Command::new("git")
         .arg("daemon")
         .arg("--verbose")

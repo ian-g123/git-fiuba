@@ -5,6 +5,7 @@ use std::{
 };
 
 #[test]
+#[ignore = "Needs server"]
 fn test_push() {
     let path = "./tests/data/commands/push/test1";
     let git_bin = "../../../../../../target/debug/git";

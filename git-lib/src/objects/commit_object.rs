@@ -1,6 +1,6 @@
 use super::{
     author::Author,
-    git_object::{get_type_and_len, GitObject, GitObjectTrait},
+    git_object::{GitObject, GitObjectTrait},
     tree::Tree,
 };
 use crate::{
@@ -290,13 +290,13 @@ fn offset_str(minutes: i32) -> Result<String, CommandError> {
 }
 
 /// Devuelve un vector con el hash de cada commit padre.
-fn read_parents_from(
+fn _read_parents_from(
     number_of_parents: u32,
     stream: &mut dyn Read,
 ) -> Result<Vec<String>, CommandError> {
     let mut parents = Vec::<String>::new();
     for _ in 0..number_of_parents {
-        let parent_hash_be = read_hash_from(stream)?;
+        let parent_hash_be = _read_hash_from(stream)?;
         let parent_hash = u8_vec_to_hex_string(&parent_hash_be);
         parents.push(parent_hash);
     }
@@ -304,7 +304,7 @@ fn read_parents_from(
 }
 
 /// Lee el hash del stream y lo devuelve en formato  Vec<u8>
-fn read_hash_from(stream: &mut dyn Read) -> Result<[u8; 20], CommandError> {
+fn _read_hash_from(stream: &mut dyn Read) -> Result<[u8; 20], CommandError> {
     let mut tree_hash_be = [0; 20];
     stream
         .read_exact(&mut tree_hash_be)
@@ -443,7 +443,7 @@ impl GitObjectTrait for CommitObject {
 // }
 
 /// Crea un DateTime<Local> a partir de la información recibida.
-fn get_date(line: &mut Vec<&str>) -> Result<DateTime<Local>, CommandError> {
+fn _get_date(line: &mut Vec<&str>) -> Result<DateTime<Local>, CommandError> {
     let Some(time_zone_offset_str) = line.pop() else {
         return Err(CommandError::InvalidCommit);
     };

@@ -606,10 +606,10 @@ impl<'a> GitRepository<'a> {
         ));
         let mut server = GitServer::connect_to(&address)?;
 
-        let remote_branches =
+        let _remote_branches =
             self.update_remote_branches(&mut server, &repository_path, &repository_url)?;
         let remote_reference = format!("{}:{}", address, repository_path);
-        self.fetch_and_save_objects(&mut server, &remote_reference, remote_branches)?;
+        self.fetch_and_save_objects(&mut server, &remote_reference)?;
         Ok(())
     }
 
@@ -641,7 +641,6 @@ impl<'a> GitRepository<'a> {
         &mut self,
         server: &mut GitServer,
         remote_reference: &str,
-        remote_branches: HashMap<String, String>,
     ) -> Result<(), CommandError> {
         let remote_branches = self.remote_branches()?;
         let wants = remote_branches.clone().into_values().collect();
@@ -953,7 +952,7 @@ impl<'a> GitRepository<'a> {
         server: &mut GitServer,
         repository_path: &str,
         repository_url: &str,
-    ) -> Result<(HashMap<String, String>), CommandError> {
+    ) -> Result<HashMap<String, String>, CommandError> {
         self.log("Updating remote branches");
         let (_head_branch, branch_remote_refs) = server
             .explore_repository_upload_pack(&("/".to_owned() + repository_path), repository_url)?;
@@ -1919,7 +1918,7 @@ pub fn local_branches(base_path: &str) -> Result<HashMap<String, String>, Comman
     Ok(branches)
 }
 
-fn remote_branches(base_path: &str) -> Result<HashMap<String, String>, CommandError> {
+fn _remote_branches(base_path: &str) -> Result<HashMap<String, String>, CommandError> {
     let mut branches = HashMap::<String, String>::new();
     let branches_path = format!("{}/.git/refs/remotes/origin/", base_path);
     let paths = fs::read_dir(branches_path).map_err(|error| {
@@ -1959,7 +1958,7 @@ fn remote_branches(base_path: &str) -> Result<HashMap<String, String>, CommandEr
     Ok(branches)
 }
 
-fn update_remote_branches(
+fn _update_remote_branches(
     server: &mut GitServer,
     repository_path: &str,
     repository_url: &str,
@@ -1969,11 +1968,11 @@ fn update_remote_branches(
         .explore_repository_upload_pack(&("/".to_owned() + repository_path), repository_url)?;
     Ok(for (sha1, mut ref_path) in branch_remote_refs {
         ref_path.replace_range(0..11, "");
-        update_ref(&base_path, &sha1, &ref_path)?;
+        _update_ref(&base_path, &sha1, &ref_path)?;
     })
 }
 
-fn update_ref(base_path: &str, sha1: &str, ref_name: &str) -> Result<(), CommandError> {
+fn _update_ref(base_path: &str, sha1: &str, ref_name: &str) -> Result<(), CommandError> {
     let dir_path = format!("{}/.git/refs/remotes/origin/", base_path);
     let file_path = dir_path.to_owned() + ref_name;
 

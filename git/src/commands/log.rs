@@ -1,14 +1,10 @@
-use std::{
-    collections::HashMap,
-    io::{Read, Write},
-};
+use std::io::{Read, Write};
 
 use crate::commands::command::Command;
 use git_lib::{
     command_errors::CommandError,
-    git_repository::{self, get_head_ref},
-    objects::commit_object::{print_for_log, sort_commits_descending_date, CommitObject},
-    server_components::history_analyzer::rebuild_commits_tree,
+    git_repository::{self},
+    objects::commit_object::{print_for_log, CommitObject},
 };
 
 use super::command::ConfigAdderFunction;

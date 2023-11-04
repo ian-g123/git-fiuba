@@ -1,12 +1,6 @@
-use std::{
-    collections::HashMap,
-    io::{Read, Write},
-};
+use std::io::{Read, Write};
 
-use git_lib::{
-    command_errors::CommandError, git_repository::GitRepository,
-    objects::commit_object::CommitObject,
-};
+use git_lib::{command_errors::CommandError, git_repository::GitRepository};
 
 use super::command::{Command, ConfigAdderFunction};
 

@@ -37,7 +37,7 @@ pub fn write_object_to_packfile(
     mut git_object: GitObject,
     packfile: &mut Vec<u8>,
 ) -> Result<(), CommandError> {
-    let mut object_content = git_object.content(None)?;
+    let object_content = git_object.content(None)?;
     // let mut cursor = Cursor::new(&mut object_content);
     // git_object.write_to(&mut cursor)?;
 
@@ -87,7 +87,7 @@ pub fn make_packfile(
     let mut hash_objects: HashMap<String, GitObject> = HashMap::new();
 
     for (hash_commit, (commit_object, _branch)) in commits_map {
-        let Some(mut tree) = commit_object.get_tree() else {
+        let Some(tree) = commit_object.get_tree() else {
             return Err(CommandError::PushTreeError);
         };
         let mut tree_owned = tree.to_owned();
