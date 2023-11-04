@@ -1503,18 +1503,39 @@ impl<'a> GitRepository<'a> {
 
     // ----- Branch -----
 
+    fn change_current_branch_name(&mut self, new_name: &str) -> Result<(), CommandError> {
+        let path = join_paths!(self.path, ".git/HEAD").ok_or(CommandError::FileCreationError(
+            " No se pudo obtener .git/HEAD".to_string(),
+        ))?;
+        let mut file =
+            File::create(path).map_err(|error| CommandError::FileOpenError(error.to_string()))?;
+
+        file.write_all(format!("ref: refs/heads/{}", new_name).as_bytes())
+            .map_err(|error| {
+                CommandError::FileWriteError(
+                    "Error guardando ref de HEAD:".to_string() + &error.to_string(),
+                )
+            })?;
+        self.log("HEAD renamed");
+        Ok(())
+    }
+
     pub fn rename_branch(&mut self, branches: &Vec<String>) -> Result<(), CommandError> {
         let head = self.get_current_branch_name()?;
         if branches.len() == 1 {
             let new_name = branches[0].clone();
             self.change_branch_name(&head, &new_name)?;
+            self.change_current_branch_name(&new_name)?;
             self.log(&format!("Branch '{head}' has been renamed to '{new_name}'"))
         } else {
             self.change_branch_name(&branches[0], &branches[1])?;
             self.log(&format!(
                 "Branch '{}' has been renamed to '{}'",
                 branches[0], branches[1]
-            ))
+            ));
+            if branches[0] == head {
+                self.change_current_branch_name(&branches[1])?;
+            }
         }
         Ok(())
     }
@@ -1556,8 +1577,12 @@ impl<'a> GitRepository<'a> {
         if path.is_dir() {
             return Err(CommandError::InvalidBranchName(new_branch));
         }
-        fs::create_dir_all(branches_path.clone())
-            .map_err(|_| CommandError::FileCreationError(new_branch_path.clone()))?;
+        if let Some(dir) = path.parent() {
+            fs::create_dir_all(dir)
+                .map_err(|_| CommandError::FileCreationError(new_branch_path.clone()))?;
+        }
+        self.log(&format!("Path: {}", new_branch_path));
+
         let mut file = File::create(new_branch_path.clone())
             .map_err(|_| CommandError::FileCreationError(new_branch_path.clone()))?;
 
@@ -1624,15 +1649,57 @@ impl<'a> GitRepository<'a> {
                 " No se pudo crear el directorio .git/refs/head/".to_string(),
             ),
         )?;
-        let old_path = branches_path.clone() + old;
-        let new_path = branches_path + new;
-        if !Path::new(&old_path).exists() {
+        let old_path_str = branches_path.clone() + old;
+        let new_path_str = branches_path + new;
+
+        let old_path = Path::new(&old_path_str);
+        let new_path = Path::new(&new_path_str);
+
+        if !old_path.exists() {
             return Err(CommandError::NoOldBranch(old.to_string()));
         }
-        if Path::new(&new_path).exists() {
+        if new_path.exists() && new != old {
             return Err(CommandError::NewBranchExists(new.to_string()));
         }
-        fs::rename(old, new).map_err(|err| CommandError::FileNameError)?;
+        /* if old_path.is_dir() { */
+        let hash = fs::read_to_string(old_path)
+            .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+
+        fs::remove_file(old_path)
+            .map_err(|error| CommandError::RemoveFileError(error.to_string()))?;
+
+        if let Some(dir) = old_path.parent() {
+            if !dir.ends_with(".git/refs/heads/") {
+                fs::remove_dir_all(dir)
+                    .map_err(|_| CommandError::RemoveDirectoryError(old_path_str.clone()))?;
+            }
+        }
+
+        /* let mut file = File::create(new_path)
+            .map_err(|error| CommandError::FileCreationError(error.to_string()))?;
+        file.write_all(hash.as_bytes())
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?; */
+        /* } else if new_path.is_dir() { */
+        /* let hash = fs::read_to_string(old_path)
+                       .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+
+                   fs::remove_dir_all(old_path)
+                       .map_err(|error| CommandError::RemoveDirectoryError(error.to_string()))?;
+        */
+        if let Some(dir) = new_path.parent() {
+            if !dir.ends_with(".git/refs/heads/") {
+                fs::create_dir_all(dir)
+                    .map_err(|_| CommandError::FileCreationError(new_path_str.clone()))?;
+            }
+        }
+
+        let mut file = File::create(new_path.clone())
+            .map_err(|_| CommandError::FileCreationError(new_path_str.clone()))?;
+        file.write_all(hash.as_bytes())
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        /* } else {
+            fs::rename(old_path_str, new_path_str).map_err(|_| CommandError::FileNameError)?;
+        } */
         Ok(())
     }
 

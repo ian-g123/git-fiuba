@@ -133,6 +133,8 @@ pub enum CommandError {
     InvalidObjectName(String),
     BranchExists(String),
     InvalidBranchName(String),
+    RemoveDirectoryError(String),
+    RemoveFileError(String),
 }
 
 impl Error for CommandError {}
@@ -361,6 +363,12 @@ impl fmt::Display for CommandError {
             }
             CommandError::InvalidBranchName(name) => {
                 write!(f, "fatal: '{name}' is not a valid branch name.")
+            }
+            CommandError::RemoveDirectoryError(error) => {
+                write!(f, "Error: {error}")
+            }
+            CommandError::RemoveFileError(error) => {
+                write!(f, "Error: {error}")
             }
         }
     }
