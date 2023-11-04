@@ -727,75 +727,6 @@ impl<'a> GitRepository<'a> {
             String::from_utf8_lossy(&pack_file)
         ));
 
-        // ===
-
-        // let mut fake_socket = Cursor::new(pack_file.clone());
-        // let mut buf = [0; 12];
-        // fake_socket.read_exact(&mut buf);
-
-        // let mut objects_data = Vec::new();
-
-        // self.log(&format!("header: {:?}", buf));
-
-        // for _ in 0..3 {
-        //     self.log("loop");
-        //     let (object_type, len) = {
-        //         let mut first_byte_buf = [0; 1];
-        //         fake_socket
-        //             .read_exact(&mut first_byte_buf)
-        //             .map_err(|_| CommandError::ErrorExtractingPackfile)?;
-
-        //         let object_type_u8 = first_byte_buf[0] >> 4 & 0b00000111;
-        //         let object_type = PackfileObjectType::from_u8(object_type_u8)?;
-
-        //         let mut bits = Vec::new();
-        //         let first_byte_buf_len_bits = first_byte_buf[0] & 0b00001111;
-
-        //         let mut bit_chunk = Vec::new();
-        //         for i in (0..4).rev() {
-        //             let bit = (first_byte_buf_len_bits >> i) & 1;
-        //             bit_chunk.push(bit);
-        //         }
-        //         self.log("1/2 loop");
-
-        //         bits.splice(0..0, bit_chunk);
-        //         let mut is_last_byte: bool = first_byte_buf[0] >> 7 == 0;
-        //         while !is_last_byte {
-        //             let mut seven_bit_chunk = Vec::<u8>::new();
-        //             let mut current_byte_buf = [0; 1];
-        //             fake_socket
-        //                 .read_exact(&mut current_byte_buf)
-        //                 .map_err(|_| CommandError::ErrorExtractingPackfile)?;
-        //             let current_byte = current_byte_buf[0];
-        //             let seven_bit_chunk_with_zero = current_byte & 0b01111111;
-        //             for i in (0..7).rev() {
-        //                 let bit = (seven_bit_chunk_with_zero >> i) & 1;
-        //                 seven_bit_chunk.push(bit);
-        //             }
-        //             bits.splice(0..0, seven_bit_chunk);
-        //             is_last_byte = current_byte >> 7 == 0;
-        //         }
-
-        //         let len = bits_to_usize(&bits);
-        //         Ok((object_type, len))
-        //     }?;
-
-        //     let i = fake_socket.position();
-        //     let mut decoder = flate2::read::ZlibDecoder::new(&mut fake_socket);
-        //     let mut deflated_data = Vec::new();
-
-        //     decoder
-        //         .read_to_end(&mut deflated_data)
-        //         .map_err(|_| CommandError::ErrorExtractingPackfile)?;
-        //     let bytes_used = decoder.total_in() as usize;
-        //     fake_socket.set_position(i + bytes_used as u64);
-
-        //     let object = deflated_data;
-        //     objects_data.push((object_type, len, object));
-        // }
-        // self.log(&format!("object data: {:?}", objects_data));
-
-        // ===
         server.write_to_socket(&pack_file)?;
         self.log("sent! Reading response");
         println!("sent! Reading response");
@@ -830,10 +761,7 @@ impl<'a> GitRepository<'a> {
             ));
             let remote_hash = match refs_hash.get(&local_branch) {
                 Some(remote_hash) => remote_hash.clone(),
-                None => {
-                    self.log("TODO create?");
-                    todo!()
-                } //create?
+                None => "0000000000000000000000000000000000000000".to_string(),
             };
 
             if local_hash == *remote_hash {
@@ -865,27 +793,12 @@ impl<'a> GitRepository<'a> {
             } else {
                 let (_address, _repository_path, repository_url) = self.get_remote_info()?;
                 CommandError::PushBranchBehindError(repository_url, local_branch.to_owned());
-                todo!(); // error de que el repo local esta desactualizado
+                // error de que el repo local esta desactualizado
             }
             commits_map.remove(&remote_hash);
         }
 
         Ok((hash_branch_status, commits_map))
-    }
-
-    // fn len_packfile_format(&self, len_bits: Vec<u8>) -> Vec<u8> {
-    //     let result = Vec::new();
-    //     for bit in len_bits {}
-    // }
-
-    fn int_to_bits(&self, num: usize) -> Vec<u8> {
-        let mut result = Vec::new();
-
-        for i in (0..64).rev() {
-            let bit = (num >> i) & 1;
-            result.push(bit as u8);
-        }
-        result
     }
 
     /// Actualiza todas las branches de la carpeta remotes con los hashes de los commits
