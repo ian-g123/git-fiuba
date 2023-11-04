@@ -826,7 +826,7 @@ impl<'a> GitRepository<'a> {
         Ok(Some(parent.to_string()))
     }
 
-    fn local_branches(&mut self) -> Result<HashMap<String, String>, CommandError> {
+    pub fn local_branches(&mut self) -> Result<HashMap<String, String>, CommandError> {
         let mut branches = HashMap::<String, String>::new();
         let branches_path = join_paths!(&self.path, ".git/refs/heads/").ok_or(
             CommandError::DirectoryCreationError(
@@ -1024,7 +1024,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    fn get_head_branch_name(&mut self) -> Result<String, CommandError> {
+    pub fn get_head_branch_name(&mut self) -> Result<String, CommandError> {
         let head_branch_path = self.get_head_branch_path()?;
         let head_branch_name =
             head_branch_path
@@ -1151,7 +1151,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    fn db(&self) -> Result<ObjectsDatabase, CommandError> {
+    pub fn db(&self) -> Result<ObjectsDatabase, CommandError> {
         ObjectsDatabase::new(&self.path)
     }
 

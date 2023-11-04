@@ -65,6 +65,7 @@ impl ObjectsDatabase {
         let file_path = join_paths!(&self.db_path, &hash_str[0..2], &hash_str[2..])
             .ok_or(CommandError::JoiningPaths)?;
         logger.log(&format!("read_file file_path: {}", file_path));
+        println!("read_file file_path: {}", file_path);
         let mut file = File::open(&file_path).map_err(|error| {
             CommandError::FileOpenError(format!(
                 "Error al abrir archivo {}: {}",

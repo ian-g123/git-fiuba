@@ -116,6 +116,13 @@ pub enum CommandError {
     UnmergedFiles,
     /// There cannot be a file and a folder with the same name
     CannotHaveFileAndFolderWithSameName(String),
+    /// Error de I/O
+    Io {
+        message: String,
+        error: String,
+    },
+    /// Error al negociar paquetes con cliente
+    PackageNegotiationError(String),
 }
 
 impl Error for CommandError {}
@@ -306,6 +313,12 @@ impl fmt::Display for CommandError {
                     "There cannot be a file and a folder with the same name: {}",
                     path
                 )
+            }
+            CommandError::Io { message, error } => {
+                write!(f, "{}: {}", message, error)
+            }
+            CommandError::PackageNegotiationError(msg) => {
+                write!(f, "{}", msg)
             }
         }
     }

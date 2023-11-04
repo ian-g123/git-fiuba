@@ -2,5 +2,6 @@
 
 members = [
     "git",
-    "git-lib"
+    "git-lib",
+    "git-server"
 ]

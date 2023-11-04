@@ -13,7 +13,7 @@ pub enum PackfileObjectType {
 }
 
 impl PackfileObjectType {
-    pub(crate) fn from_u8(byte: u8) -> Result<Self, CommandError> {
+    pub fn from_u8(byte: u8) -> Result<Self, CommandError> {
         match byte {
             1 => Ok(PackfileObjectType::Commit),
             2 => Ok(PackfileObjectType::Tree),
@@ -21,6 +21,16 @@ impl PackfileObjectType {
             4 => Ok(PackfileObjectType::Tag),
             6 => Ok(PackfileObjectType::OfsDelta),
             7 => Ok(PackfileObjectType::RefDelta),
+            _ => Err(CommandError::UnknownObjectType),
+        }
+    }
+
+    pub fn from_str(name: &str) -> Result<Self, CommandError> {
+        match name {
+            "commit" => Ok(PackfileObjectType::Commit),
+            "tree" => Ok(PackfileObjectType::Tree),
+            "blob" => Ok(PackfileObjectType::Blob),
+            "tag" => Ok(PackfileObjectType::Tag),
             _ => Err(CommandError::UnknownObjectType),
         }
     }

@@ -159,6 +159,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "git-server"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "flate2",
+ "git-lib",
+ "hex",
+ "sha1",
+]
+
+[[package]]
 name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
