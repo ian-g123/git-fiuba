@@ -721,7 +721,7 @@ impl<'a> GitRepository<'a> {
         server.negociate_recieve_pack(hash_branch_status)?;
 
         self.log("Sending packfile");
-        let pack_file = make_packfile(commits_map)?;
+        let pack_file: Vec<u8> = make_packfile(commits_map)?;
         self.log(&format!(
             "pack_file: {:?}",
             String::from_utf8_lossy(&pack_file)
@@ -1804,18 +1804,20 @@ fn write_object_to_packfile(
     mut git_object: GitObject,
     packfile: &mut Vec<u8>,
 ) -> Result<(), CommandError> {
-    let mut object_content = Vec::<u8>::new();
-    let mut cursor = Cursor::new(&mut object_content);
-    git_object.write_to(&mut cursor)?;
+    let mut object_content = git_object.content()?;
+    // let mut cursor = Cursor::new(&mut object_content);
+    // git_object.write_to(&mut cursor)?;
 
     let type_str = git_object.type_str();
     println!("type_str: {:?}", type_str);
+    println!(
+        "object_content: {:?}",
+        String::from_utf8_lossy(&object_content)
+    );
     let object_len = object_content.len();
 
     let compressed_object = compress(&object_content)?;
     let pf_type = PackfileObjectType::from_str(type_str.as_str())?;
-
-    // ===
 
     let mut len_temp = object_len;
     let first_four = (len_temp & 0b00001111) as u8;
@@ -1834,16 +1836,12 @@ fn write_object_to_packfile(
         }
     }
 
-    // ===
-
     let type_and_len_byte =
         (pf_type.to_u8()) << 4 | first_four | if len_bytes.is_empty() { 0 } else { 0b10000000 };
-
     println!("writing: {:?}", &type_and_len_byte);
     println!("object_len: {:?}", object_len);
     println!("writing: {:?}", &len_bytes);
     println!("writing: {:?}", String::from_utf8_lossy(&compressed_object));
-
     packfile.push(type_and_len_byte);
     packfile.extend(len_bytes);
     packfile.extend(compressed_object);
@@ -1856,7 +1854,7 @@ pub fn make_packfile(
     let mut hash_objects: HashMap<String, GitObject> = HashMap::new();
 
     for (hash_commit, (commit_object, _branch)) in commits_map {
-        let Some(tree) = commit_object.get_tree() else {
+        let Some(mut tree) = commit_object.get_tree() else {
             return Err(CommandError::PushTreeError);
         };
         let mut tree_owned = tree.to_owned();

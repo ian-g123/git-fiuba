@@ -82,6 +82,8 @@ pub enum CommandError {
     Connection(String),
     /// Error al leer un pkt
     ErrorReadingPkt,
+    /// Error al leer un pkt con msg
+    ErrorReadingPktVerbose(String),
     /// Error al enviar un mensaje
     SendingMessage(String),
     /// Error al intentar abrir el archivo de configuración
@@ -107,7 +109,6 @@ pub enum CommandError {
     /// Error al obtener el tree desde el option que debería ser tree en push
     PushTreeError,
     PushBranchBehindError(String, String),
-    ErrorReadingPktVerbose(String),
 }
 
 impl Error for CommandError {}
@@ -226,6 +227,10 @@ impl fmt::Display for CommandError {
             CommandError::ErrorReadingPkt => {
                 write!(f, "Error al leer un pkt")
             }
+
+            CommandError::ErrorReadingPktVerbose(msg) => {
+                write!(f, "Error al leer un pkt: {}", msg)
+            }
             CommandError::SendingMessage(msg) => {
                 write!(f, "{}", msg)
             }
@@ -288,9 +293,6 @@ impl fmt::Display for CommandError {
                     f,
                     "! [rejected]        {branch} -> {branch} (non-fast-forward)\nerror: failed to push some refs to '{url}'\n"
                 )
-            }
-            CommandError::ErrorReadingPktVerbose(msg) => {
-                write!(f, "{}", msg)
             }
         }
     }

@@ -217,6 +217,7 @@ impl GitServer {
 
         let mut refs_hash = HashMap::<String, String>::new();
 
+        println!("lines: {:?}", lines);
         let _version = lines.remove(0);
         let first_line = lines.remove(0);
 
@@ -244,6 +245,7 @@ impl GitServer {
     ) -> Result<(), CommandError> {
         for (branch, (new_hash, old_hash)) in hash_branch_status {
             let line = format!("{} {} refs/heads/{}\n", new_hash, old_hash, branch);
+            println!("Sending: {}", line);
             self.write_in_tpk_to_socket(&line).map_err(|_| {
                 return CommandError::SendingMessage(
                     "Error al enviar el hash del branch".to_string(),
