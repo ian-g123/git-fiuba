@@ -210,6 +210,10 @@ impl Branch {
             repo.rename_branch(&self.rename)?;
         } else if !self.create.is_empty() {
             repo.create_branch(&self.create)?;
+        } else if !self.delete_locals.is_empty() {
+            repo.delete_branches(&self.delete_locals, false)?;
+        } else if !self.delete_remotes.is_empty() {
+            repo.delete_branches(&self.delete_remotes, true)?;
         }
 
         Ok(())
