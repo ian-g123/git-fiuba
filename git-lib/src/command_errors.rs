@@ -125,18 +125,28 @@ pub enum CommandError {
     ShowAllAndDelete,
     /// fatal: branch name required
     BranchNameRequired,
+    /// Se intentó usar -m y -D
     RenameAndDelete,
+    /// No se puede renombrar una rama que no existe
     NoOldBranch(String),
+    /// No se puede renombrar una rama con un nombre que existe
     NewBranchExists(String),
+    /// branch -m solo recibe 2 nombres
     FatalRenameOperation,
+    /// No se pudo crear la branch
     FatalCreateBranchOperation,
+    /// Nombre de objeto inválido. No se puede crear la rama
     InvalidObjectName(String),
+    /// No se puede crear una rama que ya existe
     BranchExists(String),
+    /// Nombre de rama inválido.
     InvalidBranchName(String),
+    /// Ocurrió un error al eliminar el directorio
     RemoveDirectoryError(String),
+    /// Ocurrió un error al eliminar el archivo
     RemoveFileError(String),
+    /// Se usó el flag -D de branch sin argumentos
     DeleteWithNoArgs,
-    ContinueFlags(usize),
 }
 
 impl Error for CommandError {}
@@ -373,7 +383,6 @@ impl fmt::Display for CommandError {
                 write!(f, "Error: {error}")
             }
             CommandError::DeleteWithNoArgs => write!(f, "fatal: branch name required"),
-            CommandError::ContinueFlags(_) => write!(f, "Seguir recorriendo los argumentos."),
         }
     }
 }
