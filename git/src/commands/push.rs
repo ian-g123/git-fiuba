@@ -81,8 +81,6 @@ impl Push {
             local_branches.push((self.branch.to_owned(), hash_commit));
         }
 
-        println!("local_branches: {:?}", local_branches);
-
         repo.push(local_branches)?;
 
         Ok(())

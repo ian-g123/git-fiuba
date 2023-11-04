@@ -4,23 +4,48 @@ use std::{
     process::Command,
 };
 
+// #[test]
+// fn test_push() {
+//     let path = "./tests/data/commands/push/test1";
+//     let git_bin = "../../../../../../target/debug/git";
+
+//     create_base_scene(path.clone());
+
+//     let result = Command::new(git_bin)
+//         .arg("clone")
+//         .arg("git://127.1.0.0:9418/repo")
+//         .current_dir(path)
+//         .output()
+//         .unwrap();
+
+//     let result = Command::new("../".to_owned() + git_bin)
+//         .arg("push")
+//         .current_dir(&format!("{}/repo", path))
+//         .output()
+//         .unwrap();
+
+//     // CORROBORAR QUE LO IMPRESO SEA EVERYTHING UP-TO-DATE
+//     assert!(
+//         String::from_utf8(result.stdout)
+//             .unwrap()
+//             .contains("Everything up-to-date"),
+//         "No se pudo hacer push"
+//     );
+// }
+
 #[test]
-#[ignore]
-fn test_push() {
+fn test_push_with_changes() {
     let path = "./tests/data/commands/push/test1";
     let git_bin = "../../../../../../target/debug/git";
 
-    // create_base_scene(path.clone());
+    create_base_scene(path.clone());
 
-    // let result = Command::new(git_bin)
-    //     .arg("clone")
-    //     .arg("git://127.1.0.0:9418/repo")
-    //     .current_dir(path)
-    //     .output()
-    //     .unwrap();
-
-    // println!("{}", String::from_utf8(result.stderr).unwrap());
-    // println!("{}\n\n", String::from_utf8(result.stdout).unwrap());
+    let result = Command::new(git_bin)
+        .arg("clone")
+        .arg("git://127.1.0.0:9418/repo")
+        .current_dir(path)
+        .output()
+        .unwrap();
 
     let mut file = File::create(path.to_owned() + "/repo/testfile2").unwrap();
     file.write_all(b"contenido2\n").unwrap();
@@ -46,18 +71,21 @@ fn test_push() {
         "No se pudo hacer commit"
     );
 
-    let result1 = Command::new("../".to_owned() + git_bin)
+    let result = Command::new("../".to_owned() + git_bin)
         .arg("push")
         .current_dir(&format!("{}/repo", path))
         .output()
         .unwrap();
 
-    println!("{}", String::from_utf8(result1.stderr).unwrap());
-    println!("{}\n\n", String::from_utf8(result1.stdout).unwrap());
+    println!(
+        "push:\nSTDOUT:\n{}\n========\nERRORES\n========\n{}\n========",
+        String::from_utf8(result.stdout).unwrap(),
+        String::from_utf8(result.stderr).unwrap()
+    );
 }
 
 fn create_base_scene(path: &str) {
-    _ = fs::remove_dir_all(format!("{}/server-files/repo", path));
+    // _ = fs::remove_dir_all(format!("{}/server-files/repo", path));
     _ = fs::remove_dir_all(format!("{}/repo", path));
 
     let Ok(_) = fs::create_dir_all(path.clone()) else {

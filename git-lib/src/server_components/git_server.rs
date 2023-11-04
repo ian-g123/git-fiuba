@@ -8,7 +8,7 @@ use std::{
 use super::{packfile_object_type::PackfileObjectType, reader::TcpStreamBuffedReader};
 
 pub struct GitServer {
-    socket: TcpStream,
+    pub socket: TcpStream,
 }
 
 impl GitServer {
@@ -26,7 +26,7 @@ impl GitServer {
     fn send(&mut self, line: &str) -> Result<Vec<String>, CommandError> {
         let line = line.to_string().to_pkt_format();
         self.write_string_to_socket(&line)?;
-        let lines = get_response(&self.socket)?;
+        let lines = get_response_fn(&self.socket)?;
         Ok(lines)
     }
 
@@ -213,18 +213,26 @@ impl GitServer {
             repository_path, host
         );
 
-        let lines = self.send(&line)?;
-
-        println!("lines: {:?}", lines);
+        let mut lines = self.send(&line)?;
 
         let mut refs_hash = HashMap::<String, String>::new();
 
-        for line in lines.iter() {
+        let _version = lines.remove(0);
+        let first_line = lines.remove(0);
+
+        let (hash, mut branch_name_and_options) = first_line
+            .split_once(' ')
+            .ok_or(CommandError::ErrorReadingPkt)?;
+        branch_name_and_options = &branch_name_and_options[11..branch_name_and_options.len() - 1]; // refs/heads/*\n
+        let (branch_name, _options) = branch_name_and_options
+            .split_once('\0')
+            .ok_or(CommandError::ErrorReadingPkt)?;
+        refs_hash.insert(branch_name.to_string(), hash.to_string());
+
+        for line in &lines {
             let (hash, mut ref_name) = line.split_once(' ').ok_or(CommandError::ErrorReadingPkt)?;
-
-            ref_name = &ref_name[11..ref_name.len() - 1]; // refs/heads/debug\n
-
-            refs_hash.insert(hash.to_string(), ref_name.to_string());
+            ref_name = &ref_name[11..ref_name.len() - 1]; // refs/heads/*\n
+            refs_hash.insert(ref_name.to_string(), hash.to_string());
         }
 
         Ok(refs_hash)
@@ -247,9 +255,28 @@ impl GitServer {
         })?;
         return Ok(());
     }
+
+    pub fn get_response(&mut self) -> Result<Vec<String>, CommandError> {
+        let mut lines = Vec::<String>::new();
+        loop {
+            match String::read_pkt_format(&mut self.socket)? {
+                Some(line) => {
+                    println!("pushing: {:?}", line);
+                    lines.push(line);
+                }
+                None => break,
+            }
+        }
+        Ok(lines)
+    }
+    pub fn just_read(&mut self) -> Result<Vec<u8>, CommandError> {
+        let mut buf = Vec::new();
+        self.socket.read(&mut buf).unwrap();
+        Ok(buf)
+    }
 }
 
-fn read_object_header_from_packfile(
+pub fn read_object_header_from_packfile(
     buffed_reader: &mut TcpStreamBuffedReader<'_>,
 ) -> Result<(PackfileObjectType, usize), CommandError> {
     let mut first_byte_buf = [0; 1];
@@ -291,7 +318,7 @@ fn read_object_header_from_packfile(
     Ok((object_type, len))
 }
 
-fn get_response(mut socket: &TcpStream) -> Result<Vec<String>, CommandError> {
+fn get_response_fn(mut socket: &TcpStream) -> Result<Vec<String>, CommandError> {
     let mut lines = Vec::<String>::new();
     loop {
         match String::read_pkt_format(&mut socket)? {
@@ -320,9 +347,9 @@ fn read_pkt_size(socket: &mut dyn Read) -> Result<usize, CommandError> {
     let mut size_buffer = [0; 4];
     socket
         .read(&mut size_buffer)
-        .map_err(|_| CommandError::ErrorReadingPkt)?;
-    let from_utf8 =
-        &String::from_utf8(size_buffer.to_vec()).map_err(|_| CommandError::ErrorReadingPkt)?;
+        .map_err(|error| CommandError::ErrorReadingPktVerbose(error.to_string()))?;
+    let from_utf8 = &String::from_utf8(size_buffer.to_vec())
+        .map_err(|error| CommandError::ErrorReadingPktVerbose(error.to_string()))?;
     let size_vec = hex_string_to_u8_vec_2(from_utf8.as_str())?;
     let size: usize = u16::from_be_bytes(size_vec) as usize;
     Ok(size)
@@ -372,8 +399,9 @@ impl Pkt for String {
         let mut line_buffer = vec![0; size - 4];
         stream
             .read_exact(&mut line_buffer)
-            .map_err(|_| CommandError::ErrorReadingPkt)?;
-        let line = String::from_utf8(line_buffer).map_err(|_| CommandError::ErrorReadingPkt)?;
+            .map_err(|error| CommandError::ErrorReadingPktVerbose(error.to_string()))?;
+        let line = String::from_utf8(line_buffer)
+            .map_err(|error| CommandError::ErrorReadingPktVerbose(error.to_string()))?;
         Ok(Some(line))
     }
 }

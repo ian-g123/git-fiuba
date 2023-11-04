@@ -107,6 +107,7 @@ pub enum CommandError {
     /// Error al obtener el tree desde el option que debería ser tree en push
     PushTreeError,
     PushBranchBehindError(String, String),
+    ErrorReadingPktVerbose(String),
 }
 
 impl Error for CommandError {}
@@ -287,6 +288,9 @@ impl fmt::Display for CommandError {
                     f,
                     "! [rejected]        {branch} -> {branch} (non-fast-forward)\nerror: failed to push some refs to '{url}'\n"
                 )
+            }
+            CommandError::ErrorReadingPktVerbose(msg) => {
+                write!(f, "{}", msg)
             }
         }
     }
