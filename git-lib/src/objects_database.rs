@@ -1,11 +1,8 @@
 extern crate sha1;
 use std::{
-    env,
     fs::{self, File},
     io::{Cursor, Read, Write},
 };
-
-use sha1::digest::block_buffer::Error;
 
 use crate::{
     join_paths,

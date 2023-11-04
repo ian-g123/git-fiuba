@@ -108,7 +108,7 @@ pub enum CommandError {
     PushBranchesError,
     /// Error al obtener el tree desde el option que debería ser tree en push
     PushTreeError,
-    PushBranchBehindError(String, String),
+    PushBranchBehindVerbose(String, String),
     /// Octopus merge not supported
     MergeMultipleCommits,
     /// Merge conflict
@@ -123,6 +123,7 @@ pub enum CommandError {
     UnmergedFiles,
     /// There cannot be a file and a folder with the same name
     CannotHaveFileAndFolderWithSameName(String),
+    PushBranchBehind(String),
 }
 
 impl Error for CommandError {}
@@ -302,7 +303,7 @@ impl fmt::Display for CommandError {
                     "Error al obtener el tree desde el option que debería ser tree en push"
                 )
             }
-            CommandError::PushBranchBehindError(url, branch) => {
+            CommandError::PushBranchBehindVerbose(url, branch) => {
                 write!(
                     f,
                     "! [rejected]        {branch} -> {branch} (non-fast-forward)\nerror: failed to push some refs to '{url}'\n"
@@ -335,6 +336,9 @@ impl fmt::Display for CommandError {
                     "There cannot be a file and a folder with the same name: {}",
                     path
                 )
+            }
+            CommandError::PushBranchBehind(local_branch) => {
+                write!(f, "error: failed to push some refs to {}", local_branch)
             }
         }
     }
