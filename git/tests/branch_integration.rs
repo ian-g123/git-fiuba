@@ -474,6 +474,95 @@ fn test_delete_branch() {
     _ = fs::remove_dir_all(format!("{}", path));
 }
 
+#[test]
+fn test_show_branch() {
+    let path = "./tests/data/commands/branch/repo4";
+
+    create_test_scene_1(path);
+
+    // show local.
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("testfile.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("branch")
+        .arg("branch1")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("branch")
+        .arg("branch2")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("branch")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    println!("Stderr: {}", stderr);
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = "  branch1\n  branch2\n* master\n";
+
+    assert_eq!(stdout, expected);
+
+    // show remote
+
+    create_remote_files(path, "origin/");
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("branch")
+        .arg("-r")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    println!("Stderr: {}", stderr);
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = "  origin/dir/remote3\n  origin/remote1\n  origin/remote2\n";
+    assert_eq!(stdout, expected);
+
+    // show all
+
+    create_remote_files(path, "origin/");
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("branch")
+        .arg("-r")
+        .arg("-a")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    println!("Stderr: {}", stderr);
+    let stdout = String::from_utf8(result.stdout).unwrap();
+
+    let expected = "  branch1\n  branch2\n* master\n  remotes/origin/dir/remote3\n  remotes/origin/remote1\n  remotes/origin/remote2\n";
+    assert_eq!(stdout, expected);
+
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
 fn create_remote_files(path: &str, remote: &str) {
     let dir = path.to_string() + "/.git/refs/remotes/" + remote;
     fs::create_dir_all(dir.clone()).unwrap();

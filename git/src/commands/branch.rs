@@ -64,19 +64,23 @@ impl Branch {
         }
     }
 
+    /// Configura el flag para mostrar todas las ramas.
     fn add_show_all_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options: Vec<String> = ["--all".to_string(), "-a".to_string()].to_vec();
         Self::check_errors_flags(i, args, &options)?;
         if !self.delete_locals.is_empty() || !self.delete_remotes.is_empty() {
             return Err(CommandError::ShowAllAndDelete);
         }
-        if self.show_remotes {
+
+        if self.show_remotes == true {
             self.show_remotes = false;
         }
         self.show_all = true;
+
         Ok(i + 1)
     }
 
+    /// Configura el flag para mostrar las ramas remotas.
     fn add_show_remotes_config(
         &mut self,
         i: usize,
@@ -93,9 +97,11 @@ impl Branch {
             self.show_all = false;
         }
         self.show_remotes = true;
+
         Ok(i + 1)
     }
 
+    /// Configura el flag para eliminar ramas.
     fn add_delete_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options: Vec<String> = ["-D".to_string()].to_vec();
         Self::check_errors_flags(i, args, &options)?;
@@ -124,6 +130,7 @@ impl Branch {
         Ok(args.len())
     }
 
+    /// Configura el flag para renombrar ramas.
     fn add_rename_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options: Vec<String> = ["-m".to_string()].to_vec();
         Self::check_errors_flags(i, args, &options)?;
@@ -145,6 +152,7 @@ impl Branch {
         Ok(args.len())
     }
 
+    /// Configura el flag para crear ramas.
     fn add_create_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         if Self::is_flag(&args[i]) {
             return Err(CommandError::WrongFlag);
@@ -172,26 +180,6 @@ impl Branch {
         Ok(args.len())
     }
 
-    fn get_info(
-        &self,
-    ) -> (
-        Vec<String>,
-        Vec<String>,
-        Vec<String>,
-        Vec<String>,
-        bool,
-        bool,
-    ) {
-        (
-            self.rename.clone(),
-            self.delete_locals.clone(),
-            self.delete_remotes.clone(),
-            self.create.clone(),
-            self.show_remotes,
-            self.show_all,
-        )
-    }
-
     /// Comprueba si el flag es invalido. En ese caso, devuelve error.
     fn check_errors_flags(
         i: usize,
@@ -205,10 +193,7 @@ impl Branch {
     }
 
     fn run(&self, output: &mut dyn Write) -> Result<(), CommandError> {
-        let (r, dl, dr, c, sa, sr) = self.get_info();
-
         let mut repo = GitRepository::open("", output)?;
-        repo.log(&format!("Rename: {:?}, delete local: {:?}, delete remote: {:?}, create:  {:?}, show_all: {}, show_remotes: {}", r, dl, dr, c, sa, sr));
         if !self.rename.is_empty() {
             repo.rename_branch(&self.rename)?;
         } else if !self.create.is_empty() {
@@ -217,6 +202,12 @@ impl Branch {
             repo.delete_branches(&self.delete_locals, false)?;
         } else if !self.delete_remotes.is_empty() {
             repo.delete_branches(&self.delete_remotes, true)?;
+        } else if self.show_all {
+            repo.show_all_branches()?;
+        } else if self.show_remotes {
+            repo.show_remote_branches()?;
+        } else {
+            repo.show_local_branches()?;
         }
 
         Ok(())
@@ -227,19 +218,4 @@ impl Branch {
 mod tests {
     use super::*;
     use std::io::Cursor;
-
-    /* #[test]
-    fn test_() {
-        let mut output_string = Vec::new();
-        let mut stdout_mock = Cursor::new(&mut output_string);
-
-        let input = "prueba1";
-        let mut stdin_mock = Cursor::new(input.as_bytes());
-
-        let args = ["-no".to_string()];
-        match Commit::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
-            Err(error) => assert_eq!(error, CommandError::InvalidArguments),
-            Ok(_) => assert!(false),
-        }
-    } */
 }

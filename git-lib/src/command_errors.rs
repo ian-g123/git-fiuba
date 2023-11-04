@@ -136,6 +136,7 @@ pub enum CommandError {
     RemoveDirectoryError(String),
     RemoveFileError(String),
     DeleteWithNoArgs,
+    ContinueFlags(usize),
 }
 
 impl Error for CommandError {}
@@ -372,6 +373,7 @@ impl fmt::Display for CommandError {
                 write!(f, "Error: {error}")
             }
             CommandError::DeleteWithNoArgs => write!(f, "fatal: branch name required"),
+            CommandError::ContinueFlags(_) => write!(f, "Seguir recorriendo los argumentos."),
         }
     }
 }

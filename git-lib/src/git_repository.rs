@@ -12,6 +12,7 @@ use chrono::{DateTime, Local};
 use crate::{
     changes_controller_components::{
         format::Format, long_format::LongFormat, short_format::ShortFormat,
+        working_tree::get_path_name,
     },
     command_errors::CommandError,
     config::Config,
@@ -1760,11 +1761,164 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    /*
-    show_remotes: bool,
-    show_all: bool,
-     */
+    pub fn show_local_branches(&mut self) -> Result<(), CommandError> {
+        self.log("Showing local branches ...");
+
+        let list = self.list_local_branches()?;
+        write!(self.output, "{}", list)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        Ok(())
+    }
+
+    fn list_local_branches(&mut self) -> Result<String, CommandError> {
+        let path = join_paths!(self.path, ".git/refs/heads").ok_or(
+            CommandError::DirectoryCreationError(
+                "Error creando directorio de branches".to_string(),
+            ),
+        )?;
+
+        let mut local_branches: Vec<String> = Vec::new();
+        self.log("Before getting branches paths");
+        get_branches_paths(&mut self.logger, &path, &mut local_branches, "", 3)?;
+        self.log("After getting branches paths");
+
+        local_branches.sort();
+        let mut list = String::new();
+        let current = self.get_current_branch_name()?;
+        for branch in local_branches.iter() {
+            if branch.to_string() == current {
+                list += &format!("* {}\n", branch);
+            } else {
+                list += &format!("  {}\n", branch);
+            }
+        }
+
+        Ok(list)
+    }
+
+    pub fn show_all_branches(&mut self) -> Result<(), CommandError> {
+        self.log("Showing all branches ...");
+        let local_list = self.list_local_branches()?;
+        let remote_list = self.list_remote_branches(2)?;
+
+        write!(self.output, "{}{}", local_list, remote_list)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        Ok(())
+    }
+
+    pub fn show_remote_branches(&mut self) -> Result<(), CommandError> {
+        self.log("Showing remote branches ...");
+
+        let list = self.list_remote_branches(3)?;
+        write!(self.output, "{}", list)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        Ok(())
+    }
+
+    fn list_remote_branches(&mut self, i: usize) -> Result<String, CommandError> {
+        let path = join_paths!(self.path, ".git/refs/remotes").ok_or(
+            CommandError::DirectoryCreationError(
+                "Error creando directorio de branches".to_string(),
+            ),
+        )?;
+        let mut remote_branches: Vec<String> = Vec::new();
+        get_branches_paths(&mut self.logger, &path, &mut remote_branches, "", i)?;
+        remote_branches.sort();
+        let mut list = String::new();
+        let current = self.get_current_branch_name()?;
+        for branch in remote_branches.iter() {
+            let parts: Vec<&str> = branch.split("/").collect();
+            if parts.ends_with(&["HEAD"]).to_string() == current {
+                if let Some(path_ref_remote) = self.get_remote_head_path()? {
+                    list += &format!("  {} -> {}\n", branch, path_ref_remote);
+                } else {
+                    list += &format!("  {}\n", branch);
+                }
+            } else {
+                list += &format!("  {}\n", branch);
+            }
+        }
+
+        Ok(list)
+    }
+
+    fn get_remote_head_path(&mut self) -> Result<Option<String>, CommandError> {
+        let mut branch = String::new();
+        let path = join_paths!(&self.path, ".git/refs/remote/HEAD").ok_or(
+            CommandError::DirectoryCreationError(
+                "Error creando directorio de branches remotas".to_string(),
+            ),
+        )?;
+        let Ok(mut head) = File::open(&path) else {
+            return Ok(None);
+        };
+
+        if head.read_to_string(&mut branch).is_err() {
+            return Err(CommandError::FileReadError(path.to_string()));
+        }
+
+        let branch = branch.trim();
+        let Some(branch) = branch.split(" ").last() else {
+            return Err(CommandError::HeadError);
+        };
+        let branch: Vec<&str> = branch.split("/").collect();
+        let branch = branch[2..].to_vec();
+        let remote = branch.join("/");
+        Ok(Some(remote.to_string()))
+    }
 }
+
+// ----- Branch -----
+
+fn get_branches_paths(
+    logger: &mut Logger,
+    path: &str,
+    branches: &mut Vec<String>,
+    dir_path: &str,
+    i: usize,
+) -> Result<(), CommandError> {
+    let mut branches_path = join_paths!(path, dir_path).ok_or(
+        CommandError::DirectoryCreationError("Error creando directorio de branches".to_string()),
+    )?;
+    /* if branches_path.ends_with("/") {
+        _ = branches_path.pop();
+    } */
+    logger.log(&format!("Dir path: {}", branches_path));
+    let paths = fs::read_dir(branches_path.clone()).map_err(|error| {
+        CommandError::FileReadError(format!(
+            "Error leyendo directorio de branches: {}",
+            error.to_string()
+        ))
+    })?;
+    for entry in paths {
+        logger.log(&format!("Entry: {:?}", entry));
+
+        let entry = entry.map_err(|error| {
+            CommandError::FileReadError(format!(
+                "Error leyendo directorio de branches: {}",
+                error.to_string()
+            ))
+        })?;
+        let entry_path = entry.path();
+        let path_str = &get_path_name(entry_path.clone())?;
+        let parts: Vec<&str> = path_str.split("/").collect();
+        let name = parts[i..].to_vec();
+        let name = name.join("/");
+        logger.log(&format!("Name: {:?}", name));
+
+        if entry_path.is_file() {
+            branches.push(name);
+        } else {
+            if let Some(last) = parts.last() {
+                get_branches_paths(logger, &branches_path, branches, &last, i)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+// ----- Merge -----
 
 fn merge_trees(
     head_tree: &mut Tree,

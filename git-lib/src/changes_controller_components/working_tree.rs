@@ -43,7 +43,7 @@ fn build_working_tree_aux(path_name: &str, tree: &mut Tree) -> Result<(), Comman
 }
 
 /// Devuelve el nombre de un archivo o directorio dado un PathBuf.
-fn get_path_name(path: PathBuf) -> Result<String, CommandError> {
+pub fn get_path_name(path: PathBuf) -> Result<String, CommandError> {
     let Some(path_name) = path.to_str() else {
         return Err(CommandError::DirNotFound("".to_string())); //cambiar
     };
