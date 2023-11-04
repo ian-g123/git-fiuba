@@ -8,9 +8,8 @@ use git_lib::command_errors::CommandError;
 use git_lib::git_repository::GitRepository;
 
 pub struct Checkout {
-    change_branch: String,
     new_branch: Vec<String>,
-    update_paths: Vec<String>,
+    checkout_or_update: Vec<String>,
 }
 
 impl Command for Checkout {
@@ -30,7 +29,10 @@ impl Command for Checkout {
     }
 
     fn config_adders(&self) -> Vec<fn(&mut Self, usize, &[String]) -> Result<usize, CommandError>> {
-        vec![Self::add_change_branch_config]
+        vec![
+            Self::add_checkout_or_update_config,
+            Self::add_new_branch_config,
+        ]
     }
 }
 
@@ -46,28 +48,45 @@ impl Checkout {
 
     fn new_default() -> Self {
         Self {
-            change_branch: "".to_string(),
             new_branch: Vec::new(),
-            update_paths: Vec::new(),
+            checkout_or_update: Vec::new(),
         }
     }
 
     /// Configura el flag para mostrar todas las ramas.
-    fn add_change_branch_config(
+    fn add_checkout_or_update_config(
         &mut self,
         i: usize,
         args: &[String],
     ) -> Result<usize, CommandError> {
-        /* if !self.delete_locals.is_empty() || !self.delete_remotes.is_empty() {
-            return Err(CommandError::ShowAllAndDelete);
+        if Self::is_flag(&args[i]) {
+            return Err(CommandError::WrongFlag);
         }
-
-        if self.show_remotes == true {
-            self.show_remotes = false;
-        }
-        self.show_all = true; */
+        self.checkout_or_update.push(args[i].clone());
 
         Ok(i + 1)
+    }
+
+    /// Configura el flag para mostrar todas las ramas.
+    fn add_new_branch_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
+        let options: Vec<String> = ["-b".to_string()].to_vec();
+        Self::check_errors_flags(i, args, &options)?;
+        self.checkout_or_update.push(args[i].clone());
+        if args.len() - 1 == i {
+            return Err(CommandError::SwitchRequiresValue);
+        }
+        if args.len() > 3 || self.checkout_or_update.len() > 1 {
+            return Err(CommandError::UpdateAndSwicth(args[i + 1].clone()));
+        }
+        self.new_branch.push(args[i + 1].clone());
+        if let Some(elem) = self.checkout_or_update.pop() {
+            self.new_branch.push(elem);
+        }
+        if i + 2 < args.len() {
+            self.new_branch.push(args[i + 2].clone());
+        }
+
+        Ok(args.len())
     }
 
     /// Comprueba si el flag es invalido. En ese caso, devuelve error.
@@ -84,7 +103,12 @@ impl Checkout {
 
     fn run(&self, output: &mut dyn Write) -> Result<(), CommandError> {
         let mut repo = GitRepository::open("", output)?;
-
+        if !self.checkout_or_update.is_empty() {
+            repo.update_files_or_checkout(self.checkout_or_update.clone())?;
+        } else if !self.new_branch.is_empty() {
+        } else {
+            // checkout tracking info
+        }
         Ok(())
     }
 }

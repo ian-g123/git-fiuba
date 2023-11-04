@@ -1867,6 +1867,53 @@ impl<'a> GitRepository<'a> {
         let remote = branch.join("/");
         Ok(Some(remote.to_string()))
     }
+
+    // ----- Checkout -----
+
+    fn branch_exists(&mut self, branch: &str) -> bool {
+        if let Ok(locals) = self.local_branches() {
+            if locals.contains_key(branch) {
+                return true;
+            }
+        }
+        if let Ok(remotes) = self.remote_branches() {
+            if remotes.contains_key(branch) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn file_exists_in_index(&mut self, file: &str, index: &mut StagingArea) -> bool {
+        if index.has_file_from_path(file) {
+            return true;
+        }
+        false
+    }
+
+    pub fn update_files_or_checkout(
+        &mut self,
+        files_or_branches: Vec<String>,
+    ) -> Result<(), CommandError> {
+        if files_or_branches.len() == 1 && self.branch_exists(&files_or_branches[0]) {
+            // checkout(&files_or_branches[0])
+            //return;
+        }
+        let mut staging_area = self.staging_area()?;
+        for path in files_or_branches.iter() {
+            if !self.file_exists_in_index(path, &mut staging_area) {
+                return Err(CommandError::UntrackedError(path.to_string()));
+            }
+        }
+        let db = self.db()?;
+        for path in files_or_branches.iter() {
+            if let Some(hash) = staging_area.get_files().get(path) {
+                let mut blob = db.read_object(hash, &mut self.logger)?;
+                blob.restore(path, &mut self.logger)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 // ----- Branch -----

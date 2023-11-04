@@ -147,6 +147,12 @@ pub enum CommandError {
     RemoveFileError(String),
     /// Se usó el flag -D de branch sin argumentos
     DeleteWithNoArgs,
+
+    // Checkout
+    /// fatal: Cannot update paths and switch to branch 'b3' at the same time.
+    UpdateAndSwicth(String),
+    /// error: switch `b' requires a value
+    SwitchRequiresValue,
 }
 
 impl Error for CommandError {}
@@ -383,6 +389,11 @@ impl fmt::Display for CommandError {
                 write!(f, "Error: {error}")
             }
             CommandError::DeleteWithNoArgs => write!(f, "fatal: branch name required"),
+            CommandError::UpdateAndSwicth(branch) => write!(
+                f,
+                "fatal: Cannot update paths and switch to branch '{branch}' at the same time."
+            ),
+            CommandError::SwitchRequiresValue => write!(f, "error: switch `b' requires a value"),
         }
     }
 }

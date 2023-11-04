@@ -42,7 +42,6 @@ pub fn create_test_scene_3(path: &str) {
 
 pub fn create_test_scene_2(path: &str) {
     create_base_scene(path);
-    // copy tests/data/commands/add/dir/ contents to path.to_owned() + "/dir/"
     let Ok(_) = fs::create_dir_all(path.to_owned() + "/dir/") else {
         panic!("No se pudo crear el directorio")
     };
