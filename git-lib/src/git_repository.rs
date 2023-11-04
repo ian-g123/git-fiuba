@@ -3,7 +3,6 @@ use std::{
     fs::{self, DirEntry, File, OpenOptions, ReadDir},
     io::{Read, Write},
     path::{Path, PathBuf},
-    process::Command,
 };
 
 use chrono::{DateTime, Local};
@@ -1114,7 +1113,7 @@ impl<'a> GitRepository<'a> {
 
     /// Es el merge feliz, donde no hay conflictos. Se reemplaza el working tree por el del commit
     /// del remoto.
-    fn merge_fast_forward(&mut self, destin_commit: &str) -> Result<(), CommandError> {
+    pub fn merge_fast_forward(&mut self, destin_commit: &str) -> Result<(), CommandError> {
         self.log("Merge fast forward");
         self.set_head_branch_commit_to(destin_commit)?;
         let tree = self
