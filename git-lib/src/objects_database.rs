@@ -5,6 +5,8 @@ use std::{
     io::{Cursor, Read, Write},
 };
 
+use sha1::digest::block_buffer::Error;
+
 use crate::{
     join_paths,
     logger::Logger,
@@ -22,25 +24,45 @@ pub struct ObjectsDatabase {
 }
 
 impl ObjectsDatabase {
-    pub fn write(&self, git_object: &mut GitObject) -> Result<String, CommandError> {
-        self.write_to(git_object)
+    pub fn write(
+        &mut self,
+        git_object: &mut GitObject,
+        recursive: bool,
+        _logger: &mut Logger,
+    ) -> Result<String, CommandError> {
+        let mut data = Vec::new();
+        if recursive {
+            git_object.write_to(&mut data, Some(self))?;
+        } else {
+            git_object.write_to(&mut data, None)?;
+        };
+        let hash_str = get_sha1_str(&data);
+        self.save_to(hash_str, data)
     }
 
     /// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve el objeto que este representa.
-    pub fn read_object(&self, hash_str: &str) -> Result<GitObject, CommandError> {
-        let (path, decompressed_data) = self.read_file(hash_str)?;
+    pub fn read_object(
+        &self,
+        hash_str: &str,
+        logger: &mut Logger,
+    ) -> Result<GitObject, CommandError> {
+        logger.log(&format!("read_object hash_str: {}", hash_str));
+        let (path, decompressed_data) = self.read_file(hash_str, logger)?;
+        logger.log(&format!("read_object Success reading file!"));
+        logger.log(&format!(
+            "decompressed_data: {:?}",
+            String::from_utf8_lossy(decompressed_data.as_slice())
+        ));
         let mut stream = Cursor::new(decompressed_data);
-        read_git_object_from(
-            self,
-            &mut stream,
-            &path,
-            &hash_str,
-            &mut Logger::new_dummy(),
-        )
+        read_git_object_from(self, &mut stream, &path, &hash_str, logger)
     }
 
     /// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve la ruta del objeto y su data descomprimida.
-    pub fn read_file(&self, hash_str: &str) -> Result<(String, Vec<u8>), CommandError> {
+    pub fn read_file(
+        &self,
+        hash_str: &str,
+        logger: &mut Logger,
+    ) -> Result<(String, Vec<u8>), CommandError> {
         //throws error if hash_str is not a valid sha1
         if hash_str.len() != 40 {
             return Err(CommandError::FileOpenError(format!(
@@ -50,7 +72,7 @@ impl ObjectsDatabase {
         }
         let file_path = join_paths!(&self.db_path, &hash_str[0..2], &hash_str[2..])
             .ok_or(CommandError::JoiningPaths)?;
-
+        logger.log(&format!("read_file file_path: {}", file_path));
         let mut file = File::open(&file_path).map_err(|error| {
             CommandError::FileOpenError(format!(
                 "Error al abrir archivo {}: {}",
@@ -76,14 +98,6 @@ impl ObjectsDatabase {
         Ok(ObjectsDatabase {
             db_path: join_paths_m(base_path_str, ".git/objects")?.to_string(),
         })
-    }
-
-    // Escribe el objeto en la base de datos de objetos de git.
-    fn write_to(&self, git_object: &mut GitObject) -> Result<String, CommandError> {
-        let mut data = Vec::new();
-        git_object.write_to(&mut data)?;
-        let hash_str = get_sha1_str(&data);
-        self.save_to(hash_str, data)
     }
 
     fn save_to(&self, hash_str: String, data: Vec<u8>) -> Result<String, CommandError> {

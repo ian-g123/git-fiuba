@@ -10,6 +10,9 @@ use std::io::{Read, Write};
 pub type GitObject = Box<dyn GitObjectTrait>;
 
 pub trait GitObjectTrait {
+    fn as_mut_blob(&mut self) -> Option<&mut Blob> {
+        None
+    }
     fn as_mut_tree(&mut self) -> Option<&mut Tree>;
 
     /// Devuelve el árbol del objeto si es que corresponde, o sino None
@@ -23,8 +26,12 @@ pub trait GitObjectTrait {
 
     fn clone_object(&self) -> GitObject;
 
-    fn write_to(&mut self, stream: &mut dyn std::io::Write) -> Result<(), CommandError> {
-        let content = self.content()?;
+    fn write_to(
+        &mut self,
+        stream: &mut dyn std::io::Write,
+        db: Option<&mut ObjectsDatabase>,
+    ) -> Result<(), CommandError> {
+        let content = self.content(db)?;
         let type_str = self.type_str();
         write_to_stream_from_content(stream, content, type_str)
 
@@ -44,10 +51,10 @@ pub trait GitObjectTrait {
     /// Si el objeto no es un Tree, devuelve un error
     fn add_path(
         &mut self,
-        logger: &mut Logger,
-        vector_path: Vec<&str>,
-        current_depth: usize,
-        hash: &String,
+        _logger: &mut Logger,
+        _vector_path: Vec<&str>,
+        _current_depth: usize,
+        _hash: &String,
     ) -> Result<(), CommandError> {
         Err(CommandError::ObjectNotTree)
     }
@@ -59,23 +66,18 @@ pub trait GitObjectTrait {
     fn mode(&self) -> Mode;
 
     /// Devuelve el contenido del objeto
-    fn content(&mut self) -> Result<Vec<u8>, CommandError>;
+    fn content(&mut self, db: Option<&mut ObjectsDatabase>) -> Result<Vec<u8>, CommandError>;
 
     /// Devuelve el tamaño del objeto en bytes
-    fn size(&mut self) -> Result<usize, CommandError> {
-        let content = self.content()?;
+    fn size(&mut self, db: Option<&mut ObjectsDatabase>) -> Result<usize, CommandError> {
+        let content = self.content(db)?;
         Ok(content.len())
     }
 
     fn to_string_priv(&mut self) -> String;
 
     /// Devuelve el hash del objeto
-    fn get_hash(&mut self) -> Result<[u8; 20], CommandError>; /*  {
-                                                                  let mut buf: Vec<u8> = Vec::new();
-                                                                  let mut stream = Cursor::new(&mut buf);
-                                                                  self.write_to(&mut stream)?;
-                                                                  Ok(get_sha1(&buf))
-                                                              } */
+    fn get_hash(&mut self) -> Result<[u8; 20], CommandError>;
 
     /// Devuelve el hash del objeto
     fn get_hash_string(&mut self) -> Result<String, CommandError> {
@@ -91,11 +93,11 @@ pub trait GitObjectTrait {
         None
     }
 
-    fn restore(&mut self, path: &str, logger: &mut Logger) -> Result<(), CommandError> {
+    fn restore(&mut self, _path: &str, _logger: &mut Logger) -> Result<(), CommandError> {
         Ok(())
     }
 
-    fn set_hash(&mut self, hash: [u8; 20]) {}
+    fn set_hash(&mut self, _hash: [u8; 20]) {}
 }
 
 pub fn display_from_hash(
@@ -104,7 +106,7 @@ pub fn display_from_hash(
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (_, content) = db.read_file(hash)?;
+    let (_, content) = db.read_file(hash, logger)?;
 
     let mut stream = std::io::Cursor::new(content);
     display_from_stream(&mut stream, logger, output)
@@ -134,7 +136,7 @@ pub fn display_type_from_hash(
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (_, content) = db.read_file(hash)?;
+    let (_, content) = db.read_file(hash, logger)?;
     let mut stream = std::io::Cursor::new(content);
     let (type_str, _) = get_type_and_len(&mut stream)?;
     writeln!(output, "{}", type_str)
@@ -148,7 +150,7 @@ pub fn display_size_from_hash(
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (_, content) = db.read_file(hash)?;
+    let (_, content) = db.read_file(hash, logger)?;
     let mut stream = std::io::Cursor::new(content);
     let (_, len) = get_type_and_len(&mut stream)?;
     writeln!(output, "{}", len).map_err(|error| CommandError::FileWriteError(error.to_string()))?;

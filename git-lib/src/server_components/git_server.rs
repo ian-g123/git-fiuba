@@ -62,6 +62,31 @@ impl GitServer {
         Ok((head_branch_commit.to_string(), refs))
     }
 
+    /// explora el repositorio remoto y devuelve el hash del commit del branch head
+    /// y un hashmap con: hash del commit -> nombre de la referencia
+    pub fn explore_repository_receive(
+        &mut self,
+        repository_path: &str,
+        host: &str,
+    ) -> Result<HashMap<String, String>, CommandError> {
+        let line = format!(
+            "git-receive-pack {}\0host={}\0\0version=1\0\n",
+            repository_path, host
+        );
+
+        let lines = self.send(&line)?;
+        let mut refs = HashMap::<String, String>::new();
+
+        for line in lines {
+            let (hash, ref_name) = line
+                .split_once(' ')
+                .ok_or(CommandError::ErrorReadingPkt)
+                .map(|(hash, ref_name)| (hash.trim().to_string(), ref_name.trim().to_string()))?;
+            refs.insert(ref_name, hash);
+        }
+        Ok(refs)
+    }
+
     /// envía un mensaje al servidor para que envíe los objetos del repositorio
     /// y devuelve un vector con tuplas que contienen:\
     /// `(tipo de objeto, tamaño del objeto, contenido del objeto en bytes)`

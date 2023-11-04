@@ -1,5 +1,7 @@
 use super::git_object::GitObjectTrait;
-use crate::{command_errors::CommandError, utils::aux::get_sha1};
+use crate::{
+    command_errors::CommandError, objects_database::ObjectsDatabase, utils::aux::get_sha1,
+};
 
 #[derive(Clone, Debug)]
 pub struct ProtoObject {
@@ -35,7 +37,7 @@ impl GitObjectTrait for ProtoObject {
         todo!()
     }
 
-    fn content(&mut self) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self, _: Option<&mut ObjectsDatabase>) -> Result<Vec<u8>, CommandError> {
         Ok(self.content.clone())
     }
 
@@ -46,7 +48,7 @@ impl GitObjectTrait for ProtoObject {
 
     fn get_hash(&mut self) -> Result<[u8; 20], CommandError> {
         let mut buf: Vec<u8> = Vec::new();
-        self.write_to(&mut buf)?;
+        self.write_to(&mut buf, None)?;
         Ok(get_sha1(&buf))
     }
 
