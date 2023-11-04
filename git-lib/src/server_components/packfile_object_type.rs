@@ -24,6 +24,27 @@ impl PackfileObjectType {
             _ => Err(CommandError::UnknownObjectType),
         }
     }
+
+    pub fn to_u8(&self) -> u8 {
+        match self {
+            PackfileObjectType::Commit => 1,
+            PackfileObjectType::Tree => 2,
+            PackfileObjectType::Blob => 3,
+            PackfileObjectType::Tag => 4,
+            PackfileObjectType::OfsDelta => 6,
+            PackfileObjectType::RefDelta => 7,
+        }
+    }
+
+    pub fn from_str(name: &str) -> Result<Self, CommandError> {
+        match name {
+            "commit" => Ok(PackfileObjectType::Commit),
+            "tree" => Ok(PackfileObjectType::Tree),
+            "blob" => Ok(PackfileObjectType::Blob),
+            "tag" => Ok(PackfileObjectType::Tag),
+            _ => Err(CommandError::UnknownObjectType),
+        }
+    }
 }
 
 impl fmt::Display for PackfileObjectType {

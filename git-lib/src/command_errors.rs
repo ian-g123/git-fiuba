@@ -82,6 +82,8 @@ pub enum CommandError {
     Connection(String),
     /// Error al leer un pkt
     ErrorReadingPkt,
+    /// Error al leer un pkt con msg
+    ErrorReadingPktVerbose(String),
     /// Error al enviar un mensaje
     SendingMessage(String),
     /// Error al intentar abrir el archivo de configuración
@@ -102,6 +104,11 @@ pub enum CommandError {
     /// Error al intentar unir paths
     JoiningPaths,
     FailedToFindCommonAncestor,
+    /// Ocurre un error al encontrar las ramas de los commits en push
+    PushBranchesError,
+    /// Error al obtener el tree desde el option que debería ser tree en push
+    PushTreeError,
+    PushBranchBehindError(String, String),
     /// Octopus merge not supported
     MergeMultipleCommits,
     /// Merge conflict
@@ -234,6 +241,10 @@ impl fmt::Display for CommandError {
             CommandError::ErrorReadingPkt => {
                 write!(f, "Error al leer un pkt")
             }
+
+            CommandError::ErrorReadingPktVerbose(msg) => {
+                write!(f, "Error al leer un pkt: {}", msg)
+            }
             CommandError::SendingMessage(msg) => {
                 write!(f, "{}", msg)
             }
@@ -278,6 +289,24 @@ impl fmt::Display for CommandError {
             }
             CommandError::FailedToFindCommonAncestor => {
                 write!(f, "No se pudo encontrar un ancestro común.")
+            }
+            CommandError::PushBranchesError => {
+                write!(
+                    f,
+                    "Ocurre un error al encontrar las ramas de los commits en push"
+                )
+            }
+            CommandError::PushTreeError => {
+                write!(
+                    f,
+                    "Error al obtener el tree desde el option que debería ser tree en push"
+                )
+            }
+            CommandError::PushBranchBehindError(url, branch) => {
+                write!(
+                    f,
+                    "! [rejected]        {branch} -> {branch} (non-fast-forward)\nerror: failed to push some refs to '{url}'\n"
+                )
             }
             CommandError::MergeMultipleCommits => {
                 write!(f, "Octopus merge not supported")

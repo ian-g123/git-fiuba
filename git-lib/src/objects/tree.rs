@@ -20,7 +20,7 @@ use super::{
 #[derive(Clone)]
 pub struct Tree {
     path: String,
-    objects: HashMap<String, GitObject>,
+    objects: HashMap<String, GitObject>, // HashMap<name_object, object>
     hash: Option<[u8; 20]>,
 }
 
@@ -240,7 +240,7 @@ impl Tree {
             };
             let hash_str = get_hash(stream)?;
             let mode = get_mode(mode)?;
-            let object_type = Mode::get_type_from_mode(&mode);
+            let object_type = mode.get_type_from_mode();
             objects.push((mode, object_type, hash_str, name.to_string()));
         }
 
