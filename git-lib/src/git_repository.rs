@@ -1500,6 +1500,150 @@ impl<'a> GitRepository<'a> {
         })?;
         Ok(())
     }
+
+    // ----- Branch -----
+
+    pub fn rename_branch(&mut self, branches: &Vec<String>) -> Result<(), CommandError> {
+        let head = self.get_current_branch_name()?;
+        if branches.len() == 1 {
+            let new_name = branches[0].clone();
+            self.change_branch_name(&head, &new_name)?;
+            self.log(&format!("Branch '{head}' has been renamed to '{new_name}'"))
+        } else {
+            self.change_branch_name(&branches[0], &branches[1])?;
+            self.log(&format!(
+                "Branch '{}' has been renamed to '{}'",
+                branches[0], branches[1]
+            ))
+        }
+        Ok(())
+    }
+
+    pub fn create_branch(&mut self, new_branch_info: &Vec<String>) -> Result<(), CommandError> {
+        let mut commit_hash = String::new();
+        if new_branch_info.len() == 2 {
+            if let Some(hash) = self.try_read_commit_local_branch(&new_branch_info[1])? {
+                commit_hash = hash;
+            } else if let Some(hash) = self.try_read_commit(&new_branch_info[1])? {
+                commit_hash = hash;
+            } else if let Some(hash) = self.try_read_commit_remote_branch(&new_branch_info[1])? {
+                commit_hash = hash;
+            } else {
+                return Err(CommandError::InvalidObjectName(new_branch_info[1].clone()));
+            }
+        } else {
+            commit_hash = match self.get_last_commit_hash()? {
+                Some(hash) => hash,
+                None => {
+                    return Err(CommandError::InvalidObjectName(
+                        self.get_current_branch_name()?,
+                    ))
+                }
+            };
+        }
+        let new_branch = new_branch_info[0].clone();
+        let branches_path = join_paths!(self.path, ".git/refs/heads/").ok_or(
+            CommandError::DirectoryCreationError(
+                " No se pudo crear el directorio .git/refs/head/".to_string(),
+            ),
+        )?;
+
+        let new_branch_path = branches_path.clone() + &new_branch;
+        let path = Path::new(&new_branch_path);
+        if path.exists() {
+            return Err(CommandError::BranchExists(new_branch.clone()));
+        }
+        if path.is_dir() {
+            return Err(CommandError::InvalidBranchName(new_branch));
+        }
+        fs::create_dir_all(branches_path.clone())
+            .map_err(|_| CommandError::FileCreationError(new_branch_path.clone()))?;
+        let mut file = File::create(new_branch_path.clone())
+            .map_err(|_| CommandError::FileCreationError(new_branch_path.clone()))?;
+
+        file.write_all(commit_hash.as_bytes()).map_err(|error| {
+            CommandError::FileWriteError(
+                "Error guardando commit en la nueva rama:".to_string() + &error.to_string(),
+            )
+        })?;
+        self.log(&format!("New branch created: {}", new_branch));
+        Ok(())
+    }
+
+    fn try_read_commit_local_branch(&self, branch: &str) -> Result<Option<String>, CommandError> {
+        let branch_path = join_paths!(self.path, ".git/refs/heads/").ok_or(
+            CommandError::DirectoryCreationError(
+                " No se pudo crear el directorio .git/refs/head/".to_string(),
+            ),
+        )?;
+
+        let branch_path = branch_path.clone() + &branch;
+        if !Path::new(&branch_path).exists() {
+            return Ok(None);
+        }
+        let hash = fs::read_to_string(branch_path)
+            .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+        Ok(Some(hash))
+    }
+
+    fn try_read_commit_remote_branch(
+        &self,
+        remote_path: &str,
+    ) -> Result<Option<String>, CommandError> {
+        let mut rel_path: Vec<&str> = remote_path.split_terminator('/').collect();
+        if !rel_path.contains(&"remotes") {
+            rel_path.insert(0, "remotes");
+        }
+        if !rel_path.contains(&"refs") {
+            rel_path.insert(0, "refs");
+        }
+        let branch_path = rel_path.join("/");
+        let branch_path =
+            join_paths!(self.path, ".git/", branch_path).ok_or(CommandError::FileCreationError(
+                format!(" No se pudo crear el archivo: {}", branch_path),
+            ))?;
+
+        if !Path::new(&branch_path).exists() {
+            return Ok(None);
+        }
+        let hash = fs::read_to_string(branch_path)
+            .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+        Ok(Some(hash))
+    }
+
+    fn try_read_commit(&mut self, hash: &str) -> Result<Option<String>, CommandError> {
+        if self.db()?.read_object(hash, &mut self.logger).is_err() {
+            return Ok(None);
+        }
+        Ok(Some(hash.to_string()))
+    }
+
+    fn change_branch_name(&self, old: &str, new: &str) -> Result<(), CommandError> {
+        let branches_path = join_paths!(self.path, ".git/refs/heads/").ok_or(
+            CommandError::DirectoryCreationError(
+                " No se pudo crear el directorio .git/refs/head/".to_string(),
+            ),
+        )?;
+        let old_path = branches_path.clone() + old;
+        let new_path = branches_path + new;
+        if !Path::new(&old_path).exists() {
+            return Err(CommandError::NoOldBranch(old.to_string()));
+        }
+        if Path::new(&new_path).exists() {
+            return Err(CommandError::NewBranchExists(new.to_string()));
+        }
+        fs::rename(old, new).map_err(|err| CommandError::FileNameError)?;
+        Ok(())
+    }
+
+    /*
+    rename: Vec<String>,
+    delete_locals: Vec<String>,
+    delete_remotes: Vec<String>,
+    create: Vec<String>,
+    show_remotes: bool,
+    show_all: bool,
+     */
 }
 
 fn merge_trees(

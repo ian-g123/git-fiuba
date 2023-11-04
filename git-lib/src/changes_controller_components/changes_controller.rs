@@ -253,7 +253,7 @@ impl ChangesController {
         logger: &mut Logger,
     ) -> Result<bool, CommandError> {
         let Some(path) = object.get_path() else {
-            return Err(CommandError::FileNameError);
+            return Err(CommandError::ObjectPathError);
         };
 
         let hash = object.get_hash_string()?;

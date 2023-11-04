@@ -70,6 +70,7 @@ pub enum CommandError {
     /// Modo de archivo inválido.
     InvalidMode,
     /// No se pudo obtener el nombre del objeto.
+    ObjectPathError,
     FileNameError,
     /// No existe configuración de ususario.
     UserConfigurationError,
@@ -116,6 +117,22 @@ pub enum CommandError {
     UnmergedFiles,
     /// There cannot be a file and a folder with the same name
     CannotHaveFileAndFolderWithSameName(String),
+
+    // Branch errors
+    /// fatal: The -a, and -r, options to 'git branch' do not take a branch name.
+    CreateAndListError,
+    /// fatal: cannot use -a with -d
+    ShowAllAndDelete,
+    /// fatal: branch name required
+    BranchNameRequired,
+    RenameAndDelete,
+    NoOldBranch(String),
+    NewBranchExists(String),
+    FatalRenameOperation,
+    FatalCreateBranchOperation,
+    InvalidObjectName(String),
+    BranchExists(String),
+    InvalidBranchName(String),
 }
 
 impl Error for CommandError {}
@@ -211,7 +228,10 @@ impl fmt::Display for CommandError {
                 write!(f, "Modo de archivo inválido.")
             }
             CommandError::FileNameError => {
-                write!(f, "No se pudo obtener el nombre del objeto.")
+                write!(f, "No se pudo obtener el nombre del archivo.")
+            }
+            CommandError::ObjectPathError => {
+                write!(f, "No se pudo obtener el path del objeto.")
             }
             CommandError::UserConfigurationError => {
                 write!(f, "No existe configuración de ususario.")
@@ -306,6 +326,41 @@ impl fmt::Display for CommandError {
                     "There cannot be a file and a folder with the same name: {}",
                     path
                 )
+            }
+            CommandError::CreateAndListError => {
+                write!(
+                    f,
+                    "fatal: The -a, and -r, options to 'git branch' do not take a branch name."
+                )
+            }
+            CommandError::ShowAllAndDelete => write!(f, "fatal: cannot use (-a | -all) with -D"),
+            CommandError::RenameAndDelete => write!(f, "fatal: cannot use -m with -D"),
+
+            CommandError::BranchNameRequired => write!(f, "fatal: branch name required"),
+            CommandError::NoOldBranch(name) => {
+                write!(
+                    f,
+                    "error: refname refs/heads/{}\nfatal: Branch rename failed",
+                    name
+                )
+            }
+            CommandError::NewBranchExists(name) => {
+                write!(f, "fatal: A branch named '{name}' already exists")
+            }
+            CommandError::FatalRenameOperation => {
+                write!(f, "fatal: too many arguments for a rename operation")
+            }
+            CommandError::InvalidObjectName(name) => {
+                write!(f, "fatal: Not a valid object name: '{name}'.")
+            }
+            CommandError::FatalCreateBranchOperation => {
+                write!(f, "fatal: too many arguments for a create operation")
+            }
+            CommandError::BranchExists(name) => {
+                write!(f, "fatal: A branch named '{name}' already exists.")
+            }
+            CommandError::InvalidBranchName(name) => {
+                write!(f, "fatal: '{name}' is not a valid branch name.")
             }
         }
     }

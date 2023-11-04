@@ -36,7 +36,6 @@ impl Status {
     /// Crea un comando Status. Devuelve error si el proceso de creación falla.
     fn new(args: &[String]) -> Result<Self, CommandError> {
         if args.len() > 2 {
-            //status -s -b (máximo)
             return Err(CommandError::InvalidArguments);
         }
         let mut status = Self::new_default();
@@ -72,16 +71,11 @@ impl Status {
     }
 
     fn run(&self, output: &mut dyn Write) -> Result<(), CommandError> {
-        //let branch = get_current_branch_name()?;
         let mut repo = GitRepository::open("", output)?;
         if self.short {
             repo.status_short_format(false)
-            // let short_format = ShortFormat;
-            // short_format.show(logger, output, &branch)?;
         } else {
             repo.status_long_format(false)
-            /* let long_format = LongFormat;
-            long_format.show(logger, output, &branch)?; */
         }
     }
 }

@@ -63,6 +63,11 @@ pub fn create_test_scene_2(path: &str) {
     assert!(Path::new(&(path.to_owned() + "/dir/testfile2.txt")).exists())
 }
 
+pub fn change_testfile_content(path: &str) {
+    let mut file = File::create(path.to_owned() + "/testfile.txt").unwrap();
+    file.write_all(b"Cambio!").unwrap();
+}
+
 pub fn change_dir_testfile1_content(path: &str) {
     let mut file = File::create(path.to_owned() + "/dir/testfile1.txt").unwrap();
     file.write_all(b"Cambio!").unwrap();
