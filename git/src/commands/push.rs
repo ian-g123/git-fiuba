@@ -4,8 +4,7 @@ use std::{
 };
 
 use git_lib::{
-    command_errors::CommandError,
-    git_repository::{push_all_local_branch_hashes, GitRepository},
+    command_errors::CommandError, git_repository::GitRepository,
     objects::commit_object::CommitObject,
 };
 
@@ -75,7 +74,7 @@ impl Push {
         let mut local_branches: Vec<(String, String)> = Vec::new(); // (branch, hash)
 
         if self.all {
-            local_branches = push_all_local_branch_hashes()?;
+            local_branches = repo.push_all_local_branch_hashes()?;
         } else {
             let hash_commit = repo.get_last_commit_hash_branch(&self.branch)?;
             local_branches.push((self.branch.to_owned(), hash_commit));
