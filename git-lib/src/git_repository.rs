@@ -1542,6 +1542,7 @@ impl<'a> GitRepository<'a> {
 
     pub fn create_branch(&mut self, new_branch_info: &Vec<String>) -> Result<(), CommandError> {
         let mut commit_hash = String::new();
+        let mut new_is_remote = false;
         if new_branch_info.len() == 2 {
             if let Some(hash) = self.try_read_commit_local_branch(&new_branch_info[1])? {
                 commit_hash = hash;
@@ -1549,6 +1550,7 @@ impl<'a> GitRepository<'a> {
                 commit_hash = hash;
             } else if let Some(hash) = self.try_read_commit_remote_branch(&new_branch_info[1])? {
                 commit_hash = hash;
+                new_is_remote = true;
             } else {
                 return Err(CommandError::InvalidObjectName(new_branch_info[1].clone()));
             }
@@ -1592,6 +1594,14 @@ impl<'a> GitRepository<'a> {
             )
         })?;
         self.log(&format!("New branch created: {}", new_branch));
+        if new_is_remote {
+            writeln!(
+                self.output,
+                "Branch '{}' set up to track remote branch '{}'.",
+                new_branch_info[1], new_branch_info[0]
+            )
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        }
         Ok(())
     }
 
@@ -1661,7 +1671,7 @@ impl<'a> GitRepository<'a> {
         if new_path.exists() && new != old {
             return Err(CommandError::NewBranchExists(new.to_string()));
         }
-        /* if old_path.is_dir() { */
+
         let hash = fs::read_to_string(old_path)
             .map_err(|error| CommandError::FileReadError(error.to_string()))?;
 
@@ -1675,17 +1685,6 @@ impl<'a> GitRepository<'a> {
             }
         }
 
-        /* let mut file = File::create(new_path)
-            .map_err(|error| CommandError::FileCreationError(error.to_string()))?;
-        file.write_all(hash.as_bytes())
-            .map_err(|error| CommandError::FileWriteError(error.to_string()))?; */
-        /* } else if new_path.is_dir() { */
-        /* let hash = fs::read_to_string(old_path)
-                       .map_err(|error| CommandError::FileReadError(error.to_string()))?;
-
-                   fs::remove_dir_all(old_path)
-                       .map_err(|error| CommandError::RemoveDirectoryError(error.to_string()))?;
-        */
         if let Some(dir) = new_path.parent() {
             if !dir.ends_with(".git/refs/heads/") {
                 fs::create_dir_all(dir)
@@ -1697,17 +1696,21 @@ impl<'a> GitRepository<'a> {
             .map_err(|_| CommandError::FileCreationError(new_path_str.clone()))?;
         file.write_all(hash.as_bytes())
             .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-        /* } else {
-            fs::rename(old_path_str, new_path_str).map_err(|_| CommandError::FileNameError)?;
-        } */
+
+        Ok(())
+    }
+
+    pub fn delete_branches(
+        &mut self,
+        branches: Vec<String>,
+        are_remote: bool,
+    ) -> Result<(), CommandError> {
         Ok(())
     }
 
     /*
-    rename: Vec<String>,
     delete_locals: Vec<String>,
     delete_remotes: Vec<String>,
-    create: Vec<String>,
     show_remotes: bool,
     show_all: bool,
      */
