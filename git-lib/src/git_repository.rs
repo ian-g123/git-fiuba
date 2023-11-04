@@ -1703,8 +1703,37 @@ impl<'a> GitRepository<'a> {
     pub fn delete_branches(
         &mut self,
         branches: Vec<String>,
-        are_remote: bool,
+        are_remotes: bool,
     ) -> Result<(), CommandError> {
+        let rel_branch_path = if are_remotes { "remotes/" } else { "heads/" };
+        let branch_path = join_paths!(self.path, ".git/refs/", rel_branch_path).ok_or(
+            CommandError::DirectoryCreationError(
+                " No se pudo crear el directorio .git/refs/".to_string(),
+            ),
+        )?;
+        let mut errors: Vec<String> = Vec::new();
+        let mut deletions: Vec<(String, String)> = Vec::new();
+        for branch in branches {
+            let path = branch_path.clone() + &branch;
+            let Ok(_) = File::open(path.clone()) else {
+                errors.push(branch);
+                continue;
+            };
+            let hash = fs::read_to_string(path.clone())
+                .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+            deletions.push((branch, hash));
+            fs::remove_file(path.clone())
+                .map_err(|error| CommandError::RemoveFileError(error.to_string()))?;
+
+            if let Some(dir) = Path::new(&path).parent() {
+                if !dir.ends_with(".git/refs/heads/") || !dir.ends_with(".git/refs/remotes/") {
+                    fs::remove_dir_all(dir)
+                        .map_err(|_| CommandError::RemoveDirectoryError(path.clone()))?;
+                }
+            }
+        }
+        // delete from config
+        // output segun sean remotas o no
         Ok(())
     }
 
