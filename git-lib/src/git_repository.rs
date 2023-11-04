@@ -1,6 +1,5 @@
 use std::{
     collections::{HashMap, HashSet},
-    ffi::OsStr,
     fs::{self, DirEntry, File, OpenOptions, ReadDir},
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -586,7 +585,9 @@ impl<'a> GitRepository<'a> {
 
     pub fn update_remote(&self, url: String) -> Result<(), CommandError> {
         let mut config = self.open_config()?;
+        let fetch = format!("+refs/heads/*:refs/remotes/origin/*");
         config.insert("remote \"origin\"", "url", &url);
+        config.insert("remote \"origin\"", "fetch", &fetch);
         config.save()?;
         Ok(())
     }
