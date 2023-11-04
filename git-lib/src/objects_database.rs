@@ -4,8 +4,6 @@ use std::{
     io::{Cursor, Read, Write},
 };
 
-use sha1::digest::block_buffer::Error;
-
 use crate::{
     join_paths,
     logger::Logger,
@@ -62,6 +60,13 @@ impl ObjectsDatabase {
         hash_str: &str,
         logger: &mut Logger,
     ) -> Result<(String, Vec<u8>), CommandError> {
+        //throws error if hash_str is not a valid sha1
+        if hash_str.len() != 40 {
+            return Err(CommandError::FileOpenError(format!(
+                "No es un hash válido {}",
+                hash_str
+            )));
+        }
         let file_path = join_paths!(&self.db_path, &hash_str[0..2], &hash_str[2..])
             .ok_or(CommandError::JoiningPaths)?;
         logger.log(&format!("read_file file_path: {}", file_path));

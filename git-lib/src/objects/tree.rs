@@ -20,7 +20,7 @@ use super::{
 #[derive(Clone)]
 pub struct Tree {
     path: String,
-    objects: HashMap<String, GitObject>,
+    objects: HashMap<String, GitObject>, // HashMap<name_object, object>
     hash: Option<[u8; 20]>,
 }
 
@@ -240,7 +240,7 @@ impl Tree {
             };
             let hash_str = get_hash(stream)?;
             let mode = get_mode(mode)?;
-            let object_type = Mode::get_type_from_mode(&mode);
+            let object_type = mode.get_type_from_mode();
             objects.push((mode, object_type, hash_str, name.to_string()));
         }
 
@@ -283,7 +283,7 @@ fn get_mode(mode: &str) -> Result<Mode, CommandError> {
     Ok(mode)
 }
 
-fn get_mode_and_name(buf: Vec<u8>) -> Result<(String, String), CommandError> {
+fn _get_mode_and_name(buf: Vec<u8>) -> Result<(String, String), CommandError> {
     let string_mode_name = String::from_utf8(buf).map_err(|_| CommandError::InvalidMode)?;
     let Some((mode, name)) = string_mode_name.split_once(' ') else {
         return Err(CommandError::InvalidMode);
@@ -421,7 +421,7 @@ impl GitObjectTrait for Tree {
 //     }
 // }
 
-fn type_id_object(type_str: &str) -> Result<u8, CommandError> {
+fn _type_id_object(type_str: &str) -> Result<u8, CommandError> {
     if type_str == "blob" {
         return Ok(0);
     }

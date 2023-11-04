@@ -61,8 +61,8 @@ impl Mode {
         }
     }
 
-    pub fn get_type_from_mode(mode: &Mode) -> String {
-        match mode {
+    pub fn get_type_from_mode(&self) -> String {
+        match self {
             Mode::RegularFile => String::from("blob"),
             Mode::ExecutableFile => String::from("blob"),
             Mode::SymbolicLink => String::from("blob"),
