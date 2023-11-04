@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    ffi::OsStr,
     fs::{self, DirEntry, File, OpenOptions, ReadDir},
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -1580,8 +1581,10 @@ impl<'a> GitRepository<'a> {
             return Err(CommandError::InvalidBranchName(new_branch));
         }
         if let Some(dir) = path.parent() {
-            fs::create_dir_all(dir)
-                .map_err(|_| CommandError::FileCreationError(new_branch_path.clone()))?;
+            if !dir.ends_with(".git/refs/heads") {
+                fs::create_dir_all(dir)
+                    .map_err(|_| CommandError::FileCreationError(new_branch_path.clone()))?;
+            }
         }
         self.log(&format!("Path: {}", new_branch_path));
 
@@ -1679,14 +1682,14 @@ impl<'a> GitRepository<'a> {
             .map_err(|error| CommandError::RemoveFileError(error.to_string()))?;
 
         if let Some(dir) = old_path.parent() {
-            if !dir.ends_with(".git/refs/heads/") {
+            if !dir.ends_with(".git/refs/heads") {
                 fs::remove_dir_all(dir)
                     .map_err(|_| CommandError::RemoveDirectoryError(old_path_str.clone()))?;
             }
         }
 
         if let Some(dir) = new_path.parent() {
-            if !dir.ends_with(".git/refs/heads/") {
+            if !dir.ends_with(".git/refs/heads") {
                 fs::create_dir_all(dir)
                     .map_err(|_| CommandError::FileCreationError(new_path_str.clone()))?;
             }
@@ -1711,37 +1714,53 @@ impl<'a> GitRepository<'a> {
                 " No se pudo crear el directorio .git/refs/".to_string(),
             ),
         )?;
-        let mut errors: Vec<String> = Vec::new();
-        let mut deletions: Vec<(String, String)> = Vec::new();
+        let mut errors: String = String::new();
+        let mut deletions = String::new();
         let mut config = Config::open(&self.path)?;
         for branch in branches {
             let path = branch_path.clone() + branch;
             let Ok(_) = File::open(path.clone()) else {
-                errors.push(branch.to_string());
+                if are_remotes {
+                    errors += &format!("error: remote-tracking branch '{branch}' not found.\n")
+                } else {
+                    errors += &format!("error: branch '{branch}' not found.\n")
+                }
                 continue;
             };
             let hash = fs::read_to_string(path.clone())
                 .map_err(|error| CommandError::FileReadError(error.to_string()))?;
-            deletions.push((branch.to_string(), hash));
+
             fs::remove_file(path.clone())
                 .map_err(|error| CommandError::RemoveFileError(error.to_string()))?;
 
             if let Some(dir) = Path::new(&path).parent() {
-                if !dir.ends_with(".git/refs/heads/") || !dir.ends_with(".git/refs/remotes/") {
+                self.log(&format!("Dir: {:?}", dir));
+                let remote: Vec<&str> = branch.split_terminator("/").collect();
+                if !dir.ends_with("refs/heads") && remote.len() != 2 {
+                    self.log(&format!("Deleting dir: {:?}", dir));
+
                     fs::remove_dir_all(dir)
                         .map_err(|_| CommandError::RemoveDirectoryError(path.clone()))?;
                 }
             }
             config.remove_domain(&format!("branch \"{}\"", branch));
+            if are_remotes {
+                deletions += &format!(
+                    "Deleted remote-tracking branch {branch} (was {}).\n",
+                    hash[..7].to_string()
+                );
+            } else {
+                deletions += &format!("Deleted branch {branch} (was {}).\n", hash[..7].to_string());
+            }
         }
-        // delete from config
-        // output segun sean remotas o no
+        config.save()?;
+        write!(self.output, "{}{}", errors, deletions)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+
         Ok(())
     }
 
     /*
-    delete_locals: Vec<String>,
-    delete_remotes: Vec<String>,
     show_remotes: bool,
     show_all: bool,
      */

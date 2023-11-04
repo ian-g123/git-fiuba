@@ -108,17 +108,19 @@ impl Branch {
                 return Err(CommandError::RenameAndDelete);
             } else if args[arg] == "-r" || args[arg] == "--remotes" {
                 delete_remotes = true;
-            } else {
+            } else if args[arg] != "-D" {
                 branches.push(args[arg].clone())
             }
             // -D admite: branch names y -r
         }
         if delete_remotes {
-            self.delete_remotes = branches;
+            self.delete_remotes = branches.clone();
         } else {
-            self.delete_locals = branches;
+            self.delete_locals = branches.clone();
         }
-
+        if branches.is_empty() {
+            return Err(CommandError::DeleteWithNoArgs);
+        }
         Ok(args.len())
     }
 
@@ -147,9 +149,6 @@ impl Branch {
         if Self::is_flag(&args[i]) {
             return Err(CommandError::WrongFlag);
         }
-        if args.len() > 3 {
-            return Err(CommandError::FatalCreateBranchOperation);
-        }
         let mut branches_and_commits: Vec<String> = Vec::new();
         for arg in 0..args.len() {
             if args[arg] == "-a"
@@ -159,13 +158,17 @@ impl Branch {
             {
                 return Err(CommandError::CreateAndListError);
             } else if args[arg] == "-D" {
-                return Err(CommandError::WrongFlag);
+                return Ok(arg);
             } else {
                 branches_and_commits.push(args[arg].clone())
             }
         }
-        self.create = branches_and_commits;
 
+        if branches_and_commits.len() > 3 {
+            return Err(CommandError::FatalCreateBranchOperation);
+        }
+
+        self.create = branches_and_commits;
         Ok(args.len())
     }
 

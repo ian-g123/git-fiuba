@@ -135,6 +135,7 @@ pub enum CommandError {
     InvalidBranchName(String),
     RemoveDirectoryError(String),
     RemoveFileError(String),
+    DeleteWithNoArgs,
 }
 
 impl Error for CommandError {}
@@ -370,6 +371,7 @@ impl fmt::Display for CommandError {
             CommandError::RemoveFileError(error) => {
                 write!(f, "Error: {error}")
             }
+            CommandError::DeleteWithNoArgs => write!(f, "fatal: branch name required"),
         }
     }
 }
