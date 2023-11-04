@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File},
-    io::Write,
+    io::{Read, Write},
     process::Command,
 };
 
@@ -11,12 +11,15 @@ fn test_push() {
 
     create_base_scene(path.clone());
 
-    let result = Command::new(git_bin)
-        .arg("clone")
-        .arg("git://127.1.0.0:9418/repo")
-        .current_dir(path)
-        .output()
-        .unwrap();
+    assert!(
+        Command::new(git_bin)
+            .arg("clone")
+            .arg("git://127.1.0.0:9418/repo")
+            .current_dir(path)
+            .status()
+            .is_ok(),
+        "No se pudo agregar el archivo testfile"
+    );
 
     let mut file = File::create(path.to_owned() + "/repo/testfile2").unwrap();
     file.write_all(b"contenido2\n").unwrap();
@@ -42,32 +45,37 @@ fn test_push() {
         "No se pudo hacer commit"
     );
 
-    let result = Command::new("../".to_owned() + git_bin)
-        .arg("push")
-        .current_dir(&format!("{}/repo", path))
-        .output()
-        .unwrap();
-
-    println!(
-        "push vacío:\nSTDOUT:\n{}\n========\nERRORES\n========\n{}\n========",
-        String::from_utf8(result.stdout).unwrap(),
-        String::from_utf8(result.stderr).unwrap()
+    assert!(
+        Command::new("../".to_owned() + git_bin)
+            .arg("push")
+            .current_dir(&format!("{}/repo", path))
+            .status()
+            .is_ok(),
+        "No se pudo agregar el archivo testfile"
     );
 
-    let result = Command::new("../".to_owned() + git_bin)
-        .arg("clone")
-        .arg("git://127.1.0.0:9418/repo")
-        .current_dir(path.to_owned() + "/other_user")
-        .output()
-        .unwrap();
-
-    println!(
-        "push vacío:\nSTDOUT:\n{}\n========\nERRORES\n========\n{}\n========",
-        String::from_utf8(result.stdout).unwrap(),
-        String::from_utf8(result.stderr).unwrap()
+    assert!(
+        Command::new("../".to_owned() + git_bin)
+            .arg("clone")
+            .arg("git://127.1.0.0:9418/repo")
+            .current_dir(path.to_owned() + "/other_user")
+            .status()
+            .is_ok(),
+        "No se pudo agregar el archivo testfile"
     );
 
-    panic!();
+    let mut testfile2 = File::open(path.to_owned() + "/other_user/repo/testfile2").unwrap();
+    let mut contents = String::new();
+    testfile2.read_to_string(&mut contents).unwrap();
+    assert_eq!(contents, "contenido2\n");
+
+    let mut readme = File::open(path.to_owned() + "/other_user/repo/README.md").unwrap();
+    let mut contents = String::new();
+    readme.read_to_string(&mut contents).unwrap();
+    assert_eq!(contents, "Commit inicial\n");
+
+    // panic!("STOP");
+    _ = fs::remove_dir_all(path);
 }
 
 fn create_base_scene(path: &str) {
