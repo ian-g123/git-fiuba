@@ -282,36 +282,7 @@ fn staged_area_func(
     // staged_area, unstage_area
     let mut output = io::stdout();
     let mut repo = GitRepository::open(&repo_git_path, &mut output).unwrap();
-    let db = repo.db().unwrap();
-
-    let last_commit_tree = match repo.get_last_commit_tree() {
-        Ok(tree) => tree,
-        Err(err) => {
-            eprintln!("Error al obtener el último commit: {}", err);
-            return Err(CommandError::FileWriteError(err.to_string()));
-        }
-    };
-
-    let changes_controller =
-        ChangesController::new(&db, &repo_git_path, repo.get_logger(), last_commit_tree).unwrap();
-
-    let changes_to_be_commited_vec = sort_hashmap(changes_controller.get_changes_to_be_commited());
-    let changes_to_be_commited: HashSet<String> = changes_to_be_commited_vec
-        .into_iter()
-        .map(|(s, _)| s)
-        .collect();
-
-    let changes_not_staged_vec = sort_hashmap(changes_controller.get_changes_not_staged());
-    let mut changes_not_staged: HashSet<String> =
-        changes_not_staged_vec.into_iter().map(|(s, _)| s).collect();
-
-    let untracked_files_vec = changes_controller.get_untracked_files();
-
-    println!("untracked_files_vec: {:?}", untracked_files_vec);
-
-    changes_not_staged.extend(untracked_files_vec.iter().cloned());
-
-    return Ok((changes_to_be_commited, changes_not_staged));
+    repo.get_stage_and_unstage_changes()
 }
 
 fn commit_function(repo: &GitRepository, commit_msg: String) {

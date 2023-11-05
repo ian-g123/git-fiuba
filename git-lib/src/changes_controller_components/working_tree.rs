@@ -61,21 +61,21 @@ fn get_path_name(path: PathBuf) -> Result<String, CommandError> {
 mod tests {
     use super::*;
 
-    #[test]
-    #[ignore]
-    fn print_working_tree() {
-        let wt = build_working_tree(".").unwrap();
-        validate_tree(wt);
-    }
+    // #[test]
+    // #[ignore]
+    // fn print_working_tree() {
+    //     let wt = build_working_tree().unwrap();
+    //     validate_tree(wt);
+    // }
 
-    fn validate_tree(tree: Tree) {
-        for (name, object) in tree.get_objects().iter_mut() {
-            if let Some(new_tree) = object.as_tree() {
-                validate_tree(new_tree.clone())
-            } else {
-                let path = PathBuf::from(name);
-                assert!(path.exists(), "File name: {}", name);
-            }
-        }
-    }
+    // fn validate_tree(tree: Tree) {
+    //     for (name, object) in tree.get_objects().iter_mut() {
+    //         if let Some(new_tree) = object.as_tree() {
+    //             validate_tree(new_tree.clone())
+    //         } else {
+    //             let path = PathBuf::from(name);
+    //             assert!(path.exists(), "File name: {}", name);
+    //         }
+    //     }
+    // }
 }

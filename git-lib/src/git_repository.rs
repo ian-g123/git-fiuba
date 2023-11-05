@@ -9,7 +9,10 @@ use chrono::{DateTime, Local};
 
 use crate::{
     changes_controller_components::{
-        format::Format, long_format::LongFormat, short_format::ShortFormat,
+        changes_controller::ChangesController,
+        format::Format,
+        long_format::{sort_hashmap, LongFormat},
+        short_format::ShortFormat,
     },
     command_errors::CommandError,
     config::Config,
@@ -37,29 +40,44 @@ use crate::{
 };
 
 pub struct GitRepository<'a> {
-    path: String,
+    git_path: String,
+    working_dir_path: String,
     logger: Logger,
     output: &'a mut dyn Write,
+    bare: bool,
 }
 
 impl<'a> GitRepository<'a> {
     pub fn open(path: &str, output: &'a mut dyn Write) -> Result<GitRepository<'a>, CommandError> {
-        if !Path::new(
-            &join_paths!(path, ".git").ok_or(CommandError::DirectoryCreationError(
-                "Error abriendo directorio .git".to_string(),
-            ))?,
-        )
+        let tentative_git_path = join_paths!(path, ".git").ok_or(
+            CommandError::DirectoryCreationError("Error abriendo directorio .git".to_string()),
+        )?;
+        let (git_path, logger, bare) = if Path::new(&tentative_git_path).exists() {
+            let logs_path = &join_paths!(tentative_git_path, "logs").ok_or(
+                CommandError::DirectoryCreationError("Error creando archivo .git/logs".to_string()),
+            )?;
+            (tentative_git_path, Logger::new(&logs_path)?, false)
+        } else {
+            (path.to_string(), Logger::new_dummy(), true)
+        };
+        if !Path::new(&join_paths!(git_path, "objects").ok_or(
+            CommandError::DirectoryCreationError("Error abriendo directorio .git".to_string()),
+        )?)
         .exists()
         {
+            println!(
+                "No se encontro la carpeta {:?}",
+                join_paths!(git_path, "objects")
+            );
             return Err(CommandError::NotGitRepository);
         }
-        let logs_path = &join_paths!(path, ".git/logs").ok_or(
-            CommandError::DirectoryCreationError("Error creando directorio .git/logs".to_string()),
-        )?;
+
         Ok(GitRepository {
-            path: path.to_string(),
-            logger: Logger::new(&logs_path)?,
+            git_path: git_path,
+            working_dir_path: path.to_string(),
+            logger,
             output,
+            bare,
         })
     }
 
@@ -69,53 +87,64 @@ impl<'a> GitRepository<'a> {
         bare: bool,
         output: &'a mut dyn Write,
     ) -> Result<GitRepository<'a>, CommandError> {
-        let logs_path = &join_paths!(path, ".git/logs").ok_or(
-            CommandError::DirectoryCreationError("Error creando directorio .git/logs".to_string()),
-        )?;
-        let mut repo = GitRepository {
-            path: path.to_string(),
-            logger: Logger::new(&logs_path)?,
-            output,
+        let (git_path, logger) = if bare {
+            (path.to_string(), Logger::new_dummy())
+        } else {
+            let tentative_git_path = join_paths!(path, ".git").ok_or(
+                CommandError::DirectoryCreationError("Error creando directorio .git".to_string()),
+            )?;
+            let logs_path = &join_paths!(tentative_git_path, "logs").ok_or(
+                CommandError::DirectoryCreationError("Error creando archivo .git/logs".to_string()),
+            )?;
+            (tentative_git_path, Logger::new(&logs_path)?)
         };
-        repo.create_files_and_dirs(path, branch_name, bare)?;
+
+        let mut repo = GitRepository {
+            git_path,
+            working_dir_path: path.to_string(),
+            logger,
+            output,
+            bare,
+        };
+        repo.create_files_and_dirs(branch_name)?;
         Ok(repo)
     }
 
-    fn create_files_and_dirs(
-        &mut self,
-        path: &str,
-        branch_name: &str,
-        bare: bool,
-    ) -> Result<(), CommandError> {
-        self.create_dirs(path, bare)?;
-        self.create_files(path, bare, branch_name)?;
-        let output_text = format!("Initialized empty Git repository in {}", path);
+    fn create_files_and_dirs(&mut self, branch_name: &str) -> Result<(), CommandError> {
+        self.create_dirs()?;
+        self.create_files(branch_name)?;
+        let output_text = format!(
+            "Initialized empty Git repository in {}",
+            &self.working_dir_path
+        );
         let _ = writeln!(self.output, "{}", output_text);
         Ok(())
     }
 
-    fn create_dirs(&self, path: &str, bare: bool) -> Result<(), CommandError> {
-        if fs::create_dir_all(path).is_err() {
-            return Err(CommandError::DirectoryCreationError(path.to_string()));
+    fn create_dirs(&self) -> Result<(), CommandError> {
+        if fs::create_dir_all(&self.git_path).is_err() {
+            return Err(CommandError::DirectoryCreationError(
+                self.git_path.to_owned(),
+            ));
         }
-        let git_path = if bare {
-            path.to_string()
-        } else {
-            join_paths!(path.to_string(), ".git").ok_or(CommandError::DirectoryCreationError(
-                "Error creando arc".to_string(),
-            ))?
-        };
-        self.create_dir(&git_path, "objects".to_string())?;
-        self.create_dir(&git_path, "objects/info".to_string())?;
-        self.create_dir(&git_path, "objects/pack".to_string())?;
-        self.create_dir(&git_path, "refs".to_string())?;
-        self.create_dir(&git_path, "refs/tags".to_string())?;
-        self.create_dir(&git_path, "refs/heads".to_string())?;
-        self.create_dir(&git_path, "branches".to_string())?;
+        // let git_path = if bare {
+        //     path.to_string()
+        // } else {
+        //     join_paths!(path.to_string(), ".git").ok_or(CommandError::DirectoryCreationError(
+        //         "Error creando arc".to_string(),
+        //     ))?
+        // };
+        self.create_dir(&self.git_path, "objects".to_string())?;
+        self.create_dir(&self.git_path, "objects/info".to_string())?;
+        self.create_dir(&self.git_path, "objects/pack".to_string())?;
+        self.create_dir(&self.git_path, "refs".to_string())?;
+        self.create_dir(&self.git_path, "refs/tags".to_string())?;
+        self.create_dir(&self.git_path, "refs/heads".to_string())?;
+        self.create_dir(&self.git_path, "branches".to_string())?;
         Ok(())
     }
 
-    fn create_dir(&self, path: &String, name: String) -> Result<(), CommandError> {
+    fn create_dir(&self, path: &str, name: String) -> Result<(), CommandError> {
         let path_complete = join_paths!(path, name).ok_or(CommandError::DirectoryCreationError(
             "Error creando directorio".to_string(),
         ))?;
@@ -126,31 +155,13 @@ impl<'a> GitRepository<'a> {
         }
     }
 
-    fn create_files(&self, path: &str, bare: bool, branch_name: &str) -> Result<(), CommandError> {
-        if fs::create_dir_all(path).is_err() {
-            return Err(CommandError::DirectoryCreationError(path.to_string()));
-        }
-        let path_aux = if bare {
-            path.to_string()
-        } else {
-            join_paths!(path, ".git").ok_or(CommandError::FileCreationError(
-                "Error creando arc".to_string(),
-            ))?
-        };
-        self.create_file(&path_aux, "HEAD".to_string(), branch_name)?;
-        Ok(())
-    }
-
-    pub fn get_logger(&mut self) -> &mut Logger {
-        &mut self.logger
-    }
-
-    fn create_file(&self, path: &str, name: String, branch_name: &str) -> Result<(), CommandError> {
-        if fs::create_dir_all(path).is_ok() {
-            //let path_complete = format!("{}/{}", path, name);
-            let path_complete = join_paths!(path, name).ok_or(CommandError::FileCreationError(
-                "Error creando un archivo".to_string(),
-            ))?;
+    fn create_files(&self, branch_name: &str) -> Result<(), CommandError> {
+        let name = "HEAD".to_string();
+        let branch_name = branch_name;
+        if fs::create_dir_all(&self.git_path).is_ok() {
+            let path_complete = join_paths!(&self.git_path, name).ok_or(
+                CommandError::FileCreationError("Error creando un archivo".to_string()),
+            )?;
             match File::create(&path_complete) {
                 Ok(mut archivo) => {
                     let texto = format!("ref: refs/heads/{}", branch_name.to_string());
@@ -162,7 +173,9 @@ impl<'a> GitRepository<'a> {
                 Err(err) => return Err(CommandError::FileCreationError(err.to_string())),
             };
         } else {
-            return Err(CommandError::DirectoryCreationError(path.to_string()));
+            return Err(CommandError::DirectoryCreationError(
+                self.git_path.to_string(),
+            ));
         }
         Ok(())
     }
@@ -181,7 +194,7 @@ impl<'a> GitRepository<'a> {
 
     pub fn add(&mut self, pathspecs: Vec<String>) -> Result<(), CommandError> {
         let last_commit = &self.get_last_commit_tree()?;
-        let mut staging_area = StagingArea::open(&self.path)?;
+        let mut staging_area = StagingArea::open(&self.git_path)?;
         let mut pathspecs_clone: Vec<String> = pathspecs.clone();
         let mut position = 0;
         for pathspec in &pathspecs {
@@ -324,7 +337,7 @@ impl<'a> GitRepository<'a> {
         reuse_commit_info: Option<String>,
         quiet: bool,
     ) -> Result<(), CommandError> {
-        let mut staging_area = StagingArea::open(&self.path)?;
+        let mut staging_area = StagingArea::open(&self.git_path)?;
         self.update_staging_area_files(&files, &mut staging_area)?;
 
         self.commit_priv(
@@ -345,7 +358,7 @@ impl<'a> GitRepository<'a> {
         reuse_commit_info: Option<String>,
         quiet: bool,
     ) -> Result<(), CommandError> {
-        let mut staging_area = StagingArea::open(&self.path)?;
+        let mut staging_area = StagingArea::open(&self.git_path)?;
         self.run_all_config(&mut staging_area)?;
 
         self.commit_priv(
@@ -367,7 +380,7 @@ impl<'a> GitRepository<'a> {
         quiet: bool,
     ) -> Result<(), CommandError> {
         self.log("Running commit");
-        let mut staging_area = StagingArea::open(&self.path)?;
+        let mut staging_area = StagingArea::open(&self.git_path)?;
         self.log("StagingArea opened");
         self.commit_priv(
             message,
@@ -505,7 +518,7 @@ impl<'a> GitRepository<'a> {
         parents: Vec<String>,
         staged_tree: Tree,
     ) -> Result<CommitObject, CommandError> {
-        let config = Config::open(&self.path)?;
+        let config = Config::open(&self.git_path)?;
         let Some(author_email) = config.get("user", "email") else {
             return Err(CommandError::UserConfigurationError);
         };
@@ -563,7 +576,8 @@ impl<'a> GitRepository<'a> {
         let last_commit_tree = self.get_last_commit_tree()?;
         long_format.show(
             &self.db()?,
-            &self.path,
+            &self.git_path,
+            &self.working_dir_path,
             last_commit_tree,
             &mut self.logger,
             &mut self.output,
@@ -578,7 +592,8 @@ impl<'a> GitRepository<'a> {
         let last_commit_tree = self.get_last_commit_tree()?;
         short_format.show(
             &self.db()?,
-            &self.path,
+            &self.git_path,
+            &self.working_dir_path,
             last_commit_tree,
             &mut self.logger,
             &mut self.output,
@@ -588,7 +603,7 @@ impl<'a> GitRepository<'a> {
     }
 
     pub fn open_config(&self) -> Result<Config, CommandError> {
-        Config::open(&self.path)
+        Config::open(&self.git_path)
     }
 
     pub fn update_remote(&self, url: String) -> Result<(), CommandError> {
@@ -674,6 +689,10 @@ impl<'a> GitRepository<'a> {
 
     pub fn log(&mut self, content: &str) {
         self.logger.log(content);
+    }
+
+    pub fn logger(&mut self) -> &mut Logger {
+        &mut self.logger
     }
 
     pub fn pull(&mut self) -> Result<(), CommandError> {
@@ -813,7 +832,7 @@ impl<'a> GitRepository<'a> {
     pub fn get_head_branch_path(&mut self) -> Result<String, CommandError> {
         let mut branch = String::new();
         let path =
-            join_paths!(self.path, ".git/HEAD").ok_or(CommandError::DirectoryCreationError(
+            join_paths!(self.git_path, "HEAD").ok_or(CommandError::DirectoryCreationError(
                 "Error creando directorio de branches".to_string(),
             ))?;
         let Ok(mut head) = File::open(&path) else {
@@ -842,9 +861,8 @@ impl<'a> GitRepository<'a> {
     pub fn get_last_commit_hash(&mut self) -> Result<Option<String>, CommandError> {
         let mut parent = String::new();
         let branch = self.get_head_branch_path()?;
-
         let branch_path =
-            join_paths!(&self.path, ".git", branch).ok_or(CommandError::DirectoryCreationError(
+            join_paths!(&self.git_path, branch).ok_or(CommandError::DirectoryCreationError(
                 "Error creando directorio de branches".to_string(),
             ))?;
         let Ok(mut branch_file) = File::open(branch_path.clone()) else {
@@ -861,7 +879,7 @@ impl<'a> GitRepository<'a> {
 
     pub fn local_branches(&mut self) -> Result<HashMap<String, String>, CommandError> {
         let mut branches = HashMap::<String, String>::new();
-        let branches_path = join_paths!(&self.path, ".git/refs/heads/").ok_or(
+        let branches_path = join_paths!(&self.git_path, "refs/heads/").ok_or(
             CommandError::DirectoryCreationError(
                 "Error creando directorio de branches".to_string(),
             ),
@@ -908,7 +926,7 @@ impl<'a> GitRepository<'a> {
     /// Devuelve un HashMap con el formato: `{nombre_branch: hash_commit}`.
     fn remote_branches(&mut self) -> Result<HashMap<String, String>, CommandError> {
         let mut branches = HashMap::<String, String>::new();
-        let branches_path = join_paths!(&self.path, ".git/refs/remotes/origin/").ok_or(
+        let branches_path = join_paths!(&self.git_path, "refs/remotes/origin/").ok_or(
             CommandError::DirectoryCreationError(
                 "Error creando directorio de branches".to_string(),
             ),
@@ -990,7 +1008,7 @@ impl<'a> GitRepository<'a> {
 
     /// Actualiza la referencia de la branch con el hash del commit obtenido del servidor.
     fn update_ref(&mut self, sha1: &str, ref_name: &str) -> Result<(), CommandError> {
-        let dir_path = join_paths!(&self.path, ".git/refs/remotes/origin/").ok_or(
+        let dir_path = join_paths!(&self.git_path, "refs/remotes/origin/").ok_or(
             CommandError::DirectoryCreationError("Error creando directorio de refs".to_string()),
         )?;
         let file_path = dir_path.to_owned() + ref_name;
@@ -1025,7 +1043,7 @@ impl<'a> GitRepository<'a> {
         remote_reference: &str,
     ) -> Result<(), CommandError> {
         self.log("Updating FETCH_HEAD");
-        let fetch_head_path = join_paths!(&self.path, ".git/FETCH_HEAD").ok_or(
+        let fetch_head_path = join_paths!(&self.git_path, "FETCH_HEAD").ok_or(
             CommandError::DirectoryCreationError("Error actualizando FETCH_HEAD".to_string()),
         )?;
         let mut file = fs::OpenOptions::new()
@@ -1060,7 +1078,7 @@ impl<'a> GitRepository<'a> {
             }
             let line = format!(
                 "{}\tnot-for-merge\tbranch '{}' of {}",
-                hash, branch_name, &self.path
+                hash, branch_name, &remote_reference
             );
             file.write_all(line.as_bytes()).map_err(|error| {
                 CommandError::FileWriteError(
@@ -1071,7 +1089,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    fn get_head_branch_name(&mut self) -> Result<String, CommandError> {
+    pub fn get_head_branch_name(&mut self) -> Result<String, CommandError> {
         let head_branch_path = self.get_head_branch_path()?;
         let head_branch_name =
             head_branch_path
@@ -1086,7 +1104,7 @@ impl<'a> GitRepository<'a> {
     /// Devuelve el hash del commit que apunta la rama que se hizo fetch dentro de `FETCH_HEAD` (commit del remoto).
     fn get_fetch_head_branch_commit_hash(&self) -> Result<String, CommandError> {
         let fetch_head_path =
-            join_paths!(&self.path, ".git/FETCH_HEAD").ok_or(CommandError::JoiningPaths)?;
+            join_paths!(&self.git_path, "FETCH_HEAD").ok_or(CommandError::JoiningPaths)?;
 
         let Ok(mut fetch_head_file) = fs::File::open(fetch_head_path) else {
             return Err(CommandError::FileReadError(
@@ -1122,7 +1140,7 @@ impl<'a> GitRepository<'a> {
     /// Devuelve el hash del commit que apunta la rama que se hizo fetch
     fn get_fetch_head_commits(&self) -> Result<HashMap<String, (String, bool)>, CommandError> {
         let fetch_head_path =
-            join_paths!(&self.path, ".git/FETCH_HEAD").ok_or(CommandError::JoiningPaths)?;
+            join_paths!(&self.git_path, "FETCH_HEAD").ok_or(CommandError::JoiningPaths)?;
 
         let mut branches = HashMap::<String, (String, bool)>::new();
         let Ok(mut fetch_head_file) = fs::File::open(fetch_head_path) else {
@@ -1185,7 +1203,7 @@ impl<'a> GitRepository<'a> {
 
     fn restore(&mut self, mut source_tree: Tree) -> Result<(), CommandError> {
         self.log("Restoring files");
-        source_tree.restore(&self.path, &mut self.logger)?;
+        source_tree.restore(&self.working_dir_path, &mut self.logger)?;
         let mut staging_area = self.staging_area()?;
         staging_area.update_to_tree(&source_tree)?;
         staging_area.save()?;
@@ -1194,12 +1212,12 @@ impl<'a> GitRepository<'a> {
 
     fn restore_merge_conflict(&mut self, mut source_tree: Tree) -> Result<(), CommandError> {
         self.log("Restoring files");
-        source_tree.restore(&self.path, &mut self.logger)?;
+        source_tree.restore(&self.working_dir_path, &mut self.logger)?;
         Ok(())
     }
 
     pub fn db(&self) -> Result<ObjectsDatabase, CommandError> {
-        ObjectsDatabase::new(&self.path)
+        ObjectsDatabase::new(&self.git_path)
     }
 
     /// Devuelve true si Git no reconoce el path pasado.
@@ -1412,7 +1430,7 @@ impl<'a> GitRepository<'a> {
         &self,
         refs_branch_name: &String,
     ) -> Result<String, CommandError> {
-        let path_to_branch = join_paths!(self.path, ".git/refs/heads", refs_branch_name)
+        let path_to_branch = join_paths!(self.git_path, "refs/heads", refs_branch_name)
             .ok_or(CommandError::FileOpenError(refs_branch_name.clone()))?;
 
         let mut file = File::open(&path_to_branch).map_err(|_| {
@@ -1426,6 +1444,7 @@ impl<'a> GitRepository<'a> {
 
         Ok(commit_hash[..commit_hash.len()].to_string())
     }
+
     fn true_merge(
         &mut self,
         common: &mut CommitObject,
@@ -1447,7 +1466,7 @@ impl<'a> GitRepository<'a> {
             &mut common_tree,
             head_name,
             destin_name,
-            &self.path,
+            &self.working_dir_path,
             &mut staging_area,
         )?;
         staging_area.save()?;
@@ -1513,7 +1532,7 @@ impl<'a> GitRepository<'a> {
     }
 
     fn staging_area(&mut self) -> Result<StagingArea, CommandError> {
-        Ok(StagingArea::open(&self.path)?)
+        Ok(StagingArea::open(&self.git_path)?)
     }
 
     fn get_failed_merge_info(&mut self) -> Result<(String, String, String), CommandError> {
@@ -1530,7 +1549,7 @@ impl<'a> GitRepository<'a> {
 
     /// Dado un path, crea el archivo correspondiente y escribe el contenido pasado.
     fn write_to_file(&self, relative_path: &str, content: &str) -> Result<(), CommandError> {
-        let path_f = join_paths!(self.path, ".git", relative_path).ok_or(
+        let path_f = join_paths!(self.git_path, relative_path).ok_or(
             CommandError::FileWriteError("Error guardando FETCH_HEAD:".to_string()),
         )?;
         let mut file = fs::OpenOptions::new()
@@ -1545,7 +1564,7 @@ impl<'a> GitRepository<'a> {
     }
 
     fn read_file(&self, relative_path: &str) -> Result<String, CommandError> {
-        let path = join_paths!(self.path, ".git", relative_path).ok_or(
+        let path = join_paths!(self.git_path, relative_path).ok_or(
             CommandError::FileWriteError("Error guardando FETCH_HEAD:".to_string()),
         )?;
         let mut file = fs::OpenOptions::new()
@@ -1559,8 +1578,7 @@ impl<'a> GitRepository<'a> {
     }
 
     fn delete_file(&self, relative_path: &str) -> Result<(), CommandError> {
-        let path =
-            join_paths!(self.path, ".git", relative_path).ok_or(CommandError::JoiningPaths)?;
+        let path = join_paths!(self.git_path, relative_path).ok_or(CommandError::JoiningPaths)?;
         fs::remove_file(path).map_err(|error| {
             CommandError::FileWriteError(format!(
                 "Error borrando archivo {}: {}",
@@ -1599,6 +1617,46 @@ impl<'a> GitRepository<'a> {
         let mut commits: Vec<_> = commits_map.drain().map(|(_, v)| v).collect();
         sort_commits_descending_date(&mut commits);
         Ok(commits)
+    }
+
+    pub fn get_stage_and_unstage_changes(
+        &mut self,
+    ) -> Result<(HashSet<String>, HashSet<String>), CommandError> {
+        let last_commit_tree = match self.get_last_commit_tree() {
+            Ok(tree) => tree,
+            Err(err) => {
+                eprintln!("Error al obtener el último commit: {}", err);
+                return Err(CommandError::FileWriteError(err.to_string()));
+            }
+        };
+
+        let changes_controller = ChangesController::new(
+            &self.db()?,
+            &self.git_path,
+            &self.working_dir_path,
+            &mut self.logger,
+            last_commit_tree,
+        )
+        .unwrap();
+
+        let changes_to_be_commited_vec =
+            sort_hashmap(changes_controller.get_changes_to_be_commited());
+        let changes_to_be_commited: HashSet<String> = changes_to_be_commited_vec
+            .into_iter()
+            .map(|(s, _)| s)
+            .collect();
+
+        let changes_not_staged_vec = sort_hashmap(changes_controller.get_changes_not_staged());
+        let mut changes_not_staged: HashSet<String> =
+            changes_not_staged_vec.into_iter().map(|(s, _)| s).collect();
+
+        let untracked_files_vec = changes_controller.get_untracked_files();
+
+        println!("untracked_files_vec: {:?}", untracked_files_vec);
+
+        changes_not_staged.extend(untracked_files_vec.iter().cloned());
+
+        return Ok((changes_to_be_commited, changes_not_staged));
     }
 }
 

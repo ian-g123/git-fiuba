@@ -125,7 +125,14 @@ pub enum CommandError {
     CannotHaveFileAndFolderWithSameName(String),
     PushBranchBehind(String),
 
-    InterfaceError(String),
+    // InterfaceError(String),
+    /// Error de I/O
+    Io {
+        message: String,
+        error: String,
+    },
+    /// Error al negociar paquetes con cliente
+    PackageNegotiationError(String),
 }
 
 impl Error for CommandError {}
@@ -342,8 +349,14 @@ impl fmt::Display for CommandError {
             CommandError::PushBranchBehind(local_branch) => {
                 write!(f, "error: failed to push some refs to {}", local_branch)
             }
-            CommandError::InterfaceError(msg) => {
-                write!(f, "Ocurrió un error en la interfaz: {}", msg)
+            // CommandError::InterfaceError(msg) => {
+            //     write!(f, "Ocurrió un error en la interfaz: {}", msg)
+            // }
+            CommandError::Io { message, error } => {
+                write!(f, "{}: {}", message, error)
+            }
+            CommandError::PackageNegotiationError(msg) => {
+                write!(f, "{}", msg)
             }
         }
     }

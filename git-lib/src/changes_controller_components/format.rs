@@ -8,7 +8,8 @@ pub trait Format {
     fn show(
         &self,
         db: &ObjectsDatabase,
-        base_path: &str,
+        git_path: &str,
+        working_dir: &str,
         commit_tree: Option<Tree>,
         logger: &mut Logger,
         output: &mut dyn Write,
@@ -23,7 +24,8 @@ pub trait Format {
                 false
             }
         };
-        let changes_controller = ChangesController::new(db, base_path, logger, commit_tree)?;
+        let changes_controller =
+            ChangesController::new(db, git_path, working_dir, logger, commit_tree)?;
         let changes_to_be_commited = changes_controller.get_changes_to_be_commited();
         let changes_not_staged = changes_controller.get_changes_not_staged();
         let untracked_files = changes_controller.get_untracked_files();

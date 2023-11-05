@@ -28,14 +28,20 @@ impl ChangesController {
     /// del index y el working tree desde el último commit.
     pub fn new(
         db: &ObjectsDatabase,
-        base_path: &str,
+        git_path: &str,
+        working_dir: &str,
         logger: &mut Logger,
         commit_tree: Option<Tree>,
     ) -> Result<ChangesController, CommandError> {
-        let index = StagingArea::open(&base_path)?;
-        let working_tree = build_working_tree(base_path)?;
+        logger.log(&format!(
+            "ChangesController::new\ngit_path: {}\nworking_dir: {}",
+            git_path, working_dir
+        ));
+        let index = StagingArea::open(git_path)?;
+        logger.log("stagin area opened");
+        let working_tree = build_working_tree(working_dir)?;
+        logger.log("build_working_tree success");
         let index_changes = Self::check_staging_area_status(db, &index, &commit_tree, logger)?;
-
         let (working_tree_changes, untracked) = Self::check_working_tree_status(
             working_tree,
             &index,
@@ -165,7 +171,7 @@ impl ChangesController {
         staging_area: &StagingArea,
         changes: &mut HashMap<String, ChangeType>,
     ) -> Result<(), CommandError> {
-        let deleted_changes = staging_area.get_deleted_files(db, last_commit_tree);
+        let deleted_changes = staging_area.get_deleted_files(last_commit_tree);
         for deleted_file in deleted_changes.iter() {
             _ = changes.insert(deleted_file.to_string(), ChangeType::Deleted)
         }
@@ -184,7 +190,6 @@ impl ChangesController {
     ) -> Result<(), CommandError> {
         let mut untracked_number = 0;
         let mut total_files_dir = 0;
-
         for (_, object) in tree.get_objects().iter_mut() {
             if let Some(mut new_tree) = object.as_tree() {
                 Self::check_working_tree_aux(

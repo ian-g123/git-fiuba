@@ -29,14 +29,7 @@ impl Command for Log {
         }
 
         let instance = Self::new(args)?;
-        let mut commits: Vec<(CommitObject, Option<String>)> = instance.run(output)?;
-
-        // for commit in &mut commits {
-        //     let commit_y = &mut commit.0;
-
-        //     println!("{}", commit_y.get_hash_string()?);
-        // }
-
+        let mut commits = instance.run(output)?;
         print_for_log(output, &mut commits)?;
         Ok(())
     }

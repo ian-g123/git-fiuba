@@ -91,9 +91,9 @@ impl ObjectsDatabase {
 
     /// Dado la ruta del repositorio, crea el objeto `ObjectsDatabase` que contiene métodos útiles para
     /// acceder a la base de datos de objetos de git, tanto para leer como para escribir.
-    pub(crate) fn new(base_path_str: &str) -> Result<Self, CommandError> {
+    pub(crate) fn new(git_path: &str) -> Result<Self, CommandError> {
         Ok(ObjectsDatabase {
-            db_path: join_paths_m(base_path_str, ".git/objects")?.to_string(),
+            db_path: join_paths_m(git_path, "objects")?.to_string(),
         })
     }
 

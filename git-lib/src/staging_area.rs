@@ -15,13 +15,13 @@ use super::{command_errors::CommandError, objects::tree::Tree};
 
 #[derive(Debug)]
 pub struct StagingArea {
-    index_path: String,
-    files: HashMap<String, String>, // HashMap<path, hash>
+    files: HashMap<String, String>,
     unmerged_files: HashMap<String, (Option<String>, Option<String>, Option<String>)>,
+    index_path: String,
 }
 
 impl StagingArea {
-    pub fn new(index_path: &str) -> Self {
+    fn new(index_path: &str) -> Self {
         Self {
             files: HashMap::new(),
             unmerged_files: HashMap::new(),
@@ -33,19 +33,6 @@ impl StagingArea {
         self.files.clone()
     }
 
-    /// Dado el árbol del último commit, devuelve true si hay cambios en el staging area
-    pub fn has_changes(
-        &self,
-        db: &ObjectsDatabase,
-        last_commit_tree: &Option<Tree>,
-        logger: &mut Logger,
-    ) -> Result<bool, CommandError> {
-        let changes = self.get_changes(last_commit_tree, logger)?.len();
-        let deleted_files = self.get_deleted_files(db, last_commit_tree);
-        Ok(changes + deleted_files.len() > 0)
-    }
-
-    /// Dado el árbol del último commit, devuelve los cambios en el staging area
     pub fn get_changes(
         &self,
         last_commit_tree: &Option<Tree>,
@@ -67,9 +54,19 @@ impl StagingArea {
     }
 
     /// Dado el árbol del último commit, devuelve los archivos borrados en el staging area
+    pub fn has_changes(
+        &self,
+        db: &ObjectsDatabase,
+        last_commit_tree: &Option<Tree>,
+        logger: &mut Logger,
+    ) -> Result<bool, CommandError> {
+        let changes = self.get_changes(last_commit_tree, logger)?.len();
+        let deleted_files = self.get_deleted_files(last_commit_tree);
+        Ok(changes + deleted_files.len() > 0)
+    }
+
     pub fn get_deleted_files(
         &self,
-        _db: &ObjectsDatabase,
         last_commit_tree: &Option<Tree>,
     ) -> Vec<String> {
         let mut deleted: Vec<String> = Vec::new();
@@ -104,15 +101,14 @@ impl StagingArea {
 
     /// Verifica si hay un cambio del working tree respecto del staging area
     pub fn has_file_renamed(&self, actual_path: &str, actual_hash: &str) -> bool {
-        let mut actual_parts: Vec<&str> = actual_path.split_terminator("/").collect();
-        _ = actual_parts.pop();
+        for (path, hash) in self.get_files() {
+            let mut actual_parts: Vec<&str> = actual_path.split_terminator("/").collect();
+            let mut parts: Vec<&str> = path.split_terminator("/").collect();
 
-        for (path_for_staging_file, hash_for_staging_file) in self.get_files() {
-            let mut parts: Vec<&str> = path_for_staging_file.split_terminator("/").collect();
-
+            _ = actual_parts.pop();
             _ = parts.pop();
 
-            if actual_parts == parts && hash_for_staging_file == actual_hash {
+            if actual_parts == parts && hash == actual_hash {
                 return true;
             }
         }
@@ -254,8 +250,8 @@ impl StagingArea {
         Ok(hash)
     }
 
-    pub fn open(base_path: &str) -> Result<StagingArea, CommandError> {
-        let index_path = join_paths!(base_path, ".git/index").ok_or(
+    pub fn open(git_path: &str) -> Result<StagingArea, CommandError> {
+        let index_path = join_paths!(git_path, "index").ok_or(
             CommandError::FailToOpenStaginArea("No se pudo abrir el archivo index".to_string()),
         )?;
         match std::fs::File::open(&index_path) {
