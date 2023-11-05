@@ -69,13 +69,12 @@ impl CommitObject {
     }
 
     pub fn get_message(&self) -> String {
-        return self.message.clone()
+        return self.message.clone();
     }
 
     pub fn get_author(&self) -> String {
-        return self.author.to_string()
+        return self.author.to_string();
     }
-
 
     /// Crea un Commit a partir de la infromación leída del stream.
     pub fn read_from(

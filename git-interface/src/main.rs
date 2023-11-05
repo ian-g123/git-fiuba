@@ -5,8 +5,7 @@ use std::{
 };
 
 use gtk::{
-    prelude::*, subclass::box_, Button, DrawingArea, Label, ListBox, ListBoxRow, Orientation,
-    Window, WindowType,
+    prelude::*, Button, DrawingArea, Label, ListBox, ListBoxRow, Orientation, Window, WindowType,
 };
 
 use git::commands::push::Push;
@@ -79,12 +78,12 @@ fn main() {
     let commits_hashes_list: gtk::ListBox = interface.builder.object("commit_hash_list").unwrap();
 
     // cargamos los botones
+    // window.add(&drawing_area);
     interface.buttons_activation();
-    window.add(&drawing_area);
 
-    interface.build_ui(&mut window);
+    // interface.build_ui(&mut window);
 
-    set_graph(
+    set_right_area(
         &drawing_area,
         description_list,
         date_list,
@@ -102,6 +101,10 @@ fn main() {
 
     gtk::main();
 }
+
+// COSAS QUE VOY A USAR PARA STAGING CHANGES
+// staging_area.remove_changes
+// staging_area.get_changes
 
 impl Interface {
     fn buttons_activation<'a>(&mut self) -> Result<(), CommandError> {
@@ -122,10 +125,9 @@ impl Interface {
     }
 
     fn build_button(&self, name: String) -> gtk::Button {
-        println!("Se construyó el botón {}", name);
         self.builder
             .object(name.as_str())
-            .expect("No se pudo obtener el botón")
+            .expect(format!("No se pudo obtener el botón {}", name).as_str())
     }
 
     fn connect_button(
@@ -275,8 +277,8 @@ fn push_function(output: &mut dyn Write) {
     push.run(output).unwrap();
 }
 
-fn set_graph(
-    _drawing_area: &DrawingArea,
+fn set_right_area(
+    _drawing_area: &DrawingArea, // TODO: implementar el grafo para la entrega final
     description_list: ListBox,
     date_list: ListBox,
     author_list: ListBox,
@@ -286,9 +288,9 @@ fn set_graph(
     let mut hash_sons: HashMap<String, Vec<(f64, f64)>> = HashMap::new(); // hash, Vec<(x,y)> de los hijos
     let mut hash_branches: HashMap<String, usize> = HashMap::new();
     //let mut identado: usize = 1;
-    for commit_and_branches in commits {
-        let mut commit = &commit_and_branches.0;
-        let y = add_row_to_list(&commit.get_message(), &description_list);
+
+    for (mut commit, branch) in commits {
+        // let y = add_row_to_list(&commit.get_message(), &description_list);
         //identado = make_graph(
         //     &drawing_area,
         //     &mut hash_branches,
@@ -297,11 +299,18 @@ fn set_graph(
         //     &commit_and_branches,
         //     y,
         // );
-        let mut commit = commit_and_branches.0;
         add_row_to_list(&commit.get_timestamp().to_string(), &date_list);
         add_row_to_list(&commit.get_author(), &author_list);
         add_row_to_list(&commit.get_hash_string().unwrap(), &commits_hashes_list);
     }
+}
+
+fn add_row_to_list(row_information: &String, row_list: &ListBox) -> i32 {
+    let label = Label::new(Some(&row_information));
+    let row_date = ListBoxRow::new();
+    row_date.add(&label);
+    row_list.add(&row_date);
+    row_date.allocation().y()
 }
 
 // fn make_graph(
@@ -611,11 +620,3 @@ fn set_graph(
 //         Inhibit(false)
 //     });
 // }
-
-fn add_row_to_list(row_information: &String, row_list: &ListBox) -> i32 {
-    let label = Label::new(Some(&row_information));
-    let row_date = ListBoxRow::new();
-    row_date.add(&label);
-    row_list.add(&row_date);
-    row_date.allocation().y()
-}

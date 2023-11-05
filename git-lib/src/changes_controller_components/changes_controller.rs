@@ -161,7 +161,7 @@ impl ChangesController {
         staging_area: &StagingArea,
         changes: &mut HashMap<String, ChangeType>,
     ) -> Result<(), CommandError> {
-        let deleted_changes = staging_area.get_deleted_files(db, last_commit_tree)?;
+        let deleted_changes = staging_area.get_deleted_files(db, last_commit_tree);
         for deleted_file in deleted_changes.iter() {
             _ = changes.insert(deleted_file.to_string(), ChangeType::Deleted)
         }

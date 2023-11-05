@@ -61,7 +61,8 @@ pub fn get_analysis(
                 return Err(CommandError::PushBranchBehind(local_branch.to_owned()));
             }
         } else {
-            return Err(CommandError::PushBranchBehind("".to_string()));
+            CommandError::PushBranchBehind(local_branch.to_owned());
+            // error de que el repo local esta desactualizado
         }
         commits_map.remove(&remote_hash);
     }
