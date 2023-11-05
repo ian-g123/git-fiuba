@@ -68,6 +68,15 @@ impl CommitObject {
         Ok(tree.get_hash_string()?)
     }
 
+    pub fn get_message(&self) -> String {
+        return self.message.clone()
+    }
+
+    pub fn get_author(&self) -> String {
+        return self.author.to_string()
+    }
+
+
     /// Crea un Commit a partir de la infromación leída del stream.
     pub fn read_from(
         db: &ObjectsDatabase,

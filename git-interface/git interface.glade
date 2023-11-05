@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.38.2 -->
+<!-- Generated with glade 3.40.0 -->
 <interface>
   <requires lib="gtk+" version="3.24"/>
   <object class="GtkApplicationWindow" id="window app">
@@ -10,25 +10,12 @@
         <property name="visible">True</property>
         <property name="can-focus">False</property>
         <child>
-          <!-- n-columns=1 n-rows=6 -->
+          <!-- n-columns=1 n-rows=5 -->
           <object class="GtkGrid" id="option_buttons">
             <property name="width-request">95</property>
             <property name="visible">True</property>
             <property name="can-focus">False</property>
             <property name="vexpand">True</property>
-            <child>
-              <object class="GtkButton" id="fetch_button">
-                <property name="label" translatable="yes">fetch</property>
-                <property name="visible">True</property>
-                <property name="can-focus">True</property>
-                <property name="receives-default">True</property>
-                <property name="vexpand">True</property>
-              </object>
-              <packing>
-                <property name="left-attach">0</property>
-                <property name="top-attach">5</property>
-              </packing>
-            </child>
             <child>
               <object class="GtkButton" id="pull_button">
                 <property name="label" translatable="yes">pull</property>
@@ -56,8 +43,8 @@
               </packing>
             </child>
             <child>
-              <object class="GtkButton" id="merge_button">
-                <property name="label" translatable="yes">merge</property>
+              <object class="GtkButton" id="checkout_button">
+                <property name="label" translatable="yes">checkout</property>
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
                 <property name="receives-default">True</property>
@@ -66,6 +53,19 @@
               <packing>
                 <property name="left-attach">0</property>
                 <property name="top-attach">2</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkButton" id="fetch_button">
+                <property name="label" translatable="yes">fetch</property>
+                <property name="visible">True</property>
+                <property name="can-focus">True</property>
+                <property name="receives-default">True</property>
+                <property name="vexpand">True</property>
+              </object>
+              <packing>
+                <property name="left-attach">0</property>
+                <property name="top-attach">3</property>
               </packing>
             </child>
             <child>
@@ -79,19 +79,6 @@
               <packing>
                 <property name="left-attach">0</property>
                 <property name="top-attach">4</property>
-              </packing>
-            </child>
-            <child>
-              <object class="GtkButton" id="checkout_button">
-                <property name="label" translatable="yes">checkout</property>
-                <property name="visible">True</property>
-                <property name="can-focus">True</property>
-                <property name="receives-default">True</property>
-                <property name="vexpand">True</property>
-              </object>
-              <packing>
-                <property name="left-attach">0</property>
-                <property name="top-attach">3</property>
               </packing>
             </child>
           </object>
@@ -133,41 +120,29 @@
               </packing>
             </child>
             <child>
-              <!-- n-columns=2 n-rows=1 -->
+              <!-- n-columns=1 n-rows=1 -->
               <object class="GtkGrid" id="buttons_staging_grid">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
                 <child>
-                  <object class="GtkAccelLabel" id="opciones_commit">
+                  <object class="GtkAccelLabel" id="staged_changes">
+                    <property name="name">staged_changes</property>
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
                     <property name="hexpand">True</property>
                     <property name="vexpand">False</property>
-                    <property name="label" translatable="yes">Staging Changes</property>
+                    <property name="label" translatable="yes">Staged Changes</property>
                     <property name="justify">right</property>
                     <property name="ellipsize">end</property>
                     <attributes>
                       <attribute name="font-desc" value="Garuda Bold 10"/>
+                      <attribute name="scale" value="1.3"/>
                       <attribute name="foreground" value="#00007ae023b3"/>
                       <attribute name="strikethrough-color" value="#000000000000"/>
                     </attributes>
                   </object>
                   <packing>
                     <property name="left-attach">0</property>
-                    <property name="top-attach">0</property>
-                  </packing>
-                </child>
-                <child>
-                  <object class="GtkButton" id="refresh_button_for_staging_changes">
-                    <property name="label">gtk-refresh</property>
-                    <property name="visible">True</property>
-                    <property name="can-focus">True</property>
-                    <property name="receives-default">True</property>
-                    <property name="use-stock">True</property>
-                    <property name="always-show-image">True</property>
-                  </object>
-                  <packing>
-                    <property name="left-attach">1</property>
                     <property name="top-attach">0</property>
                   </packing>
                 </child>
@@ -178,23 +153,82 @@
               </packing>
             </child>
             <child>
-              <object class="GtkScrolledWindow" id="ventana_staging_changes">
+              <!-- n-columns=1 n-rows=3 -->
+              <object class="GtkGrid">
                 <property name="visible">True</property>
-                <property name="can-focus">True</property>
+                <property name="can-focus">False</property>
                 <property name="hexpand">True</property>
                 <property name="vexpand">True</property>
-                <property name="shadow-type">in</property>
                 <child>
-                  <object class="GtkViewport" id="viewport_staging_changes">
+                  <object class="GtkScrolledWindow">
                     <property name="visible">True</property>
-                    <property name="can-focus">False</property>
+                    <property name="can-focus">True</property>
+                    <property name="vexpand">True</property>
+                    <property name="shadow-type">in</property>
                     <child>
-                      <object class="GtkListBox" id="lista_staging_changes">
+                      <object class="GtkViewport">
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
+                        <child>
+                          <object class="GtkListBox" id="staged_list">
+                            <property name="name">staged_changes_list</property>
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                          </object>
+                        </child>
                       </object>
                     </child>
                   </object>
+                  <packing>
+                    <property name="left-attach">0</property>
+                    <property name="top-attach">0</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkAccelLabel" id="changes">
+                    <property name="name">Changes</property>
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                    <property name="hexpand">True</property>
+                    <property name="vexpand">False</property>
+                    <property name="label" translatable="yes">Changes</property>
+                    <property name="justify">right</property>
+                    <property name="ellipsize">end</property>
+                    <attributes>
+                      <attribute name="font-desc" value="Garuda Bold 10"/>
+                      <attribute name="scale" value="1.3"/>
+                      <attribute name="foreground" value="#00007ae023b3"/>
+                      <attribute name="strikethrough-color" value="#000000000000"/>
+                    </attributes>
+                  </object>
+                  <packing>
+                    <property name="left-attach">0</property>
+                    <property name="top-attach">1</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkScrolledWindow">
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="vexpand">True</property>
+                    <property name="shadow-type">in</property>
+                    <child>
+                      <object class="GtkViewport">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <child>
+                          <object class="GtkListBox" id="changes_list">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                  <packing>
+                    <property name="left-attach">0</property>
+                    <property name="top-attach">2</property>
+                  </packing>
                 </child>
               </object>
               <packing>
@@ -329,6 +363,7 @@
                     </child>
                     <child>
                       <object class="GtkDrawingArea" id="drawing_area">
+                        <property name="name">drawing_area</property>
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
                       </object>

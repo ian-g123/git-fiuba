@@ -22,7 +22,7 @@ impl Command for Push {
             return Err(CommandError::Name);
         }
         let push = Push::new(args, output)?;
-        push.run(stdin, output)?;
+        push.run(output)?;
         Ok(())
     }
 
@@ -43,7 +43,7 @@ impl Push {
         Ok(push)
     }
 
-    fn new_default(output: &mut dyn Write) -> Result<Push, CommandError> {
+    pub fn new_default(output: &mut dyn Write) -> Result<Push, CommandError> {
         let mut repo = GitRepository::open("", output).unwrap();
         let current_branch = repo.get_current_branch_name()?;
 
@@ -63,7 +63,7 @@ impl Push {
         }
     }
 
-    fn run(&self, _stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), CommandError> {
+    pub fn run(&self, output: &mut dyn Write) -> Result<(), CommandError> {
         let mut repo = GitRepository::open("", output)?;
         let mut local_branches: Vec<(String, String)> = Vec::new(); // (branch, hash)
 

@@ -141,6 +141,10 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    pub fn get_logger(&mut self) -> &mut Logger {
+        &mut self.logger
+    }
+
     fn create_file(&self, path: &str, name: String, branch_name: &str) -> Result<(), CommandError> {
         if fs::create_dir_all(path).is_ok() {
             //let path_complete = format!("{}/{}", path, name);

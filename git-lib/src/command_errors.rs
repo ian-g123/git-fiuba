@@ -124,6 +124,8 @@ pub enum CommandError {
     /// There cannot be a file and a folder with the same name
     CannotHaveFileAndFolderWithSameName(String),
     PushBranchBehind(String),
+
+    InterfaceError(String),
 }
 
 impl Error for CommandError {}
@@ -339,6 +341,9 @@ impl fmt::Display for CommandError {
             }
             CommandError::PushBranchBehind(local_branch) => {
                 write!(f, "error: failed to push some refs to {}", local_branch)
+            }
+            CommandError::InterfaceError(msg) => {
+                write!(f, "Ocurrió un error en la interfaz: {}", msg)
             }
         }
     }
