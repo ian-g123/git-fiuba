@@ -1,22 +1,15 @@
-use git::{
-    commands::{
-        add_components::add::Add, cat_file_components::cat_file::CatFile, command::Command,
-        command_errors::CommandError, commit_components::commit::Commit,
-        hash_object_components::hash_object::HashObject, init_components::init::Init,
-        status_components::status::Status,
-    },
-    logger::Logger,
+use git::commands::{
+    add::Add, cat_file::CatFile, clone::Clone, command::Command, commit::Commit, fetch::Fetch,
+    hash_object::HashObject, init::Init, log::Log, merge::Merge, push::Push, status::Status,
 };
+use git_lib::command_errors::CommandError;
 use std::{env, io};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
     let (command_name, command_args) = parse_args(&args);
 
-    let mut logger = Logger::new(".git/logs.txt").unwrap();
-
-    if let Err(error) = run(command_name, command_args, &mut logger) {
-        logger.log(&format!("Error: {}", error));
+    if let Err(error) = run(command_name, command_args) {
         eprintln!("{error}")
     }
 }
@@ -27,11 +20,7 @@ fn parse_args(args: &[String]) -> (&str, &[String]) {
     (command, command_args)
 }
 
-fn run(
-    command_name: &str,
-    command_args: &[String],
-    logger: &mut Logger,
-) -> Result<(), CommandError> {
+fn run(command_name: &str, command_args: &[String]) -> Result<(), CommandError> {
     let commands = [
         HashObject::run_from,
         Init::run_from,
@@ -39,6 +28,11 @@ fn run(
         CatFile::run_from,
         Commit::run_from,
         Status::run_from,
+        Clone::run_from,
+        Fetch::run_from,
+        Merge::run_from,
+        Push::run_from,
+        Log::run_from,
     ];
 
     for command in &commands {
@@ -47,7 +41,6 @@ fn run(
             command_args,
             &mut io::stdin(),
             &mut io::stdout(),
-            logger,
         ) {
             Ok(()) => return Ok(()),
             Err(CommandError::Name) => {}
@@ -56,26 +49,3 @@ fn run(
     }
     Err(CommandError::Name)
 }
-
-// fn parse_args(args: &[String]) -> Result<(&str, &[String]), ErrorFlags> {
-//     if args.len() == 1 {
-//         return Err(ErrorFlags::ArgsNumber);
-//     }
-//     let command = &args[1];
-//     let command_args = args.split_at(2).1;
-
-//     Ok((command, command_args))
-// }
-
-// fn ejecutar(command_name: &str, command_args: &[String]) -> Result<(), ErrorFlags> {
-//     let commands = [HashObject::run];
-
-//     for command in &commands {
-//         match command(command_name, command_args) {
-//             Ok(()) => return Ok(()),
-//             Err(ErrorFlags::CommandName) => {}
-//             Err(error) => return Err(error),
-//         }
-//     }
-//     Err(ErrorFlags::ArgsNumber)
-// }
