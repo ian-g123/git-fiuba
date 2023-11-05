@@ -97,6 +97,8 @@ pub enum CommandError {
     CastingError,
     MessageIncomplete(String),
     AllAndFilesFlagsCombination(String),
+    /// Error al intentar usar un comando en la interfaz
+    InterfaceError(String),
 }
 
 impl Error for CommandError {}
@@ -251,8 +253,11 @@ impl fmt::Display for CommandError {
             CommandError::AllAndFilesFlagsCombination(path) => {
                 write!(f, "fatal: paths '{} ...' with -a does not make sense", path)
             } /*
-              fatal: paths 'fil1 ...' with -a does not make sense
-               */
+            fatal: paths 'fil1 ...' with -a does not make sense
+             */
+            CommandError::InterfaceError(msg) => {
+                write!(f, "{}", msg)
+            }
         }
     }
 }

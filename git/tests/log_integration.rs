@@ -5,7 +5,6 @@ mod common {
 }
 
 #[test]
-#[ignore]
 fn testx() {
     let path = "./tests/data/commands/log";
     let result = Command::new("../../../../../target/debug/git")

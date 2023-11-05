@@ -607,7 +607,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    fn merge(&self) -> Result<(), CommandError> {
+    pub fn merge(&self) -> Result<(), CommandError> {
         todo!()
     }
 }

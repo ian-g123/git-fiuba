@@ -1,11 +1,11 @@
 extern crate gtk;
-use std::collections::HashMap;
+use std::{collections::HashMap, io::{self}, env};
 
-use git::*;
-use git_lib::objects::{author, commit_object::CommitObject};
+use git_lib::{objects::commit_object::CommitObject, command_errors::CommandError, git_repository::GitRepository};
 // use git_lib::*;
 use gtk::{prelude::*, DrawingArea, Label, ListBox, ListBoxRow};
 
+// colores para el grafo en el futuro
 const GRAPH_COLORS: [(f64, f64, f64); 10] = [
     (1.0, 0.0, 0.0), // Rojo
     (0.0, 1.0, 0.0), // Verde
@@ -20,36 +20,42 @@ const GRAPH_COLORS: [(f64, f64, f64); 10] = [
 ];
 
 fn main() {
-    println!("meli");
     if gtk::init().is_err() {
         println!("Failed to initialize GTK.");
         return;
     }
-    println!("meli2");
-    let commits = git::commands::log::Log::run_for_graph().unwrap();
+
+    // let commits = git::commands::log::Log::run_for_graph().unwrap();
 
     let glade_src = include_str!("../git interface.glade");
     let builder = gtk::Builder::from_string(glade_src);
     let window: gtk::Window = builder.object("window app").unwrap();
 
-    set_buttons();
-    println!("meli3");
-    let stagin_changes_list: gtk::ListBox = builder.object("lista_staging_changes").unwrap();
+    let _stagin_changes_list: gtk::ListBox = builder.object("lista_staging_changes").unwrap();
 
-    let drawing_area: gtk::DrawingArea = builder.object("drawing_area").unwrap();
-    let description_list: gtk::ListBox = builder.object("description_list").unwrap();
-    let date_list: gtk::ListBox = builder.object("date_list").unwrap();
-    let author_list: gtk::ListBox = builder.object("author_list").unwrap();
-    let commits_hashes_list: gtk::ListBox = builder.object("commit_hash_list").unwrap();
+    // cargamos la interfaz gráfica
+    let _drawing_area: gtk::DrawingArea = builder.object("drawing_area").unwrap();
+    let _description_list: gtk::ListBox = builder.object("description_list").unwrap();
+    let _date_list: gtk::ListBox = builder.object("date_list").unwrap();
+    let _author_list: gtk::ListBox = builder.object("author_list").unwrap();
+    let _commits_hashes_list: gtk::ListBox = builder.object("commit_hash_list").unwrap();
 
-    set_graph(
-        &drawing_area,
-        description_list,
-        date_list,
-        author_list,
-        commits_hashes_list,
-        commits,
-    );
+    // cargamos los botones
+    let repo_git_path = "./git-interface/log".to_string();
+    let output = &mut io::stdout();
+    let result = GitRepository::open(&repo_git_path, output);
+    println!("{:?}", result.);
+    panic!();
+    act_buttons(builder, repo_git_path);
+
+    // set_graph(
+    //     &drawing_area,
+    //     description_list,
+    //     date_list,
+    //     author_list,
+    //     commits_hashes_list,
+    //     commits,
+    // );
 
     window.connect_delete_event(|_, _| {
         gtk::main_quit();
@@ -59,6 +65,91 @@ fn main() {
     window.show_all();
 
     gtk::main();
+}
+
+fn act_buttons<'a>(builder: gtk::Builder, repo_git_path: String) -> Result<(), CommandError> {
+    let pull_button = build_button(&builder, "pull_button".to_string());
+    let push_button = build_button(&builder, "push_button".to_string());
+    let merge_button = build_button(&builder, "merge_button".to_string());
+    let checkout_button = build_button(&builder, "checkout_button".to_string());
+    let fetch_button = build_button(&builder, "fetch_button".to_string());
+    let branch_button = build_button(&builder, "branch_button".to_string());
+
+    connect_button(&pull_button, repo_git_path.clone(), "pull");
+    connect_button(&push_button, repo_git_path.clone(), "push");
+    connect_button(&merge_button, repo_git_path.clone(), "merge");
+    connect_button(&checkout_button, repo_git_path.clone(), "checkout");
+    connect_button(&fetch_button, repo_git_path.clone(), "fetch");
+    connect_button(&branch_button, repo_git_path.clone(), "branch");
+
+    Ok(())
+}
+
+fn build_button(builder: &gtk::Builder, name: String) -> gtk::Button {
+    builder.object(name.as_str()).expect("No se pudo obtener el botón")
+}
+
+fn connect_button(button: &gtk::Button, repo_git_path: String, action: &str) {
+    let action = action.to_owned();
+    button.connect_clicked(move |_| {
+        let output = &mut io::stdout();
+        let result = GitRepository::open(&repo_git_path, output);
+
+        match result {
+            Ok(mut repo) => {
+                match action.as_str() {
+                    "fetch" => {
+                        if let Err(err) = repo.fetch() {
+                            eprintln!("Error al realizar fetch: {}", err);
+                        }
+                        println!("se presionó fetch");
+                    }
+                    "pull" => {
+                        if let Err(err) = repo.pull() {
+                            eprintln!("Error al realizar pull: {}", err);
+                        }
+                        println!("se presionó pull");
+                    }
+                    "push" => {
+                        // if let Err(err) = repo.push() {
+                        //     eprintln!("Error al realizar push: {}", err);
+                        // }
+                        // println!("se presionó push");
+                    }
+                    "merge" => {
+                        if let Err(err) = repo.merge() {
+                            eprintln!("Error al realizar pull: {}", err);
+                        }
+                        println!("se presionó pull");
+                    }
+                    "checkout" => {
+                        // if let Err(err) = repo.checkout() {
+                        //     eprintln!("Error al realizar pull: {}", err);
+                        // }
+                        // println!("se presionó pull");
+                    }
+                    "branch" => {
+                    //     if let Err(err) = repo.branch() {
+                    //         eprintln!("Error al realizar pull: {}", err);
+                    //     }
+                    //     println!("se presionó pull");
+                    }
+                    "commit" => {
+                        // if let Err(err) = repo.commit() {
+                        //     eprintln!("Error al realizar pull: {}", err);
+                        // }
+                        // println!("se presionó pull");
+                    }
+                    _ => {
+                        eprintln!("Acción no reconocida: {}", action);
+                    }
+                }
+            }
+            Err(err) => {
+                eprintln!("Error al abrir el repositorio: {}", err);
+            }
+        }
+    });
 }
 
 fn set_graph(
@@ -405,53 +496,3 @@ fn add_row_to_list(row_information: &String, row_list: &ListBox) -> i32 {
     row_list.add(&row_date);
     row_date.allocation().y()
 }
-
-// fn add_
-
-// for _ in 1..50 {
-//     let drawing_area = DrawingArea::new();
-//     drawing_area.set_size_request(300, 300);
-//     drawing_area.connect_draw(|_, context| {
-//         // Dibuja una línea en el DrawingArea
-//         context.set_source_rgb(1.0, 1.0, 0.0);
-//         context.set_line_width(5.0);
-//         context.move_to(10.0, 10.0);
-//         context.line_to(190.0, 190.0);
-//         context.stroke();
-//         Inhibit(false)
-//     });
-//     stagin_changes_list.add(&drawing_area);
-// }
-// }
-
-fn set_buttons() {
-    // let commit: gtk::Button = builder.object("commit").unwrap();
-    // let more_options: gtk::Button = builder.object("more options").unwrap();
-    // let git_graph: gtk::Button = builder.object("git graph").unwrap();
-    // let refresh: gtk::Button = builder.object("refresh").unwrap();
-    // let mensaje_commit: gtk::Entry = builder.object("mensaje commit").unwrap();
-}
-
-// commit.connect_clicked(move |_| {
-//     if mensaje_commit.text().len() == 0 {
-//         let dialog = gtk::MessageDialog::new(
-//             Some(&window),
-//             gtk::DialogFlags::MODAL,
-//             gtk::MessageType::Error,
-//             gtk::ButtonsType::Ok,
-//             "No se ha ingresado un mensaje de commit",
-//         );
-//         dialog.run();
-//         dialog.hide();
-//     } else {
-//         let dialog = gtk::MessageDialog::new(
-//             Some(&window),
-//             gtk::DialogFlags::MODAL,
-//             gtk::MessageType::Info,
-//             gtk::ButtonsType::Ok,
-//             "Commit realizado con exito",
-//         );
-//         dialog.run();
-//         dialog.hide();
-//     }
-// });
