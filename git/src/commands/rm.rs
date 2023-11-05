@@ -12,7 +12,6 @@ use super::command::{Command, ConfigAdderFunction};
 /// Commando Add
 pub struct Rm {
     pathspecs: Vec<String>,
-    cached: bool,
     recursive: bool,
     force: bool,
 }
@@ -34,12 +33,7 @@ impl Command for Rm {
     }
 
     fn config_adders(&self) -> ConfigAdderFunction<Rm> {
-        vec![
-            Rm::rm_file_config,
-            Rm::rm_cached_config,
-            Rm::rm_dir_config,
-            Rm::rm_force_config,
-        ]
+        vec![Rm::rm_file_config, Rm::rm_dir_config, Rm::rm_force_config]
     }
 }
 
@@ -53,7 +47,6 @@ impl Rm {
     fn new_default() -> Rm {
         Rm {
             pathspecs: Vec::<String>::new(),
-            cached: false,
             recursive: false,
             force: false,
         }
@@ -72,14 +65,6 @@ impl Rm {
             return Err(CommandError::WrongFlag);
         }
         rm.force = true;
-        Ok(i + 1)
-    }
-
-    fn rm_cached_config(rm: &mut Rm, i: usize, args: &[String]) -> Result<usize, CommandError> {
-        if args[i] != "--cached" {
-            return Err(CommandError::WrongFlag);
-        }
-        rm.cached = true;
         Ok(i + 1)
     }
 

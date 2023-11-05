@@ -260,7 +260,7 @@ impl<'a> GitRepository<'a> {
         staging_area: &mut StagingArea,
     ) -> Result<(), CommandError> {
         if !force {
-            //self.verifies_version_of_index()?; //IMPLEMENTAR!
+            self.verifies_version_of_index(path, staging_area)?;
         }
 
         staging_area.remove_from_stagin_area(path, &mut self.logger)?;
@@ -287,10 +287,10 @@ impl<'a> GitRepository<'a> {
         let actual_hash = staging_area.get_hash_from_path(path)?;
         let (exist, name_blob) =
             tree_last_commit.has_blob_from_hash(&actual_hash, &mut self.logger)?;
-        if (exist && name_blob != get_name(path)?) {
-            return Ok(());
+        if exist && name_blob != get_name(path)? {
+            return Err(CommandError::RmFromStagingAreaError(path.to_string()));
         }
-        return Err(CommandError::RmFromStagingAreaError(path.to_string()));
+        return Ok(());
     }
 
     fn run_for_dir_rm(
