@@ -219,6 +219,30 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    pub fn remove(&mut self, pathspecs: Vec<String>) -> Result<(), CommandError> {
+        let last_commit = &self.get_last_commit_tree()?;
+        let mut staging_area = StagingArea::open(&self.git_path)?;
+        let mut pathspecs_clone: Vec<String> = pathspecs.clone();
+        let mut position = 0;
+        for pathspec in &pathspecs {
+            if !Path::new(pathspec).exists() {
+                if !self.is_in_last_commit_from_path(pathspec, last_commit) {
+                    
+                }
+                staging_area.remove(pathspec);
+                pathspecs_clone.remove(position);
+                continue;
+            }
+            position += 1;
+        }
+
+        for pathspec in pathspecs_clone.iter() {
+            self.add_path(pathspec, &mut staging_area)?
+        }
+        staging_area.save()?;
+        Ok(())
+    }
+
     fn add_path(&mut self, path: &str, staging_area: &mut StagingArea) -> Result<(), CommandError> {
         let path = Path::new(path);
         let path_str = &Self::get_path_str(path)?;

@@ -143,14 +143,10 @@ impl Interface {
         button: &gtk::Button,
     ) -> Result<(), CommandError> {
         let repo_git_path = self.repo_git_path.clone();
-        let commit_entry_msg: gtk::Entry = self
-            .builder
-            .object("entrada_de_mensaje")
-            .expect("No se pudo obtener la entrada de mensaje");
-        let message: gtk::glib::GString = commit_entry_msg.text();
+        let clone_builder = self.builder.clone();
 
         button.connect_clicked(move |_| {
-            let commit_msg = message.to_string();
+            let builder = clone_builder.clone();
             let output = io::stdout();
             let mut binding = &output;
             let mut repo = match GitRepository::open(&repo_git_path, &mut binding) {
@@ -184,8 +180,7 @@ impl Interface {
                     println!("se presionó branch");
                 }
                 "commit" => {
-                    println!("se presionó commit");
-                    commit_function(&repo, commit_msg);
+                    commit_function(&mut repo, builder);
                 }
                 _ => {
                     eprintln!("Acción no reconocida: {}", button_action);
@@ -236,6 +231,12 @@ impl Interface {
                     staging_changes: Rc::clone(&staging_changes),
                     unstaging_changes: Rc::clone(&unstaging_changes),
                 };
+
+                let mut binding = io::stdout();
+                let mut repo = GitRepository::open(&repo_git_path, &mut binding).unwrap();
+                let vec_files = vec![file.clone()];
+                repo.add(vec_files).unwrap();
+
                 interface.build_ui(&window);
             });
         }
@@ -270,6 +271,12 @@ impl Interface {
                     staging_changes: Rc::clone(&staging_changes),
                     unstaging_changes: Rc::clone(&unstaging_changes),
                 };
+
+                let mut binding = io::stdout();
+                let mut repo = GitRepository::open(&repo_git_path, &mut binding).unwrap();
+                let vec_files = vec![file.clone()];
+                repo.remove(vec_files).unwrap();
+
                 interface.build_ui(&window);
             });
         }
@@ -285,8 +292,14 @@ fn staged_area_func(
     repo.get_stage_and_unstage_changes()
 }
 
-fn commit_function(repo: &GitRepository, commit_msg: String) {
-    if commit_msg.is_empty() {
+fn commit_function(repo: &mut GitRepository, builder: gtk::Builder) {
+    let commit_entry_msg: gtk::Entry = builder
+        .object("entrada_de_mensaje")
+        .expect("No se pudo obtener la entrada de mensaje");
+    let message: gtk::glib::GString = commit_entry_msg.text();
+
+    println!("commit message: {}", message);
+    if message.is_empty() {
         let window = Window::new(WindowType::Toplevel);
         window.set_title("Empty commit message");
         window.set_default_size(300, 200);
@@ -303,10 +316,13 @@ fn commit_function(repo: &GitRepository, commit_msg: String) {
             dialog.hide();
         });
 
-        eprintln!("No se ha ingresado un mensaje de commit");
         dialog.run();
         return;
     }
+
+    commit_entry_msg.set_text("");
+
+    repo.commit(message.to_string(), &vec![], false, None, false);
 }
 
 fn push_function(output: &mut dyn Write) {
