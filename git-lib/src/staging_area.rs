@@ -21,7 +21,7 @@ pub struct StagingArea {
 }
 
 impl StagingArea {
-    pub fn new(index_path: &str) -> Self {
+    fn new(index_path: &str) -> Self {
         Self {
             files: HashMap::new(),
             unmerged_files: HashMap::new(),
@@ -249,8 +249,8 @@ impl StagingArea {
         Ok(hash)
     }
 
-    pub fn open(base_path: &str) -> Result<StagingArea, CommandError> {
-        let index_path = join_paths!(base_path, ".git/index").ok_or(
+    pub fn open(git_path: &str) -> Result<StagingArea, CommandError> {
+        let index_path = join_paths!(git_path, "index").ok_or(
             CommandError::FailToOpenStaginArea("No se pudo abrir el archivo index".to_string()),
         )?;
         match std::fs::File::open(&index_path) {

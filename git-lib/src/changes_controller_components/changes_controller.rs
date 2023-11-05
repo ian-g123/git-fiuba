@@ -1,3 +1,5 @@
+use chrono::format;
+
 use crate::{
     command_errors::CommandError,
     logger::Logger,
@@ -25,12 +27,19 @@ impl ChangesController {
     /// del index y el working tree desde el último commit.
     pub fn new(
         db: &ObjectsDatabase,
-        base_path: &str,
+        git_path: &str,
+        working_dir: &str,
         logger: &mut Logger,
         commit_tree: Option<Tree>,
     ) -> Result<ChangesController, CommandError> {
-        let index = StagingArea::open(base_path)?;
-        let working_tree = build_working_tree()?;
+        logger.log(&format!(
+            "ChangesController::new\ngit_path: {}\nworking_dir: {}",
+            git_path, working_dir
+        ));
+        let index = StagingArea::open(git_path)?;
+        logger.log("stagin area opened");
+        let working_tree = build_working_tree(working_dir)?;
+        logger.log("build_working_tree success");
         let index_changes = Self::check_staging_area_status(db, &index, &commit_tree, logger)?;
         let (working_tree_changes, untracked) = Self::check_working_tree_status(
             working_tree,

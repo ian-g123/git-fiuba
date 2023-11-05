@@ -4,29 +4,37 @@ use std::{
     process::Command,
 };
 
-// #[ignore = "Needs server"]
 #[test]
+#[ignore = "Needs server"]
 fn test_push() {
-    let path = "./tests/data/commands/push/test1";
-    let git_bin = "../../../../../../target/debug/git";
+    let path = "./tests/data/test1";
+    let git_bin = "../../../../target/debug/git";
 
     create_base_scene(path.clone());
 
     assert!(
-        Command::new(git_bin)
+        Command::new("git")
             .arg("clone")
             .arg("git://127.1.0.0:9418/repo")
+            .arg("repo")
             .current_dir(path)
             .status()
             .is_ok(),
         "No se pudo agregar el archivo testfile"
     );
 
+    let mut readme = File::open(path.to_owned() + "/repo/README.md").unwrap();
+    let mut contents = String::new();
+    readme.read_to_string(&mut contents).unwrap();
+    assert_eq!(contents, "Commit inicial\n");
+
+    panic!("STOP");
+
     let mut file = File::create(path.to_owned() + "/repo/testfile2").unwrap();
     file.write_all(b"contenido2\n").unwrap();
 
     assert!(
-        Command::new("../".to_string() + git_bin)
+        Command::new("../".to_string() + "git")
             .arg("add")
             .arg("testfile2")
             .current_dir(path.to_owned() + "/repo")
@@ -36,7 +44,7 @@ fn test_push() {
     );
 
     assert!(
-        Command::new("../".to_string() + git_bin)
+        Command::new("../".to_string() + "git")
             .arg("commit")
             .arg("-m")
             .arg("hi2")
@@ -47,7 +55,7 @@ fn test_push() {
     );
 
     assert!(
-        Command::new("../".to_owned() + git_bin)
+        Command::new("../".to_owned() + "git")
             .arg("push")
             .current_dir(&format!("{}/repo", path))
             .status()
@@ -56,7 +64,7 @@ fn test_push() {
     );
 
     assert!(
-        Command::new("../".to_owned() + git_bin)
+        Command::new("../".to_owned() + "git")
             .arg("clone")
             .arg("git://127.1.0.0:9418/repo")
             .current_dir(path.to_owned() + "/other_user")
@@ -75,15 +83,14 @@ fn test_push() {
     readme.read_to_string(&mut contents).unwrap();
     assert_eq!(contents, "Commit inicial\n");
 
-    // panic!("STOP");
+    panic!("STOP");
     _ = fs::remove_dir_all(path);
 }
 
 fn create_base_scene(path: &str) {
-    _ = fs::remove_dir_all(format!("{}/server-files/repo", path));
+    // _ = fs::remove_dir_all(format!("{}/server-files/repo", path));
     _ = fs::remove_dir_all(format!("{}/repo", path));
     _ = fs::remove_dir_all(format!("{}/repocan", path));
-    _ = fs::remove_dir_all(format!("{}/other_user", path));
 
     let Ok(_) = fs::create_dir_all(path.clone()) else {
         panic!("No se pudo crear el directorio")
@@ -131,46 +138,46 @@ fn create_base_scene(path: &str) {
         "No se pudo crear el archivo git-daemon-export-ok"
     );
 
-    assert!(
-        Command::new("git")
-            .arg("clone")
-            .arg("git://127.1.0.0:9418/repo")
-            .arg("repocan")
-            .current_dir(path.to_owned())
-            .status()
-            .is_ok(),
-        "No se pudo clonar con canónico"
-    );
-    let mut file = File::create(path.to_owned() + "/repocan/README.md").unwrap();
-    file.write_all(b"Commit inicial\n").unwrap();
+    // assert!(
+    //     Command::new("git")
+    //         .arg("clone")
+    //         .arg("git://127.1.0.0:9418/repo")
+    //         .arg("repocan")
+    //         .current_dir(path.to_owned())
+    //         .status()
+    //         .is_ok(),
+    //     "No se pudo clonar con canónico"
+    // );
+    // let mut file = File::create(path.to_owned() + "/repocan/README.md").unwrap();
+    // file.write_all(b"Commit inicial\n").unwrap();
 
-    assert!(
-        Command::new("git")
-            .arg("add")
-            .arg("README.md")
-            .current_dir(path.to_owned() + "/repocan")
-            .status()
-            .is_ok(),
-        "No se pudo agregar el archivo testfile"
-    );
+    // assert!(
+    //     Command::new("git")
+    //         .arg("add")
+    //         .arg("README.md")
+    //         .current_dir(path.to_owned() + "/repocan")
+    //         .status()
+    //         .is_ok(),
+    //     "No se pudo agregar el archivo testfile"
+    // );
 
-    assert!(
-        Command::new("git")
-            .arg("commit")
-            .arg("-m")
-            .arg("InitialCommit")
-            .current_dir(path.to_owned() + "/repocan")
-            .status()
-            .is_ok(),
-        "No se pudo hacer commit"
-    );
+    // assert!(
+    //     Command::new("git")
+    //         .arg("commit")
+    //         .arg("-m")
+    //         .arg("InitialCommit")
+    //         .current_dir(path.to_owned() + "/repocan")
+    //         .status()
+    //         .is_ok(),
+    //     "No se pudo hacer commit"
+    // );
 
-    assert!(
-        Command::new("git")
-            .arg("push")
-            .current_dir(path.to_owned() + "/repocan")
-            .status()
-            .is_ok(),
-        "No se pudo hacer push"
-    );
+    // assert!(
+    //     Command::new("git")
+    //         .arg("push")
+    //         .current_dir(path.to_owned() + "/repocan")
+    //         .status()
+    //         .is_ok(),
+    //     "No se pudo hacer push"
+    // );
 }

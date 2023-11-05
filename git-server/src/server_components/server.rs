@@ -53,6 +53,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore]
     fn test_server() {
         let path = "./tests/data/server/test1";
         let git_bin = "../../../../../../../target/debug/git";

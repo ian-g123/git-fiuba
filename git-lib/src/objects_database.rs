@@ -70,7 +70,6 @@ impl ObjectsDatabase {
         let file_path = join_paths!(&self.db_path, &hash_str[0..2], &hash_str[2..])
             .ok_or(CommandError::JoiningPaths)?;
         logger.log(&format!("read_file file_path: {}", file_path));
-        println!("read_file file_path: {}", file_path);
         let mut file = File::open(&file_path).map_err(|error| {
             CommandError::FileOpenError(format!(
                 "Error al abrir archivo {}: {}",
@@ -92,9 +91,9 @@ impl ObjectsDatabase {
 
     /// Dado la ruta del repositorio, crea el objeto `ObjectsDatabase` que contiene métodos útiles para
     /// acceder a la base de datos de objetos de git, tanto para leer como para escribir.
-    pub(crate) fn new(base_path_str: &str) -> Result<Self, CommandError> {
+    pub(crate) fn new(git_path: &str) -> Result<Self, CommandError> {
         Ok(ObjectsDatabase {
-            db_path: join_paths_m(base_path_str, ".git/objects")?.to_string(),
+            db_path: join_paths_m(git_path, "objects")?.to_string(),
         })
     }
 
