@@ -10,3 +10,4 @@ pub mod init;
 pub mod merge;
 pub mod push;
 pub mod status;
+pub mod push;

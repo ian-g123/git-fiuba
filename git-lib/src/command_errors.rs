@@ -83,6 +83,8 @@ pub enum CommandError {
     Connection(String),
     /// Error al leer un pkt
     ErrorReadingPkt,
+    /// Error al leer un pkt con msg
+    ErrorReadingPktVerbose(String),
     /// Error al enviar un mensaje
     SendingMessage(String),
     /// Error al intentar abrir el archivo de configuración
@@ -103,6 +105,11 @@ pub enum CommandError {
     /// Error al intentar unir paths
     JoiningPaths,
     FailedToFindCommonAncestor,
+    /// Ocurre un error al encontrar las ramas de los commits en push
+    PushBranchesError,
+    /// Error al obtener el tree desde el option que debería ser tree en push
+    PushTreeError,
+    PushBranchBehindVerbose(String, String),
     /// Octopus merge not supported
     MergeMultipleCommits,
     /// Merge conflict
@@ -117,7 +124,6 @@ pub enum CommandError {
     UnmergedFiles,
     /// There cannot be a file and a folder with the same name
     CannotHaveFileAndFolderWithSameName(String),
-
     // Branch errors
     /// fatal: The -a, and -r, options to 'git branch' do not take a branch name.
     CreateAndListError,
@@ -147,6 +153,9 @@ pub enum CommandError {
     RemoveFileError(String),
     /// Se usó el flag -D de branch sin argumentos
     DeleteWithNoArgs,
+
+    PushBranchBehind(String),
+
 }
 
 impl Error for CommandError {}
@@ -268,6 +277,10 @@ impl fmt::Display for CommandError {
             CommandError::ErrorReadingPkt => {
                 write!(f, "Error al leer un pkt")
             }
+
+            CommandError::ErrorReadingPktVerbose(msg) => {
+                write!(f, "Error al leer un pkt: {}", msg)
+            }
             CommandError::SendingMessage(msg) => {
                 write!(f, "{}", msg)
             }
@@ -313,6 +326,24 @@ impl fmt::Display for CommandError {
             CommandError::FailedToFindCommonAncestor => {
                 write!(f, "No se pudo encontrar un ancestro común.")
             }
+            CommandError::PushBranchesError => {
+                write!(
+                    f,
+                    "Ocurre un error al encontrar las ramas de los commits en push"
+                )
+            }
+            CommandError::PushTreeError => {
+                write!(
+                    f,
+                    "Error al obtener el tree desde el option que debería ser tree en push"
+                )
+            }
+            CommandError::PushBranchBehindVerbose(url, branch) => {
+                write!(
+                    f,
+                    "! [rejected]        {branch} -> {branch} (non-fast-forward)\nerror: failed to push some refs to '{url}'\n"
+                )
+            }
             CommandError::MergeMultipleCommits => {
                 write!(f, "Octopus merge not supported")
             }
@@ -341,6 +372,7 @@ impl fmt::Display for CommandError {
                     path
                 )
             }
+
             CommandError::CreateAndListError => {
                 write!(
                     f,
@@ -383,6 +415,10 @@ impl fmt::Display for CommandError {
                 write!(f, "Error: {error}")
             }
             CommandError::DeleteWithNoArgs => write!(f, "fatal: branch name required"),
+
+            CommandError::PushBranchBehind(local_branch) => {
+                write!(f, "error: failed to push some refs to {}", local_branch)
+            }
         }
     }
 }

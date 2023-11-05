@@ -3,7 +3,6 @@ use std::{
     fs::{self, DirEntry, File, OpenOptions, ReadDir},
     io::{Read, Write},
     path::{Path, PathBuf},
-    process::Command,
 };
 
 use chrono::{DateTime, Local};
@@ -21,13 +20,19 @@ use crate::{
     objects::{
         author::Author,
         blob::Blob,
-        commit_object::{write_commit_tree_to_database, CommitObject},
+        commit_object::{
+            sort_commits_descending_date, write_commit_tree_to_database, CommitObject,
+        },
         git_object::{self, GitObject, GitObjectTrait},
         proto_object::ProtoObject,
         tree::Tree,
     },
     objects_database::ObjectsDatabase,
-    server_components::git_server::GitServer,
+    server_components::{
+        git_server::GitServer,
+        history_analyzer::{get_analysis, rebuild_commits_tree},
+        packfile_functions::make_packfile,
+    },
     staging_area::StagingArea,
     utils::{aux::get_name, super_string::u8_vec_to_hex_string},
 };
@@ -604,10 +609,10 @@ impl<'a> GitRepository<'a> {
         ));
         let mut server = GitServer::connect_to(&address)?;
 
-        let remote_branches =
+        let _remote_branches =
             self.update_remote_branches(&mut server, &repository_path, &repository_url)?;
         let remote_reference = format!("{}:{}", address, repository_path);
-        self.fetch_and_save_objects(&mut server, &remote_reference, remote_branches)?;
+        self.fetch_and_save_objects(&mut server, &remote_reference)?;
         Ok(())
     }
 
@@ -639,7 +644,6 @@ impl<'a> GitRepository<'a> {
         &mut self,
         server: &mut GitServer,
         remote_reference: &str,
-        remote_branches: HashMap<String, String>,
     ) -> Result<(), CommandError> {
         let remote_branches = self.remote_branches()?;
         let wants = remote_branches.clone().into_values().collect();
@@ -677,50 +681,74 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    pub fn push(&mut self) -> Result<(), CommandError> {
-        self.log("pushing updates");
+    pub fn push(&mut self, local_branches: Vec<(String, String)>) -> Result<(), CommandError> {
+        self.log("Push updates");
         let (address, repository_path, repository_url) = self.get_remote_info()?;
-
         self.log(&format!(
             "Address: {}, repository_path: {}, repository_url: {}",
             address, repository_path, repository_url
         ));
+
         let mut server = GitServer::connect_to(&address)?;
+        let refs_hash = self.receive_pack(&mut server, &repository_path, &repository_url)?; // ref_hash: HashMap<branch, hash>
 
-        let ref_and_hash = self.push2(&mut server, &repository_path, &repository_url)?;
+        // verificamos que todas las branches locales esten actualizadas
+        let (_, _, repository_url) = self.get_remote_info()?;
 
-        // self.exists_in_db(&ref_and_hash)?;
+        let (hash_branch_status, commits_map) =
+            get_analysis(local_branches, self.db()?, refs_hash, &mut self.logger).map_err(
+                |error| match error {
+                    CommandError::PushBranchBehind(local_branch) => {
+                        CommandError::PushBranchBehindVerbose(repository_url, local_branch)
+                    }
+                    _ => CommandError::PushBranchesError,
+                },
+            )?;
+
+        if hash_branch_status.is_empty() {
+            self.log("Everything up-to-date");
+            self.output
+                .write_all(b"Everything up-to-date")
+                .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+            return Ok(());
+        }
+
+        self.log(&format!("hash_branch_status: {:?}", hash_branch_status));
+
+        server.negociate_recieve_pack(hash_branch_status)?;
+
+        self.log("Sending packfile");
+        let pack_file: Vec<u8> = make_packfile(commits_map)?;
+        self.log(&format!(
+            "pack_file: {:?}",
+            String::from_utf8_lossy(&pack_file)
+        ));
+
+        server.write_to_socket(&pack_file)?;
+        self.log("sent! Reading response");
+        println!("sent! Reading response");
+
+        let response = server.get_response()?;
+        // let response = server.just_read()?;
+        self.log(&format!("response: {:?}", response));
 
         Ok(())
     }
 
-    /// Obtenemos todas las referencias con los hashes donde apuntan cada una del servidor.\
-    /// Devuelve un HashMap con el formato: `{nombre_branch: hash_commit}`.
-    fn push2(
+    /// Actualiza todas las branches de la carpeta remotes con los hashes de los commits
+    /// obtenidos del servidor.
+    fn receive_pack(
         &mut self,
         server: &mut GitServer,
         repository_path: &str,
         repository_url: &str,
     ) -> Result<HashMap<String, String>, CommandError> {
-        self.log("Updating remote branches");
-
-        let ref_and_hash = server
-            .explore_repository_receive(&("/".to_owned() + repository_path), repository_url)?;
-
-        self.log(&format!("branch_remote_refs: {:?}\n", ref_and_hash));
-
-        Ok(ref_and_hash)
+        self.log("git receive-pack");
+        let hash_refs = server
+            .explore_repository_receive_pack(&("/".to_owned() + repository_path), repository_url)?;
+        self.log(&format!("hash_refs: {:?}", hash_refs));
+        Ok(hash_refs)
     }
-
-    // fn exists_in_db(&mut self, ref_and_hash: &HashMap<String, String>) -> Result<(), CommandError> {
-    //     let db = self.db()?;
-    //     for (ref_name, hash) in ref_and_hash {
-    //         if !db.exists(hash) {
-    //             return Err(CommandError::ObjectNotFound(ref_name.to_string()));
-    //         }
-    //     }
-    //     Ok(())
-    // }
 
     pub fn merge(&mut self, commits: &Vec<String>) -> Result<(), CommandError> {
         let mut head_name = "HEAD".to_string();
@@ -829,7 +857,7 @@ impl<'a> GitRepository<'a> {
         Ok(Some(parent.to_string()))
     }
 
-    fn local_branches(&mut self) -> Result<HashMap<String, String>, CommandError> {
+    pub fn local_branches(&mut self) -> Result<HashMap<String, String>, CommandError> {
         let mut branches = HashMap::<String, String>::new();
         let branches_path = join_paths!(&self.path, ".git/refs/heads/").ok_or(
             CommandError::DirectoryCreationError(
@@ -927,10 +955,10 @@ impl<'a> GitRepository<'a> {
         server: &mut GitServer,
         repository_path: &str,
         repository_url: &str,
-    ) -> Result<(HashMap<String, String>), CommandError> {
+    ) -> Result<HashMap<String, String>, CommandError> {
         self.log("Updating remote branches");
-        let (_head_branch, branch_remote_refs) =
-            server.explore_repository(&("/".to_owned() + repository_path), repository_url)?;
+        let (_head_branch, branch_remote_refs) = server
+            .explore_repository_upload_pack(&("/".to_owned() + repository_path), repository_url)?;
         self.log(&format!("branch_remote_refs: {:?}", branch_remote_refs));
 
         let mut remote_branches = HashMap::<String, String>::new();
@@ -942,6 +970,20 @@ impl<'a> GitRepository<'a> {
         }
 
         Ok(remote_branches)
+    }
+
+    /// Devuelve al vector de branches_with_their_commits todos los nombres de las ramas y el hash del commit al que apuntan
+    pub fn push_all_local_branch_hashes(&self) -> Result<Vec<(String, String)>, CommandError> {
+        let mut branches_with_their_commits: Vec<(String, String)> = Vec::new();
+        let branches_hashes = local_branches(&self.path)?;
+        for branch_hash in branches_hashes {
+            let branch_hash = (
+                branch_hash.0,
+                branch_hash.1[..branch_hash.1.len() - 1].to_string(),
+            );
+            branches_with_their_commits.push(branch_hash);
+        }
+        Ok(branches_with_their_commits)
     }
 
     /// Actualiza la referencia de la branch con el hash del commit obtenido del servidor.
@@ -1154,7 +1196,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    fn db(&self) -> Result<ObjectsDatabase, CommandError> {
+    pub fn db(&self) -> Result<ObjectsDatabase, CommandError> {
         ObjectsDatabase::new(&self.path)
     }
 
@@ -1224,12 +1266,16 @@ impl<'a> GitRepository<'a> {
 
         let mut commit_box = self.db()?.read_object(&last_commit, &mut self.logger)?;
         self.log("Last commit readed");
-        if let Some(commit) = commit_box.as_commit_mut() {
+        if let Some(commit) = commit_box.as_mut_commit() {
             self.log(&format!(
                 "Last commit content : {}",
                 String::from_utf8_lossy(&commit.content(None)?)
             ));
-            let tree = commit.get_tree();
+            let option_tree = commit.get_tree();
+
+            let Some(tree) = option_tree else {
+                return Ok(None);
+            };
 
             self.log(&format!(
                 "tree content : {}",
@@ -1280,13 +1326,13 @@ impl<'a> GitRepository<'a> {
         let commit_head = self
             .db()?
             .read_object(&commit_head_str, &mut self.logger)?
-            .as_commit_mut()
+            .as_mut_commit()
             .ok_or(CommandError::FailedToFindCommonAncestor)?
             .to_owned();
         let commit_destin = self
             .db()?
             .read_object(commit_destin_str, &mut self.logger)?
-            .as_commit_mut()
+            .as_mut_commit()
             .ok_or(CommandError::FailedToFindCommonAncestor)?
             .to_owned();
         self.log("Found objects");
@@ -1346,7 +1392,7 @@ impl<'a> GitRepository<'a> {
                 let parent = self
                     .db()?
                     .read_object(&parent_hash, &mut self.logger)?
-                    .as_commit_mut()
+                    .as_mut_commit()
                     .ok_or(CommandError::FailedToFindCommonAncestor)?
                     .to_owned();
 
@@ -1359,6 +1405,25 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Obtiene el hash del commit al que apunta la rama que se le pasa por parámetro
+    pub fn get_last_commit_hash_branch(
+        &self,
+        refs_branch_name: &String,
+    ) -> Result<String, CommandError> {
+        let path_to_branch = join_paths!(self.path, ".git/refs/heads", refs_branch_name)
+            .ok_or(CommandError::FileOpenError(refs_branch_name.clone()))?;
+
+        let mut file = File::open(&path_to_branch).map_err(|_| {
+            CommandError::FileNotFound(format!("No se pudo abrir {path_to_branch} en log"))
+        })?;
+
+        let mut commit_hash = String::new();
+        file.read_to_string(&mut commit_hash).map_err(|_| {
+            CommandError::FileReadError(format!("No se pudo leer {path_to_branch} en log"))
+        })?;
+
+        Ok(commit_hash[..commit_hash.len()].to_string())
+    }
     fn true_merge(
         &mut self,
         common: &mut CommitObject,
@@ -1367,9 +1432,9 @@ impl<'a> GitRepository<'a> {
         head_name: &str,
         destin_name: &str,
     ) -> Result<(), CommandError> {
-        let mut common_tree = common.get_tree().to_owned();
-        let mut head_tree = head.get_tree().to_owned();
-        let mut destin_tree = destin.get_tree().to_owned();
+        let mut common_tree = common.get_tree_some_or_err()?.to_owned();
+        let mut head_tree = head.get_tree_some_or_err()?.to_owned();
+        let mut destin_tree = destin.get_tree_some_or_err()?.to_owned();
 
         let mut staging_area = self.staging_area()?;
         // staging_area.update_to_conflictings(merged_files.to_owned(), unmerged_files.to_owned());
@@ -1413,22 +1478,6 @@ impl<'a> GitRepository<'a> {
             self.restore(merged_tree)?;
             Ok(())
         }
-    }
-
-    /// Dado un path, crea el archivo correspondiente y escribe el contenido pasado.
-    fn write_to_file(&self, relative_path: &str, content: &str) -> Result<(), CommandError> {
-        let path_f = join_paths!(self.path, ".git", relative_path).ok_or(
-            CommandError::FileWriteError("Error guardando FETCH_HEAD:".to_string()),
-        )?;
-        let mut file = fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .open(&path_f)
-            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-        file.write_all(content.as_bytes())
-            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-
-        Ok(())
     }
 
     /// Tries to continue from failed merged
@@ -1477,6 +1526,22 @@ impl<'a> GitRepository<'a> {
         Ok((message, merge_tree_hash_str, destin))
     }
 
+    /// Dado un path, crea el archivo correspondiente y escribe el contenido pasado.
+    fn write_to_file(&self, relative_path: &str, content: &str) -> Result<(), CommandError> {
+        let path_f = join_paths!(self.path, ".git", relative_path).ok_or(
+            CommandError::FileWriteError("Error guardando FETCH_HEAD:".to_string()),
+        )?;
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open(&path_f)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        file.write_all(content.as_bytes())
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+
+        Ok(())
+    }
+
     fn read_file(&self, relative_path: &str) -> Result<String, CommandError> {
         let path = join_paths!(self.path, ".git", relative_path).ok_or(
             CommandError::FileWriteError("Error guardando FETCH_HEAD:".to_string()),
@@ -1503,6 +1568,7 @@ impl<'a> GitRepository<'a> {
         })?;
         Ok(())
     }
+
 
     // ----- Branch -----
 
@@ -1923,6 +1989,39 @@ fn get_branches_paths(
     }
 
     Ok(())
+
+  // ----- Log -----
+  
+    pub fn get_log(
+        &mut self,
+        all: bool,
+    ) -> Result<Vec<(CommitObject, Option<String>)>, CommandError> {
+        let mut branches_with_their_last_hash: Vec<(String, String)> = Vec::new();
+        let mut commits_map: HashMap<String, (CommitObject, Option<String>)> = HashMap::new();
+        if all {
+            branches_with_their_last_hash = self.push_all_local_branch_hashes()?;
+        } else {
+            let current_branch = get_head_ref()?;
+            let hash_commit = self.get_last_commit_hash_branch(&current_branch)?;
+            branches_with_their_last_hash.push((current_branch, hash_commit));
+        }
+        for branch_with_commit in branches_with_their_last_hash {
+            rebuild_commits_tree(
+                &self.db()?,
+                &branch_with_commit.1,
+                &mut commits_map,
+                Some(branch_with_commit.0),
+                all,
+                &None,
+                false,
+                &mut self.logger,
+            )?;
+        }
+        let mut commits: Vec<_> = commits_map.drain().map(|(_, v)| v).collect();
+        sort_commits_descending_date(&mut commits);
+        Ok(commits)
+    }
+
 }
 
 // ----- Merge -----
@@ -2186,7 +2285,7 @@ fn update_last_commit(commit_hash: &str) -> Result<(), CommandError> {
 }
 
 /// Opens file in .git/HEAD and returns the branch name
-fn get_head_ref() -> Result<String, CommandError> {
+pub fn get_head_ref() -> Result<String, CommandError> {
     let Ok(mut head_file) = File::open(".git/HEAD") else {
         return Err(CommandError::FileOpenError(".git/HEAD".to_string()));
     };
@@ -2206,4 +2305,125 @@ fn get_head_ref() -> Result<String, CommandError> {
         ));
     };
     Ok(head_ref.trim().to_string())
+}
+
+pub fn local_branches(base_path: &str) -> Result<HashMap<String, String>, CommandError> {
+    let mut branches = HashMap::<String, String>::new();
+    let branches_path = format!("{}/.git/refs/heads/", base_path);
+    let paths = fs::read_dir(branches_path).map_err(|error| {
+        CommandError::FileReadError(format!(
+            "Error leyendo directorio de branches: {}",
+            error.to_string()
+        ))
+    })?;
+    for path in paths {
+        let path = path.map_err(|error| {
+            CommandError::FileReadError(format!(
+                "Error leyendo directorio de branches: {}",
+                error.to_string()
+            ))
+        })?;
+        let file_name = &path.file_name();
+        let Some(file_name) = file_name.to_str() else {
+            return Err(CommandError::FileReadError(
+                "Error leyendo directorio de branches".to_string(),
+            ));
+        };
+        let mut file = fs::File::open(path.path()).map_err(|error| {
+            CommandError::FileReadError(format!(
+                "Error leyendo directorio de branches: {}",
+                error.to_string()
+            ))
+        })?;
+        let mut sha1 = String::new();
+        file.read_to_string(&mut sha1).map_err(|error| {
+            CommandError::FileReadError(format!(
+                "Error leyendo directorio de branches: {}",
+                error.to_string()
+            ))
+        })?;
+        branches.insert(file_name.to_string(), sha1);
+    }
+    Ok(branches)
+}
+
+fn _remote_branches(base_path: &str) -> Result<HashMap<String, String>, CommandError> {
+    let mut branches = HashMap::<String, String>::new();
+    let branches_path = format!("{}/.git/refs/remotes/origin/", base_path);
+    let paths = fs::read_dir(branches_path).map_err(|error| {
+        CommandError::FileReadError(format!(
+            "Error leyendo directorio de branches: {}",
+            error.to_string()
+        ))
+    })?;
+    for path in paths {
+        let path = path.map_err(|error| {
+            CommandError::FileReadError(format!(
+                "Error leyendo directorio de branches: {}",
+                error.to_string()
+            ))
+        })?;
+        let file_name = &path.file_name();
+        let Some(file_name) = file_name.to_str() else {
+            return Err(CommandError::FileReadError(
+                "Error leyendo directorio de branches".to_string(),
+            ));
+        };
+        let mut file = fs::File::open(path.path()).map_err(|error| {
+            CommandError::FileReadError(format!(
+                "Error leyendo directorio de branches: {}",
+                error.to_string()
+            ))
+        })?;
+        let mut sha1 = String::new();
+        file.read_to_string(&mut sha1).map_err(|error| {
+            CommandError::FileReadError(format!(
+                "Error leyendo directorio de branches: {}",
+                error.to_string()
+            ))
+        })?;
+        branches.insert(file_name.to_string(), sha1);
+    }
+    Ok(branches)
+}
+
+fn _update_remote_branches(
+    server: &mut GitServer,
+    repository_path: &str,
+    repository_url: &str,
+    base_path: &str,
+) -> Result<(), CommandError> {
+    let (_head_branch, branch_remote_refs) = server
+        .explore_repository_upload_pack(&("/".to_owned() + repository_path), repository_url)?;
+    Ok(for (sha1, mut ref_path) in branch_remote_refs {
+        ref_path.replace_range(0..11, "");
+        _update_ref(&base_path, &sha1, &ref_path)?;
+    })
+}
+
+fn _update_ref(base_path: &str, sha1: &str, ref_name: &str) -> Result<(), CommandError> {
+    let dir_path = format!("{}/.git/refs/remotes/origin/", base_path);
+    let file_path = dir_path.to_owned() + ref_name;
+
+    fs::create_dir_all(dir_path).map_err(|error| {
+        CommandError::DirectoryCreationError(format!(
+            "Error creando directorio de refs: {}",
+            error.to_string()
+        ))
+    })?;
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .open(&file_path)
+        .map_err(|error| {
+            CommandError::FileWriteError(format!(
+                "Error guardando ref en {}: {}",
+                file_path,
+                &error.to_string()
+            ))
+        })?;
+    file.write_all(sha1.as_bytes()).map_err(|error| {
+        CommandError::FileWriteError("Error guardando ref:".to_string() + &error.to_string())
+    })?;
+    Ok(())
 }

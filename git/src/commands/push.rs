@@ -6,10 +6,9 @@ use super::command::{Command, ConfigAdderFunction};
 
 /// Commando Clone
 pub struct Push {
-    repository_path: String,
-    // repository_url: String,
-    // repository_port: Option<String>,
-    directory: String,
+    all: bool,
+    // remote: String,
+    branch: String,
 }
 
 impl Command for Push {
@@ -22,64 +21,63 @@ impl Command for Push {
         if name != "push" {
             return Err(CommandError::Name);
         }
-
-        let instance = Self::new(args)?;
-
-        instance.run(stdin, output)?;
+        let push = Push::new(args, output)?;
+        push.run(stdin, output)?;
         Ok(())
     }
 
     fn config_adders(&self) -> ConfigAdderFunction<Push> {
-        vec![Push::add_repository_config, Push::add_directory_config]
+        vec![Push::add_all_config]
     }
 }
 
 impl Push {
-    fn new(args: &[String]) -> Result<Push, CommandError> {
-        let mut clone = Push::new_default();
-        clone.config(args)?;
-        // clone.directory = clone.get_directory();
-        Ok(clone)
+    fn new(args: &[String], output: &mut dyn Write) -> Result<Push, CommandError> {
+        if args.len() > 1 {
+            return Err(CommandError::InvalidArguments);
+        }
+        let mut push = Push::new_default(output)?;
+        if args.len() == 1 {
+            push.config(args)?;
+        }
+        Ok(push)
     }
 
-    fn new_default() -> Push {
-        Push {
-            repository_path: String::new(),
-            // repository_url: String::new(),
-            // repository_port: None,
-            directory: String::new(),
+    fn new_default(output: &mut dyn Write) -> Result<Push, CommandError> {
+        let mut repo = GitRepository::open("", output).unwrap();
+        let current_branch = repo.get_current_branch_name()?;
+
+        Ok(Push {
+            all: false,
+            // remote: "origin".to_string(),
+            branch: current_branch,
+        })
+    }
+
+    fn add_all_config(push: &mut Push, i: usize, args: &[String]) -> Result<usize, CommandError> {
+        if args[i] == "--all" {
+            push.all = true;
+            Ok(i + 1)
+        } else {
+            Err(CommandError::InvalidArguments)
         }
     }
 
-    fn add_repository_config(
-        clone: &mut Push,
-        i: usize,
-        args: &[String],
-    ) -> Result<usize, CommandError> {
-        Ok(i + 1)
-    }
-
-    fn add_directory_config(
-        clone: &mut Push,
-        i: usize,
-        args: &[String],
-    ) -> Result<usize, CommandError> {
-        //clone.directory = args[i].clone();
-        Ok(i + 1)
-    }
-
     fn run(&self, _stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), CommandError> {
-        let mut repo = GitRepository::init(&self.directory, "master", false, output)?;
+        let mut repo = GitRepository::open("", output)?;
+        let mut local_branches: Vec<(String, String)> = Vec::new(); // (branch, hash)
 
-        repo.push()?;
+        if self.all {
+            local_branches = repo.push_all_local_branch_hashes()?;
+        } else {
+            let hash_commit = repo.get_last_commit_hash_branch(&self.branch)?;
+            local_branches.push((self.branch.to_owned(), hash_commit));
+        }
+
+        println!("local_branches: {:?}", local_branches);
+
+        repo.push(local_branches)?;
+
         Ok(())
-    }
-
-    fn get_address(&self) -> String {
-        return String::new();
-    }
-
-    fn get_directory(&self) -> String {
-        return String::new();
     }
 }
