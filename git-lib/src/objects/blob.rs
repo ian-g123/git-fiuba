@@ -1,9 +1,12 @@
 use std::{
+    collections::HashMap,
     fs::File,
     io::{Read, Write},
+    path::Path,
 };
 
 use crate::{
+    changes_controller_components::changes_types::ChangeType,
     command_errors::CommandError,
     objects_database::ObjectsDatabase,
     utils::{
@@ -256,6 +259,47 @@ impl GitObjectTrait for Blob {
             ))
         })?;
         Ok(())
+    }
+
+    fn checkout_restore(
+        &mut self,
+        path: &str,
+        logger: &mut Logger,
+        has_conflicts: fn(&str, &Vec<u8>) -> Result<(bool, Vec<u8>), CommandError>,
+        deletions: &mut Vec<String>,
+        modifications: &mut Vec<String>,
+        conflicts: &mut Vec<String>,
+    ) -> Result<bool, CommandError> {
+        if !Path::new(path).exists() {
+            deletions.push(path.to_string());
+            return Ok(true);
+        }
+        let content = self.content(None)?;
+        let (has_conflicts, new_content) = has_conflicts(path, &content)?;
+
+        if has_conflicts {
+            conflicts.push(path.to_string());
+            return Ok(false);
+        }
+        if new_content != content {
+            modifications.push(path.to_string())
+        }
+        let mut file = File::create(path).map_err(|error| {
+            CommandError::FileOpenError(format!(
+                "Error al crear archivo {}: {}",
+                path,
+                error.to_string()
+            ))
+        })?;
+
+        file.write_all(&new_content).map_err(|error| {
+            CommandError::FileWriteError(format!(
+                "Error al escribir archivo {}: {}",
+                path,
+                error.to_string()
+            ))
+        })?;
+        Ok(false)
     }
 
     fn set_hash(&mut self, sha1: [u8; 20]) {

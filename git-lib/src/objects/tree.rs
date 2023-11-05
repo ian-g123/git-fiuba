@@ -103,29 +103,11 @@ impl Tree {
         for file in files.iter() {
             logger.log(&format!("Path buscado: {}", file));
             if !self.has_blob_from_path(file, logger) {
-                logger.log(&format!("No encontrado: {}", file));
-
                 deleted_blobs.push(file.to_string());
             }
         }
         deleted_blobs
     }
-
-    /* fn a(&self, path: &mut Vec<&str>, files: Vec<&String>) -> bool {
-        if path.is_empty() {
-            return false;
-        }
-        for (name, object) in self.get_objects().iter_mut() {
-            if name == path[0] {
-                if let Some(obj_tree) = object.as_tree() {
-                    _ = path.remove(0);
-                    return obj_tree.a(path);
-                }
-                return true;
-            }
-        }
-        false
-    } */
 
     pub fn add_path_tree(
         &mut self,
@@ -408,6 +390,38 @@ impl GitObjectTrait for Tree {
             Ok(())
         })?;
         Ok(())
+    }
+
+    fn checkout_restore(
+        &mut self,
+        path: &str,
+        logger: &mut Logger,
+        has_conflicts: fn(&str, &Vec<u8>) -> Result<(bool, Vec<u8>), CommandError>,
+        deletions: &mut Vec<String>,
+        modifications: &mut Vec<String>,
+        conflicts: &mut Vec<String>,
+    ) -> Result<bool, CommandError> {
+        let mut objects = self.objects.clone();
+        for (name, object) in self.objects.iter_mut() {
+            let path = join_paths!(path, name).ok_or(CommandError::FileWriteError(
+                "No se pudo encontrar el path".to_string(),
+            ))?;
+            if object.to_owned().checkout_restore(
+                &path,
+                logger,
+                has_conflicts,
+                deletions,
+                modifications,
+                conflicts,
+            )? {
+                objects.remove(name);
+            }
+        }
+        self.objects = objects;
+        if self.objects.is_empty() {
+            return Ok(true);
+        }
+        Ok(false)
     }
 
     fn set_hash(&mut self, hash: [u8; 20]) {

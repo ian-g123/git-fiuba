@@ -10,8 +10,8 @@ use chrono::{DateTime, Local};
 
 use crate::{
     changes_controller_components::{
-        format::Format, long_format::LongFormat, short_format::ShortFormat,
-        working_tree::get_path_name,
+        changes_controller::ChangesController, changes_types::ChangeType, format::Format,
+        long_format::LongFormat, short_format::ShortFormat, working_tree::get_path_name,
     },
     command_errors::CommandError,
     config::Config,
@@ -29,7 +29,10 @@ use crate::{
     objects_database::ObjectsDatabase,
     server_components::git_server::GitServer,
     staging_area::StagingArea,
-    utils::{aux::get_name, super_string::u8_vec_to_hex_string},
+    utils::{
+        aux::{get_name, get_sha1_str},
+        super_string::u8_vec_to_hex_string,
+    },
 };
 
 pub struct GitRepository<'a> {
@@ -1914,6 +1917,171 @@ impl<'a> GitRepository<'a> {
         }
         Ok(())
     }
+
+    fn checkout(&mut self, branch: &str) -> Result<(), CommandError> {
+        if branch == self.get_current_branch_name()? {
+            writeln!(self.output, "Already on '{}'", branch)
+                .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+            return Ok(());
+        }
+        let last_commit = self.get_last_commit_tree()?;
+        let current_changes =
+            ChangesController::new(&self.db()?, &self.path, &mut self.logger, last_commit)?;
+        let untracked_files = current_changes.get_untracked_files();
+        let changes_not_staged = current_changes.get_changes_not_staged();
+        //let merge_conflicts = current_changes.ge
+        /*
+        if !merge_conflicts.is_empty(){
+            return Err(CommandError::MergeConflictsDuringCheckout(current_branch));
+        }
+         */
+        let (new_hash, mut new_tree) = self.get_checkout_branch_info(branch, &self.db()?)?;
+        let local_new_files = add_local_new_files(
+            untracked_files,
+            changes_not_staged,
+            &mut new_tree,
+            &mut self.logger,
+        )?;
+        let mut deletions: Vec<String> = Vec::new();
+        let mut modifications: Vec<String> = Vec::new();
+        let mut conflicts: Vec<String> = Vec::new();
+
+        self.checkout_restore(
+            new_tree,
+            &new_hash,
+            &mut deletions,
+            &mut modifications,
+            &mut conflicts,
+        )?;
+        if !conflicts.is_empty() {
+            // set_checkout_local_conflicts(conflicts, untracked_files, changes_not_staged)
+            return Ok(());
+        }
+        self.get_checkout_sucess_output(branch, local_new_files, deletions, modifications)?;
+        Ok(())
+    }
+
+    fn get_checkout_sucess_output(
+        &mut self,
+        branch: &str,
+        new_files: Vec<String>,
+        deletions: Vec<String>,
+        modifications: Vec<String>,
+    ) -> Result<(), CommandError> {
+        let mut message = String::new();
+        let mut changes: Vec<String> = Vec::new();
+        changes.extend_from_slice(&new_files);
+        changes.extend_from_slice(&deletions);
+        changes.extend_from_slice(&modifications);
+        changes.sort();
+        for path in changes.iter() {
+            if new_files.contains(path) {
+                message += &format!("A\t{path}\n");
+            } else if deletions.contains(path) {
+                message += &format!("D\t{path}\n");
+            } else {
+                message += &format!("M\t{path}\n");
+            }
+        }
+        message += &format!("Switched to branch '{branch}'\n");
+        write!(self.output, "{}", message)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        // output de status (divergencia)
+        Ok(())
+    }
+
+    fn get_checkout_branch_info(
+        &mut self,
+        branch: &str,
+        db: &ObjectsDatabase,
+    ) -> Result<(String, Tree), CommandError> {
+        let path = join_paths!(&self.path, ".git/refs/heads/", branch)
+            .ok_or(CommandError::UntrackedError(branch.to_string()))?;
+        let hash =
+            fs::read_to_string(path.clone()).map_err(|_| CommandError::FileReadError(path))?;
+        let mut commit = db.read_object(&hash, &mut self.logger)?;
+        let Some(commit) = commit.as_commit_mut() else {
+            return Err(CommandError::ObjectTypeError);
+        };
+        let tree = commit.get_tree();
+        Ok((hash, tree.to_owned()))
+    }
+
+    fn checkout_restore(
+        &mut self,
+        mut source_tree: Tree,
+        new_hash: &str,
+        deletions: &mut Vec<String>,
+        modifications: &mut Vec<String>,
+        conflicts: &mut Vec<String>,
+    ) -> Result<(), CommandError> {
+        self.log("Restoring files");
+
+        let delete = source_tree.checkout_restore(
+            &self.path,
+            &mut self.logger,
+            has_conflicts,
+            deletions,
+            modifications,
+            conflicts,
+        )?;
+        if !conflicts.is_empty() {
+            return Ok(());
+        }
+        if delete {
+            source_tree = Tree::new(self.path.clone());
+        }
+        let mut staging_area = self.staging_area()?;
+        staging_area.update_to_tree(&source_tree)?;
+        staging_area.save()?;
+        update_last_commit(new_hash)?;
+        Ok(())
+    }
+}
+
+// ----- Checkout -----
+fn has_conflicts(path: &str, new_content: &Vec<u8>) -> Result<(bool, Vec<u8>), CommandError> {
+    let content = fs::read_to_string(path.clone())
+        .map_err(|_| CommandError::FileReadError(path.to_string()))?;
+    let new_content_str: String = String::from_utf8_lossy(new_content).to_string();
+    let (_, has_conflicts) =
+        merge_content(content.clone(), new_content_str, "".to_string(), "", "")?;
+
+    Ok((has_conflicts, content.as_bytes().to_vec()))
+}
+
+fn add_local_new_files(
+    untracked_files: &Vec<String>,
+    changes_not_staged: &HashMap<String, ChangeType>,
+    tree: &mut Tree,
+    logger: &mut Logger,
+) -> Result<Vec<String>, CommandError> {
+    let mut added: Vec<String> = Vec::new();
+    for path in untracked_files {
+        if !tree.has_blob_from_path(path, logger) {
+            let vector_path = path.split("/").collect::<Vec<_>>();
+            let current_depth: usize = 0;
+            let data = fs::read_to_string(path)
+                .map_err(|_| CommandError::FileReadError(path.to_string()))?;
+
+            let hash = &get_sha1_str(data.as_bytes());
+            tree.add_path_tree(logger, vector_path, current_depth, hash)?;
+            added.push(path.to_string());
+        }
+    }
+    for (path, _) in changes_not_staged.iter() {
+        if !tree.has_blob_from_path(path, logger) {
+            let vector_path = path.split("/").collect::<Vec<_>>();
+            let current_depth: usize = 0;
+            let data = fs::read_to_string(path)
+                .map_err(|_| CommandError::FileReadError(path.to_string()))?;
+
+            let hash = &get_sha1_str(data.as_bytes());
+            tree.add_path_tree(logger, vector_path, current_depth, hash)?;
+            added.push(path.to_string());
+        }
+    }
+    Ok(added)
 }
 
 // ----- Branch -----
