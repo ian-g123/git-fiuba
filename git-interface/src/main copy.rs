@@ -209,7 +209,8 @@ impl Interface {
     fn build_ui(self, window: &gtk::Window) {
         let staging_changes: gtk::ListBox = self.builder.object("staging_list").unwrap();
         let unstaging_changes: gtk::ListBox = self.builder.object("unstaging_list").unwrap();
-        println!("{:?}", self.unstaging_changes.borrow());
+        println!("unstaging changes: {:?}", self.unstaging_changes.borrow());
+        println!("staging changes: {:?}", self.staging_changes.borrow());
         unstaging_changes.foreach(|child| {
             unstaging_changes.remove(child);
         });
@@ -218,7 +219,7 @@ impl Interface {
             let file = file.clone();
             let box_outer = gtk::Box::new(Orientation::Horizontal, 0);
 
-            let label = Label::new(Some(&format!("Elemento {}", file)));
+            let label = Label::new(Some(&format!("{}", file)));
             let button_stage = Button::with_label("stage");
 
             box_outer.pack_start(&label, true, true, 0);
@@ -226,7 +227,8 @@ impl Interface {
 
             unstaging_changes.add(&box_outer);
 
-            let unstaged_changed = Rc::clone(&self.unstaging_changes);
+            let unstaging_changes = Rc::clone(&self.unstaging_changes);
+            let staging_changes = Rc::clone(&self.staging_changes);
             let builder = self.builder.clone();
             let window = window.clone();
 
@@ -234,13 +236,14 @@ impl Interface {
 
             let repo_git_path = self.repo_git_path.clone();
             button_stage.connect_clicked(move |_| {
-                let staged_file = unstaged_changed.borrow_mut().remove(&file);
-                // staging_changes.add(&box_outer);
+                _ = unstaging_changes.borrow_mut().take(&file);
+                staging_changes.borrow_mut().insert(file.clone());
+
                 let interface = Interface {
                     builder: builder.clone(),
                     repo_git_path: repo_git_path.to_string(),
-                    staging_changes: Rc::clone(&unstaged_changed),
-                    unstaging_changes: unstaged_changed.clone(),
+                    staging_changes: Rc::clone(&unstaging_changes),
+                    unstaging_changes: unstaging_changes.clone(),
                 };
                 interface.build_ui(&window);
             });
