@@ -15,7 +15,7 @@ use crate::{
         format::Format,
         long_format::{sort_hashmap_and_filter_untracked, LongFormat},
         short_format::ShortFormat,
-        working_tree::get_path_name,
+        working_tree::{build_working_tree, get_path_name},
     },
     command_errors::CommandError,
     config::Config,
@@ -1994,10 +1994,6 @@ impl<'a> GitRepository<'a> {
             &changes_not_staged,
             &changes_staged,
         )?;
-        if !conflicts.is_empty() {
-            self.set_checkout_local_conflicts(conflicts, untracked_files)?;
-            return Ok(());
-        }
         self.get_checkout_sucess_output(branch, local_new_files, deletions, modifications)?;
         Ok(())
     }
@@ -2105,6 +2101,63 @@ impl<'a> GitRepository<'a> {
         staged: &HashMap<String, Vec<u8>>,
     ) -> Result<(), CommandError> {
         self.log("Restoring files");
+        let staging_files = self.staging_area()?.get_files();
+        self.log("Buscando untracked conflictos de checkout");
+
+        self.look_for_checkout_conflicts(
+            last_tree,
+            &mut source_tree,
+            common,
+            conflicts,
+            untracked_files,
+            false,
+            &staging_files,
+        )?;
+        self.log(&format!("Untracked conflicts: {:?}", conflicts));
+
+        self.log("Buscando unstaged conflictos de checkout");
+
+        self.look_for_checkout_conflicts(
+            last_tree,
+            &mut source_tree,
+            common,
+            conflicts,
+            unstaged_files,
+            false,
+            &staging_files,
+        )?;
+        self.log(&format!("Unstaged conflicts: {:?}", conflicts));
+
+        self.log("Buscando staged conflictos de checkout");
+
+        let staged_paths: Vec<&String> = staged.keys().collect();
+        let staged_paths: Vec<String> = staged_paths.iter().map(|x| x.to_string()).collect();
+
+        self.look_for_checkout_conflicts(
+            last_tree,
+            &mut source_tree,
+            common,
+            conflicts,
+            &staged_paths,
+            true,
+            &staging_files,
+        )?;
+        self.log(&format!("Staging area conflicts: {:?}", conflicts));
+
+        let mut working_tree = build_working_tree()?;
+        source_tree.look_for_checkout_deletions_conflicts(
+            &mut working_tree,
+            common,
+            conflicts,
+            &self.path,
+            &mut self.logger,
+        )?;
+        self.log(&format!("Se buscó conflictos de checkout: {:?}", conflicts));
+
+        if !conflicts.is_empty() {
+            self.set_checkout_local_conflicts(conflicts.to_owned(), untracked_files)?;
+            return Ok(());
+        }
 
         let delete = source_tree.checkout_restore(
             &self.path,
@@ -2128,14 +2181,14 @@ impl<'a> GitRepository<'a> {
             source_tree = Tree::new(self.path.clone());
         }
         remove_local_changes_from_tree(untracked_files, &mut source_tree, &mut self.logger);
-        remove_new_files_commited(
+        /* remove_new_files_commited(
             last_tree,
             &mut source_tree,
             &mut self.logger,
             untracked_files,
             unstaged_files,
             staged,
-        )?;
+        )?; */
         let mut staging_area = self.staging_area()?;
         staging_area.update_to_tree(&source_tree)?;
         staging_area.save()?;
@@ -2155,6 +2208,68 @@ impl<'a> GitRepository<'a> {
 
         Ok(())
     }
+
+    fn look_for_checkout_conflicts(
+        &mut self,
+        curr_tree: &mut Tree,
+        new_tree: &mut Tree,
+        common: &mut Tree,
+        conflicts: &mut Vec<String>,
+        files: &Vec<String>,
+        is_staged: bool,
+        staging_files: &HashMap<String, String>,
+    ) -> Result<(), CommandError> {
+        for path in files.iter() {
+            let path = &join_paths!(self.path, path).ok_or(CommandError::FileCreationError(
+                "No se pudo obtener el path del objeto".to_string(),
+            ))?;
+            if !Path::new(path).exists() {
+                continue;
+            }
+            let is_in_common_tree = common.has_blob_from_path(&path, &mut self.logger);
+            match new_tree.get_object_from_path(path) {
+                None => {
+                    if is_in_common_tree {
+                        // Added: conflicto xq el tree de otra rama no lo tiene
+                        conflicts.push(path.to_string());
+                    }
+                }
+                Some(mut object) => {
+                    let new_content = object.content(None)?;
+
+                    let actual_content = {
+                        if is_staged {
+                            let Some(hash) = staging_files.get(path) else {
+                                return Err(CommandError::ObjectHashNotKnown);
+                            };
+                            let c = self.get_staged_file_content(hash)?;
+                            c
+                        } else {
+                            let c = get_current_file_content(path)?;
+                            c
+                        }
+                    };
+
+                    if has_conflicts(&path, &actual_content, &new_content, common)? {
+                        conflicts.push(path.to_string());
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn get_staged_file_content(&mut self, hash: &str) -> Result<Vec<u8>, CommandError> {
+        let mut object = self.db()?.read_object(hash, &mut self.logger)?;
+
+        Ok(object.content(None)?)
+    }
+}
+
+pub fn get_current_file_content(path: &str) -> Result<Vec<u8>, CommandError> {
+    let content =
+        fs::read_to_string(path).map_err(|error| CommandError::FileReadError(error.to_string()))?;
+    Ok(content.as_bytes().to_vec())
 }
 
 // ----- Checkout -----
@@ -2169,6 +2284,7 @@ fn remove_new_files_commited(
 ) -> Result<(), CommandError> {
     for path in untracked.iter() {
         if !old_branch.has_blob_from_path(path, logger) {
+            logger.log(&format!("Deleting new file commitd: {}", path));
             new_branch.remove_object_from_path(path, logger);
             fs::remove_file(path.clone())
                 .map_err(|error| CommandError::RemoveFileError(error.to_string()))?;
@@ -2176,6 +2292,8 @@ fn remove_new_files_commited(
     }
     for path in unstaged.iter() {
         if !old_branch.has_blob_from_path(path, logger) {
+            logger.log(&format!("Deleting new file commitd: {}", path));
+
             new_branch.remove_object_from_path(path, logger);
 
             fs::remove_file(path.clone())
@@ -2184,6 +2302,8 @@ fn remove_new_files_commited(
     }
     for (path, _) in staged.iter() {
         if !old_branch.has_blob_from_path(path, logger) {
+            logger.log(&format!("Deleting new file commitd: {}", path));
+
             new_branch.remove_object_from_path(path, logger);
 
             fs::remove_file(path.clone())
@@ -2195,11 +2315,12 @@ fn remove_new_files_commited(
 
 fn has_conflicts(
     path: &str,
+    content: &Vec<u8>,
     new_content: &Vec<u8>,
     common: &mut Tree,
-) -> Result<(bool, Vec<u8>), CommandError> {
-    let content = fs::read_to_string(path.clone())
-        .map_err(|_| CommandError::FileReadError(path.to_string()))?;
+) -> Result<bool, CommandError> {
+    let content_str: String = String::from_utf8_lossy(content).to_string();
+
     let new_content_str: String = String::from_utf8_lossy(new_content).to_string();
 
     let mut common_content_str: String = "".to_string();
@@ -2208,10 +2329,15 @@ fn has_conflicts(
         common_content_str = String::from_utf8_lossy(&content_u8).to_string();
     }
 
-    let (_, has_conflicts) =
-        merge_content(content.clone(), new_content_str, common_content_str, "", "")?;
+    let (_, has_conflicts) = merge_content(
+        content_str.clone(),
+        new_content_str,
+        common_content_str,
+        "",
+        "",
+    )?;
 
-    Ok((has_conflicts, content.as_bytes().to_vec()))
+    Ok(has_conflicts)
 }
 
 fn remove_local_changes_from_tree(

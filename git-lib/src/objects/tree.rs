@@ -277,6 +277,39 @@ impl Tree {
         }
         sorted_objects
     }
+
+    pub fn look_for_checkout_deletions_conflicts(
+        &mut self,
+        working_tree: &mut Tree,
+        common: &mut Tree,
+        conflicts: &mut Vec<String>,
+        path: &str,
+        logger: &mut Logger,
+    ) -> Result<(), CommandError> {
+        let hash_str = &self.get_hash_string()?;
+        for (name, object) in self.objects.iter_mut() {
+            let actual_path = join_paths!(path, name).ok_or(CommandError::FileCreationError(
+                "No se pudo obtener el path del objeto".to_string(),
+            ))?;
+            if let Some(tree) = object.as_mut_tree() {
+                tree.look_for_checkout_deletions_conflicts(
+                    working_tree,
+                    common,
+                    conflicts,
+                    &actual_path,
+                    logger,
+                )?;
+            }
+            if !working_tree.has_blob_from_path(&actual_path, logger) {
+                if let Some(mut common_object) = common.get_object_from_path(&actual_path) {
+                    if &common_object.get_hash_string()? != hash_str {
+                        conflicts.push(actual_path);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 fn read_mode(stream: &mut dyn Read) -> Result<Mode, CommandError> {
@@ -425,7 +458,7 @@ impl GitObjectTrait for Tree {
         &mut self,
         path: &str,
         logger: &mut Logger,
-        has_conflicts: fn(&str, &Vec<u8>, &mut Tree) -> Result<(bool, Vec<u8>), CommandError>,
+        has_conflicts: fn(&str, &Vec<u8>, &Vec<u8>, &mut Tree) -> Result<bool, CommandError>,
         deletions: &mut Vec<String>,
         modifications: &mut Vec<String>,
         conflicts: &mut Vec<String>,

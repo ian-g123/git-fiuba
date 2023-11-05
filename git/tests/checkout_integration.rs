@@ -168,6 +168,8 @@ fn test_ckeckout() {
 
     assert_eq!(expected, stdout);
 
+    panic!("pause");
+
     let head_ref = fs::read_to_string(head_path.clone()).unwrap();
     let expected = "ref: refs/heads/master".to_string();
     assert_eq!(expected, head_ref);
@@ -259,16 +261,19 @@ fn test_ckeckout() {
     let expected = "error: The following untracked working tree files would be overwritten by checkout:\n\tdir/testfile3.txt\nPlease commit your changes or stash them before you switch branches.\nAborting\nerror: Your local changes to the following files would be overwritten by checkout:\n\tdir/testfile1.txt\nPlease move or remove them before you switch branches.\nAborting\n".to_string();
 
     assert_eq!(expected, stdout);
-    panic!("pause");
+
     let head_ref = fs::read_to_string(head_path.clone()).unwrap();
-    let expected = "ref: refs/heads/master".to_string();
+    let expected = "ref: refs/heads/branch1".to_string();
     assert_eq!(expected, head_ref);
 
     let testfile1_path = format!("{}/dir/testfile1.txt", path);
     let testfile2_path = format!("{}/dir/testfile2.txt", path);
     println!("testfile1: {}", testfile1_path);
     let testfile1_content = fs::read_to_string(testfile1_path.clone()).unwrap();
-    assert_eq!(testfile1_content, "Cambio!".to_string());
+    assert_eq!(
+        testfile1_content,
+        "cambio file 1 con overlapping!".to_string()
+    );
     assert!(!Path::new(&testfile2_path).exists());
 
     panic!("pause");

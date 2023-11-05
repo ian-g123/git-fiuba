@@ -104,7 +104,7 @@ pub trait GitObjectTrait {
         &mut self,
         _path: &str,
         _logger: &mut Logger,
-        has_conflicts: fn(&str, &Vec<u8>, &mut Tree) -> Result<(bool, Vec<u8>), CommandError>,
+        has_conflicts: fn(&str, &Vec<u8>, &Vec<u8>, &mut Tree) -> Result<bool, CommandError>,
         deletions: &mut Vec<String>,
         modifications: &mut Vec<String>,
         conflicts: &mut Vec<String>,

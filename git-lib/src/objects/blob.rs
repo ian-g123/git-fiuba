@@ -8,6 +8,7 @@ use std::{
 use crate::{
     changes_controller_components::changes_types::ChangeType,
     command_errors::CommandError,
+    git_repository::get_current_file_content,
     objects_database::ObjectsDatabase,
     utils::{
         aux::get_name,
@@ -265,7 +266,7 @@ impl GitObjectTrait for Blob {
         &mut self,
         path: &str,
         logger: &mut Logger,
-        has_conflicts: fn(&str, &Vec<u8>, &mut Tree) -> Result<(bool, Vec<u8>), CommandError>,
+        has_conflicts: fn(&str, &Vec<u8>, &Vec<u8>, &mut Tree) -> Result<bool, CommandError>,
         deletions: &mut Vec<String>,
         modifications: &mut Vec<String>,
         conflicts: &mut Vec<String>,
@@ -278,15 +279,13 @@ impl GitObjectTrait for Blob {
             deletions.push(path.to_string());
             return Ok(true);
         }
-        let mut content = self.content(None)?;
+        let mut new_content = self.content(None)?;
 
         if Path::new(path).exists() {
-            let (has_conflicts, new_content) = has_conflicts(path, &content, common)?;
+            let content = get_current_file_content(path)?;
 
-            if has_conflicts {
-                conflicts.push(path.to_string());
-                return Ok(false);
-            }
+            let has_conflicts = has_conflicts(path, &content, &new_content, common)?;
+
             if new_content != content
                 && (unstaged_files.contains(&path.to_string()) || staged.contains_key(path))
             {
@@ -296,7 +295,7 @@ impl GitObjectTrait for Blob {
 
                 modifications.push(path.to_string());
 
-                content = new_content;
+                new_content = content;
             }
         }
         let mut file = File::create(path).map_err(|error| {
@@ -307,7 +306,7 @@ impl GitObjectTrait for Blob {
             ))
         })?;
 
-        file.write_all(&content).map_err(|error| {
+        file.write_all(&new_content).map_err(|error| {
             CommandError::FileWriteError(format!(
                 "Error al escribir archivo {}: {}",
                 path,
@@ -321,10 +320,6 @@ impl GitObjectTrait for Blob {
         }
 
         Ok(false)
-    }
-
-    fn set_hash(&mut self, sha1: [u8; 20]) {
-        self.hash = Some(sha1.clone());
     }
 }
 
