@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    env,
     fs::{self, DirEntry, File, OpenOptions, ReadDir},
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -202,6 +203,139 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    pub fn rm(
+        &mut self,
+        pathspecs: Vec<String>,
+        force: bool,
+        recursive: bool,
+    ) -> Result<(), CommandError> {
+        for pathspec in &pathspecs {
+            if !Path::new(pathspec).exists() {
+                return Err(CommandError::FileOpenError(format!(
+                    "No existe el archivo o directorio: {:?}",
+                    pathspec
+                )));
+            }
+            self.verifies_directory(pathspec, recursive)?;
+        }
+
+        let mut staging_area = StagingArea::open(&self.path)?;
+        for pathspec in &pathspecs {
+            self.run_for_path_rm(pathspec, force, &mut staging_area)?
+        }
+        staging_area.save()?;
+        Ok(())
+    }
+
+    fn verifies_directory(&self, pathspec: &String, recursive: bool) -> Result<(), CommandError> {
+        let path = Path::new(pathspec);
+        if path.is_dir() && !recursive {
+            return Err(CommandError::NotRecursive(pathspec.clone()));
+        }
+        Ok(())
+    }
+
+    fn run_for_path_rm(
+        &mut self,
+        path: &str,
+        force: bool,
+        staging_area: &mut StagingArea,
+    ) -> Result<(), CommandError> {
+        let path = Path::new(path);
+        let path_str = &get_path_str(path.to_path_buf())?;
+
+        if path.is_file() {
+            self.run_for_file_rm(path_str, force, staging_area)?;
+            return Ok(());
+        } else {
+            self.run_for_dir_rm(path_str, force, staging_area)?;
+        }
+        Ok(())
+    }
+
+    fn run_for_file_rm(
+        &mut self,
+        path: &str,
+        force: bool,
+        staging_area: &mut StagingArea,
+    ) -> Result<(), CommandError> {
+        if !force {
+            //self.verifies_version_of_index()?; //IMPLEMENTAR!
+        }
+
+        staging_area.remove_from_stagin_area(path, &mut self.logger)?;
+
+        fs::remove_file(path).map_err(|_| {
+            CommandError::FileOpenError(format!("No existe el archivo: {:?}", path))
+        })?;
+
+        Ok(())
+    }
+
+    /// Verifica que la versión del commit anterior sea la misma. Los archivos que se eliminan
+    /// deben ser idénticos al últmo commit, y no se pueden haber agregado nuevas versiones
+    /// de este al index."
+    fn verifies_version_of_index(
+        &mut self,
+        path: &str,
+        staging_area: &mut StagingArea,
+    ) -> Result<(), CommandError> {
+        let mut tree_last_commit = match self.get_last_commit_tree()? {
+            Some(tree_last_commit_box) => tree_last_commit_box,
+            None => return Err(CommandError::RmFromStagingAreaError(path.to_string())),
+        };
+        let actual_hash = staging_area.get_hash_from_path(path)?;
+        let (exist, name_blob) =
+            tree_last_commit.has_blob_from_hash(&actual_hash, &mut self.logger)?;
+        if (exist && name_blob != get_name(path)?) {
+            return Ok(());
+        }
+        return Err(CommandError::RmFromStagingAreaError(path.to_string()));
+    }
+
+    fn run_for_dir_rm(
+        &mut self,
+        path_str: &String,
+        force: bool,
+        staging_area: &mut StagingArea,
+    ) -> Result<(), CommandError> {
+        let read_dir = self.read_dir(path_str)?;
+
+        for entry in read_dir {
+            match entry {
+                Ok(entry) => self.try_run_for_path_rm(entry, force, staging_area)?,
+                Err(error) => {
+                    self.logger.log(&format!("Error en entry: {:?}", error));
+                    return Err(CommandError::FileOpenError(error.to_string()));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn try_run_for_path_rm(
+        &mut self,
+        entry: DirEntry,
+        force: bool,
+        staging_area: &mut StagingArea,
+    ) -> Result<(), CommandError> {
+        let path = entry.path();
+
+        let Some(path_str) = path.to_str() else {
+            return Err(CommandError::FileOpenError(
+                "No se pudo convertir el path a str".to_string(),
+            ));
+        };
+
+        if self.should_ignore(path_str) {
+            return Ok(());
+        }
+
+        self.logger.log(&format!("entry: {:?}", path_str));
+        self.run_for_path_rm(path_str, force, staging_area)?;
+        Ok(())
+    }
+
     fn add_path(&mut self, path: &str, staging_area: &mut StagingArea) -> Result<(), CommandError> {
         let path = Path::new(path);
         let path_str = &Self::get_path_str(path)?;
@@ -255,10 +389,16 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    fn read_dir(&self, path_str: &String) -> Result<ReadDir, CommandError> {
+    fn read_dir(&mut self, path_str: &String) -> Result<ReadDir, CommandError> {
         match fs::read_dir(path_str) {
             Ok(read_dir) => Ok(read_dir),
-            Err(error) => Err(CommandError::FileOpenError(error.to_string())),
+            Err(error) => {
+                self.logger.log(&format!(
+                    "Error en read_dir: {error} desde {:?}",
+                    env::current_dir()
+                ));
+                Err(CommandError::FileOpenError(error.to_string()))
+            }
         }
     }
 

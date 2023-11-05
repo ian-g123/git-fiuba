@@ -124,6 +124,11 @@ pub enum CommandError {
     /// There cannot be a file and a folder with the same name
     CannotHaveFileAndFolderWithSameName(String),
     PushBranchBehind(String),
+    /// Error al eliminar un archivo
+    FileRemovingError(String),
+    /// Error de recursividad de comando
+    NotRecursive(String),
+    RmFromStagingAreaError(String),
 }
 
 impl Error for CommandError {}
@@ -339,6 +344,18 @@ impl fmt::Display for CommandError {
             }
             CommandError::PushBranchBehind(local_branch) => {
                 write!(f, "error: failed to push some refs to {}", local_branch)
+            }
+            CommandError::NotRecursive(path) => {
+                write!(f, "No se remueve {path} recursivamente sin el flag -r")
+            }
+            CommandError::FileRemovingError(path) => {
+                write!(f, "Hay un error cerrando el archivo: {path}")
+            }
+            CommandError::RmFromStagingAreaError(path) => {
+                write!(
+                    f,
+                    "No se puede remover un archivo que no fue agregado al Staging Area: {path}"
+                )
             }
         }
     }

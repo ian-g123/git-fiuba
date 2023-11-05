@@ -10,5 +10,6 @@ pub mod commands {
     pub mod log;
     pub mod merge;
     pub mod push;
+    pub mod rm;
     pub mod status;
 }
