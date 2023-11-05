@@ -35,9 +35,9 @@ fn read_pkt_size(socket: &mut dyn Read) -> Result<usize, CommandError> {
     let mut size_buffer = [0; 4];
     socket
         .read(&mut size_buffer)
-        .map_err(|_| CommandError::ErrorReadingPkt)?;
-    let from_utf8 =
-        &String::from_utf8(size_buffer.to_vec()).map_err(|_| CommandError::ErrorReadingPkt)?;
+        .map_err(|error| CommandError::ErrorReadingPktVerbose(error.to_string()))?;
+    let from_utf8 = &String::from_utf8(size_buffer.to_vec())
+        .map_err(|error| CommandError::ErrorReadingPktVerbose(error.to_string()))?;
     let size_vec = hex_string_to_u8_vec_2(from_utf8.as_str())?;
     let size: usize = u16::from_be_bytes(size_vec) as usize;
     Ok(size)

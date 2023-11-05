@@ -1,4 +1,5 @@
 use std::{
+    collections::{HashMap, HashSet},
     io::{self, Cursor, Write},
     net::TcpStream,
 };
@@ -8,11 +9,10 @@ use git_lib::{
     file_compressor::compress,
     git_repository::GitRepository,
     join_paths,
-    logger::Logger,
-    objects,
+    objects::commit_object::CommitObject,
     server_components::{
-        packfile_object_type::{self, PackfileObjectType},
-        pkt_strings::Pkt,
+        history_analyzer::rebuild_commits_tree, packfile_functions::make_packfile,
+        packfile_object_type::PackfileObjectType, pkt_strings::Pkt,
     },
     utils::aux::read_string_until,
 };
@@ -83,14 +83,19 @@ impl ServerWorker {
         sorted_branches.sort_unstable();
         println!("local branches: {:?}", sorted_branches);
         self.send("version 1\n")?;
-        self.send(&format!("{} HEAD\0\n", head_branch_hash,))?;
+        println!("head_branch_hash:{} HEAD\0\n", head_branch_hash);
+        self.send(&format!("{} HEAD\0\n", head_branch_hash))?;
         for (branch_name, branch_hash) in sorted_branches {
-            self.send(&format!("{} refs/heads{}\n", branch_hash, branch_name))?;
+            self.send(&format!("{} refs/heads/{}\n", branch_hash, branch_name))?;
         }
         self.write_string_to_socket("0000")?;
         let (want_lines, have_lines) = self.read_wants_and_haves()?;
+        self.send("NAK\n")?;
         let packfile = self.build_pack_file(&mut repo, want_lines, have_lines)?;
-        self.socket.write_all(&packfile);
+
+        self.socket.write_all(&packfile).map_err(|error| {
+            CommandError::SendingMessage(format!("Error enviando packfile: {}", error))
+        })?;
         Ok(())
     }
 
@@ -112,6 +117,7 @@ impl ServerWorker {
     /// envía un mensaje al servidor
     fn send(&mut self, line: &str) -> Result<(), CommandError> {
         let line = line.to_string().to_pkt_format();
+        println!("|| Sending: \"{:?}\"", line);
         self.write_string_to_socket(&line)?;
         Ok(())
     }
@@ -131,69 +137,59 @@ impl ServerWorker {
         want_lines: Vec<String>,
         have_lines: Vec<String>,
     ) -> Result<Vec<u8>, CommandError> {
+        println!("build_pack_file");
         println!("want_lines: {:?}", want_lines);
         println!("have_lines: {:?}", have_lines);
         if !have_lines.is_empty() {
             todo!("TODO implementar have_lines")
         }
-        let mut pack_file = Vec::<u8>::new();
-        let mut objects = Vec::<Vec<u8>>::new();
-        for want_line in want_lines {
-            let (_, hash_str) =
-                want_line
-                    .split_once(' ')
-                    .ok_or(CommandError::PackageNegotiationError(
-                        "No se pudo leer la línea want".to_string(),
-                    ))?;
-            let (path, object_content) =
-                repo.db()?.read_file(hash_str, &mut Logger::new_dummy())?;
-            objects.push(object_content);
+        let haves: Result<HashSet<String>, CommandError> = have_lines
+            .into_iter()
+            .map(|have_line| {
+                let (_, hash_str) =
+                    have_line
+                        .split_once(' ')
+                        .ok_or(CommandError::PackageNegotiationError(
+                            "No se pudo leer la línea have".to_string(),
+                        ))?;
+                Ok(hash_str.trim().to_string())
+            })
+            .collect();
+
+        let haves = haves?;
+
+        let wants: Result<Vec<String>, CommandError> = want_lines
+            .into_iter()
+            .map(|want_line| {
+                let (_, hash_str) =
+                    want_line
+                        .split_once(' ')
+                        .ok_or(CommandError::PackageNegotiationError(
+                            "No se pudo leer la línea want".to_string(),
+                        ))?;
+                Ok(hash_str.trim().to_string())
+            })
+            .collect();
+
+        let wants = wants?;
+
+        println!("haves: {:?}", haves);
+        println!("wants: {:?}", wants);
+        let mut commits_map = HashMap::<String, (CommitObject, Option<String>)>::new();
+        for want in wants {
+            rebuild_commits_tree(
+                &repo.db()?,
+                &want,
+                &mut commits_map,
+                None,
+                false,
+                &haves,
+                true,
+                repo.logger(),
+            )?;
         }
-        pack_file.extend("PACK".as_bytes());
-        let version = (2 as u32).to_le_bytes();
-        println!("Version bytes: {:?}", version);
-        pack_file.extend(version);
-        let num_objects = (objects.len() as u32).to_le_bytes();
-        println!("Num objects bytes: {:?}", num_objects);
-        pack_file.extend(num_objects);
-        for object_content in objects {
-            let object_size = object_content.len();
-            let compressed_object = compress(&object_content)?;
-            let mut cursor = Cursor::new(object_content);
-            let type_str = read_string_until(&mut cursor, ' ')?;
-            let pf_type = PackfileObjectType::from_str(type_str.as_str())?;
 
-            // Size encoding
-            // This document uses the following "size encoding" of non-negative integers: From each byte, the seven least
-            // significant bits are used to form the resulting integer. As long as the most significant bit is 1, this
-            // process continues; the byte with MSB 0 provides the last seven bits. The seven-bit chunks are concatenated.
-            // Later values are more significant.
-            // This size encoding should not be confused with the "offset encoding", which is also used in this document.
-
-            let mut len_temp = object_size;
-            let first_four = (len_temp & 0b00001111) as u8;
-            len_temp >>= 4;
-            let mut len_bytes: Vec<u8> = Vec::new();
-            loop {
-                let mut byte = (len_temp & 0b01111111) as u8;
-                len_temp >>= 7;
-                if len_temp == 0 {
-                    len_bytes.push(byte);
-                    break;
-                }
-                byte |= 0b10000000;
-                len_bytes.push(byte);
-            }
-
-            let type_and_len_byte = (pf_type as u8) << 4
-                | first_four
-                | if len_bytes.is_empty() { 0 } else { 0b10000000 };
-
-            pack_file.push(type_and_len_byte);
-            pack_file.extend(len_bytes);
-            pack_file.extend(compressed_object);
-        }
-        todo!()
+        make_packfile(commits_map)
     }
 }
 
