@@ -107,10 +107,6 @@ impl StagingArea {
         let mut actual_parts: Vec<&str> = actual_path.split_terminator("/").collect();
         _ = actual_parts.pop();
 
-        let Some(hash_for_staging_file) = self.files.get(actual_path) else {
-            return false;
-        };
-
         for (path_for_staging_file, hash_for_staging_file) in self.get_files() {
             let mut parts: Vec<&str> = path_for_staging_file.split_terminator("/").collect();
 

@@ -1,7 +1,9 @@
 extern crate gtk;
 use std::{
-    collections::HashMap,
+    cell::RefCell,
+    collections::{HashMap, HashSet},
     io::{self, Write},
+    rc::Rc,
 };
 
 use gtk::{
@@ -10,7 +12,9 @@ use gtk::{
 
 use git::commands::push::Push;
 use git_lib::{
-    changes_controller_components::changes_controller::ChangesController,
+    changes_controller_components::{
+        changes_controller::ChangesController, long_format::sort_hashmap,
+    },
     command_errors::CommandError,
     git_repository::GitRepository,
     objects::{commit_object::CommitObject, git_object::GitObjectTrait},
@@ -44,18 +48,20 @@ fn main() {
     let glade_src = include_str!("../git interface.glade");
     let repo_git_path = "./git-interface/log".to_string();
 
-    let mut interface = Interface {
-        builder: gtk::Builder::from_string(glade_src),
-        repo_git_path,
-    };
-
     let mut output = io::stdout();
-    let mut repo = match GitRepository::open(&interface.repo_git_path, &mut output) {
+    let mut repo = match GitRepository::open(&repo_git_path, &mut output) {
         Ok(repo) => repo,
         Err(_) => {
             eprintln!("No se pudo conectar satisfactoriamente a un repositorio Git.");
             return;
         }
+    };
+
+    let (mut staged_files, changes_file) = staged_area_func(repo_git_path.clone()).unwrap();
+
+    let mut interface = Interface {
+        builder: gtk::Builder::from_string(glade_src),
+        repo_git_path,
     };
 
     let commits = match repo.get_log(true) {
@@ -81,7 +87,14 @@ fn main() {
     // window.add(&drawing_area);
     interface.buttons_activation();
 
-    // interface.build_ui(&mut window);
+    // interface.staged_changes_display(&mut window);
+
+    // Envolver el HashSet en un RefCell y luego en un Rc
+    let staged_files = Rc::new(RefCell::new(staged_files));
+
+    // Clonar el Rc según sea necesario
+    let cloned_staged_files = Rc::clone(&staged_files);
+    interface.build_ui(&mut window, Rc::clone(&cloned_staged_files));
 
     set_right_area(
         &drawing_area,
@@ -188,64 +201,87 @@ impl Interface {
         Ok(())
     }
 
-    fn build_ui(&self, window: &mut gtk::Window) {
-        let mut output = io::stdout();
-        let mut repo = GitRepository::open(&self.repo_git_path, &mut output).unwrap();
-        let db = repo.db().unwrap();
+    fn build_ui(self, window: &gtk::Window, staged_changed: Rc<RefCell<HashSet<String>>>) {
+        let list: gtk::ListBox = self.builder.object("staged_list").unwrap();
+        println!("Se ha stageado el archivo {:?}", staged_changed.borrow());
 
-        let last_commit_tree = match repo.get_last_commit_tree() {
-            Ok(tree) => tree,
-            Err(err) => {
-                eprintln!("Error al obtener el último commit: {}", err);
-                return;
-            }
-        };
+        // Elimina todos los elementos dentro del ListBox
+        list.foreach(|child| {
+            list.remove(child);
+        });
 
-        let changes_controller = ChangesController::new(
-            &db,
-            &self.repo_git_path,
-            repo.get_logger(),
-            last_commit_tree,
-        )
-        .unwrap();
-
-        let changes_to_be_commited = changes_controller.get_changes_to_be_commited();
-        let changes_not_staged = changes_controller.get_changes_not_staged();
-        let untracked_files = changes_controller.get_untracked_files();
-
-        let list_box = ListBox::new();
-        window.add(&list_box);
-
-        for i in 1..=10 {
-            let row = ListBoxRow::new();
+        for file in staged_changed.borrow().iter() {
+            let file = file.clone();
             let box_outer = gtk::Box::new(Orientation::Horizontal, 0);
 
-            let label = Label::new(Some(&format!("Elemento {}", i)));
+            let label = Label::new(Some(&format!("Elemento {}", file)));
             let button = Button::with_label("stagear cambios");
 
             box_outer.pack_start(&label, true, true, 0);
             box_outer.pack_end(&button, false, false, 0);
 
-            row.add(&box_outer);
-            list_box.add(&row);
+            list.add(&box_outer);
 
-            let window_clone = window.clone();
+            let staged_changed = Rc::clone(&staged_changed);
+            let builder = self.builder.clone();
+            let window = window.clone();
+
+            window.show_all();
+
+            let repo_git_path = self.repo_git_path.clone();
             button.connect_clicked(move |_| {
-                let dialog = gtk::MessageDialog::new(
-                    Some(&window_clone),
-                    gtk::DialogFlags::MODAL,
-                    gtk::MessageType::Info,
-                    gtk::ButtonsType::Ok,
-                    &format!("Haz clic en el botón del elemento {}", i),
-                );
-
-                dialog.run();
-                dialog.close();
+                staged_changed.borrow_mut().remove(&file);
+                let interface = Interface {
+                    builder: builder.clone(),
+                    repo_git_path: repo_git_path.to_string(),
+                };
+                interface.build_ui(&window, staged_changed.clone());
             });
         }
-
-        window.show_all();
     }
+}
+
+fn staged_area_func(
+    repo_git_path: String,
+) -> Result<(HashSet<String>, HashSet<String>), CommandError> {
+    // staged_area, unstage_area
+    let mut output = io::stdout();
+    let mut repo = GitRepository::open(&repo_git_path, &mut output).unwrap();
+    let db = repo.db().unwrap();
+
+    let last_commit_tree = match repo.get_last_commit_tree() {
+        Ok(tree) => tree,
+        Err(err) => {
+            eprintln!("Error al obtener el último commit: {}", err);
+            return Err(CommandError::FileWriteError(err.to_string()));
+        }
+    };
+
+    let changes_controller =
+        ChangesController::new(&db, &repo_git_path, repo.get_logger(), last_commit_tree).unwrap();
+
+    let changes_to_be_commited_vec = sort_hashmap(changes_controller.get_changes_to_be_commited());
+    let changes_to_be_commited: HashSet<String> = changes_to_be_commited_vec
+        .into_iter()
+        .map(|(s, _)| s)
+        .collect();
+
+    let changes_not_staged_vec = sort_hashmap(changes_controller.get_changes_not_staged());
+    let mut changes_not_staged: HashSet<String> =
+        changes_not_staged_vec.into_iter().map(|(s, _)| s).collect();
+
+    let untracked_files_vec = changes_controller.get_untracked_files();
+    //let untracked_files: HashSet<String> = untracked_files_vec.iter().collect();
+
+    changes_not_staged.extend(untracked_files_vec.iter().cloned());
+
+    //return Ok((changes_to_be_commited, changes_not_staged));
+    let strings1 = vec!["meli.txt", "ian.txt", "sofi.txt", "patricio.txt"];
+    let hash_set1: HashSet<String> = strings1.into_iter().map(String::from).collect();
+    let strings2 = vec!["perro.txt", "gato.txt", "caballo.txt", "raton.txt"];
+    let hash_set2: HashSet<String> = strings2.into_iter().map(String::from).collect();
+
+    return Ok((hash_set1, hash_set2));
 }
 
 fn commit_function(repo: &GitRepository, commit_msg: String) {

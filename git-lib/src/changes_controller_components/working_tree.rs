@@ -7,15 +7,14 @@ use std::{
 };
 
 // build working tree
-pub fn build_working_tree() -> Result<Tree, CommandError> {
-    let path = "./";
-    let mut tree = Tree::new("".to_string());
-    build_working_tree_aux(path, &mut tree)?;
+pub fn build_working_tree(base_path: String) -> Result<Tree, CommandError> {
+    let mut tree = Tree::new(base_path.clone());
+    build_working_tree_aux(base_path, &mut tree)?;
     Ok(tree)
 }
 
-fn build_working_tree_aux(path_name: &str, tree: &mut Tree) -> Result<(), CommandError> {
-    let path = Path::new(path_name);
+fn build_working_tree_aux(path_name: String, tree: &mut Tree) -> Result<(), CommandError> {
+    let path = Path::new(&path_name);
 
     let Ok(entries) = fs::read_dir(path.clone()) else {
         return Err(CommandError::DirNotFound(path_name.to_owned()));
@@ -32,7 +31,7 @@ fn build_working_tree_aux(path_name: &str, tree: &mut Tree) -> Result<(), Comman
         }
         if entry_path.is_dir() {
             let mut new_tree = Tree::new(path.to_owned());
-            build_working_tree_aux(&full_path, &mut new_tree)?;
+            build_working_tree_aux(full_path.to_string(), &mut new_tree)?;
             tree.add_object(get_name(path)?, Box::new(new_tree));
         } else {
             let blob = Blob::new_from_path(path.to_string())?;
@@ -57,7 +56,7 @@ mod tests {
     #[test]
     #[ignore]
     fn print_working_tree() {
-        let wt = build_working_tree().unwrap();
+        let wt = build_working_tree(".".to_string()).unwrap();
         validate_tree(wt);
     }
 

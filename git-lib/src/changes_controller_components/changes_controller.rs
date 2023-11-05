@@ -1,7 +1,10 @@
 use crate::{
     command_errors::CommandError,
     logger::Logger,
-    objects::{git_object::GitObject, tree::Tree},
+    objects::{
+        git_object::{GitObject, GitObjectTrait},
+        tree::Tree,
+    },
     objects_database::ObjectsDatabase,
     staging_area::StagingArea,
     utils::aux::get_name,
@@ -29,9 +32,10 @@ impl ChangesController {
         logger: &mut Logger,
         commit_tree: Option<Tree>,
     ) -> Result<ChangesController, CommandError> {
-        let index = StagingArea::open(base_path)?;
-        let working_tree = build_working_tree()?;
+        let index = StagingArea::open(&base_path)?;
+        let working_tree = build_working_tree(base_path.to_string())?;
         let index_changes = Self::check_staging_area_status(db, &index, &commit_tree, logger)?;
+
         let (working_tree_changes, untracked) = Self::check_working_tree_status(
             working_tree,
             &index,
@@ -180,6 +184,7 @@ impl ChangesController {
     ) -> Result<(), CommandError> {
         let mut untracked_number = 0;
         let mut total_files_dir = 0;
+
         for (_, object) in tree.get_objects().iter_mut() {
             if let Some(mut new_tree) = object.as_tree() {
                 Self::check_working_tree_aux(

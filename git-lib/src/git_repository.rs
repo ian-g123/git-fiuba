@@ -237,7 +237,7 @@ impl<'a> GitRepository<'a> {
     }
 
     fn should_ignore(&self, path_str: &str) -> bool {
-        path_str == "./.git"
+        path_str.starts_with("./.git") || path_str.starts_with(".git")
     }
 
     fn try_run_for_path(
@@ -842,6 +842,7 @@ impl<'a> GitRepository<'a> {
     pub fn get_last_commit_hash(&mut self) -> Result<Option<String>, CommandError> {
         let mut parent = String::new();
         let branch = self.get_head_branch_path()?;
+
         let branch_path =
             join_paths!(&self.path, ".git", branch).ok_or(CommandError::DirectoryCreationError(
                 "Error creando directorio de branches".to_string(),
@@ -974,9 +975,9 @@ impl<'a> GitRepository<'a> {
     }
 
     /// Devuelve al vector de branches_with_their_commits todos los nombres de las ramas y el hash del commit al que apuntan
-    pub fn push_all_local_branch_hashes(&self) -> Result<Vec<(String, String)>, CommandError> {
+    pub fn push_all_local_branch_hashes(&mut self) -> Result<Vec<(String, String)>, CommandError> {
         let mut branches_with_their_commits: Vec<(String, String)> = Vec::new();
-        let branches_hashes = local_branches(&self.path)?;
+        let branches_hashes = self.local_branches()?;
         for branch_hash in branches_hashes {
             let branch_hash = (
                 branch_hash.0,
@@ -1880,46 +1881,6 @@ pub fn get_head_ref() -> Result<String, CommandError> {
         ));
     };
     Ok(head_ref.trim().to_string())
-}
-
-pub fn local_branches(base_path: &str) -> Result<HashMap<String, String>, CommandError> {
-    let mut branches = HashMap::<String, String>::new();
-    let branches_path = format!("{}/.git/refs/heads/", base_path);
-    let paths = fs::read_dir(branches_path).map_err(|error| {
-        CommandError::FileReadError(format!(
-            "Error leyendo directorio de branches: {}",
-            error.to_string()
-        ))
-    })?;
-    for path in paths {
-        let path = path.map_err(|error| {
-            CommandError::FileReadError(format!(
-                "Error leyendo directorio de branches: {}",
-                error.to_string()
-            ))
-        })?;
-        let file_name = &path.file_name();
-        let Some(file_name) = file_name.to_str() else {
-            return Err(CommandError::FileReadError(
-                "Error leyendo directorio de branches".to_string(),
-            ));
-        };
-        let mut file = fs::File::open(path.path()).map_err(|error| {
-            CommandError::FileReadError(format!(
-                "Error leyendo directorio de branches: {}",
-                error.to_string()
-            ))
-        })?;
-        let mut sha1 = String::new();
-        file.read_to_string(&mut sha1).map_err(|error| {
-            CommandError::FileReadError(format!(
-                "Error leyendo directorio de branches: {}",
-                error.to_string()
-            ))
-        })?;
-        branches.insert(file_name.to_string(), sha1);
-    }
-    Ok(branches)
 }
 
 fn _remote_branches(base_path: &str) -> Result<HashMap<String, String>, CommandError> {
