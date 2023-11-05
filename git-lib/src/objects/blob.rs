@@ -270,21 +270,34 @@ impl GitObjectTrait for Blob {
         modifications: &mut Vec<String>,
         conflicts: &mut Vec<String>,
         common: &mut Tree,
+        unstaged_files: &Vec<String>,
+        staged: &HashMap<String, Vec<u8>>,
     ) -> Result<bool, CommandError> {
-        if !Path::new(path).exists() {
+        if !Path::new(path).exists() && unstaged_files.contains(&path.to_string()) {
+            logger.log(&format!("This file was deleted: {}", path));
             deletions.push(path.to_string());
             return Ok(true);
         }
-        let content = self.content(None)?;
+        let mut content = self.content(None)?;
 
-        let (has_conflicts, new_content) = has_conflicts(path, &content, common)?;
+        if Path::new(path).exists() {
+            let (has_conflicts, new_content) = has_conflicts(path, &content, common)?;
 
-        if has_conflicts {
-            conflicts.push(path.to_string());
-            return Ok(false);
-        }
-        if new_content != content {
-            modifications.push(path.to_string())
+            if has_conflicts {
+                conflicts.push(path.to_string());
+                return Ok(false);
+            }
+            if new_content != content
+                && (unstaged_files.contains(&path.to_string()) || staged.contains_key(path))
+            {
+                logger.log(&format!("Unstaged: {:?}", unstaged_files));
+
+                logger.log(&format!("This file was modified: {}", path));
+
+                modifications.push(path.to_string());
+
+                content = new_content;
+            }
         }
         let mut file = File::create(path).map_err(|error| {
             CommandError::FileOpenError(format!(
@@ -294,13 +307,19 @@ impl GitObjectTrait for Blob {
             ))
         })?;
 
-        file.write_all(&new_content).map_err(|error| {
+        file.write_all(&content).map_err(|error| {
             CommandError::FileWriteError(format!(
                 "Error al escribir archivo {}: {}",
                 path,
                 error.to_string()
             ))
         })?;
+
+        if let Some(staged_content) = staged.get(path) {
+            self.content = Some(staged_content.to_vec());
+            self.hash = Some(get_sha1(&staged_content));
+        }
+
         Ok(false)
     }
 

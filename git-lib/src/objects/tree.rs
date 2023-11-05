@@ -67,6 +67,7 @@ impl Tree {
 
     pub fn has_blob_from_path(&self, path: &str, logger: &mut Logger) -> bool {
         let mut parts: Vec<&str> = path.split_terminator("/").collect();
+        logger.log(&format!("Path buscado: {}", path));
         let (found, _) = self.follow_path_in_tree(&mut parts);
         found
     }
@@ -107,6 +108,34 @@ impl Tree {
             }
         }
         deleted_blobs
+    }
+
+    pub fn remove_object_from_path(&mut self, path: &str, logger: &mut Logger) {
+        let mut parts: Vec<&str> = path.split_terminator("/").collect();
+        self.remove_aux(&mut parts, logger);
+    }
+
+    fn remove_aux(&mut self, path: &mut Vec<&str>, logger: &mut Logger) {
+        if path.is_empty() {
+            return;
+        }
+
+        for (name, object) in self.get_objects().iter_mut() {
+            if name == path[0] {
+                if let Some(obj_tree) = object.as_mut_tree() {
+                    _ = path.remove(0);
+                    obj_tree.remove_aux(path, logger);
+                    if !obj_tree.get_objects().contains_key(name) {
+                        logger.log("Path removed sucessfully");
+                    }
+                    let boxed_tree: GitObject = Box::new(obj_tree.to_owned());
+                    self.objects.insert(name.to_string(), boxed_tree);
+                    return;
+                }
+                self.objects.remove(name);
+                break;
+            }
+        }
     }
 
     pub fn add_path_tree(
@@ -401,6 +430,8 @@ impl GitObjectTrait for Tree {
         modifications: &mut Vec<String>,
         conflicts: &mut Vec<String>,
         common: &mut Tree,
+        unstaged_files: &Vec<String>,
+        staged: &HashMap<String, Vec<u8>>,
     ) -> Result<bool, CommandError> {
         let mut objects = self.objects.clone();
         for (name, object) in self.objects.iter_mut() {
@@ -415,6 +446,8 @@ impl GitObjectTrait for Tree {
                 modifications,
                 conflicts,
                 common,
+                unstaged_files,
+                staged,
             )? {
                 objects.remove(name);
             }
@@ -553,6 +586,25 @@ mod tests {
         /* let result = tree.has_blob_from_path("dir0/dir1/dir2/barrrr.txt");
 
         assert!(!result) */
+    }
+
+    #[test]
+    fn remove_object_from_path() {
+        let files = [
+            "dir/testfile1.txt".to_string(),
+            "dir/testfile2.txt".to_string(),
+            "dir/testfile3.txt".to_string(),
+        ];
+        let mut tree = Tree::new("".to_string());
+        let hash = "30d74d258442c7c65512eafab474568dd706c430".to_string();
+        let mut logger = Logger::new_dummy();
+        for path in files {
+            let vector_path = path.split("/").collect::<Vec<_>>();
+            let current_depth: usize = 0;
+            _ = tree.add_path_tree(&mut logger, vector_path, current_depth, &hash);
+        }
+        tree.remove_object_from_path("dir/testfile3.txt", &mut logger);
+        assert!(!tree.has_blob_from_path("dir/testfile3.txt", &mut logger));
     }
 
     #[test]

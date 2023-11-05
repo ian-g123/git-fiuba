@@ -10,8 +10,12 @@ use chrono::{DateTime, Local};
 
 use crate::{
     changes_controller_components::{
-        changes_controller::ChangesController, changes_types::ChangeType, format::Format,
-        long_format::LongFormat, short_format::ShortFormat, working_tree::get_path_name,
+        changes_controller::ChangesController,
+        changes_types::{self, ChangeType},
+        format::Format,
+        long_format::{sort_hashmap_and_filter_untracked, LongFormat},
+        short_format::ShortFormat,
+        working_tree::get_path_name,
     },
     command_errors::CommandError,
     config::Config,
@@ -28,7 +32,7 @@ use crate::{
     },
     objects_database::ObjectsDatabase,
     server_components::git_server::GitServer,
-    staging_area::StagingArea,
+    staging_area::{self, StagingArea},
     utils::{
         aux::{get_name, get_sha1_str},
         super_string::u8_vec_to_hex_string,
@@ -1931,11 +1935,36 @@ impl<'a> GitRepository<'a> {
         let Some(actual_hash) = self.get_last_commit_hash()? else {
             return Err(CommandError::UntrackedError(current_branch));
         };
-        let last_commit = self.get_last_commit_tree()?;
-        let current_changes =
-            ChangesController::new(&self.db()?, &self.path, &mut self.logger, last_commit)?;
+        let Some(mut last_commit) = self.get_last_commit_tree()? else {
+            return Err(CommandError::UntrackedError(current_branch));
+        };
+        self.log(&format!(
+            "Actual hash:{} tree hash {}",
+            actual_hash,
+            last_commit.clone().get_hash_string()?,
+        ));
+        let current_changes = ChangesController::new(
+            &self.db()?,
+            &self.path,
+            &mut self.logger,
+            Some(last_commit.clone()),
+        )?;
         let untracked_files = current_changes.get_untracked_files();
         let changes_not_staged = current_changes.get_changes_not_staged();
+        let changes_not_staged = get_modified_paths(changes_not_staged);
+        let changes_staged = current_changes.get_changes_to_be_commited();
+        let changes_staged = get_staged_paths_and_content(
+            changes_staged,
+            &self.staging_area()?,
+            &mut self.db()?,
+            &mut self.logger,
+        )?;
+        self.log(&format!(
+            "Current branch:{} untracked {:?}, not staged {:?}",
+            current_branch,
+            untracked_files,
+            changes_not_staged.len(),
+        ));
         //let merge_conflicts = current_changes.ge
         /*
         if !merge_conflicts.is_empty(){
@@ -1943,12 +1972,8 @@ impl<'a> GitRepository<'a> {
         }
          */
         let (new_hash, mut new_tree) = self.get_checkout_branch_info(branch, &self.db()?)?;
-        let local_new_files = add_local_new_files(
-            untracked_files,
-            changes_not_staged,
-            &mut new_tree,
-            &mut self.logger,
-        )?;
+        let local_new_files =
+            add_local_new_files(untracked_files, &mut new_tree, &mut self.logger)?;
         let mut deletions: Vec<String> = Vec::new();
         let mut modifications: Vec<String> = Vec::new();
         let mut conflicts: Vec<String> = Vec::new();
@@ -1957,6 +1982,7 @@ impl<'a> GitRepository<'a> {
         let mut common_tree = ancestor.get_tree();
 
         self.checkout_restore(
+            &mut last_commit,
             new_tree,
             &new_hash,
             branch,
@@ -1964,6 +1990,9 @@ impl<'a> GitRepository<'a> {
             &mut modifications,
             &mut conflicts,
             &mut common_tree,
+            untracked_files,
+            &changes_not_staged,
+            &changes_staged,
         )?;
         if !conflicts.is_empty() {
             self.set_checkout_local_conflicts(conflicts, untracked_files)?;
@@ -1981,6 +2010,7 @@ impl<'a> GitRepository<'a> {
         let mut untracked_conflicts: Vec<String> = Vec::new();
         let mut unstaged_conflicts: Vec<String> = Vec::new();
         for path in conflicts.iter() {
+            self.log(&format!("There is a conflict. Path: {}", path));
             if untracked_files.contains(path) {
                 untracked_conflicts.push(path.to_string());
             } else {
@@ -1994,7 +2024,7 @@ impl<'a> GitRepository<'a> {
             message += "error: The following untracked working tree files would be overwritten by checkout:\n"
         }
         for path in untracked_conflicts.iter() {
-            message += &format!("\t{}", path);
+            message += &format!("\t{}\n", path);
         }
         if !untracked_conflicts.is_empty() {
             message +=
@@ -2004,7 +2034,7 @@ impl<'a> GitRepository<'a> {
             message += "error: Your local changes to the following files would be overwritten by checkout:\n"
         }
         for path in unstaged_conflicts.iter() {
-            message += &format!("\t{}", path);
+            message += &format!("\t{}\n", path);
         }
         if !unstaged_conflicts.is_empty() {
             message += "Please move or remove them before you switch branches.\nAborting\n"
@@ -2062,6 +2092,7 @@ impl<'a> GitRepository<'a> {
 
     fn checkout_restore(
         &mut self,
+        last_tree: &mut Tree,
         mut source_tree: Tree,
         new_hash: &str,
         branch: &str,
@@ -2069,6 +2100,9 @@ impl<'a> GitRepository<'a> {
         modifications: &mut Vec<String>,
         conflicts: &mut Vec<String>,
         common: &mut Tree,
+        untracked_files: &Vec<String>,
+        unstaged_files: &Vec<String>,
+        staged: &HashMap<String, Vec<u8>>,
     ) -> Result<(), CommandError> {
         self.log("Restoring files");
 
@@ -2080,6 +2114,8 @@ impl<'a> GitRepository<'a> {
             modifications,
             conflicts,
             common,
+            unstaged_files,
+            staged,
         )?;
         self.log(&format!(
             "Deletions: {:?}, modifications: {:?}, conflicts: {:?}",
@@ -2091,6 +2127,15 @@ impl<'a> GitRepository<'a> {
         if delete {
             source_tree = Tree::new(self.path.clone());
         }
+        remove_local_changes_from_tree(untracked_files, &mut source_tree, &mut self.logger);
+        remove_new_files_commited(
+            last_tree,
+            &mut source_tree,
+            &mut self.logger,
+            untracked_files,
+            unstaged_files,
+            staged,
+        )?;
         let mut staging_area = self.staging_area()?;
         staging_area.update_to_tree(&source_tree)?;
         staging_area.save()?;
@@ -2113,6 +2158,41 @@ impl<'a> GitRepository<'a> {
 }
 
 // ----- Checkout -----
+
+fn remove_new_files_commited(
+    old_branch: &mut Tree,
+    new_branch: &mut Tree,
+    logger: &mut Logger,
+    untracked: &Vec<String>,
+    unstaged: &Vec<String>,
+    staged: &HashMap<String, Vec<u8>>,
+) -> Result<(), CommandError> {
+    for path in untracked.iter() {
+        if !old_branch.has_blob_from_path(path, logger) {
+            new_branch.remove_object_from_path(path, logger);
+            fs::remove_file(path.clone())
+                .map_err(|error| CommandError::RemoveFileError(error.to_string()))?;
+        }
+    }
+    for path in unstaged.iter() {
+        if !old_branch.has_blob_from_path(path, logger) {
+            new_branch.remove_object_from_path(path, logger);
+
+            fs::remove_file(path.clone())
+                .map_err(|error| CommandError::RemoveFileError(error.to_string()))?;
+        }
+    }
+    for (path, _) in staged.iter() {
+        if !old_branch.has_blob_from_path(path, logger) {
+            new_branch.remove_object_from_path(path, logger);
+
+            fs::remove_file(path.clone())
+                .map_err(|error| CommandError::RemoveFileError(error.to_string()))?;
+        }
+    }
+    Ok(())
+}
+
 fn has_conflicts(
     path: &str,
     new_content: &Vec<u8>,
@@ -2134,9 +2214,22 @@ fn has_conflicts(
     Ok((has_conflicts, content.as_bytes().to_vec()))
 }
 
+fn remove_local_changes_from_tree(
+    untracked_files: &Vec<String>,
+    tree: &mut Tree,
+    logger: &mut Logger,
+) {
+    for path in untracked_files.iter() {
+        logger.log(&format!(
+            "Removing untracked file {} from new branch tree",
+            path
+        ));
+        tree.remove_object_from_path(path, logger);
+    }
+}
+
 fn add_local_new_files(
     untracked_files: &Vec<String>,
-    changes_not_staged: &HashMap<String, ChangeType>,
     tree: &mut Tree,
     logger: &mut Logger,
 ) -> Result<Vec<String>, CommandError> {
@@ -2153,19 +2246,39 @@ fn add_local_new_files(
             added.push(path.to_string());
         }
     }
-    for (path, _) in changes_not_staged.iter() {
-        if !tree.has_blob_from_path(path, logger) {
-            let vector_path = path.split("/").collect::<Vec<_>>();
-            let current_depth: usize = 0;
-            let data = fs::read_to_string(path)
-                .map_err(|_| CommandError::FileReadError(path.to_string()))?;
+    Ok(added)
+}
 
-            let hash = &get_sha1_str(data.as_bytes());
-            tree.add_path_tree(logger, vector_path, current_depth, hash)?;
-            added.push(path.to_string());
+fn get_modified_paths(unstaged_changes: &HashMap<String, ChangeType>) -> Vec<String> {
+    let unstaged_changes = sort_hashmap_and_filter_untracked(unstaged_changes);
+    let mut changes: Vec<String> = Vec::new();
+
+    for (path, _) in unstaged_changes.iter() {
+        changes.push(path.to_string());
+    }
+    changes
+}
+
+fn get_staged_paths_and_content(
+    staged_changes: &HashMap<String, ChangeType>,
+    staging_area: &StagingArea,
+    db: &mut ObjectsDatabase,
+    logger: &mut Logger,
+) -> Result<HashMap<String, Vec<u8>>, CommandError> {
+    let nstaged_changes = sort_hashmap_and_filter_untracked(staged_changes);
+    let mut changes: HashMap<String, Vec<u8>> = HashMap::new();
+
+    for (path, change_type) in nstaged_changes.iter() {
+        if let ChangeType::Deleted = change_type {
+            if let Some(hash) = staging_area.get_files().get(path) {
+                let mut object = db.read_object(hash, logger)?;
+                let content = object.content(None)?;
+                changes.insert(path.to_string(), content);
+            }
         }
     }
-    Ok(added)
+
+    Ok(changes)
 }
 
 // ----- Branch -----

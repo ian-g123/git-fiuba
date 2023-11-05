@@ -80,6 +80,13 @@ impl ChangesController {
         let mut changes: HashMap<String, ChangeType> =
             Self::check_files_in_staging_area(staging_files, logger, &mut tree)?;
         Self::get_deleted_changes_index(db, last_commit_tree, staging_area, &mut changes)?;
+        logger.log(&format!(
+            "Staging area files: {:?}",
+            staging_area.get_files().keys()
+        ));
+
+        logger.log(&format!("Staging area changes: {:?}", changes.keys()));
+
         Ok(changes)
     }
 
@@ -96,8 +103,10 @@ impl ChangesController {
 
             let actual_name = get_name(path)?;
             if !has_path && !has_hash {
+                logger.log(&format!("{} was added", path));
                 _ = changes.insert(path.to_string(), ChangeType::Added);
             } else if has_path && !has_hash {
+                logger.log(&format!("{} was modified", path));
                 _ = changes.insert(path.to_string(), ChangeType::Modified);
             } else if has_path && has_hash {
                 _ = changes.insert(path.to_string(), ChangeType::Unmodified);
@@ -134,6 +143,9 @@ impl ChangesController {
             &mut wt_changes,
             logger,
         );
+        logger.log(&format!("Changes not staged: {:?}", wt_changes.keys()));
+        logger.log(&format!("untracked files: {:?}", untracked));
+
         Ok((wt_changes, untracked))
     }
 
@@ -266,9 +278,13 @@ impl ChangesController {
             && (!has_hash || (has_hash && content_differs(&path, object)?))
             && isnt_in_last_commit
         {
+            logger.log(&format!("{} is untracked", path));
+
             untracked.push(path);
             return Ok(true);
         } else if has_path && !has_hash {
+            logger.log(&format!("{} was modified", path));
+
             _ = changes.insert(path, ChangeType::Modified);
         } else if has_path && has_hash {
             _ = changes.insert(path, ChangeType::Unmodified);

@@ -121,12 +121,6 @@ pub fn change_test_scene_4_part_2(path: &str) {
 }
 
 pub fn create_test_scene_5(path: &str) {
-    /* create_base_scene(path);
-
-    let mut file = File::create(path.to_owned() + "/dir/testfile1.txt").unwrap();
-    file.write_all(b"file 1!").unwrap();
-    let mut file = File::create(path.to_owned() + "/dir/testfile2.txt").unwrap();
-    file.write_all(b"file 2!").unwrap(); */
     create_test_scene_2(path);
     let Ok(_) = fs::create_dir_all(path.to_owned() + "/dir/dir1") else {
         panic!("No se pudo crear el directorio")
@@ -145,4 +139,9 @@ pub fn create_test_scene_5(path: &str) {
 
     let mut file = File::create(path.to_owned() + "/dir/dir1/testfile6.txt").unwrap();
     file.write_all(b"file 6!").unwrap();
+}
+
+pub fn create_test_scene_checkout(path: &str){
+    create_base_scene(path);
+    
 }

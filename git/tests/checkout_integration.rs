@@ -54,6 +54,8 @@ fn test_update_pathspec() {
         .output()
         .unwrap();
 
+    check_commit(path);
+
     change_dir_testfile1_content_and_remove_dir_testfile2(path);
     let testfile1_path = format!("{}/dir/testfile1.txt", path);
     let testfile2_path = format!("{}/dir/testfile2.txt", path);
@@ -102,6 +104,7 @@ fn test_ckeckout() {
         .current_dir(path)
         .output()
         .unwrap();
+    check_commit(path);
 
     _ = Command::new("../../../../../../target/debug/git")
         .arg("branch")
@@ -119,7 +122,7 @@ fn test_ckeckout() {
         .current_dir(path)
         .output()
         .unwrap();
-
+    check_commit(path);
     let stderr = String::from_utf8(result.stderr).unwrap();
     let stdout = String::from_utf8(result.stdout).unwrap();
     println!("stderr: {}", stderr);
@@ -140,11 +143,21 @@ fn test_ckeckout() {
     file.write_all(b"file 3!").unwrap();
 
     let result = Command::new("../../../../../../target/debug/git")
+        .arg("status")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    println!("Status: {}", stdout);
+
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("checkout")
         .arg("master")
         .current_dir(path)
         .output()
         .unwrap();
+    check_commit(path);
 
     let stderr = String::from_utf8(result.stderr).unwrap();
     let stdout = String::from_utf8(result.stdout).unwrap();
@@ -159,13 +172,32 @@ fn test_ckeckout() {
     let expected = "ref: refs/heads/master".to_string();
     assert_eq!(expected, head_ref);
 
-    // overlapping changes: error
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("status")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    println!("Status: {}", stdout);
+
+    // Overlaping changes
+
     _ = Command::new("../../../../../../target/debug/git")
         .arg("add")
         .arg("dir/testfile3.txt")
         .current_dir(path)
         .output()
         .unwrap();
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("status")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    println!("Status: {}", stdout);
 
     _ = Command::new("../../../../../../target/debug/git")
         .arg("commit")
@@ -175,6 +207,7 @@ fn test_ckeckout() {
         .current_dir(path)
         .output()
         .unwrap();
+    check_commit(path);
 
     let result = Command::new("../../../../../../target/debug/git")
         .arg("status")
@@ -195,26 +228,9 @@ fn test_ckeckout() {
     let stdout = String::from_utf8(result.stdout).unwrap();
     println!("Checkout -stderr: {}", stderr);
     println!("stdout: {}", stdout);
+    check_commit(path);
 
-    let mut file = File::create(path.to_owned() + "/dir/testfile3.txt").unwrap();
-    file.write_all(b"cambio file 3!").unwrap();
-    let mut file = File::create(path.to_owned() + "/dir/testfile1.txt").unwrap();
-    file.write_all(b"cambio file 1!").unwrap();
-
-    let result = Command::new("../../../../../../target/debug/git")
-        .arg("commit")
-        .arg("-m")
-        .arg("message")
-        .arg("-a")
-        .current_dir(path)
-        .output()
-        .unwrap();
-    let stderr = String::from_utf8(result.stderr).unwrap();
-    let stdout = String::from_utf8(result.stdout).unwrap();
-    println!("Commit-stderr: {}", stderr);
-    println!("stdout: {}", stdout);
-
-    panic!("pause");
+    assert_eq!(stdout, "Switched to branch 'branch1'\n");
 
     let mut file = File::create(path.to_owned() + "/dir/testfile3.txt").unwrap();
     file.write_all(b"cambio file 3 con overlapping!").unwrap();
@@ -240,16 +256,13 @@ fn test_ckeckout() {
     println!("stderr: {}", stderr);
     println!("stdout: {}", stdout);
 
-    let expected = "error: Your local changes to the following files would be overwritten by checkout:\n\t
-dir/testfile1.txt\n\tdir/testfile3.txt\nPlease move or remove them before you switch branches.\nAborting\n".to_string();
+    let expected = "error: The following untracked working tree files would be overwritten by checkout:\n\tdir/testfile3.txt\nPlease commit your changes or stash them before you switch branches.\nAborting\nerror: Your local changes to the following files would be overwritten by checkout:\n\tdir/testfile1.txt\nPlease move or remove them before you switch branches.\nAborting\n".to_string();
 
     assert_eq!(expected, stdout);
     panic!("pause");
     let head_ref = fs::read_to_string(head_path.clone()).unwrap();
     let expected = "ref: refs/heads/master".to_string();
     assert_eq!(expected, head_ref);
-
-    panic!("pause");
 
     let testfile1_path = format!("{}/dir/testfile1.txt", path);
     let testfile2_path = format!("{}/dir/testfile2.txt", path);
@@ -275,4 +288,76 @@ dir/testfile1.txt\n\tdir/testfile3.txt\nPlease move or remove them before you sw
     assert_eq!(stderr, expected);
 
     _ = fs::remove_dir_all(format!("{}", path));
+}
+
+fn check_commit(path: &str) {
+    let head = fs::read_to_string(path.to_owned() + "/.git/HEAD").unwrap();
+    let (_, branch_ref) = head.split_once(' ').unwrap();
+    let branch_ref = branch_ref.trim();
+    println!("branch ref: {}", branch_ref);
+    let ref_path = path.to_owned() + "/.git/" + branch_ref;
+    let commit_hash = fs::read_to_string(ref_path).unwrap();
+    println!("Commit hash: {}", commit_hash.clone());
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("cat-file")
+        .arg(commit_hash)
+        .arg("-p")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let output = String::from_utf8(result.stdout).unwrap();
+    println!("Commit output: {}", output.clone());
+    let output_lines: Vec<&str> = output.split('\n').collect();
+
+    let commit_tree_info: Vec<&str> = output_lines[0].split(" ").collect();
+    let commit_tree = commit_tree_info[1];
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("cat-file")
+        .arg(commit_tree)
+        .arg("-p")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    println!(
+        "Commit tree:\nstderr: {}\nstdout: {}\n",
+        stderr,
+        stdout.clone()
+    );
+
+    let output_lines: Vec<&str> = stdout.split('\n').collect();
+
+    let dir_tree_info: Vec<&str> = output_lines[0].split(" ").collect();
+    let dir_tree = dir_tree_info[2];
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("cat-file")
+        .arg(dir_tree)
+        .arg("-p")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    println!(
+        "Commit tree:\nstderr: {}\nstdout: {}\n",
+        stderr,
+        stdout.clone()
+    );
+    /* assert_eq!(
+        output_lines[0],
+        "tree 43a028a569110ece7d1d1ee46f3d1e50fdcf7946"
+    );
+    assert!(output_lines[1]
+        .to_string()
+        .starts_with("author Foo Bar <example@email.org>"));
+    assert!(output_lines[1].to_string().ends_with(" -0300"));
+    assert!(output_lines[2]
+        .to_string()
+        .starts_with("committer Foo Bar <example@email.org>"));
+    assert!(output_lines[2].to_string().ends_with("-0300"));
+    assert_eq!(output_lines[3], ""); */
 }

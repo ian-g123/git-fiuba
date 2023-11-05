@@ -25,7 +25,7 @@ impl Format for LongFormat {
                 output_message = format!("{}\n\nNo commits yet\n", output_message)
             }
         }
-        let changes_to_be_commited = sort_hashmap(changes_to_be_commited);
+        let changes_to_be_commited = sort_hashmap_and_filter_untracked(changes_to_be_commited);
         if !changes_to_be_commited.is_empty() {
             output_message = format!(
                 "{}\nChanges to be committed:\n  (use \"git restore --staged <file>...\" to unstage)\n", output_message
@@ -36,7 +36,7 @@ impl Format for LongFormat {
             logger.log(&format!("Change to be commited: {}", path));
             output_message = format!("{}	{}:   {}\n", output_message, change, path);
         }
-        let changes_not_staged = sort_hashmap(changes_not_staged);
+        let changes_not_staged = sort_hashmap_and_filter_untracked(changes_not_staged);
         if !changes_not_staged.is_empty() {
             output_message = format!("{}\nChanges not staged for commit:\n  (use \"git add/rm <file>...\" to update what will be committed)\n  (use \"git restore <file>...\" to discard changes in working directory)\n", output_message);
         }
@@ -80,7 +80,9 @@ impl Format for LongFormat {
     }
 }
 
-fn sort_hashmap(files: &HashMap<String, ChangeType>) -> Vec<(String, ChangeType)> {
+pub fn sort_hashmap_and_filter_untracked(
+    files: &HashMap<String, ChangeType>,
+) -> Vec<(String, ChangeType)> {
     let mut keys: Vec<&String> = files.keys().collect();
     keys.sort();
 

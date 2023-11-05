@@ -109,6 +109,8 @@ pub trait GitObjectTrait {
         modifications: &mut Vec<String>,
         conflicts: &mut Vec<String>,
         common: &mut Tree,
+        unstaged_files: &Vec<String>,
+        staged: &HashMap<String, Vec<u8>>,
     ) -> Result<bool, CommandError> {
         Ok(false)
     }
