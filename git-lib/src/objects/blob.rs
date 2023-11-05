@@ -266,7 +266,6 @@ impl GitObjectTrait for Blob {
         &mut self,
         path: &str,
         logger: &mut Logger,
-        has_conflicts: fn(&str, &Vec<u8>, &Vec<u8>, &mut Tree) -> Result<bool, CommandError>,
         deletions: &mut Vec<String>,
         modifications: &mut Vec<String>,
         conflicts: &mut Vec<String>,
@@ -283,8 +282,6 @@ impl GitObjectTrait for Blob {
 
         if Path::new(path).exists() {
             let content = get_current_file_content(path)?;
-
-            let has_conflicts = has_conflicts(path, &content, &new_content, common)?;
 
             if new_content != content
                 && (unstaged_files.contains(&path.to_string()) || staged.contains_key(path))

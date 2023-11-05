@@ -153,6 +153,7 @@ pub enum CommandError {
     UpdateAndSwicth(String),
     /// error: switch `b' requires a value
     SwitchRequiresValue,
+    CheckoutConflictsError,
 }
 
 impl Error for CommandError {}
@@ -394,6 +395,9 @@ impl fmt::Display for CommandError {
                 "fatal: Cannot update paths and switch to branch '{branch}' at the same time."
             ),
             CommandError::SwitchRequiresValue => write!(f, "error: switch `b' requires a value"),
+            CommandError::CheckoutConflictsError => {
+                write!(f, "No se puede cambiar de rama. Hay conflictos")
+            }
         }
     }
 }

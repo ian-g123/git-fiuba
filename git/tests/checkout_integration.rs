@@ -1,5 +1,4 @@
 use common::aux::create_base_scene;
-use git::commands::branch;
 
 mod common {
     pub mod aux;
@@ -168,8 +167,6 @@ fn test_ckeckout() {
 
     assert_eq!(expected, stdout);
 
-    panic!("pause");
-
     let head_ref = fs::read_to_string(head_path.clone()).unwrap();
     let expected = "ref: refs/heads/master".to_string();
     assert_eq!(expected, head_ref);
@@ -268,29 +265,23 @@ fn test_ckeckout() {
 
     let testfile1_path = format!("{}/dir/testfile1.txt", path);
     let testfile2_path = format!("{}/dir/testfile2.txt", path);
+    let testfile3_path = format!("{}/dir/testfile3.txt", path);
+
     println!("testfile1: {}", testfile1_path);
     let testfile1_content = fs::read_to_string(testfile1_path.clone()).unwrap();
+    let testfile2_content = fs::read_to_string(testfile2_path.clone()).unwrap();
+    let testfile3_content = fs::read_to_string(testfile3_path.clone()).unwrap();
+
     assert_eq!(
         testfile1_content,
         "cambio file 1 con overlapping!".to_string()
     );
-    assert!(!Path::new(&testfile2_path).exists());
 
-    panic!("pause");
-
-    _ = Command::new("../../../../../../target/debug/git")
-        .arg("checkout")
-        .arg("dir/testfile1.txt")
-        .arg("dir/testfile2.txt")
-        .current_dir(path)
-        .output()
-        .unwrap();
-
-    let testfile1_content = fs::read_to_string(testfile1_path).unwrap();
-    assert_eq!(testfile1_content, "test".to_string());
-    assert!(Path::new(&testfile2_path).exists());
-
-    assert_eq!(stderr, expected);
+    assert_eq!(testfile2_content, "test".to_string());
+    assert_eq!(
+        testfile3_content,
+        "cambio file 3 con overlapping!".to_string()
+    );
 
     _ = fs::remove_dir_all(format!("{}", path));
 }

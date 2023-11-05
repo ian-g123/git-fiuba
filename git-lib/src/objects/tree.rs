@@ -110,6 +110,26 @@ impl Tree {
         deleted_blobs
     }
 
+    pub fn get_new_blobs_from_tree(
+        &mut self,
+        other_tree: &mut Tree,
+        new_files: &mut Vec<String>,
+        path: &str,
+        logger: &mut Logger,
+    ) -> Result<(), CommandError> {
+        for (name, object) in self.objects.iter_mut() {
+            let actual_path = join_paths!(path, name).ok_or(CommandError::FileCreationError(
+                "No se pudo obtener el path del objeto".to_string(),
+            ))?;
+            if let Some(tree) = object.as_mut_tree() {
+                tree.get_new_blobs_from_tree(other_tree, new_files, &actual_path, logger)?;
+            } else if !other_tree.has_blob_from_path(&actual_path, logger) {
+                new_files.push(actual_path);
+            }
+        }
+        Ok(())
+    }
+
     pub fn remove_object_from_path(&mut self, path: &str, logger: &mut Logger) {
         let mut parts: Vec<&str> = path.split_terminator("/").collect();
         self.remove_aux(&mut parts, logger);
@@ -286,7 +306,6 @@ impl Tree {
         path: &str,
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
-        let hash_str = &self.get_hash_string()?;
         for (name, object) in self.objects.iter_mut() {
             let actual_path = join_paths!(path, name).ok_or(CommandError::FileCreationError(
                 "No se pudo obtener el path del objeto".to_string(),
@@ -300,9 +319,10 @@ impl Tree {
                     logger,
                 )?;
             }
+            let hash_str = object.get_hash_string()?;
             if !working_tree.has_blob_from_path(&actual_path, logger) {
                 if let Some(mut common_object) = common.get_object_from_path(&actual_path) {
-                    if &common_object.get_hash_string()? != hash_str {
+                    if common_object.get_hash_string()? != hash_str {
                         conflicts.push(actual_path);
                     }
                 }
@@ -458,7 +478,6 @@ impl GitObjectTrait for Tree {
         &mut self,
         path: &str,
         logger: &mut Logger,
-        has_conflicts: fn(&str, &Vec<u8>, &Vec<u8>, &mut Tree) -> Result<bool, CommandError>,
         deletions: &mut Vec<String>,
         modifications: &mut Vec<String>,
         conflicts: &mut Vec<String>,
@@ -474,7 +493,6 @@ impl GitObjectTrait for Tree {
             if object.to_owned().checkout_restore(
                 &path,
                 logger,
-                has_conflicts,
                 deletions,
                 modifications,
                 conflicts,
