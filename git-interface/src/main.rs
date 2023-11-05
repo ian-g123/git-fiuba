@@ -60,7 +60,6 @@ fn main() {
     };
 
     let (staged_files, changes_file) = staged_area_func(repo_git_path.clone()).unwrap();
-
     let staging_changes = Rc::new(RefCell::new(staged_files));
     let unstaging_changes = Rc::new(RefCell::new(changes_file));
 
@@ -91,14 +90,8 @@ fn main() {
     let commits_hashes_list: gtk::ListBox = interface.builder.object("commit_hash_list").unwrap();
 
     // cargamos los botones
-    // window.add(&drawing_area);
     interface.buttons_activation();
 
-    // interface.staged_changes_display(&mut window);
-
-    // Envolver el HashSet en un RefCell y luego en un Rc
-
-    // Clonar el Rc según sea necesario
     interface.build_ui(&mut window);
 
     set_right_area(
@@ -119,10 +112,6 @@ fn main() {
 
     gtk::main();
 }
-
-// COSAS QUE VOY A USAR PARA STAGING CHANGES
-// staging_area.remove_changes
-// staging_area.get_changes
 
 impl Interface {
     fn buttons_activation<'a>(&mut self) -> Result<(), CommandError> {
@@ -209,16 +198,19 @@ impl Interface {
     fn build_ui(self, window: &gtk::Window) {
         let staging_changes: gtk::ListBox = self.builder.object("staging_list").unwrap();
         let unstaging_changes: gtk::ListBox = self.builder.object("unstaging_list").unwrap();
-        println!("{:?}", self.unstaging_changes.borrow());
+
         unstaging_changes.foreach(|child| {
             unstaging_changes.remove(child);
+        });
+        staging_changes.foreach(|child| {
+            staging_changes.remove(child);
         });
 
         for file in self.unstaging_changes.borrow().iter() {
             let file = file.clone();
             let box_outer = gtk::Box::new(Orientation::Horizontal, 0);
 
-            let label = Label::new(Some(&format!("Elemento {}", file)));
+            let label = Label::new(Some(&format!("{}", file)));
             let button_stage = Button::with_label("stage");
 
             box_outer.pack_start(&label, true, true, 0);
@@ -226,7 +218,8 @@ impl Interface {
 
             unstaging_changes.add(&box_outer);
 
-            let unstaged_changed = Rc::clone(&self.unstaging_changes);
+            let unstaging_changes = Rc::clone(&self.unstaging_changes);
+            let staging_changes = Rc::clone(&self.staging_changes);
             let builder = self.builder.clone();
             let window = window.clone();
 
@@ -234,13 +227,48 @@ impl Interface {
 
             let repo_git_path = self.repo_git_path.clone();
             button_stage.connect_clicked(move |_| {
-                let staged_file = unstaged_changed.borrow_mut().remove(&file);
-                // staging_changes.add(&box_outer);
+                _ = unstaging_changes.borrow_mut().take(&file);
+                staging_changes.borrow_mut().insert(file.clone());
+
                 let interface = Interface {
                     builder: builder.clone(),
                     repo_git_path: repo_git_path.to_string(),
-                    staging_changes: Rc::clone(&unstaged_changed),
-                    unstaging_changes: unstaged_changed.clone(),
+                    staging_changes: Rc::clone(&staging_changes),
+                    unstaging_changes: Rc::clone(&unstaging_changes),
+                };
+                interface.build_ui(&window);
+            });
+        }
+
+        for file in self.staging_changes.borrow().iter() {
+            let file = file.clone();
+            let box_outer = gtk::Box::new(Orientation::Horizontal, 0);
+
+            let label = Label::new(Some(&format!("{}", file)));
+            let button_unstage = Button::with_label("unstage");
+
+            box_outer.pack_start(&label, true, true, 0);
+            box_outer.pack_end(&button_unstage, false, false, 0);
+
+            staging_changes.add(&box_outer);
+
+            let unstaging_changes = Rc::clone(&self.unstaging_changes);
+            let staging_changes = Rc::clone(&self.staging_changes);
+            let builder = self.builder.clone();
+            let window = window.clone();
+
+            window.show_all();
+
+            let repo_git_path = self.repo_git_path.clone();
+            button_unstage.connect_clicked(move |_| {
+                _ = staging_changes.borrow_mut().take(&file);
+                unstaging_changes.borrow_mut().insert(file.clone());
+
+                let interface = Interface {
+                    builder: builder.clone(),
+                    repo_git_path: repo_git_path.to_string(),
+                    staging_changes: Rc::clone(&staging_changes),
+                    unstaging_changes: Rc::clone(&unstaging_changes),
                 };
                 interface.build_ui(&window);
             });
@@ -278,17 +306,12 @@ fn staged_area_func(
         changes_not_staged_vec.into_iter().map(|(s, _)| s).collect();
 
     let untracked_files_vec = changes_controller.get_untracked_files();
-    //let untracked_files: HashSet<String> = untracked_files_vec.iter().collect();
+
+    println!("untracked_files_vec: {:?}", untracked_files_vec);
 
     changes_not_staged.extend(untracked_files_vec.iter().cloned());
 
-    //return Ok((changes_to_be_commited, changes_not_staged));
-    let strings1 = vec!["meli.txt", "ian.txt", "sofi.txt", "patricio.txt"];
-    let hash_set1: HashSet<String> = strings1.into_iter().map(String::from).collect();
-    let strings2 = vec!["perro.txt", "gato.txt", "caballo.txt", "raton.txt"];
-    let hash_set2: HashSet<String> = strings2.into_iter().map(String::from).collect();
-
-    return Ok((hash_set1, hash_set2));
+    return Ok((changes_to_be_commited, changes_not_staged));
 }
 
 fn commit_function(repo: &GitRepository, commit_msg: String) {

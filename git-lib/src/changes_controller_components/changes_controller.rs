@@ -33,7 +33,7 @@ impl ChangesController {
         commit_tree: Option<Tree>,
     ) -> Result<ChangesController, CommandError> {
         let index = StagingArea::open(&base_path)?;
-        let working_tree = build_working_tree(base_path.to_string())?;
+        let working_tree = build_working_tree(base_path)?;
         let index_changes = Self::check_staging_area_status(db, &index, &commit_tree, logger)?;
 
         let (working_tree_changes, untracked) = Self::check_working_tree_status(
