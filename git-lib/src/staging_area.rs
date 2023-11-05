@@ -33,6 +33,17 @@ impl StagingArea {
         self.files.clone()
     }
 
+    pub fn get_hash_from_path(&self, path: &str) -> Result<String, CommandError> {
+        match self.files.get(path) {
+            Some(hash) => Ok(hash.to_string()),
+            None => Err(CommandError::RmFromStagingAreaError(path.to_string())),
+        }
+    }
+
+    fn is_in_staging_area(&self, path: &String) -> bool {
+        return self.files.get(path).is_some();
+    }
+
     pub fn get_changes(
         &self,
         last_commit_tree: &Option<Tree>,
@@ -54,6 +65,21 @@ impl StagingArea {
     }
 
     /// Dado el árbol del último commit, devuelve los archivos borrados en el staging area
+    pub fn remove_from_stagin_area(
+        &mut self,
+        path: &str,
+        logger: &mut Logger,
+    ) -> Result<(), CommandError> {
+        if !self.is_in_staging_area(&path.to_string()) {
+            return Err(CommandError::RmFromStagingAreaError(path.to_string()));
+        }
+
+        self.remove(path);
+
+        logger.log(&format!("staging_area.rm({})", path));
+        Ok(())
+    }
+
     pub fn has_changes(
         &self,
         db: &ObjectsDatabase,

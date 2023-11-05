@@ -275,7 +275,7 @@ impl Interface {
                 let mut binding = io::stdout();
                 let mut repo = GitRepository::open(&repo_git_path, &mut binding).unwrap();
                 let vec_files = vec![file.clone()];
-                repo.remove(vec_files).unwrap();
+                // repo.remove(vec_files).unwrap();
 
                 interface.build_ui(&window);
             });

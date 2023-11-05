@@ -133,6 +133,11 @@ pub enum CommandError {
     },
     /// Error al negociar paquetes con cliente
     PackageNegotiationError(String),
+    /// Error al eliminar un archivo
+    FileRemovingError(String),
+    /// Error de recursividad de comando
+    NotRecursive(String),
+    RmFromStagingAreaError(String),
 }
 
 impl Error for CommandError {}
@@ -357,6 +362,18 @@ impl fmt::Display for CommandError {
             }
             CommandError::PackageNegotiationError(msg) => {
                 write!(f, "{}", msg)
+            }
+            CommandError::NotRecursive(path) => {
+                write!(f, "No se remueve {path} recursivamente sin el flag -r")
+            }
+            CommandError::FileRemovingError(path) => {
+                write!(f, "Hay un error cerrando el archivo: {path}")
+            }
+            CommandError::RmFromStagingAreaError(path) => {
+                write!(
+                    f,
+                    "No se puede remover un archivo que no fue agregado al Staging Area: {path}"
+                )
             }
         }
     }
