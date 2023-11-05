@@ -1226,7 +1226,7 @@ impl<'a> GitRepository<'a> {
         ));
 
         let mut commit_box = self.db()?.read_object(&last_commit, &mut self.logger)?;
-        self.log("Last commit readed");
+        self.log("Last commit read");
         if let Some(commit) = commit_box.as_commit_mut() {
             self.log(&format!(
                 "Last commit content : {}",
@@ -1898,9 +1898,12 @@ impl<'a> GitRepository<'a> {
         &mut self,
         files_or_branches: Vec<String>,
     ) -> Result<(), CommandError> {
+        self.log(&format!("Checkout args: {:?}", files_or_branches));
+
         if files_or_branches.len() == 1 && self.branch_exists(&files_or_branches[0]) {
-            // checkout(&files_or_branches[0])
-            //return;
+            self.log("Switching to new branch");
+            self.checkout(&files_or_branches[0])?;
+            return Ok(());
         }
         let mut staging_area = self.staging_area()?;
         for path in files_or_branches.iter() {
@@ -1918,12 +1921,16 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    fn checkout(&mut self, branch: &str) -> Result<(), CommandError> {
-        if branch == self.get_current_branch_name()? {
-            writeln!(self.output, "Already on '{}'", branch)
+    pub fn checkout(&mut self, branch: &str) -> Result<(), CommandError> {
+        let current_branch = self.get_current_branch_name()?;
+        if branch == current_branch {
+            writeln!(self.output, "Already on '{}'", current_branch)
                 .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
             return Ok(());
         }
+        let Some(actual_hash) = self.get_last_commit_hash()? else {
+            return Err(CommandError::UntrackedError(current_branch));
+        };
         let last_commit = self.get_last_commit_tree()?;
         let current_changes =
             ChangesController::new(&self.db()?, &self.path, &mut self.logger, last_commit)?;
@@ -1946,18 +1953,64 @@ impl<'a> GitRepository<'a> {
         let mut modifications: Vec<String> = Vec::new();
         let mut conflicts: Vec<String> = Vec::new();
 
+        let (mut ancestor, _, _) = self.get_common_ansestor(&new_hash, &actual_hash)?;
+        let mut common_tree = ancestor.get_tree();
+
         self.checkout_restore(
             new_tree,
             &new_hash,
+            branch,
             &mut deletions,
             &mut modifications,
             &mut conflicts,
+            &mut common_tree,
         )?;
         if !conflicts.is_empty() {
-            // set_checkout_local_conflicts(conflicts, untracked_files, changes_not_staged)
+            self.set_checkout_local_conflicts(conflicts, untracked_files)?;
             return Ok(());
         }
         self.get_checkout_sucess_output(branch, local_new_files, deletions, modifications)?;
+        Ok(())
+    }
+
+    fn set_checkout_local_conflicts(
+        &mut self,
+        conflicts: Vec<String>,
+        untracked_files: &Vec<String>,
+    ) -> Result<(), CommandError> {
+        let mut untracked_conflicts: Vec<String> = Vec::new();
+        let mut unstaged_conflicts: Vec<String> = Vec::new();
+        for path in conflicts.iter() {
+            if untracked_files.contains(path) {
+                untracked_conflicts.push(path.to_string());
+            } else {
+                unstaged_conflicts.push(path.to_string());
+            }
+        }
+        let mut message = String::new();
+        untracked_conflicts.sort();
+        unstaged_conflicts.sort();
+        if !untracked_conflicts.is_empty() {
+            message += "error: The following untracked working tree files would be overwritten by checkout:\n"
+        }
+        for path in untracked_conflicts.iter() {
+            message += &format!("\t{}", path);
+        }
+        if !untracked_conflicts.is_empty() {
+            message +=
+                "Please commit your changes or stash them before you switch branches.\nAborting\n"
+        }
+        if !unstaged_conflicts.is_empty() {
+            message += "error: Your local changes to the following files would be overwritten by checkout:\n"
+        }
+        for path in unstaged_conflicts.iter() {
+            message += &format!("\t{}", path);
+        }
+        if !unstaged_conflicts.is_empty() {
+            message += "Please move or remove them before you switch branches.\nAborting\n"
+        }
+        write!(self.output, "{}", message)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
         Ok(())
     }
 
@@ -2011,9 +2064,11 @@ impl<'a> GitRepository<'a> {
         &mut self,
         mut source_tree: Tree,
         new_hash: &str,
+        branch: &str,
         deletions: &mut Vec<String>,
         modifications: &mut Vec<String>,
         conflicts: &mut Vec<String>,
+        common: &mut Tree,
     ) -> Result<(), CommandError> {
         self.log("Restoring files");
 
@@ -2024,7 +2079,12 @@ impl<'a> GitRepository<'a> {
             deletions,
             modifications,
             conflicts,
+            common,
         )?;
+        self.log(&format!(
+            "Deletions: {:?}, modifications: {:?}, conflicts: {:?}",
+            deletions, modifications, conflicts
+        ));
         if !conflicts.is_empty() {
             return Ok(());
         }
@@ -2034,18 +2094,42 @@ impl<'a> GitRepository<'a> {
         let mut staging_area = self.staging_area()?;
         staging_area.update_to_tree(&source_tree)?;
         staging_area.save()?;
+        self.update_ref_head(branch)?;
         update_last_commit(new_hash)?;
+        Ok(())
+    }
+
+    fn update_ref_head(&self, path: &str) -> Result<(), CommandError> {
+        let head_path = join_paths!(&self.path, ".git/HEAD")
+            .ok_or(CommandError::FileCreationError(".git/HEAD".to_string()))?;
+        let mut file = File::create(head_path)
+            .map_err(|_| CommandError::FileCreationError(".git/HEAD".to_string()))?;
+        let head_ref = format!("ref: refs/heads/{path}");
+        file.write_all(head_ref.as_bytes())
+            .map_err(|_| CommandError::FileWriteError(".git/HEAD".to_string()))?;
+
         Ok(())
     }
 }
 
 // ----- Checkout -----
-fn has_conflicts(path: &str, new_content: &Vec<u8>) -> Result<(bool, Vec<u8>), CommandError> {
+fn has_conflicts(
+    path: &str,
+    new_content: &Vec<u8>,
+    common: &mut Tree,
+) -> Result<(bool, Vec<u8>), CommandError> {
     let content = fs::read_to_string(path.clone())
         .map_err(|_| CommandError::FileReadError(path.to_string()))?;
     let new_content_str: String = String::from_utf8_lossy(new_content).to_string();
+
+    let mut common_content_str: String = "".to_string();
+    if let Some(mut common_object) = common.get_object_from_path(path) {
+        let content_u8 = common_object.content(None)?;
+        common_content_str = String::from_utf8_lossy(&content_u8).to_string();
+    }
+
     let (_, has_conflicts) =
-        merge_content(content.clone(), new_content_str, "".to_string(), "", "")?;
+        merge_content(content.clone(), new_content_str, common_content_str, "", "")?;
 
     Ok((has_conflicts, content.as_bytes().to_vec()))
 }

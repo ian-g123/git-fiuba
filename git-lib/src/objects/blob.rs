@@ -265,17 +265,19 @@ impl GitObjectTrait for Blob {
         &mut self,
         path: &str,
         logger: &mut Logger,
-        has_conflicts: fn(&str, &Vec<u8>) -> Result<(bool, Vec<u8>), CommandError>,
+        has_conflicts: fn(&str, &Vec<u8>, &mut Tree) -> Result<(bool, Vec<u8>), CommandError>,
         deletions: &mut Vec<String>,
         modifications: &mut Vec<String>,
         conflicts: &mut Vec<String>,
+        common: &mut Tree,
     ) -> Result<bool, CommandError> {
         if !Path::new(path).exists() {
             deletions.push(path.to_string());
             return Ok(true);
         }
         let content = self.content(None)?;
-        let (has_conflicts, new_content) = has_conflicts(path, &content)?;
+
+        let (has_conflicts, new_content) = has_conflicts(path, &content, common)?;
 
         if has_conflicts {
             conflicts.push(path.to_string());

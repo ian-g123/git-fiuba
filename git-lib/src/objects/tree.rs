@@ -67,31 +67,31 @@ impl Tree {
 
     pub fn has_blob_from_path(&self, path: &str, logger: &mut Logger) -> bool {
         let mut parts: Vec<&str> = path.split_terminator("/").collect();
-        return self.follow_path_in_tree(&mut parts, logger);
+        let (found, _) = self.follow_path_in_tree(&mut parts);
+        found
     }
 
-    fn follow_path_in_tree(&self, path: &mut Vec<&str>, logger: &mut Logger) -> bool {
+    fn follow_path_in_tree(&self, path: &mut Vec<&str>) -> (bool, Option<GitObject>) {
         if path.is_empty() {
-            logger.log(&format!("Path empty"));
-
-            return false;
+            return (false, None);
         }
         for (name, object) in self.get_objects().iter_mut() {
-            logger.log(&format!("Name: {}, part: {}", name, path[0]));
-
             if name == path[0] {
-                logger.log(&format!("found"));
-
                 if let Some(obj_tree) = object.as_tree() {
                     _ = path.remove(0);
-                    return obj_tree.follow_path_in_tree(path, logger);
+                    return obj_tree.follow_path_in_tree(path);
                 }
-                logger.log(&format!("return true"));
 
-                return true;
+                return (true, Some(object.to_owned()));
             }
         }
-        false
+        (false, None)
+    }
+
+    pub fn get_object_from_path(&mut self, path: &str) -> Option<GitObject> {
+        let mut parts: Vec<&str> = path.split_terminator("/").collect();
+        let (_, object_option) = self.follow_path_in_tree(&mut parts);
+        object_option
     }
 
     pub fn get_deleted_blobs_from_path(
@@ -396,10 +396,11 @@ impl GitObjectTrait for Tree {
         &mut self,
         path: &str,
         logger: &mut Logger,
-        has_conflicts: fn(&str, &Vec<u8>) -> Result<(bool, Vec<u8>), CommandError>,
+        has_conflicts: fn(&str, &Vec<u8>, &mut Tree) -> Result<(bool, Vec<u8>), CommandError>,
         deletions: &mut Vec<String>,
         modifications: &mut Vec<String>,
         conflicts: &mut Vec<String>,
+        common: &mut Tree,
     ) -> Result<bool, CommandError> {
         let mut objects = self.objects.clone();
         for (name, object) in self.objects.iter_mut() {
@@ -413,6 +414,7 @@ impl GitObjectTrait for Tree {
                 deletions,
                 modifications,
                 conflicts,
+                common,
             )? {
                 objects.remove(name);
             }

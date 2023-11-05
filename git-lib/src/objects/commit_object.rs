@@ -138,8 +138,8 @@ impl CommitObject {
         Ok(())
     }
 
-    pub fn get_tree(&self) -> &Tree {
-        &self.tree
+    pub fn get_tree(&self) -> Tree {
+        self.tree.clone()
     }
 }
 
