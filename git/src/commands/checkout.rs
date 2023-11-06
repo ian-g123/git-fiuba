@@ -1,0 +1,121 @@
+use std::io::Read;
+use std::io::Write;
+use std::str;
+use std::vec;
+
+use crate::commands::command::Command;
+use git_lib::command_errors::CommandError;
+use git_lib::git_repository::GitRepository;
+
+pub struct Checkout {
+    new_branch: Vec<String>,
+    checkout_or_update: Vec<String>,
+}
+
+impl Command for Checkout {
+    fn run_from(
+        name: &str,
+        args: &[String],
+        _: &mut dyn Read,
+        output: &mut dyn Write,
+    ) -> Result<(), CommandError> {
+        if name != "checkout" {
+            return Err(CommandError::Name);
+        }
+
+        let instance = Self::new(args)?;
+        instance.run(output)?;
+        Ok(())
+    }
+
+    fn config_adders(&self) -> Vec<fn(&mut Self, usize, &[String]) -> Result<usize, CommandError>> {
+        vec![
+            Self::add_checkout_or_update_config,
+            Self::add_new_branch_config,
+        ]
+    }
+}
+
+impl Checkout {
+    /// Crea un comando Checkout. Devuelve error si el proceso de creación falla.
+    fn new(args: &[String]) -> Result<Self, CommandError> {
+        let mut checkout = Self::new_default();
+
+        checkout.config(args)?;
+
+        Ok(checkout)
+    }
+
+    fn new_default() -> Self {
+        Self {
+            new_branch: Vec::new(),
+            checkout_or_update: Vec::new(),
+        }
+    }
+
+    /// Configura el flag para mostrar todas las ramas.
+    fn add_checkout_or_update_config(
+        &mut self,
+        i: usize,
+        args: &[String],
+    ) -> Result<usize, CommandError> {
+        if Self::is_flag(&args[i]) {
+            return Err(CommandError::WrongFlag);
+        }
+        self.checkout_or_update.push(args[i].clone());
+
+        Ok(i + 1)
+    }
+
+    /// Configura el flag para mostrar todas las ramas.
+    fn add_new_branch_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
+        let options: Vec<String> = ["-b".to_string()].to_vec();
+        Self::check_errors_flags(i, args, &options)?;
+        self.checkout_or_update.push(args[i].clone());
+        if args.len() - 1 == i {
+            return Err(CommandError::SwitchRequiresValue);
+        }
+        if args.len() > 3 || self.checkout_or_update.len() > 1 {
+            return Err(CommandError::UpdateAndSwicth(args[i + 1].clone()));
+        }
+        self.new_branch.push(args[i + 1].clone());
+        if let Some(elem) = self.checkout_or_update.pop() {
+            if !options.contains(&elem) {
+                self.new_branch.push(elem);
+            }
+        }
+        if i + 2 < args.len() {
+            self.new_branch.push(args[i + 2].clone());
+        } else if i > 0 {
+            self.new_branch.push(args[0].clone());
+        }
+
+        Ok(args.len())
+    }
+
+    /// Comprueba si el flag es invalido. En ese caso, devuelve error.
+    fn check_errors_flags(
+        i: usize,
+        args: &[String],
+        options: &[String],
+    ) -> Result<(), CommandError> {
+        if !options.contains(&args[i]) {
+            return Err(CommandError::WrongFlag);
+        }
+        Ok(())
+    }
+
+    fn run(&self, output: &mut dyn Write) -> Result<(), CommandError> {
+        let mut repo = GitRepository::open("", output)?;
+        if !self.checkout_or_update.is_empty() {
+            repo.update_files_or_checkout(self.checkout_or_update.clone())?;
+        } else if !self.new_branch.is_empty() {
+            repo.create_branch(&self.new_branch)?;
+            let name = self.new_branch[0].clone();
+            repo.checkout(&name)?;
+        } else {
+            // checkout tracking info
+        }
+        Ok(())
+    }
+}

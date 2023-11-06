@@ -6,9 +6,7 @@ use std::{
     rc::Rc,
 };
 
-use gtk::{
-    prelude::*, Button, DrawingArea, Label, ListBox, ListBoxRow, Orientation, Window, WindowType,
-};
+use gtk::{prelude::*, Button, Label, ListBox, ListBoxRow, Orientation, Window, WindowType};
 
 use git::commands::push::Push;
 use git_lib::{
@@ -36,6 +34,7 @@ struct Interface {
     repo_git_path: String,
     staging_changes: Rc<RefCell<HashSet<String>>>,
     unstaging_changes: Rc<RefCell<HashSet<String>>>,
+    window: Rc<RefCell<gtk::Window>>,
 }
 
 fn main() {
@@ -45,7 +44,7 @@ fn main() {
     }
 
     let mut output = io::stdout();
-    let repo_git_path = "./git-interface/log".to_string();
+    let repo_git_path = "".to_string();
     let glade_src = include_str!("../git interface.glade");
 
     let mut repo = match GitRepository::open(&repo_git_path, &mut output) {
@@ -57,37 +56,40 @@ fn main() {
     };
 
     let (staging_changes, unstaging_changes) = staged_area_func(repo_git_path.to_string()).unwrap();
-    let staging_changes = Rc::new(RefCell::new(staging_changes));
-    let unstaging_changes = Rc::new(RefCell::new(unstaging_changes));
+    let builder = gtk::Builder::from_string(glade_src);
+    let window: gtk::Window = builder.object("window app").unwrap();
 
     let mut interface = Interface {
-        builder: gtk::Builder::from_string(glade_src),
+        builder,
         repo_git_path,
-        staging_changes,
-        unstaging_changes,
+        staging_changes: Rc::new(RefCell::new(staging_changes)),
+        unstaging_changes: Rc::new(RefCell::new(unstaging_changes)),
+        window: Rc::new(RefCell::new(window)),
     };
-
-    let mut window: gtk::Window = interface.builder.object("window app").unwrap();
 
     let commits = match repo.get_log(true) {
         Ok(commits) => commits,
-        Err(_) => {
-            eprintln!("No se pudo conectar satisfactoriamente a un repositorio Git.");
+        Err(err) => {
+            eprintln!("Error en al presionar el botón refresh: {}", err);
             return;
         }
     };
 
-    interface.build_ui(&mut window);
-    interface.buttons_activation(&mut window);
+    interface.staged_area_ui();
+    let err_activation = interface.buttons_activation();
+    if err_activation.is_err() {
+        dialog_window(err_activation.unwrap_err().to_string());
+        return;
+    }
 
-    interface.set_right_area(commits, &mut window);
+    interface.set_right_area(commits);
 
-    window.connect_delete_event(|_, _| {
+    interface.window.borrow_mut().connect_delete_event(|_, _| {
         gtk::main_quit();
         Inhibit(false)
     });
 
-    window.show_all();
+    interface.window.borrow_mut().show_all();
     gtk::main();
 }
 
@@ -101,23 +103,23 @@ impl Interface {
         let mut binding = io::stdout();
         let mut repo = match GitRepository::open(&self.repo_git_path, &mut binding) {
             Ok(repo) => repo,
-            Err(_) => {
-                eprintln!("No se pudo conectar satisfactoriamente a un repositorio Git.");
+            Err(error) => {
+                dialog_window(error.to_string());
                 return None;
             }
         };
 
         let commits = match repo.get_log(true) {
             Ok(commits) => commits,
-            Err(_) => {
-                eprintln!("No se pudo conectar satisfactoriamente a un repositorio Git.");
+            Err(error) => {
+                dialog_window(error.to_string());
                 return None;
             }
         };
         Some(commits)
     }
 
-    fn buttons_activation<'a>(&mut self, window: &gtk::Window) -> Result<(), CommandError> {
+    fn buttons_activation<'a>(&mut self) -> Result<(), CommandError> {
         let buttons = [
             ("pull", self.build_button("pull_button".to_string())),
             ("push", self.build_button("push_button".to_string())),
@@ -129,7 +131,7 @@ impl Interface {
         ];
 
         for button in buttons.iter() {
-            self.connect_button(button.0.to_string(), &button.1, window)?;
+            self.connect_button(button.0.to_string(), &button.1)?;
         }
 
         Ok(())
@@ -145,16 +147,15 @@ impl Interface {
         &self,
         button_action: String,
         button: &gtk::Button,
-        window: &gtk::Window,
     ) -> Result<(), CommandError> {
         let repo_git_path = self.repo_git_path.clone();
         let clone_builder = self.builder.clone();
         let unstaging_changes = Rc::clone(&self.unstaging_changes);
         let staging_changes = Rc::clone(&self.staging_changes);
-        let window = window.clone();
+        let window = self.window.clone();
 
         button.connect_clicked(move |_| {
-            let mut window = window.clone();
+            let window = window.clone();
             let builder = clone_builder.clone();
             let output = io::stdout();
             let mut binding = &output;
@@ -162,7 +163,10 @@ impl Interface {
             let mut repo = match GitRepository::open(&repo_git_path, &mut binding) {
                 Ok(repo) => repo,
                 Err(_) => {
-                    eprintln!("No se pudo conectar satisfactoriamente a un repositorio Git.");
+                    dialog_window(
+                        "No se pudo conectar satisfactoriamente a un repositorio Git.".to_string(),
+                    );
+                    window.borrow_mut().hide();
                     return;
                 }
             };
@@ -176,24 +180,7 @@ impl Interface {
                         let err = err.unwrap_err();
                         message_for_pull = err.to_string() + "\nPull no pudo realizarse con éxito";
                     }
-
-                    let window = Window::new(WindowType::Toplevel);
-                    window.set_title("Refresh please");
-                    window.set_default_size(300, 200);
-
-                    let dialog = gtk::MessageDialog::new(
-                        Some(&window),
-                        gtk::DialogFlags::MODAL,
-                        gtk::MessageType::Info,
-                        gtk::ButtonsType::Close,
-                        &message_for_pull,
-                    );
-
-                    dialog.connect_response(|dialog, _| {
-                        dialog.hide();
-                    });
-
-                    dialog.run();
+                    dialog_window(message_for_pull);
                 }
                 "push" => {
                     let mut binding_for_push = &output;
@@ -217,13 +204,14 @@ impl Interface {
                         repo_git_path: repo_git_path.to_string(),
                         staging_changes: Rc::clone(&staging_changes),
                         unstaging_changes: Rc::clone(&unstaging_changes),
+                        window,
                     };
-                    interface.build_ui(&window);
+                    interface.staged_area_ui();
                     let commits = match interface.actualizar() {
                         Some(commits) => commits,
                         None => return,
                     };
-                    interface.set_right_area(commits, &mut window);
+                    interface.set_right_area(commits);
                 }
                 _ => {
                     eprintln!("Acción no reconocida: {}", button_action);
@@ -233,118 +221,100 @@ impl Interface {
         Ok(())
     }
 
-    fn build_ui(&self, window: &gtk::Window) {
+    fn staged_area_ui(&self) {
         let staging_changes: gtk::ListBox = self.builder.object("staging_list").unwrap();
         let unstaging_changes: gtk::ListBox = self.builder.object("unstaging_list").unwrap();
+
         remove_childs(&staging_changes);
         remove_childs(&unstaging_changes);
 
-        for file in self.unstaging_changes.borrow().iter() {
+        self.stage_and_unstage_ui(unstaging_changes, self.unstaging_changes.clone(), true);
+        self.stage_and_unstage_ui(staging_changes, self.staging_changes.clone(), false);
+    }
+
+    fn stage_and_unstage_ui(
+        &self,
+        list_box: ListBox,
+        files: Rc<RefCell<HashSet<String>>>,
+        is_unstaging: bool,
+    ) {
+        for file in files.borrow_mut().iter() {
             let file = file.clone();
             let box_outer = gtk::Box::new(Orientation::Horizontal, 0);
 
+            let mut button = Button::with_label("stage");
+            if !is_unstaging {
+                button = Button::with_label("unstage");
+            }
             let label = Label::new(Some(&format!("{}", file)));
-            let button_stage = Button::with_label("stage");
 
             box_outer.pack_start(&label, true, true, 0);
-            box_outer.pack_end(&button_stage, false, false, 0);
+            box_outer.pack_end(&button, false, false, 0);
 
-            unstaging_changes.add(&box_outer);
+            list_box.add(&box_outer);
 
-            let unstaging_changes = Rc::clone(&self.unstaging_changes);
-            let staging_changes = Rc::clone(&self.staging_changes);
+            let window = self.window.clone();
             let builder = self.builder.clone();
-            let window = window.clone();
+            let staging_changes = Rc::clone(&self.staging_changes);
+            let unstaging_changes = Rc::clone(&self.unstaging_changes);
 
-            window.show_all();
+            self.window.borrow_mut().show_all();
 
             let repo_git_path = self.repo_git_path.clone();
-            button_stage.connect_clicked(move |_| {
-                _ = unstaging_changes.borrow_mut().take(&file);
-                staging_changes.borrow_mut().insert(file.clone());
+            button.connect_clicked(move |_| {
+                let mut binding = io::stdout();
+                let mut repo = GitRepository::open(&repo_git_path, &mut binding).unwrap();
+                let vec_files = vec![file.clone()];
 
+                if is_unstaging {
+                    _ = unstaging_changes.borrow_mut().take(&file);
+                    staging_changes.borrow_mut().insert(file.clone());
+                    let err = repo.add(vec_files);
+                    if err.is_err() {
+                        dialog_window(err.unwrap_err().to_string());
+                        return;
+                    }
+                    println!("unstaged files: {:?}", unstaging_changes.borrow());
+                } else {
+                    _ = staging_changes.borrow_mut().take(&file);
+                    unstaging_changes.borrow_mut().insert(file.clone());
+                    repo.remove_cached(vec_files).unwrap();
+                    println!("staged files: {:?}", unstaging_changes.borrow());
+                }
                 let interface = Interface {
                     builder: builder.clone(),
                     repo_git_path: repo_git_path.to_string(),
                     staging_changes: Rc::clone(&staging_changes),
                     unstaging_changes: Rc::clone(&unstaging_changes),
+                    window: window.clone(),
                 };
-
-                let mut binding = io::stdout();
-                let mut repo = GitRepository::open(&repo_git_path, &mut binding).unwrap();
-                let vec_files = vec![file.clone()];
-                repo.add(vec_files).unwrap();
-
-                interface.build_ui(&window);
-            });
-        }
-
-        for file in self.staging_changes.borrow().iter() {
-            let file = file.clone();
-            let box_outer = gtk::Box::new(Orientation::Horizontal, 0);
-
-            let label = Label::new(Some(&format!("{}", file)));
-            let button_unstage = Button::with_label("unstage");
-
-            box_outer.pack_start(&label, true, true, 0);
-            box_outer.pack_end(&button_unstage, false, false, 0);
-
-            staging_changes.add(&box_outer);
-
-            let unstaging_changes = Rc::clone(&self.unstaging_changes);
-            let staging_changes = Rc::clone(&self.staging_changes);
-            let builder = self.builder.clone();
-            let window = window.clone();
-
-            window.show_all();
-
-            let repo_git_path = self.repo_git_path.clone();
-            button_unstage.connect_clicked(move |_| {
-                _ = staging_changes.borrow_mut().take(&file);
-                unstaging_changes.borrow_mut().insert(file.clone());
-
-                let interface = Interface {
-                    builder: builder.clone(),
-                    repo_git_path: repo_git_path.to_string(),
-                    staging_changes: Rc::clone(&staging_changes),
-                    unstaging_changes: Rc::clone(&unstaging_changes),
-                };
-
-                let mut binding = io::stdout();
-                let mut repo = GitRepository::open(&repo_git_path, &mut binding).unwrap();
-                let vec_files = vec![file.clone()];
-                repo.remove_from_staging(vec_files);
-
-                interface.build_ui(&window);
+                interface.staged_area_ui();
             });
         }
     }
 
-    fn set_right_area(
-        &mut self,
-        commits: Vec<(CommitObject, Option<String>)>,
-        window: &mut gtk::Window,
-    ) {
-        let _stagin_changes_list: gtk::ListBox = self.builder.object("staging_list").unwrap();
-        let drawing_area: gtk::DrawingArea = self.builder.object("drawing_area").unwrap();
-        let description_list: gtk::ListBox = self.builder.object("description_list").unwrap();
+    fn set_right_area(&mut self, commits: Vec<(CommitObject, Option<String>)>) {
         let date_list: gtk::ListBox = self.builder.object("date_list").unwrap();
         let author_list: gtk::ListBox = self.builder.object("author_list").unwrap();
+        let drawing_area: gtk::DrawingArea = self.builder.object("drawing_area").unwrap();
+        let _stagin_changes_list: gtk::ListBox = self.builder.object("staging_list").unwrap();
+        let description_list: gtk::ListBox = self.builder.object("description_list").unwrap();
         let commits_hashes_list: gtk::ListBox = self.builder.object("commit_hash_list").unwrap();
+
         remove_childs(&description_list);
         remove_childs(&date_list);
         remove_childs(&author_list);
         remove_childs(&commits_hashes_list);
 
-        let mut hash_sons: HashMap<String, Vec<(f64, f64)>> = HashMap::new(); // hash, Vec<(x,y)> de los hijos
-        let mut hash_branches: HashMap<String, usize> = HashMap::new();
+        let hash_sons: HashMap<String, Vec<(f64, f64)>> = HashMap::new(); // hash, Vec<(x,y)> de los hijos
+        let hash_branches: HashMap<String, usize> = HashMap::new();
 
         for (mut commit, branch) in commits {
-            add_row_to_list(&commit.get_timestamp().to_string(), &date_list);
+            add_row_to_list(&commit.get_timestamp_string(), &date_list);
             add_row_to_list(&commit.get_author(), &author_list);
             add_row_to_list(&commit.get_hash_string().unwrap(), &commits_hashes_list);
         }
-        window.show_all();
+        self.window.borrow_mut().show_all();
     }
 }
 
@@ -362,31 +332,39 @@ fn commit_function(repo: &mut GitRepository, builder: gtk::Builder) {
         .expect("No se pudo obtener la entrada de mensaje");
     let message: gtk::glib::GString = commit_entry_msg.text();
 
-    println!("commit message: {}", message);
     if message.is_empty() {
-        let window = Window::new(WindowType::Toplevel);
-        window.set_title("Empty commit message");
-        window.set_default_size(300, 200);
-
-        let dialog = gtk::MessageDialog::new(
-            Some(&window),
-            gtk::DialogFlags::MODAL,
-            gtk::MessageType::Info,
-            gtk::ButtonsType::Close,
-            "Ingrese un mensaje, por favor",
-        );
-
-        dialog.connect_response(|dialog, _| {
-            dialog.hide();
-        });
-
-        dialog.run();
+        dialog_window("No se ha ingresado un mensaje de commit".to_string());
         return;
     }
 
     commit_entry_msg.set_text("");
 
-    repo.commit(message.to_string(), &vec![], false, None, false);
+    match repo.commit(message.to_string(), &vec![], false, None, false) {
+        Ok(_) => dialog_window(
+            "Commit realizado con éxito\nRealice refresh para ver los cambios".to_string(),
+        ),
+        Err(err) => dialog_window(err.to_string()),
+    };
+}
+
+fn dialog_window(message: String) {
+    let window = Window::new(WindowType::Toplevel);
+    window.set_title(&message);
+    window.set_default_size(300, 200);
+
+    let dialog = gtk::MessageDialog::new(
+        Some(&window),
+        gtk::DialogFlags::MODAL,
+        gtk::MessageType::Info,
+        gtk::ButtonsType::Close,
+        &message,
+    );
+
+    dialog.connect_response(|dialog, _| {
+        dialog.hide();
+    });
+
+    dialog.run();
 }
 
 fn push_function(output: &mut dyn Write) {

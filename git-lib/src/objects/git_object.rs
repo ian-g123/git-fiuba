@@ -1,11 +1,14 @@
 use crate::{
-    command_errors::CommandError, logger::Logger, objects_database::ObjectsDatabase,
-    utils::super_string::u8_vec_to_hex_string,
+    changes_controller_components::changes_types::ChangeType, command_errors::CommandError,
+    logger::Logger, objects_database::ObjectsDatabase, utils::super_string::u8_vec_to_hex_string,
 };
 
 use super::{author::Author, blob::Blob, commit_object::CommitObject, mode::Mode, tree::Tree};
 use crate::utils::aux::hex_string_to_u8_vec;
-use std::io::{Read, Write};
+use std::{
+    collections::HashMap,
+    io::{Read, Write},
+};
 
 pub type GitObject = Box<dyn GitObjectTrait>;
 
@@ -95,6 +98,20 @@ pub trait GitObjectTrait {
 
     fn restore(&mut self, _path: &str, _logger: &mut Logger) -> Result<(), CommandError> {
         Ok(())
+    }
+
+    fn checkout_restore(
+        &mut self,
+        _path: &str,
+        _logger: &mut Logger,
+        deletions: &mut Vec<String>,
+        modifications: &mut Vec<String>,
+        conflicts: &mut Vec<String>,
+        common: &mut Tree,
+        unstaged_files: &Vec<String>,
+        staged: &HashMap<String, Vec<u8>>,
+    ) -> Result<bool, CommandError> {
+        Ok(false)
     }
 
     fn set_hash(&mut self, _hash: [u8; 20]) {}

@@ -1,6 +1,8 @@
 pub mod commands {
     pub mod add;
+    pub mod branch;
     pub mod cat_file;
+    pub mod checkout;
     pub mod clone;
     pub mod command;
     pub mod commit;

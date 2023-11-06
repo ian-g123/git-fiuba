@@ -1,10 +1,14 @@
 use std::{
+    collections::HashMap,
     fs::File,
     io::{Read, Write},
+    path::Path,
 };
 
 use crate::{
+    changes_controller_components::changes_types::ChangeType,
     command_errors::CommandError,
+    git_repository::get_current_file_content,
     objects_database::ObjectsDatabase,
     utils::{
         aux::get_name,
@@ -258,8 +262,61 @@ impl GitObjectTrait for Blob {
         Ok(())
     }
 
-    fn set_hash(&mut self, sha1: [u8; 20]) {
-        self.hash = Some(sha1.clone());
+    fn checkout_restore(
+        &mut self,
+        path: &str,
+        logger: &mut Logger,
+        deletions: &mut Vec<String>,
+        modifications: &mut Vec<String>,
+        conflicts: &mut Vec<String>,
+        common: &mut Tree,
+        unstaged_files: &Vec<String>,
+        staged: &HashMap<String, Vec<u8>>,
+    ) -> Result<bool, CommandError> {
+        if !Path::new(path).exists() && unstaged_files.contains(&path.to_string()) {
+            logger.log(&format!("This file was deleted: {}", path));
+            deletions.push(path.to_string());
+            return Ok(true);
+        }
+        let mut new_content = self.content(None)?;
+
+        if Path::new(path).exists() {
+            let content = get_current_file_content(path)?;
+
+            if new_content != content
+                && (unstaged_files.contains(&path.to_string()) || staged.contains_key(path))
+            {
+                logger.log(&format!("Unstaged: {:?}", unstaged_files));
+
+                logger.log(&format!("This file was modified: {}", path));
+
+                modifications.push(path.to_string());
+
+                new_content = content;
+            }
+        }
+        let mut file = File::create(path).map_err(|error| {
+            CommandError::FileOpenError(format!(
+                "Error al crear archivo {}: {}",
+                path,
+                error.to_string()
+            ))
+        })?;
+
+        file.write_all(&new_content).map_err(|error| {
+            CommandError::FileWriteError(format!(
+                "Error al escribir archivo {}: {}",
+                path,
+                error.to_string()
+            ))
+        })?;
+
+        if let Some(staged_content) = staged.get(path) {
+            self.content = Some(staged_content.to_vec());
+            self.hash = Some(get_sha1(&staged_content));
+        }
+
+        Ok(false)
     }
 }
 

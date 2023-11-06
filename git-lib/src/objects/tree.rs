@@ -13,7 +13,7 @@ use crate::{join_paths, logger::Logger};
 use super::{
     author::Author,
     blob::Blob,
-    git_object::{GitObject, GitObjectTrait},
+    git_object::{self, GitObject, GitObjectTrait},
     mode::Mode,
 };
 
@@ -65,40 +65,34 @@ impl Tree {
         Ok((false, "".to_string()))
     }
 
-    pub fn has_blob_from_path(&self, path: &str, logger: &mut Logger) -> (bool, Option<String>) {
-        let mut parts: Vec<&str> = path.split_terminator("/").collect();
-        return self.follow_path_in_tree(&mut parts, logger);
+    pub fn has_blob_from_path(&self, path: &str, logger: &mut Logger) -> bool {
+        let mut parts = path.split_terminator("/").collect();
+        logger.log(&format!("Path buscado: {}", path));
+        let (found, git_object_option) = self.follow_path_in_tree(&mut parts);
+        found
     }
 
-    fn follow_path_in_tree(
-        &self,
-        path: &mut Vec<&str>,
-        logger: &mut Logger,
-    ) -> (bool, Option<String>) {
+    fn follow_path_in_tree(&self, path: &mut Vec<&str>) -> (bool, Option<GitObject>) {
         if path.is_empty() {
-            logger.log(&format!("Path empty"));
-            return (false, None)
+            return (false, None);
         }
         for (name, object) in self.get_objects().iter_mut() {
-            logger.log(&format!("Name: {}, part: {}", name, path[0]));
-
             if name == path[0] {
-                logger.log(&format!("found"));
-
                 if let Some(obj_tree) = object.as_tree() {
                     _ = path.remove(0);
-                    return obj_tree.follow_path_in_tree(path, logger);
+                    return obj_tree.follow_path_in_tree(path);
                 }
-                logger.log(&format!("return true"));
-                let hash_res = match object.get_hash_string() {
-                    Ok(hash) => Some(hash),
-                    Err(_) => None,
-                };
 
-                return (true, hash_res);
+                return (true, Some(object.to_owned()));
             }
         }
         (false, None)
+    }
+
+    pub fn get_object_from_path(&mut self, path: &str) -> Option<GitObject> {
+        let mut parts: Vec<&str> = path.split_terminator("/").collect();
+        let (_, object_option) = self.follow_path_in_tree(&mut parts);
+        object_option
     }
 
     pub fn get_deleted_blobs_from_path(
@@ -109,30 +103,60 @@ impl Tree {
         let mut deleted_blobs: Vec<String> = Vec::new();
         for file in files.iter() {
             logger.log(&format!("Path buscado: {}", file));
-            if !self.has_blob_from_path(file, logger).0 {
-                logger.log(&format!("No encontrado: {}", file));
-
+            if !self.has_blob_from_path(file, logger) {
                 deleted_blobs.push(file.to_string());
             }
         }
         deleted_blobs
     }
 
-    /* fn a(&self, path: &mut Vec<&str>, files: Vec<&String>) -> bool {
-        if path.is_empty() {
-            return false;
-        }
-        for (name, object) in self.get_objects().iter_mut() {
-            if name == path[0] {
-                if let Some(obj_tree) = object.as_tree() {
-                    _ = path.remove(0);
-                    return obj_tree.a(path);
-                }
-                return true;
+    pub fn get_new_blobs_from_tree(
+        &mut self,
+        other_tree: &mut Tree,
+        new_files: &mut Vec<String>,
+        path: &str,
+        logger: &mut Logger,
+    ) -> Result<(), CommandError> {
+        for (name, object) in self.objects.iter_mut() {
+            let actual_path = join_paths!(path, name).ok_or(CommandError::FileCreationError(
+                "No se pudo obtener el path del objeto".to_string(),
+            ))?;
+            if let Some(tree) = object.as_mut_tree() {
+                tree.get_new_blobs_from_tree(other_tree, new_files, &actual_path, logger)?;
+            } else if !other_tree.has_blob_from_path(&actual_path, logger) {
+                new_files.push(actual_path);
             }
         }
-        false
-    } */
+        Ok(())
+    }
+
+    pub fn remove_object_from_path(&mut self, path: &str, logger: &mut Logger) {
+        let mut parts: Vec<&str> = path.split_terminator("/").collect();
+        self.remove_aux(&mut parts, logger);
+    }
+
+    fn remove_aux(&mut self, path: &mut Vec<&str>, logger: &mut Logger) {
+        if path.is_empty() {
+            return;
+        }
+
+        for (name, object) in self.get_objects().iter_mut() {
+            if name == path[0] {
+                if let Some(obj_tree) = object.as_mut_tree() {
+                    _ = path.remove(0);
+                    obj_tree.remove_aux(path, logger);
+                    if !obj_tree.get_objects().contains_key(name) {
+                        logger.log("Path removed sucessfully");
+                    }
+                    let boxed_tree: GitObject = Box::new(obj_tree.to_owned());
+                    self.objects.insert(name.to_string(), boxed_tree);
+                    return;
+                }
+                self.objects.remove(name);
+                break;
+            }
+        }
+    }
 
     pub fn add_path_tree(
         &mut self,
@@ -272,6 +296,40 @@ impl Tree {
             }
         }
         sorted_objects
+    }
+
+    pub fn look_for_checkout_deletions_conflicts(
+        &mut self,
+        working_tree: &mut Tree,
+        common: &mut Tree,
+        conflicts: &mut Vec<String>,
+        working_dir_path: &str,
+        logger: &mut Logger,
+    ) -> Result<(), CommandError> {
+        for (name, object) in self.objects.iter_mut() {
+            let actual_path =
+                join_paths!(working_dir_path, name).ok_or(CommandError::FileCreationError(
+                    "No se pudo obtener el path del objeto".to_string(),
+                ))?;
+            if let Some(tree) = object.as_mut_tree() {
+                tree.look_for_checkout_deletions_conflicts(
+                    working_tree,
+                    common,
+                    conflicts,
+                    &actual_path,
+                    logger,
+                )?;
+            }
+            let hash_str = object.get_hash_string()?;
+            if !working_tree.has_blob_from_path(&actual_path, logger) {
+                if let Some(mut common_object) = common.get_object_from_path(&actual_path) {
+                    if common_object.get_hash_string()? != hash_str {
+                        conflicts.push(actual_path);
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -417,6 +475,42 @@ impl GitObjectTrait for Tree {
         Ok(())
     }
 
+    fn checkout_restore(
+        &mut self,
+        path: &str,
+        logger: &mut Logger,
+        deletions: &mut Vec<String>,
+        modifications: &mut Vec<String>,
+        conflicts: &mut Vec<String>,
+        common: &mut Tree,
+        unstaged_files: &Vec<String>,
+        staged: &HashMap<String, Vec<u8>>,
+    ) -> Result<bool, CommandError> {
+        let mut objects = self.objects.clone();
+        for (name, object) in self.objects.iter_mut() {
+            let path = join_paths!(path, name).ok_or(CommandError::FileWriteError(
+                "No se pudo encontrar el path".to_string(),
+            ))?;
+            if object.to_owned().checkout_restore(
+                &path,
+                logger,
+                deletions,
+                modifications,
+                conflicts,
+                common,
+                unstaged_files,
+                staged,
+            )? {
+                objects.remove(name);
+            }
+        }
+        self.objects = objects;
+        if self.objects.is_empty() {
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
     fn set_hash(&mut self, hash: [u8; 20]) {
         self.hash = Some(hash);
     }
@@ -544,6 +638,25 @@ mod tests {
         /* let result = tree.has_blob_from_path("dir0/dir1/dir2/barrrr.txt");
 
         assert!(!result) */
+    }
+
+    #[test]
+    fn remove_object_from_path() {
+        let files = [
+            "dir/testfile1.txt".to_string(),
+            "dir/testfile2.txt".to_string(),
+            "dir/testfile3.txt".to_string(),
+        ];
+        let mut tree = Tree::new("".to_string());
+        let hash = "30d74d258442c7c65512eafab474568dd706c430".to_string();
+        let mut logger = Logger::new_dummy();
+        for path in files {
+            let vector_path = path.split("/").collect::<Vec<_>>();
+            let current_depth: usize = 0;
+            _ = tree.add_path_tree(&mut logger, vector_path, current_depth, &hash);
+        }
+        tree.remove_object_from_path("dir/testfile3.txt", &mut logger);
+        assert!(!tree.has_blob_from_path("dir/testfile3.txt", &mut logger));
     }
 
     #[test]

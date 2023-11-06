@@ -1,4 +1,8 @@
-use std::{fs, process::Command};
+use std::{
+    fs::{self, File},
+    io::{Error, Read, Write},
+    process::Command,
+};
 
 use common::aux::create_base_scene;
 
@@ -296,3 +300,81 @@ fn test_untracked_folder() {
 
     _ = fs::remove_dir_all(format!("{}", path));
 }
+
+#[test]
+fn test_status_remote_info() {
+    let path = "./tests/data/commands/status/repo8";
+    create_base_scene(path);
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("status")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    let result = String::from_utf8(result.stderr).unwrap();
+    println!("{}", result);
+    //_ = fs::remove_dir_all(format!("{}", path));
+}
+
+/* #[test]
+fn test_status_unmerged() {
+    let path = "./tests/data/commands/status/repo9";
+    create_base_scene_merge(path);
+    //_ = fs::remove_dir_all(format!("{}", path));
+}
+
+fn create_base_scene_merge(path: &str) {
+    _ = fs::remove_dir_all(format!("{}/server-files/repo", path));
+    _ = fs::remove_dir_all(format!("{}/repo", path));
+
+    let Ok(_) = fs::create_dir_all(path.clone()) else {
+        panic!("No se pudo crear el directorio")
+    };
+
+    let Ok(_) = fs::create_dir_all(format!("{}/server-files/repo", path)) else {
+        panic!("No se pudo crear el directorio")
+    };
+
+    assert!(
+        Command::new("git")
+            .arg("init")
+            .arg("-q")
+            .current_dir(path.to_owned() + "/server-files/repo")
+            .status()
+            .is_ok(),
+        "No se pudo inicializar el repositorio"
+    );
+
+    let mut file = fs::File::create(path.to_owned() + "/server-files/repo/testfile").unwrap();
+    file.write_all(b"contenido\n").unwrap();
+
+    assert!(
+        Command::new("git")
+            .arg("add")
+            .arg("testfile")
+            .current_dir(path.to_owned() + "/server-files/repo")
+            .status()
+            .is_ok(),
+        "No se pudo agregar el archivo testfile"
+    );
+
+    assert!(
+        Command::new("git")
+            .arg("commit")
+            .arg("-m")
+            .arg("hi")
+            .current_dir(path.to_owned() + "/server-files/repo")
+            .status()
+            .is_ok(),
+        "No se pudo hacer commit"
+    );
+
+    assert!(
+        Command::new("touch")
+            .arg("git-daemon-export-ok")
+            .current_dir(path.to_owned() + "/server-files/repo/.git")
+            .status()
+            .is_ok(),
+        "No se pudo crear el archivo testfile"
+    );
+}
+ */

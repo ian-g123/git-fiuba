@@ -1,4 +1,4 @@
-use std::{fs, path::Path, process::Command};
+use std::{fs, io::Write, path::Path, process::Command};
 
 use git_lib::staging_area::StagingArea;
 
@@ -59,37 +59,15 @@ fn test_single_file() {
 fn create_test_scene_1(path: &str) {
     create_base_scene(path);
 
-    let Ok(_) = fs::copy(
-        "tests/data/commands/rm/testfile.txt",
-        &(path.to_owned() + "/testfile.txt"),
-    ) else {
-        panic!("No se pudo copiar el archivo")
-    };
+    let file = fs::File::create(path.to_owned() + "/testfile.txt");
+    match file {
+        Ok(mut file) => {
+            let _ = file.write_all(b"test");
+        }
+        Err(error) => panic!("No se pudo crear el archivo: {:?}", error),
+    }
 
     assert!(Path::new(&(path.to_owned() + "/testfile.txt")).exists())
-}
-
-fn create_test_scene_2(path: &str) {
-    create_base_scene(path);
-
-    let Ok(_) = fs::create_dir_all(path.to_owned() + "/dir/") else {
-        panic!("No se pudo crear el directorio")
-    };
-    let Ok(_) = fs::copy(
-        "tests/data/commands/add/dir/testfile1.txt",
-        &(path.to_owned() + "/dir/testfile1.txt"),
-    ) else {
-        panic!("No se pudo copiar el archivo")
-    };
-    let Ok(_) = fs::copy(
-        "tests/data/commands/add/dir/testfile2.txt",
-        &(path.to_owned() + "/dir/testfile2.txt"),
-    ) else {
-        panic!("No se pudo copiar el archivo")
-    };
-
-    assert!(Path::new(&(path.to_owned() + "/dir/testfile1.txt")).exists());
-    assert!(Path::new(&(path.to_owned() + "/dir/testfile2.txt")).exists())
 }
 
 fn create_base_scene(path: &str) {

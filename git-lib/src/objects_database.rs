@@ -28,9 +28,15 @@ impl ObjectsDatabase {
         _logger: &mut Logger,
     ) -> Result<String, CommandError> {
         let mut data = Vec::new();
+        let current_dir = std::env::current_dir().unwrap();
+        println!("current_dir: {:?}", current_dir);
+        println!("db path: {:?}", self.db_path);
         if recursive {
+            println!("casii");
             git_object.write_to(&mut data, Some(self))?;
         } else {
+            println!("casii2");
+            
             git_object.write_to(&mut data, None)?;
         };
         let hash_str = get_sha1_str(&data);

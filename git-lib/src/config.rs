@@ -99,4 +99,8 @@ impl Config {
             self.entries.insert(domain.to_string(), configs);
         }
     }
+
+    pub fn remove_domain(&mut self, domain: &str) {
+        _ = self.entries.remove(domain)
+    }
 }

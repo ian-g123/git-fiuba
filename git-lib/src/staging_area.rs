@@ -41,7 +41,13 @@ impl StagingArea {
     }
 
     pub fn is_in_staging_area(&self, path: &String) -> bool {
-        return self.files.get(path).is_some();
+        return self.files.contains_key(path);
+    }
+
+    pub fn get_unmerged_files(
+        &self,
+    ) -> HashMap<String, (Option<String>, Option<String>, Option<String>)> {
+        self.unmerged_files.clone()
     }
 
     pub fn get_changes(
@@ -90,10 +96,7 @@ impl StagingArea {
         Ok(changes + deleted_files.len() > 0)
     }
 
-    pub fn get_deleted_files(
-        &self,
-        last_commit_tree: &Option<Tree>,
-    ) -> Vec<String> {
+    pub fn get_deleted_files(&self, last_commit_tree: &Option<Tree>) -> Vec<String> {
         let mut deleted: Vec<String> = Vec::new();
         if let Some(mut tree) = last_commit_tree.clone() {
             self.check_deleted_from_commit(&mut tree, &mut deleted, "".to_string())
