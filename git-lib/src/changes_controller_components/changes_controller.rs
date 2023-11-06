@@ -18,6 +18,7 @@ pub struct ChangesController {
     index_changes: HashMap<String, ChangeType>,
     working_tree_changes: HashMap<String, ChangeType>,
     untracked: Vec<String>,
+    unmerged_changes: HashMap<String, ChangeType>,
 }
 
 impl ChangesController {
@@ -39,11 +40,12 @@ impl ChangesController {
             logger,
             &index_changes,
         )?;
-
+        let unmerged_changes = Self::check_unmerged_paths(&index, logger)?;
         Ok(Self {
             index_changes,
             working_tree_changes,
             untracked,
+            unmerged_changes,
         })
     }
 
@@ -60,6 +62,43 @@ impl ChangesController {
     /// Devuelve los archivos desconocidos para git.
     pub fn get_untracked_files(&self) -> &Vec<String> {
         &self.untracked
+    }
+
+    /// Devuelve los cambios que no están mergeados.
+    pub fn get_unmerged_changes(&self) -> &HashMap<String, ChangeType> {
+        &self.unmerged_changes
+    }
+
+    /// Recolecta información sobre los merge conflicts
+    fn check_unmerged_paths(
+        staging_area: &StagingArea,
+        logger: &mut Logger,
+    ) -> Result<HashMap<String, ChangeType>, CommandError> {
+        let mut changes: HashMap<String, ChangeType> = HashMap::new();
+        let unmerged_files = staging_area.get_unmerged_files();
+        for (path, (common, head, destin)) in unmerged_files.iter() {
+            let path_str = path.to_string();
+            match (common, head, destin) {
+                (Some(_), Some(_), Some(_)) => {
+                    _ = changes.insert(path_str, ChangeType::ModifiedByBoth);
+                }
+                (None, Some(_), Some(_)) => {
+                    _ = changes.insert(path_str, ChangeType::AddedByBoth);
+                }
+                (Some(_), Some(_), None) => {
+                    _ = changes.insert(path_str, ChangeType::DeletedByThen);
+                }
+                (Some(_), None, Some(_)) => {
+                    _ = changes.insert(path_str, ChangeType::DeletedByUs);
+                }
+                _ => {
+                    return Err(CommandError::MergeConflict(
+                        "Invalid merge conflict".to_string(),
+                    ))
+                }
+            }
+        }
+        Ok(changes)
     }
 
     /// Obtiene los cambios que se incluirán en el próximo commit.
