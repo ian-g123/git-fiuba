@@ -1,8 +1,9 @@
 extern crate gtk;
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     io::{self, Write},
+    ops::ControlFlow,
     rc::Rc,
 };
 
@@ -43,62 +44,118 @@ fn main() {
         return;
     }
 
-    let mut output = io::stdout();
-    let repo_git_path = "".to_string();
+    let repo_dir_text = "".to_string();
     let glade_src = include_str!("../git interface.glade");
+    let builder = gtk::Builder::from_string(glade_src);
 
+    let inicial_window: gtk::Window = builder.object("inicial_window").unwrap();
+    inicial_window.show_all();
+
+    let inicial_apply: gtk::Button = builder.object("apply_button_inicial").unwrap();
+    let repo_dir: gtk::Entry = builder.object("entry_for_inicial").unwrap();
+    let correct_path = false;
+
+    let rc_repo_dir_text = Rc::new(RefCell::new(repo_dir_text));
+    let rc_correct_path = Rc::new(RefCell::new(correct_path));
+    let rc_builder = Rc::new(RefCell::new(builder));
+
+    let clone_rc_repo_dir_text = rc_repo_dir_text.clone();
+
+    ventana_inicial(
+        inicial_apply,
+        rc_correct_path,
+        clone_rc_repo_dir_text,
+        inicial_window,
+        repo_dir,
+    );
+    git_interface(rc_repo_dir_text.borrow_mut().to_string(), rc_builder);
+    gtk::main();
+}
+
+fn ventana_inicial(
+    inicial_apply: Button,
+    rc_correct_path: Rc<RefCell<bool>>,
+    clone_rc_repo_dir_text: Rc<RefCell<String>>,
+    inicial_window: Window,
+    repo_dir: gtk::Entry,
+) {
+    let clone_rc_correct_path = rc_correct_path.clone();
+    inicial_apply.connect_clicked(move |_| {
+        let clone_correct_path_clone = clone_rc_correct_path.clone();
+        let repo_dir_text_clone = clone_rc_repo_dir_text.clone();
+        // let inicial_window = inicial_window.clone();
+        let repo_dir = repo_dir.clone();
+
+        let repo_dir = repo_dir.clone();
+        let repo_dir_text = repo_dir.text().to_string();
+        println!("repo_dir_text: {:?}", repo_dir_text);
+        // let inicial_window = inicial_window.clone();
+        let mut binding = io::stdout();
+        if GitRepository::open(&repo_dir_text, &mut binding).is_err() {
+            repo_dir.set_text("");
+            dialog_window(
+                format!(
+                    "No se pudo conectar satisfactoriamente a un repositorio Git en {}",
+                    repo_dir_text_clone.borrow_mut()
+                )
+                .to_string(),
+            );
+        } else {
+            *clone_correct_path_clone.borrow_mut() = true;
+            inicial_window.hide();
+            gtk::main_quit();
+        }
+    });
+    gtk::main();
+}
+
+fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> ControlFlow<()> {
+    let mut output = io::stdout();
     let mut repo = match GitRepository::open(&repo_git_path, &mut output) {
         Ok(repo) => repo,
         Err(_) => {
             eprintln!("No se pudo conectar satisfactoriamente a un repositorio Git.");
-            return;
+            return ControlFlow::Break(());
         }
     };
-
     let (staging_changes, unstaging_changes) = staged_area_func(repo_git_path.to_string()).unwrap();
-    let builder = gtk::Builder::from_string(glade_src);
-    let window: gtk::Window = builder.object("window app").unwrap();
+    let window: gtk::Window = builder.borrow_mut().object("window app").unwrap();
 
+    let builder_interface = builder.borrow_mut().clone();
     let mut interface = Interface {
-        builder,
+        builder: builder_interface,
         repo_git_path,
         staging_changes: Rc::new(RefCell::new(staging_changes)),
         unstaging_changes: Rc::new(RefCell::new(unstaging_changes)),
         window: Rc::new(RefCell::new(window)),
     };
-
     let commits = match repo.get_log(true) {
         Ok(commits) => commits,
         Err(err) => {
-            eprintln!("Error en al presionar el botón refresh: {}", err);
-            return;
+            dialog_window(err.to_string());
+            return ControlFlow::Break(());
         }
     };
-
     interface.staged_area_ui();
     let err_activation = interface.buttons_activation();
     if err_activation.is_err() {
         dialog_window(err_activation.unwrap_err().to_string());
-        return;
+        return ControlFlow::Break(());
     }
-
     interface.set_right_area(commits);
-
     interface.window.borrow_mut().connect_delete_event(|_, _| {
         gtk::main_quit();
         Inhibit(false)
     });
-
     interface.window.borrow_mut().show_all();
-    gtk::main();
+
+    ControlFlow::Continue(())
 }
 
 impl Interface {
     fn actualizar(&mut self) -> Option<Vec<(CommitObject, Option<String>)>> {
         let (staging_changes, unstaging_changes) =
             staged_area_func(self.repo_git_path.to_string()).unwrap();
-        print!("stage: {:?}",staging_changes);
-        print!("unstage: {:?}",unstaging_changes);
         self.staging_changes = Rc::new(RefCell::new(staging_changes));
         self.unstaging_changes = Rc::new(RefCell::new(unstaging_changes));
 
@@ -186,16 +243,28 @@ impl Interface {
                 }
                 "push" => {
                     let mut binding_for_push = &output;
-                    push_function(&mut binding_for_push);
+                    let result_for_push = push_function(&mut binding_for_push);
+                    if result_for_push.is_err() {
+                        dialog_window(result_for_push.unwrap_err().to_string());
+                        return;
+                    }
                 }
                 "fetch" => {
                     if let Err(err) = repo.fetch() {
-                        eprintln!("Error en al presionar el botón fetch: {}", err);
+                        dialog_window(err.to_string());
+                        return;
                     }
-                    println!("se presionó fetch");
+                    dialog_window("Fetch realizado con éxito".to_string());
                 }
                 "branch" => {
-                    println!("se presionó branch");
+                    let mut interface = Interface {
+                        builder: builder.clone(),
+                        repo_git_path: repo_git_path.to_string(),
+                        staging_changes: Rc::clone(&staging_changes),
+                        unstaging_changes: Rc::clone(&unstaging_changes),
+                        window,
+                    };
+                    interface.branch_function();
                 }
                 "commit" => {
                     commit_function(&mut repo, builder);
@@ -215,6 +284,9 @@ impl Interface {
                     };
                     interface.set_right_area(commits);
                     interface.staged_area_ui();
+                }
+                "checkout" => {
+                    todo!();
                 }
                 _ => {
                     eprintln!("Acción no reconocida: {}", button_action);
@@ -309,8 +381,8 @@ impl Interface {
         remove_childs(&author_list);
         remove_childs(&commits_hashes_list);
 
-        let hash_sons: HashMap<String, Vec<(f64, f64)>> = HashMap::new(); // hash, Vec<(x,y)> de los hijos
-        let hash_branches: HashMap<String, usize> = HashMap::new();
+        // let hash_sons: HashMap<String, Vec<(f64, f64)>> = HashMap::new(); // hash, Vec<(x,y)> de los hijos
+        // let hash_branches: HashMap<String, usize> = HashMap::new();
 
         for (mut commit, branch) in commits {
             add_row_to_list(&commit.get_timestamp_string(), &date_list);
@@ -319,6 +391,55 @@ impl Interface {
             add_row_to_list(&commit.get_message(), &description_list);
         }
         self.window.borrow_mut().show_all();
+    }
+
+    fn branch_function(&mut self) {
+        let branch_window: gtk::Window = self.builder.object("branch_window").unwrap();
+        let branches_list: gtk::ListBox = self.builder.object("branches_list").unwrap();
+        let apply_button: gtk::Button = self.builder.object("apply_button").unwrap();
+        let mut binding = io::stdout();
+        let Ok(mut repo) = GitRepository::open(&self.repo_git_path, &mut binding) else {
+            dialog_window(
+                "No se pudo conectar satisfactoriamente a un repositorio Git.".to_string(),
+            );
+            return;
+        };
+        let local_branches = match repo.local_branches() {
+            Ok(local_branches) => local_branches,
+            Err(err) => {
+                dialog_window(err.to_string());
+                return;
+            }
+        };
+        for branch in &local_branches {
+            add_row_to_list(&branch.0, &branches_list);
+        }
+        branch_window.show_all();
+        let name_branch: gtk::Entry = self.builder.object("entry_for_new_branch").unwrap();
+
+        let repo_git_path = self.repo_git_path.clone();
+        apply_button.connect_clicked(move |_| {
+            let mut binding = io::stdout();
+            let Ok(mut repo) = GitRepository::open(&repo_git_path, &mut binding) else {
+                dialog_window(
+                    "No se pudo conectar satisfactoriamente a un repositorio Git.".to_string(),
+                );
+                return;
+            };
+            let name_branch_text = name_branch.text();
+            if name_branch_text.is_empty() {
+                dialog_window("No se ha ingresado un nombre para la rama".to_string());
+                return;
+            }
+            let vec_branch = vec![name_branch_text.to_string()];
+            println!("vec_branch: {:?}", vec_branch);
+            match repo.create_branch(&vec_branch) {
+                Ok(_) => dialog_window("Rama creada con éxito".to_string()),
+                Err(err) => dialog_window(err.to_string()),
+            };
+            remove_childs(&branches_list);
+            branch_window.hide();
+        });
     }
 }
 
@@ -371,9 +492,9 @@ fn dialog_window(message: String) {
     dialog.run();
 }
 
-fn push_function(output: &mut dyn Write) {
+fn push_function(output: &mut dyn Write) -> Result<(), CommandError> {
     let push = Push::new_default(output).unwrap();
-    push.run(output).unwrap();
+    push.run(output)
 }
 
 fn remove_childs(list: &ListBox) {

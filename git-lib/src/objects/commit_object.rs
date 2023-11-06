@@ -12,7 +12,11 @@ use crate::{
         super_string::u8_vec_to_hex_string,
     },
 };
-use std::io::{Cursor, Read, Write};
+use std::{
+    cmp::Ordering,
+    collections::{HashMap, HashSet},
+    io::{Cursor, Read, Write},
+};
 
 extern crate chrono;
 use chrono::{prelude::*, DateTime};
@@ -663,6 +667,36 @@ fn print_merge_commit_for_log(
 //         hash: Some(hex_string_to_u8_vec(hash_commit)),
 //     })
 // }
+
+pub fn sort_commits_descending_date2(
+    vec_commits: &mut Vec<(CommitObject, Option<String>)>,
+    parents_hash: &mut HashMap<String, HashSet<String>>,
+) {
+    vec_commits.sort_by(|a, b| {
+        // Comparar por timestamp en orden descendente
+        let timestamp_order = b.0.timestamp.cmp(&a.0.timestamp);
+        if timestamp_order != Ordering::Equal {
+            return timestamp_order;
+        }
+
+        // Si los timestamps son iguales, comparar por inclusión en el HashSet
+        match (&a.1, &b.1) {
+            (Some(parent_a), Some(parent_b)) => {
+                println!("parent_a: {:?}, parent_b: {:?}", parent_a, parent_b);
+                if parents_hash[parent_a].contains(parent_b) {
+                    Ordering::Greater
+                } else if parents_hash[parent_b].contains(parent_a) {
+                    Ordering::Less
+                } else {
+                    Ordering::Equal
+                }
+            }
+            (Some(_), None) => Ordering::Less,
+            (None, Some(_)) => Ordering::Greater,
+            (None, None) => Ordering::Equal,
+        }
+    });
+}
 
 pub fn sort_commits_descending_date(vec_commits: &mut Vec<(CommitObject, Option<String>)>) {
     vec_commits.sort_by(|a, b| b.0.timestamp.cmp(&a.0.timestamp));

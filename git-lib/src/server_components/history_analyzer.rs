@@ -1,4 +1,7 @@
-use std::{collections::HashMap, io::Cursor};
+use std::{
+    collections::{HashMap, HashSet},
+    io::Cursor,
+};
 
 use crate::{
     command_errors::CommandError,
@@ -171,5 +174,54 @@ pub fn rebuild_commits_tree(
 
     let commit_with_branch = (commit_object.to_owned(), branch);
     commits_map.insert(hash_commit.to_string(), commit_with_branch);
+    Ok(())
+}
+
+/// Reconstruye el arbol de commits que le preceden a partir de un commit
+pub fn get_parents_hash_map(
+    hash_commit: &String,
+    commits_map: &mut HashMap<String, (CommitObject, Option<String>)>, // HashMap<hash, (commit, branch)>
+    parents_hash: &mut HashMap<String, HashSet<String>>,
+    sons_hash: &mut HashMap<String, HashSet<String>>,
+    //logger: &mut Logger,
+) -> Result<(), CommandError> {
+    println!("MMM{}", hash_commit);
+    // if parents_hash.contains_key(&hash_commit.to_string()) {
+    //     return Ok(());
+    // }
+
+    let commit_object = match commits_map.get_mut(hash_commit) {
+        Some(commit_object_box_aux) => commit_object_box_aux.0.to_owned(),
+        None => return Ok(()),
+    };
+
+    let parents_vec: Vec<String> = commit_object.get_parents();
+    println!("padres {:?}", parents_vec);
+
+    for parent_hash in parents_vec.iter() {
+        let hash_set_p = parents_hash
+            .entry(hash_commit.to_string())
+            .or_insert(HashSet::new());
+        hash_set_p.insert(parent_hash.to_string());
+
+        let hash_set_s = sons_hash
+            .entry(parent_hash.to_string())
+            .or_insert(HashSet::new());
+        hash_set_s.insert(hash_commit.to_string());
+
+        let hash_set_s_s = sons_hash
+            .entry(hash_commit.to_string())
+            .or_insert(HashSet::new());
+
+        for childs in hash_set_s_s.iter() {
+            let hash_set_p_s = parents_hash
+                .entry(childs.to_string())
+                .or_insert(HashSet::new());
+            hash_set_p_s.insert(parent_hash.to_string());
+            //parents_hash.insert(childs.to_string(), hash_set_p_s.to_owned());
+        }
+        get_parents_hash_map(parent_hash, commits_map, parents_hash, sons_hash)?;
+    }
+
     Ok(())
 }

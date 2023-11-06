@@ -36,7 +36,7 @@ use crate::{
     objects_database::ObjectsDatabase,
     server_components::git_server::GitServer,
     server_components::{
-        history_analyzer::{get_analysis, rebuild_commits_tree},
+        history_analyzer::{get_analysis, get_parents_hash_map, rebuild_commits_tree},
         packfile_functions::make_packfile,
     },
     staging_area::StagingArea,
@@ -1331,6 +1331,41 @@ impl<'a> GitRepository<'a> {
         Ok(branches_with_their_commits)
     }
 
+    /// Devuelve al vector de branches_with_their_commits todos los nombres de las ramas y el hash del commit al que apuntan
+    pub fn push_all_remote_branch_hashes(&mut self) -> Result<Vec<(String, String)>, CommandError> {
+        let mut branches_with_their_commits: Vec<(String, String)> = Vec::new();
+        let branches_hashes = self.remote_branches()?;
+        for branch_hash in branches_hashes {
+            let branch_hash = (branch_hash.0, branch_hash.1.to_string());
+            branches_with_their_commits.push(branch_hash);
+        }
+        Ok(branches_with_their_commits)
+    }
+
+    /// Devuelve al vector de branches_with_their_commits todos los nombres de las ramas y el hash del commit al que apuntan
+    pub fn push_all_branch_hashes(&mut self) -> Result<Vec<(String, String)>, CommandError> {
+        let mut branches_with_their_commits: Vec<(String, String)> = Vec::new();
+        let branches_local_hashes = self.local_branches()?;
+
+        for branch_local_hash in branches_local_hashes {
+            let branch_local_hash = (branch_local_hash.0, branch_local_hash.1.to_string());
+            branches_with_their_commits.push(branch_local_hash);
+        }
+        let branches_remotes_hashes = match self.remote_branches() {
+            Ok(remote_branches) => remote_branches,
+            Err(_) => {
+                return Ok(branches_with_their_commits);
+            }
+        };
+        for branch_remote_hash in branches_remotes_hashes {
+            let branch_name_remote = format!("origin/{}", branch_remote_hash.0);
+            let branch_remote_hash = (branch_name_remote, branch_remote_hash.1.to_string());
+            branches_with_their_commits.push(branch_remote_hash);
+        }
+        // println!("branches_with_their_commits : {:?}", branches_with_their_commits);
+        Ok(branches_with_their_commits)
+    }
+
     /// Actualiza la referencia de la branch con el hash del commit obtenido del servidor.
     fn update_ref(&mut self, sha1: &str, ref_name: &str) -> Result<(), CommandError> {
         let dir_path = join_paths!(&self.git_path, "refs/remotes/origin/").ok_or(
@@ -1386,7 +1421,7 @@ impl<'a> GitRepository<'a> {
         let head_branch_name = self.get_head_branch_name()?;
         let head_branch_hash = remote_branches
             .get(&head_branch_name)
-            .ok_or(CommandError::NoHeadCommit)?;
+            .ok_or(CommandError::NoHeadCommit(head_branch_name.to_string()))?;
 
         let line = format!(
             "{}\t\tbranch '{}' of {}",
@@ -1770,6 +1805,47 @@ impl<'a> GitRepository<'a> {
         Ok(commit_hash[..commit_hash.len()].to_string())
     }
 
+    pub fn get_last_commit_hash_branch_local_remote(
+        &self,
+        refs_branch_name: &String,
+    ) -> Result<Vec<(String, String)>, CommandError> {
+        let mut branches_with_their_commits: Vec<(String, String)> = Vec::new();
+        let path_to_branch_local = join_paths!(self.git_path, "refs/heads", refs_branch_name)
+            .ok_or(CommandError::FileOpenError(refs_branch_name.clone()))?;
+
+        let mut file = File::open(&path_to_branch_local).map_err(|_| {
+            CommandError::FileNotFound(format!("No se pudo abrir {path_to_branch_local} en log"))
+        })?;
+
+        let mut commit_hash_local = String::new();
+        file.read_to_string(&mut commit_hash_local).map_err(|_| {
+            CommandError::FileReadError(format!("No se pudo leer {path_to_branch_local} en log"))
+        })?;
+
+        branches_with_their_commits.push((refs_branch_name.to_owned(), commit_hash_local));
+
+        let path_to_branch_remote =
+            join_paths!(self.git_path, "refs/remotes/origin", refs_branch_name)
+                .ok_or(CommandError::FileOpenError(refs_branch_name.clone()))?;
+
+        let mut file = match File::open(&path_to_branch_remote) {
+            Ok(file) => file,
+            Err(_) => {
+                return Ok(branches_with_their_commits);
+            }
+        };
+
+        let mut commit_hash_remote = String::new();
+        file.read_to_string(&mut commit_hash_remote).map_err(|_| {
+            CommandError::FileReadError(format!("No se pudo leer {path_to_branch_remote} en log"))
+        })?;
+
+        let branch_name_remote = format!("origin/{}", refs_branch_name);
+
+        branches_with_their_commits.push((branch_name_remote.to_owned(), commit_hash_remote));
+        Ok(branches_with_their_commits)
+    }
+
     fn true_merge(
         &mut self,
         common: &mut CommitObject,
@@ -1920,12 +1996,13 @@ impl<'a> GitRepository<'a> {
     ) -> Result<Vec<(CommitObject, Option<String>)>, CommandError> {
         let mut branches_with_their_last_hash: Vec<(String, String)> = Vec::new();
         let mut commits_map: HashMap<String, (CommitObject, Option<String>)> = HashMap::new();
+
         if all {
-            branches_with_their_last_hash = self.push_all_local_branch_hashes()?;
+            branches_with_their_last_hash = self.push_all_branch_hashes()?;
         } else {
             let current_branch = get_head_ref()?;
-            let hash_commit = self.get_last_commit_hash_branch(&current_branch)?;
-            branches_with_their_last_hash.push((current_branch, hash_commit));
+            branches_with_their_last_hash =
+                self.get_last_commit_hash_branch_local_remote(&current_branch.clone())?;
         }
         for branch_with_commit in branches_with_their_last_hash {
             rebuild_commits_tree(
@@ -1939,8 +2016,32 @@ impl<'a> GitRepository<'a> {
                 &mut self.logger,
             )?;
         }
-        let mut commits: Vec<_> = commits_map.drain().map(|(_, v)| v).collect();
-        sort_commits_descending_date(&mut commits);
+        let mut commits: Vec<_> = commits_map.values().cloned().collect();
+
+        match self.get_last_commit_hash() {
+            Ok(Some(last_commit)) => {
+                // let mut parents_hash = HashMap::new();
+                // let mut sons_hash = HashMap::new();
+                // get_parents_hash_map(
+                //     &last_commit,
+                //     &mut commits_map,
+                //     &mut parents_hash,
+                //     &mut sons_hash,
+                // )?;
+
+                //println!("parents_hash: {:?}", parents_hash);
+                sort_commits_descending_date(&mut commits);
+            }
+            _ => return Ok(commits),
+        }
+
+        // let Ok(Some(last_commit)) = match self.get_last_commit_hash() else {return Ok(commits)};
+
+        // let parents_hash = HashMap::new();
+        // let sons_hash = HashMap::new();
+        // get_parents_hashMap(last_commit, &mut commits_map, parents_hash, sons_hash)?;
+        // sort_commits_descending_date(&mut commits);
+
         Ok(commits)
     }
 
