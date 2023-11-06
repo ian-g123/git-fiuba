@@ -347,8 +347,9 @@ impl<'a> GitRepository<'a> {
                         }
                     };
                     staging_area.add(relative_path, &actual_hash_lc);
+                } else {
+                    staging_area.remove(relative_path);
                 }
-                staging_area.remove(relative_path);
             }
         }
         if staging_area.save().is_err() {
