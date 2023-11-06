@@ -18,6 +18,7 @@ pub struct ChangesController {
     index_changes: HashMap<String, ChangeType>,
     working_tree_changes: HashMap<String, ChangeType>,
     untracked: Vec<String>,
+    untracked_files: Vec<String>,
     unmerged_changes: HashMap<String, ChangeType>,
 }
 
@@ -33,7 +34,7 @@ impl ChangesController {
         let index = StagingArea::open(base_path)?;
         let working_tree = build_working_tree()?;
         let index_changes = Self::check_staging_area_status(db, &index, &commit_tree, logger)?;
-        let (working_tree_changes, untracked) = Self::check_working_tree_status(
+        let (working_tree_changes, untracked, untracked_files) = Self::check_working_tree_status(
             working_tree,
             &index,
             &commit_tree,
@@ -45,6 +46,7 @@ impl ChangesController {
             index_changes,
             working_tree_changes,
             untracked,
+            untracked_files,
             unmerged_changes,
         })
     }
@@ -67,6 +69,10 @@ impl ChangesController {
     /// Devuelve los cambios que no están mergeados.
     pub fn get_unmerged_changes(&self) -> &HashMap<String, ChangeType> {
         &self.unmerged_changes
+    }
+
+    pub fn get_untracked_files_interface(&self) -> &Vec<String> {
+        &self.untracked_files
     }
 
     /// Recolecta información sobre los merge conflicts
@@ -163,16 +169,17 @@ impl ChangesController {
         last_commit: &Option<Tree>,
         logger: &mut Logger,
         staged_changes: &HashMap<String, ChangeType>,
-    ) -> Result<(HashMap<String, ChangeType>, Vec<String>), CommandError> {
+    ) -> Result<(HashMap<String, ChangeType>, Vec<String>, Vec<String>), CommandError> {
         let mut wt_changes: HashMap<String, ChangeType> = HashMap::new();
         let mut untracked: Vec<String> = Vec::new();
-
+        let mut untracked_files: Vec<String> = Vec::new();
         Self::check_working_tree_aux(
             &mut working_tree,
             staging_area,
             last_commit,
             &mut wt_changes,
             &mut untracked,
+            &mut untracked_files,
             logger,
             staged_changes,
         )?;
@@ -185,7 +192,7 @@ impl ChangesController {
         logger.log(&format!("Changes not staged: {:?}", wt_changes.keys()));
         logger.log(&format!("untracked files: {:?}", untracked));
 
-        Ok((wt_changes, untracked))
+        Ok((wt_changes, untracked, untracked_files))
     }
 
     /// Obtiene los archivos eliminados en el working tree, pero presentes en el index.
@@ -226,6 +233,7 @@ impl ChangesController {
         last_commit: &Option<Tree>,
         changes: &mut HashMap<String, ChangeType>,
         untracked: &mut Vec<String>,
+        untracked_files: &mut Vec<String>,
         logger: &mut Logger,
         staged_changes: &HashMap<String, ChangeType>,
     ) -> Result<(), CommandError> {
@@ -239,11 +247,12 @@ impl ChangesController {
                     last_commit,
                     changes,
                     untracked,
+                    untracked_files,
                     logger,
                     staged_changes,
                 )?
             } else {
-                let is_untracked = Self::check_file_status(
+                let (is_untracked, path) = Self::check_file_status(
                     object,
                     staging_area,
                     last_commit,
@@ -254,6 +263,7 @@ impl ChangesController {
 
                 total_files_dir += 1;
                 if is_untracked {
+                    untracked_files.push(path);
                     untracked_number += 1;
                 }
             }
@@ -302,7 +312,7 @@ impl ChangesController {
         changes: &mut HashMap<String, ChangeType>,
         untracked: &mut Vec<String>,
         logger: &mut Logger,
-    ) -> Result<bool, CommandError> {
+    ) -> Result<(bool, String), CommandError> {
         let Some(path) = object.get_path() else {
             return Err(CommandError::ObjectPathError);
         };
@@ -319,18 +329,18 @@ impl ChangesController {
         {
             logger.log(&format!("{} is untracked", path));
 
-            untracked.push(path);
-            return Ok(true);
+            untracked.push(path.clone());
+            return Ok((true, path));
         } else if has_path && !has_hash {
             logger.log(&format!("{} was modified", path));
 
-            _ = changes.insert(path, ChangeType::Modified);
+            _ = changes.insert(path.clone(), ChangeType::Modified);
         } else if has_path && has_hash {
-            _ = changes.insert(path, ChangeType::Unmodified);
+            _ = changes.insert(path.clone(), ChangeType::Unmodified);
         } else if has_path_renamed {
-            _ = changes.insert(path, ChangeType::Renamed);
+            _ = changes.insert(path.clone(), ChangeType::Renamed);
         }
-        Ok(false)
+        Ok((false, path))
     }
 }
 
