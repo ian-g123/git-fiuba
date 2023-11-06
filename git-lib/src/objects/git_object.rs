@@ -55,11 +55,12 @@ pub trait GitObjectTrait {
     /// Si el objeto no es un Tree, devuelve un error
     fn add_path(
         &mut self,
-        _logger: &mut Logger,
+        logger: &mut Logger,
         _vector_path: Vec<&str>,
         _current_depth: usize,
         _hash: &String,
     ) -> Result<(), CommandError> {
+        logger.log("ERROR: No se puede agregar un path a un objeto que no es un árbol");
         Err(CommandError::ObjectNotTree)
     }
 

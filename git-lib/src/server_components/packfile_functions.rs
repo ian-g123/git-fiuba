@@ -22,7 +22,8 @@ pub fn get_objects_from_tree(
     hash_objects: &mut HashMap<String, GitObject>,
     tree: &Tree,
 ) -> Result<(), CommandError> {
-    for (hash_object, mut git_object) in tree.get_objects() {
+    for (hash_object, (_git_object_hash, git_object_opt)) in tree.get_objects() {
+        let mut git_object = git_object_opt.ok_or(CommandError::ShallowTree)?;
         if let Some(son_tree) = git_object.as_tree() {
             get_objects_from_tree(hash_objects, &son_tree)?;
         }

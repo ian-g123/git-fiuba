@@ -179,6 +179,8 @@ pub enum CommandError {
     /// error: switch `b' requires a value
     SwitchRequiresValue,
     CheckoutConflictsError,
+    /// El tree guarda solo hashes y no sus objetos
+    ShallowTree,
 }
 
 impl Error for CommandError {}
@@ -474,6 +476,9 @@ impl fmt::Display for CommandError {
             }
             CommandError::CheckingCommitsBetweenError(msg) => {
                 write!(f, "{}", msg)
+            }
+            CommandError::ShallowTree => {
+                write!(f, "El tree guarda solo hashes y no sus objetos")
             }
         }
     }

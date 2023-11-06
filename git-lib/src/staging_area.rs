@@ -87,7 +87,7 @@ impl StagingArea {
 
     pub fn has_changes(
         &self,
-        db: &ObjectsDatabase,
+        _db: &ObjectsDatabase,
         last_commit_tree: &Option<Tree>,
         logger: &mut Logger,
     ) -> Result<bool, CommandError> {
@@ -105,13 +105,16 @@ impl StagingArea {
     }
 
     fn check_deleted_from_commit(&self, tree: &mut Tree, deleted: &mut Vec<String>, path: String) {
-        for (name, object) in tree.get_objects().iter_mut() {
+        for (name, (_, object_opt)) in tree.get_objects().iter_mut() {
             let complete_path = {
                 if path == "".to_string() {
                     format!("{}", name)
                 } else {
                     format!("{}/{}", path, name)
                 }
+            };
+            let Some(object) = object_opt else {
+                continue;
             };
             if let Some(new_tree) = object.as_mut_tree() {
                 self.check_deleted_from_commit(new_tree, deleted, complete_path);
@@ -340,10 +343,12 @@ impl StagingArea {
         let mut working_tree = Tree::new(current_dir_display.to_string());
         let files = self.sort_files();
         for (path, hash) in files.iter() {
+            logger.log(&format!("path: {}", path));
             let vector_path = path.split("/").collect::<Vec<_>>();
             let current_depth: usize = 0;
             working_tree.add_path_tree(logger, vector_path, current_depth, hash)?;
         }
+        logger.log("Working tree staged built");
         Ok(working_tree)
     }
 
@@ -417,7 +422,10 @@ impl StagingArea {
         if let Some(blob) = object.as_mut_blob() {
             self.add(&obj_path, &blob.get_hash_string()?);
         } else if let Some(tree) = object.as_mut_tree() {
-            for (name, mut child_object) in tree.get_objects() {
+            for (name, (_, child_obj_opt)) in tree.get_objects() {
+                let Some(mut child_object) = child_obj_opt else {
+                    return Err(CommandError::ShallowTree);
+                };
                 let path = join_paths!(obj_path, name).ok_or(
                     CommandError::FailToSaveStaginArea("Fail to join paths".to_string()),
                 )?;
@@ -461,19 +469,25 @@ impl StagingArea {
                     obj_path.to_string(),
                 ));
             };
-            for (name, mut modiffied_object_child) in modiffied_object_tree.get_objects() {
+            for (name, (_, modiffied_object_child_opt)) in modiffied_object_tree.get_objects() {
+                let Some(mut modiffied_object_child) = modiffied_object_child_opt else {
+                    return Err(CommandError::ShallowTree);
+                };
                 let path = join_paths!(obj_path, name).ok_or(
                     CommandError::FailToSaveStaginArea("Fail to join paths".to_string()),
                 )?;
-                let mut original_object_child = original_object_tree
+                let (_, original_obj_opt) = original_object_tree
                     .get_objects()
                     .get(&name)
                     .ok_or(CommandError::CannotHaveFileAndFolderWithSameName(
                         obj_path.to_string(),
                     ))?
                     .to_owned();
+                let Some(mut original) = original_obj_opt else {
+                    return Err(CommandError::ShallowTree);
+                };
                 self.add_unmerged_object(
-                    &mut original_object_child,
+                    &mut original,
                     &mut modiffied_object_child,
                     &path,
                     modiffied_object_is_head,

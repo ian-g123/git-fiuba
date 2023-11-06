@@ -26,21 +26,23 @@ pub struct CommitObject {
     timestamp: i64,
     offset: i32,
     tree: Option<Tree>,
+    tree_hash: [u8; 20],
     hash: Option<[u8; 20]>,
 }
 
 impl CommitObject {
     /// Crea un objeto Commit.
-    pub fn new(
+    pub fn new_from_tree(
         parent: Vec<String>,
         message: String,
         author: Author,
         committer: Author,
         timestamp: i64,
         offset: i32,
-        tree: Tree,
+        mut tree: Tree,
         hash: Option<[u8; 20]>,
     ) -> Result<Self, CommandError> {
+        let tree_hash = tree.get_hash()?;
         Ok(Self {
             parents: parent,
             message,
@@ -50,6 +52,7 @@ impl CommitObject {
             offset,
             hash,
             tree: Some(tree),
+            tree_hash,
         })
     }
 
@@ -66,11 +69,8 @@ impl CommitObject {
     }
 
     /// Devuelve el hash del tree del Commit.
-    pub fn get_tree_hash(&mut self) -> Result<String, CommandError> {
-        let Some(tree) = &mut self.tree.as_mut() else {
-            return Err(CommandError::InvalidCommit);
-        };
-        Ok(tree.get_hash_string()?)
+    pub fn get_tree_hash_string(&mut self) -> Result<String, CommandError> {
+        Ok(u8_vec_to_hex_string(&self.tree_hash))
     }
 
     pub fn get_message(&self) -> String {
@@ -121,6 +121,7 @@ impl CommitObject {
 
         Ok(Box::new(CommitObject {
             tree: option_tree,
+            tree_hash,
             parents,
             author,
             committer,
@@ -497,7 +498,10 @@ pub fn write_commit_tree_to_database(
     let mut boxed_tree: Box<dyn GitObjectTrait> = Box::new(tree.clone());
 
     db.write(&mut boxed_tree, false, logger)?;
-    for (_, child) in tree.get_objects().iter_mut() {
+    for (_, (child_hash, child_obj_opt)) in tree.get_objects().iter_mut() {
+        let Some(child) = child_obj_opt else {
+            return Err(CommandError::ShallowTree);
+        };
         if let Some(child_tree) = child.as_mut_tree() {
             write_commit_tree_to_database(db, child_tree, logger)?;
         }
@@ -517,7 +521,7 @@ mod test {
     fn write_and_read() {
         let hash_str = "a471637c78c8f67cca05221a942bd7efabb58caa".to_string();
         let hash = hash_str.cast_hex_to_u8_vec().unwrap();
-        let mut commit = CommitObject::new(
+        let mut commit = CommitObject::new_from_tree(
             vec![],
             "message".to_string(),
             Author::new("name", "email"),
@@ -557,7 +561,7 @@ mod test {
         let hash = hex_string_to_u8_vec("a471637c78c8f67cca05221a942bd7efabb58caa");
         let mut tree = Tree::new("".to_string());
         tree.set_hash(hash);
-        let mut commit = CommitObject::new(
+        let mut commit = CommitObject::new_from_tree(
             vec![],
             "message".to_string(),
             Author::new("name", "email"),

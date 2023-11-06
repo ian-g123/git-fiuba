@@ -11,13 +11,12 @@ use std::{
     process::Command,
 };
 
-use crate::common::aux::{change_testfile_content, create_test_scene_1, get_head};
+use crate::common::aux::{change_testfile_content, create_test_scene_1};
 
 #[test]
 fn test_create_branch() {
     let path = "./tests/data/commands/branch/repo1";
     create_test_scene_1(path);
-    let head = &get_head(path);
 
     // crear rama cuando no hay ningún commit
 
@@ -29,7 +28,7 @@ fn test_create_branch() {
         .unwrap();
 
     let stderr = String::from_utf8(result.stderr).unwrap();
-    let expected = format!("fatal: Not a valid object name: '{}'.\n", head);
+    let expected = format!("fatal: Not a valid object name: 'master'.\n");
     assert_eq!(expected, stderr);
 
     // crear rama a partir de HEAD
@@ -60,7 +59,7 @@ fn test_create_branch() {
     println!("Stderr: {}", stderr);
     let branch1_path = format!("{}/.git/refs/heads/branch1", path);
     println!("Branch1: {}", branch1_path);
-    let master_path = format!("{}/.git/refs/heads/{}", path, head);
+    let master_path = format!("{}/.git/refs/heads/master", path);
 
     assert!(Path::new(&branch1_path).exists());
 
@@ -201,7 +200,6 @@ fn test_rename_branch() {
     let path = "./tests/data/commands/branch/repo2";
 
     create_test_scene_1(path);
-    let head = get_head(path);
     // cambiar nombre de head
 
     let result = Command::new("../../../../../../target/debug/git")
@@ -213,10 +211,7 @@ fn test_rename_branch() {
         .unwrap();
 
     let stderr = String::from_utf8(result.stderr).unwrap();
-    let expected = format!(
-        "error: refname refs/heads/{}\nfatal: Branch rename failed\n",
-        head
-    );
+    let expected = format!("error: refname refs/heads/master\nfatal: Branch rename failed\n");
     assert_eq!(expected, stderr);
 
     // cambiar nombre de HEAD (existe)
@@ -236,7 +231,7 @@ fn test_rename_branch() {
         .output()
         .unwrap();
 
-    let master_path = format!("{}/.git/refs/heads/{}", path, head);
+    let master_path = format!("{}/.git/refs/heads/master", path);
     let master_commit = fs::read_to_string(master_path.clone()).unwrap();
 
     let result = Command::new("../../../../../../target/debug/git")
@@ -372,7 +367,6 @@ fn test_delete_branch() {
     let path = "./tests/data/commands/branch/repo3";
 
     create_test_scene_1(path);
-    let head = get_head(path);
     // delete with no args
 
     let result = Command::new("../../../../../../target/debug/git")
@@ -412,7 +406,7 @@ fn test_delete_branch() {
         .output()
         .unwrap();
 
-    let master_path = format!("{}/.git/refs/heads/{}", path, head);
+    let master_path = format!("{}/.git/refs/heads/master", path);
     let master_commit = fs::read_to_string(master_path).unwrap();
 
     _ = Command::new("../../../../../../target/debug/git")
@@ -481,7 +475,6 @@ fn test_show_branch() {
     let path = "./tests/data/commands/branch/repo4";
 
     create_test_scene_1(path);
-    let head = get_head(path);
     // show local.
 
     _ = Command::new("../../../../../../target/debug/git")
@@ -559,7 +552,7 @@ fn test_show_branch() {
     println!("Stderr: {}", stderr);
     let stdout = String::from_utf8(result.stdout).unwrap();
 
-    let expected = format!("  branch1\n  branch2\n* {}\n  remotes/origin/dir/remote3\n  remotes/origin/remote1\n  remotes/origin/remote2\n", head);
+    let expected = format!("  branch1\n  branch2\n* master\n  remotes/origin/dir/remote3\n  remotes/origin/remote1\n  remotes/origin/remote2\n");
     assert_eq!(stdout, expected);
 
     _ = fs::remove_dir_all(format!("{}", path));

@@ -86,6 +86,7 @@ pub fn rebuild_commits_tree(
     build_tree: bool,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
+    logger.log("rebuild_commits_tree");
     if commits_map.contains_key(&hash_commit.to_string()) {
         return Ok(());
     }
