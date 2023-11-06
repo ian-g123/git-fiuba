@@ -2411,7 +2411,7 @@ impl<'a> GitRepository<'a> {
         let Some(mut last_commit) = self.get_last_commit_tree()? else {
             return Err(CommandError::UntrackedError(current_branch));
         };
-        
+
         let current_changes = ChangesController::new(
             &self.db()?,
             &self.git_path,
@@ -2430,7 +2430,7 @@ impl<'a> GitRepository<'a> {
             &mut self.db()?,
             &mut self.logger,
         )?;
-        
+
         let merge_files = staging_area.get_unmerged_files();
         if !merge_files.is_empty() {
             let merge_conflicts: Vec<&String> = merge_files.keys().collect();
@@ -2475,7 +2475,6 @@ impl<'a> GitRepository<'a> {
         conflicts: Vec<String>,
         untracked_files: &Vec<String>,
     ) -> Result<(), CommandError> {
-
         let mut untracked_conflicts: Vec<String> = Vec::new();
         let mut unstaged_conflicts: Vec<String> = Vec::new();
         for path in conflicts.iter() {
@@ -2612,14 +2611,9 @@ impl<'a> GitRepository<'a> {
             &staging_files,
         )?;
 
-
         let staged_paths: Vec<&String> = staged.keys().collect();
-        //self.log(&format!("Staged paths antes: {:?}", staged_paths));
         let staged_paths: Vec<String> = staged_paths.iter().map(|x| x.to_string()).collect();
-        self.log(&format!(
-            "Staged paths: {:?}, Staging area: {:?}",
-            staged_paths, staging_files
-        ));
+
         self.look_for_checkout_conflicts(
             &mut source_tree,
             common,
@@ -2628,7 +2622,6 @@ impl<'a> GitRepository<'a> {
             true,
             &staging_files,
         )?;
-        self.log(&format!("Staging area conflicts: {:?}", conflicts));
 
         let mut working_tree = build_working_tree(&self.working_dir_path)?;
         source_tree.look_for_checkout_deletions_conflicts(
@@ -2638,7 +2631,6 @@ impl<'a> GitRepository<'a> {
             &self.working_dir_path,
             &mut self.logger,
         )?;
-        self.log(&format!("Se buscó conflictos de checkout: {:?}", conflicts));
 
         if !conflicts.is_empty() {
             self.set_checkout_local_conflicts(conflicts.to_owned(), untracked_files)?;
@@ -2655,10 +2647,6 @@ impl<'a> GitRepository<'a> {
             unstaged_files,
             staged,
         )?;
-        self.log(&format!(
-            "Deletions: {:?}, modifications: {:?}, conflicts: {:?}",
-            deletions, modifications, conflicts
-        ));
 
         if delete {
             source_tree = Tree::new(self.working_dir_path.clone());
@@ -2735,10 +2723,7 @@ impl<'a> GitRepository<'a> {
                             c
                         }
                     };
-                    self.log(&format!(
-                        "Content vs newcontent: {}",
-                        actual_content == new_content
-                    ));
+
                     if has_conflicts(
                         &path,
                         &actual_content,
@@ -2799,10 +2784,7 @@ fn has_conflicts(
     let content_str: String = String::from_utf8_lossy(content).to_string();
 
     let new_content_str: String = String::from_utf8_lossy(new_content).to_string();
-    logger.log(&format!(
-        "Diferencias entre contenidos: content: {}, new_content: {}",
-        content_str, new_content_str
-    ));
+
     let mut common_content_str: String = "".to_string();
     if let Some(mut common_object) = common.get_object_from_path(path) {
         let content_u8 = common_object.content(None)?;
@@ -2871,10 +2853,6 @@ fn get_staged_paths_and_content(
     db: &mut ObjectsDatabase,
     logger: &mut Logger,
 ) -> Result<HashMap<String, Vec<u8>>, CommandError> {
-    logger.log(&format!(
-        "Staging files antes del contenido {:?}",
-        staged_changes.keys()
-    ));
     let staged_changes = sort_hashmap_and_filter_unmodified(staged_changes);
     let mut changes: HashMap<String, Vec<u8>> = HashMap::new();
 
@@ -2889,7 +2867,6 @@ fn get_staged_paths_and_content(
         }
     }
     let log: Vec<&String> = changes.iter().map(|(s, _)| s).collect();
-    logger.log(&format!("Staging files después {:?}", log));
     Ok(changes)
 }
 
@@ -2902,13 +2879,12 @@ fn get_branches_paths(
     dir_path: &str,
     i: usize,
 ) -> Result<(), CommandError> {
-    let mut branches_path = join_paths!(path, dir_path).ok_or(
-        CommandError::DirectoryCreationError("Error creando directorio de branches".to_string()),
-    )?;
+    let branches_path = join_paths!(path, dir_path).ok_or(CommandError::DirectoryCreationError(
+        "Error creando directorio de branches".to_string(),
+    ))?;
     /* if branches_path.ends_with("/") {
         _ = branches_path.pop();
     } */
-    logger.log(&format!("Dir path: {}", branches_path));
     let paths = fs::read_dir(branches_path.clone()).map_err(|error| {
         CommandError::FileReadError(format!(
             "Error leyendo directorio de branches: {}",
@@ -2929,7 +2905,6 @@ fn get_branches_paths(
         let parts: Vec<&str> = path_str.split("/").collect();
         let name = parts[i..].to_vec();
         let name = name.join("/");
-        logger.log(&format!("Name: {:?}", name));
 
         if entry_path.is_file() {
             branches.push(name);
