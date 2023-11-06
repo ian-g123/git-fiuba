@@ -86,8 +86,6 @@ fn test_ckeckout() {
 
     create_test_scene_2(path);
 
-    // update files
-
     _ = Command::new("../../../../../../target/debug/git")
         .arg("add")
         .arg("dir/testfile1.txt")
@@ -282,6 +280,75 @@ fn test_ckeckout() {
         testfile3_content,
         "cambio file 3 con overlapping!".to_string()
     );
+
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
+#[test]
+fn test_create_and_checkout() {
+    let path = "./tests/data/commands/checkout/repo3";
+
+    create_test_scene_2(path);
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("dir/testfile1.txt")
+        .arg("dir/testfile2.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("branch")
+        .arg("base")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    change_dir_testfile1_content_and_remove_dir_testfile2(path); // 1 deleted, 1 modificated, 1 added
+    let mut file = File::create(path.to_owned() + "/dir/testfile3.txt").unwrap();
+    file.write_all(b"file 3!").unwrap();
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("checkout")
+        .arg("-b")
+        .arg("branch1")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    println!("stderr: {}", stderr);
+    println!("stdout: {}", stdout);
+    let head_path = format!("{}/.git/HEAD", path);
+    let expected = "M\tdir/testfile1.txt\nD\tdir/testfile2.txt\nA\tdir/testfile3.txt\nSwitched to branch 'branch1'\n".to_string();
+
+    assert_eq!(expected, stdout);
+
+    let head_ref = fs::read_to_string(head_path.clone()).unwrap();
+    let expected = "ref: refs/heads/branch1".to_string();
+    assert_eq!(expected, head_ref);
+
+    let testfile1_path = format!("{}/dir/testfile1.txt", path);
+    let testfile2_path = format!("{}/dir/testfile2.txt", path);
+    let testfile3_path = format!("{}/dir/testfile3.txt", path);
+
+    let testfile1_content = fs::read_to_string(testfile1_path.clone()).unwrap();
+    let testfile3_content = fs::read_to_string(testfile3_path.clone()).unwrap();
+
+    assert_eq!(testfile1_content, "Cambio!".to_string());
+
+    assert!(!Path::new(&testfile2_path).exists());
+    assert_eq!(testfile3_content, "file 3!".to_string());
 
     _ = fs::remove_dir_all(format!("{}", path));
 }

@@ -80,10 +80,14 @@ impl Checkout {
         }
         self.new_branch.push(args[i + 1].clone());
         if let Some(elem) = self.checkout_or_update.pop() {
-            self.new_branch.push(elem);
+            if !options.contains(&elem) {
+                self.new_branch.push(elem);
+            }
         }
         if i + 2 < args.len() {
             self.new_branch.push(args[i + 2].clone());
+        } else if i > 0 {
+            self.new_branch.push(args[0].clone());
         }
 
         Ok(args.len())
@@ -106,6 +110,9 @@ impl Checkout {
         if !self.checkout_or_update.is_empty() {
             repo.update_files_or_checkout(self.checkout_or_update.clone())?;
         } else if !self.new_branch.is_empty() {
+            repo.create_branch(&self.new_branch)?;
+            let name = self.new_branch[0].clone();
+            repo.checkout(&name)?;
         } else {
             // checkout tracking info
         }
