@@ -385,6 +385,8 @@ fn create_base_scene(path: &str) {
         Command::new("git")
             .arg("init")
             .arg("-q")
+            .arg("-b")
+            .arg("master")
             .current_dir(path.to_owned() + "/server-files/repo")
             .status()
             .is_ok(),

@@ -31,6 +31,7 @@ impl ObjectsDatabase {
         if recursive {
             git_object.write_to(&mut data, Some(self))?;
         } else {
+            
             git_object.write_to(&mut data, None)?;
         };
         let hash_str = get_sha1_str(&data);

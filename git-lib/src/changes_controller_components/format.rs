@@ -15,8 +15,9 @@ pub trait Format {
         output: &mut dyn Write,
         branch: &str,
         commit_output: bool,
+        merge: bool,
+        branches_diverge_info: (bool, usize, usize),
     ) -> Result<(), CommandError> {
-        // let commit_tree = build_last_commit_tree(db, logger)?;
         let initial_commit = {
             if commit_tree.is_none() {
                 true
@@ -29,6 +30,8 @@ pub trait Format {
         let changes_to_be_commited = changes_controller.get_changes_to_be_commited();
         let changes_not_staged = changes_controller.get_changes_not_staged();
         let untracked_files = changes_controller.get_untracked_files();
+        let unmerged_paths = changes_controller.get_unmerged_changes();
+
         self.get_status(
             logger,
             output,
@@ -36,6 +39,9 @@ pub trait Format {
             changes_not_staged,
             untracked_files,
             (branch, commit_output, initial_commit),
+            unmerged_paths,
+            merge,
+            branches_diverge_info,
         )?;
         Ok(())
     }
@@ -48,6 +54,9 @@ pub trait Format {
         changes_not_staged: &HashMap<String, ChangeType>,
         untracked_files: &Vec<String>,
         long_info: (&str, bool, bool),
+        unmerged_paths: &HashMap<String, ChangeType>,
+        merge: bool,
+        branches_diverge_info: (bool, usize, usize),
     ) -> Result<(), CommandError>;
 }
 

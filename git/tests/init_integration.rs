@@ -78,6 +78,8 @@ fn test_sub_dir() {
 
     let output = Command::new("../../../../../../target/debug/git")
         .arg("init")
+        .arg("-b")
+        .arg("master")
         .arg("./new_dir")
         .current_dir(path.clone())
         .output()
@@ -103,6 +105,8 @@ fn test_init() {
 
     let output = Command::new("../../../../../../target/debug/git")
         .arg("init")
+        .arg("-b")
+        .arg("master")
         .current_dir(path.clone())
         .output()
         .expect("No se pudo ejecutar el comando");
@@ -173,6 +177,8 @@ fn test_err_two_dir() {
 
     let output = Command::new("../../../../../../target/debug/git")
         .arg("init")
+        .arg("-b")
+        .arg("master")
         .arg("./new_dir1")
         .arg("./new_dir2")
         .current_dir(path.clone())

@@ -33,6 +33,23 @@ impl StagingArea {
         self.files.clone()
     }
 
+    pub fn get_hash_from_path(&self, path: &str) -> Result<String, CommandError> {
+        match self.files.get(path) {
+            Some(hash) => Ok(hash.to_string()),
+            None => Err(CommandError::RmFromStagingAreaError(path.to_string())),
+        }
+    }
+
+    pub fn is_in_staging_area(&self, path: &String) -> bool {
+        return self.files.contains_key(path);
+    }
+
+    pub fn get_unmerged_files(
+        &self,
+    ) -> HashMap<String, (Option<String>, Option<String>, Option<String>)> {
+        self.unmerged_files.clone()
+    }
+
     pub fn get_changes(
         &self,
         last_commit_tree: &Option<Tree>,
@@ -53,6 +70,21 @@ impl StagingArea {
         Ok(changes)
     }
 
+    pub fn remove_from_stagin_area(
+        &mut self,
+        path: &str,
+        logger: &mut Logger,
+    ) -> Result<(), CommandError> {
+        if !self.is_in_staging_area(&path.to_string()) {
+            return Err(CommandError::RmFromStagingAreaError(path.to_string()));
+        }
+
+        self.remove(path);
+
+        logger.log(&format!("staging_area.rm({})", path));
+        Ok(())
+    }
+
     pub fn has_changes(
         &self,
         db: &ObjectsDatabase,
@@ -60,20 +92,16 @@ impl StagingArea {
         logger: &mut Logger,
     ) -> Result<bool, CommandError> {
         let changes = self.get_changes(last_commit_tree, logger)?.len();
-        let deleted_files = self.get_deleted_files(db, last_commit_tree)?;
+        let deleted_files = self.get_deleted_files(last_commit_tree);
         Ok(changes + deleted_files.len() > 0)
     }
 
-    pub fn get_deleted_files(
-        &self,
-        _db: &ObjectsDatabase,
-        last_commit_tree: &Option<Tree>,
-    ) -> Result<Vec<String>, CommandError> {
+    pub fn get_deleted_files(&self, last_commit_tree: &Option<Tree>) -> Vec<String> {
         let mut deleted: Vec<String> = Vec::new();
         if let Some(mut tree) = last_commit_tree.clone() {
             self.check_deleted_from_commit(&mut tree, &mut deleted, "".to_string())
         }
-        Ok(deleted)
+        deleted
     }
 
     fn check_deleted_from_commit(&self, tree: &mut Tree, deleted: &mut Vec<String>, path: String) {
@@ -99,6 +127,7 @@ impl StagingArea {
         self.get_files().contains_key(path)
     }
 
+    /// Verifica si hay un cambio del working tree respecto del staging area
     pub fn has_file_renamed(&self, actual_path: &str, actual_hash: &str) -> bool {
         for (path, hash) in self.get_files() {
             let mut actual_parts: Vec<&str> = actual_path.split_terminator("/").collect();

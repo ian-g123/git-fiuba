@@ -1,8 +1,11 @@
 use std::{fs, path::Path, process::Command};
 
+use common::aux::create_test_scene_6;
+
 use crate::common::aux::{
     change_dir_testfile1_content, change_dir_testfile1_content_and_remove_dir_testfile2,
-    create_base_scene, create_test_scene_1, create_test_scene_2, create_test_scene_3,
+    change_lines_scene6, create_base_scene, create_test_scene_1, create_test_scene_2,
+    create_test_scene_3,
 };
 
 mod common {
@@ -857,5 +860,153 @@ fn test_nothing_to_commit() {
     let entries = fs::read_dir(path_obj.clone()).unwrap();
     let n_objects = entries.count();
     assert_eq!(2, n_objects); // info y pack
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
+#[test]
+fn test_commit_output_deletions_or_insertions() {
+    let path = "./tests/data/commands/commit/repo14";
+    create_test_scene_2(path);
+
+    // new file
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("dir/testfile1.txt")
+        .arg("dir/testfile2.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let result = String::from_utf8(result.stdout).unwrap();
+    println!("Commit output:\n{}", result);
+    let result: Vec<&str> = result.lines().collect();
+    let expected = [
+        " 2 files changed, 2 insertions(+)",
+        " create mode 100644 dir/testfile1.txt",
+        " create mode 100644 dir/testfile2.txt",
+    ]
+    .to_vec();
+    assert_eq!(result[1..], expected);
+
+    //delete file
+    change_dir_testfile1_content_and_remove_dir_testfile2(path);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message2")
+        .arg("dir/testfile2.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    println!("stderr:\n{}", String::from_utf8(result.stderr).unwrap());
+
+    let result = String::from_utf8(result.stdout).unwrap();
+    println!("Commit output:\n{}", result);
+    let result: Vec<&str> = result.lines().collect();
+    let expected = [
+        " 1 file changed, 1 deletion(-)",
+        " delete mode 100644 dir/testfile2.txt",
+    ]
+    .to_vec();
+    assert_eq!(result[1..], expected);
+
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
+#[test]
+fn test_commit_output_deletions_and_insertions() {
+    let path = "./tests/data/commands/commit/repo15";
+    create_test_scene_6(path);
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("testfile.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    println!("stderr:\n{}", String::from_utf8(result.stderr).unwrap());
+
+    let result = String::from_utf8(result.stdout).unwrap();
+    println!("Commit output:\n{}", result);
+    let result: Vec<&str> = result.lines().collect();
+    let expected = [
+        " 1 file changed, 3 insertions(+)",
+        " create mode 100644 testfile.txt",
+    ]
+    .to_vec();
+    assert_eq!(result[1..], expected);
+
+    change_lines_scene6(path, "line3\nline2\nline1");
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .arg("testfile.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    println!("stderr:\n{}", String::from_utf8(result.stderr).unwrap());
+
+    let result = String::from_utf8(result.stdout).unwrap();
+    println!("Commit output:\n{}", result);
+    let result: Vec<&str> = result.lines().collect();
+    let expected = [" 1 file changed, 2 insertions(+), 2 deletions(-)"].to_vec();
+    assert_eq!(result[1..], expected);
+
+    change_lines_scene6(path, "line3\nline2\nline1\nline4");
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .arg("testfile.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    println!("stderr:\n{}", String::from_utf8(result.stderr).unwrap());
+
+    let result = String::from_utf8(result.stdout).unwrap();
+    println!("Commit output:\n{}", result);
+    let result: Vec<&str> = result.lines().collect();
+    let expected = [" 1 file changed, 1 insertion(+)"].to_vec();
+    assert_eq!(result[1..], expected);
+
+    change_lines_scene6(path, "line2\nline2\nline1");
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .arg("testfile.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    println!("stderr:\n{}", String::from_utf8(result.stderr).unwrap());
+
+    let result = String::from_utf8(result.stdout).unwrap();
+    println!("Commit output:\n{}", result);
+    let result: Vec<&str> = result.lines().collect();
+    let expected = [" 1 file changed, 1 insertion(+), 2 deletions(-)"].to_vec();
+    assert_eq!(result[1..], expected);
+
     _ = fs::remove_dir_all(format!("{}", path));
 }
