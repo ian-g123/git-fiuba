@@ -8,12 +8,15 @@ pub trait Format {
     fn show(
         &self,
         db: &ObjectsDatabase,
-        base_path: &str,
+        git_path: &str,
+        working_dir: &str,
         commit_tree: Option<Tree>,
         logger: &mut Logger,
         output: &mut dyn Write,
         branch: &str,
         commit_output: bool,
+        merge: bool,
+        branches_diverge_info: (bool, usize, usize),
     ) -> Result<(), CommandError> {
         let initial_commit = {
             if commit_tree.is_none() {
@@ -22,10 +25,13 @@ pub trait Format {
                 false
             }
         };
-        let changes_controller = ChangesController::new(db, base_path, logger, commit_tree)?;
+        let changes_controller =
+            ChangesController::new(db, git_path, working_dir, logger, commit_tree)?;
         let changes_to_be_commited = changes_controller.get_changes_to_be_commited();
         let changes_not_staged = changes_controller.get_changes_not_staged();
         let untracked_files = changes_controller.get_untracked_files();
+        let unmerged_paths = changes_controller.get_unmerged_changes();
+
         self.get_status(
             logger,
             output,
@@ -33,6 +39,9 @@ pub trait Format {
             changes_not_staged,
             untracked_files,
             (branch, commit_output, initial_commit),
+            unmerged_paths,
+            merge,
+            branches_diverge_info,
         )?;
         Ok(())
     }
@@ -45,6 +54,9 @@ pub trait Format {
         changes_not_staged: &HashMap<String, ChangeType>,
         untracked_files: &Vec<String>,
         long_info: (&str, bool, bool),
+        unmerged_paths: &HashMap<String, ChangeType>,
+        merge: bool,
+        branches_diverge_info: (bool, usize, usize),
     ) -> Result<(), CommandError>;
 }
 

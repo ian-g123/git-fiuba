@@ -52,6 +52,7 @@ impl CommitObject {
             tree: Some(tree),
         })
     }
+
     pub fn get_parents(&self) -> Vec<String> {
         self.parents.clone()
     }
@@ -60,12 +61,24 @@ impl CommitObject {
         self.timestamp
     }
 
+    pub fn get_timestamp_string(&self) -> String {
+        timestamp_to_string(self.timestamp)
+    }
+
     /// Devuelve el hash del tree del Commit.
     pub fn get_tree_hash(&mut self) -> Result<String, CommandError> {
         let Some(tree) = &mut self.tree.as_mut() else {
             return Err(CommandError::InvalidCommit);
         };
         Ok(tree.get_hash_string()?)
+    }
+
+    pub fn get_message(&self) -> String {
+        return self.message.clone();
+    }
+
+    pub fn get_author(&self) -> String {
+        return self.author.to_string();
     }
 
     /// Crea un Commit a partir de la infromación leída del stream.
@@ -653,4 +666,16 @@ fn print_merge_commit_for_log(
 
 pub fn sort_commits_descending_date(vec_commits: &mut Vec<(CommitObject, Option<String>)>) {
     vec_commits.sort_by(|a, b| b.0.timestamp.cmp(&a.0.timestamp));
+}
+
+fn timestamp_to_string(timestamp: i64) -> String {
+    // let duration = Duration::from_secs(timestamp as u64);
+    let Some(datetime) = DateTime::from_timestamp(timestamp, 0) else {
+        return "No tiene".to_string();
+    };
+
+    // Formatear la fecha en una cadena de texto
+    let formatted_date = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
+
+    formatted_date
 }

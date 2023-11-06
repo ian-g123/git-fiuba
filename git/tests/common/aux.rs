@@ -4,6 +4,18 @@ use std::{
     path::Path,
     process::Command,
 };
+pub fn get_head(path: &str) -> String {
+    let head_path = format!("{}/.git/HEAD", path);
+
+    let head_ref = fs::read_to_string(head_path.clone()).unwrap();
+    let head_ref = head_ref.trim();
+    let head_ref_parts: Vec<&str> = head_ref.split(" ").collect();
+
+    let head_ref_path = head_ref_parts[1];
+    let head_path: Vec<&str> = head_ref_path.split("/").collect();
+    let head = head_path[2..].join("/");
+    head
+}
 
 pub fn create_test_scene_1(path: &str) {
     create_base_scene(path);
@@ -42,7 +54,6 @@ pub fn create_test_scene_3(path: &str) {
 
 pub fn create_test_scene_2(path: &str) {
     create_base_scene(path);
-    // copy tests/data/commands/add/dir/ contents to path.to_owned() + "/dir/"
     let Ok(_) = fs::create_dir_all(path.to_owned() + "/dir/") else {
         panic!("No se pudo crear el directorio")
     };
@@ -61,6 +72,11 @@ pub fn create_test_scene_2(path: &str) {
 
     assert!(Path::new(&(path.to_owned() + "/dir/testfile1.txt")).exists());
     assert!(Path::new(&(path.to_owned() + "/dir/testfile2.txt")).exists())
+}
+
+pub fn change_testfile_content(path: &str) {
+    let mut file = File::create(path.to_owned() + "/testfile.txt").unwrap();
+    file.write_all(b"Cambio!").unwrap();
 }
 
 pub fn change_dir_testfile1_content(path: &str) {
@@ -148,4 +164,8 @@ pub fn create_test_scene_6(path: &str) {
 pub fn change_lines_scene6(path: &str, lines: &str) {
     let mut file = File::create(path.to_owned() + "/testfile.txt").unwrap();
     write!(file, "{}", lines).unwrap();
+}
+
+pub fn create_test_scene_checkout(path: &str) {
+    create_base_scene(path);
 }

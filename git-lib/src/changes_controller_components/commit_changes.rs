@@ -1,16 +1,12 @@
-use std::env::join_paths;
-use std::fs::File;
 use std::{collections::HashMap, fs, io::Read};
 
-use crate::file_compressor::extract;
-use crate::join_paths;
-use crate::objects::git_object::{self, GitObjectTrait};
+use crate::objects::git_object::GitObjectTrait;
 use crate::{
     command_errors::CommandError, logger::Logger, objects::tree::Tree,
     objects_database::ObjectsDatabase,
 };
 
-use super::{changes_controller::ChangesController, changes_types::ChangeType};
+use super::changes_types::ChangeType;
 
 pub struct CommitChanges;
 
@@ -21,7 +17,6 @@ impl CommitChanges {
         logger: &mut Logger,
         commit_tree: Option<Tree>,
         changes_to_be_commited: &HashMap<String, ChangeType>,
-        curr_path: &str,
     ) -> Result<(usize, usize, usize), CommandError> {
         let (files_changed, insertions, deletions) = Self::get_changes_insertions_deletions(
             staging_area_changes,
@@ -29,7 +24,6 @@ impl CommitChanges {
             logger,
             &commit_tree,
             changes_to_be_commited,
-            curr_path,
         )?;
         Ok((files_changed, insertions, deletions))
     }
@@ -40,7 +34,6 @@ impl CommitChanges {
         logger: &mut Logger,
         commit_tree: &Option<Tree>,
         changes_to_be_commited: &HashMap<String, ChangeType>,
-        curr_path: &str,
     ) -> Result<(usize, usize, usize), CommandError> {
         let mut insertions = 0;
         let mut deletions = 0;
@@ -64,19 +57,19 @@ impl CommitChanges {
                     }
                 }
                 ChangeType::Deleted => {
-                    if let Some(tree) = commit_tree {
+                    if let Some(mut tree) = commit_tree.to_owned() {
                         logger.log(&format!("deleted: {}", path));
 
-                        deletions += count_deletions(path, logger, &tree)?;
+                        deletions += count_deletions(path, logger, &mut tree)?;
                         files_changed += 1;
                     }
                 }
                 ChangeType::Modified => {
                     logger.log(&format!("modified: {}", path));
 
-                    if let (Some(hash), Some(tree)) = (hash, commit_tree) {
+                    if let (Some(hash), Some(mut tree)) = (hash, commit_tree.to_owned()) {
                         let (inserted, deleted) =
-                            count_modifications(path, hash, logger, &tree, db)?;
+                            count_modifications(path, hash, logger, &mut tree, db)?;
                         files_changed += 1;
                         insertions += inserted;
                         deletions += deleted;
@@ -102,7 +95,7 @@ fn count_insertions(
 fn count_deletions(
     path: &str,
     logger: &mut Logger,
-    commit_tree: &Tree,
+    commit_tree: &mut Tree,
 ) -> Result<usize, CommandError> {
     let lines = read_blob_content(path, logger, commit_tree)?;
     Ok(lines.len())
@@ -112,7 +105,7 @@ fn count_modifications(
     path: &str,
     data_base_path: &str,
     logger: &mut Logger,
-    commit_tree: &Tree,
+    commit_tree: &mut Tree,
     db: &ObjectsDatabase,
 ) -> Result<(usize, usize), CommandError> {
     let last_commit_content = read_blob_content(path, logger, commit_tree)?;
@@ -143,9 +136,9 @@ fn read_content(
 fn read_blob_content(
     path: &str,
     logger: &mut Logger,
-    commit_tree: &Tree,
+    commit_tree: &mut Tree,
 ) -> Result<Vec<String>, CommandError> {
-    let Some(mut object) = commit_tree.get_blob(path, logger) else {
+    let Some(mut object) = commit_tree.get_object_from_path(path) else {
         return Err(CommandError::FileNameError);
     };
     let Some(blob) = object.as_mut_blob() else {

@@ -5,6 +5,5 @@ pub mod commit_changes;
 pub mod commit_format;
 pub mod format;
 pub mod long_format;
-pub mod merge_conflicts;
 pub mod short_format;
 pub mod working_tree;

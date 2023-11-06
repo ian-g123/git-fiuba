@@ -5,12 +5,11 @@ use crate::{
     logger::Logger,
     objects::{mode::Mode, tree::Tree},
     objects_database::ObjectsDatabase,
-    utils::aux::get_name,
 };
 
 use super::{
     changes_controller::ChangesController, changes_types::ChangeType,
-    commit_changes::CommitChanges, long_format::sort_hashmap,
+    commit_changes::CommitChanges, long_format::sort_hashmap_and_filter_unmodified,
 };
 
 pub struct CommitFormat;
@@ -25,9 +24,11 @@ impl CommitFormat {
         branch_name: &str,
         message: &str,
         output: &mut dyn Write,
-        curr_path: &str,
+        git_path: &str,
+        working_dir: &str,
     ) -> Result<(), CommandError> {
-        let changes_controller = ChangesController::new(db, curr_path, logger, commit_tree.clone())?;
+        let changes_controller =
+            ChangesController::new(db, git_path, working_dir, logger, commit_tree.clone())?;
         let changes_to_be_commited = changes_controller.get_changes_to_be_commited();
         let (files_changed, insertions, deletions) = CommitChanges::new(
             staging_area_changes,
@@ -35,12 +36,11 @@ impl CommitFormat {
             logger,
             commit_tree.clone(),
             changes_to_be_commited,
-            curr_path,
         )?;
         let is_root = if commit_tree.is_none() { true } else { false };
-        let changes_to_be_commited = &sort_hashmap(changes_to_be_commited);
+        let changes_to_be_commited = sort_hashmap_and_filter_unmodified(changes_to_be_commited);
         let output_message = get_commit_sucess_message(
-            changes_to_be_commited,
+            &changes_to_be_commited,
             files_changed,
             insertions,
             deletions,

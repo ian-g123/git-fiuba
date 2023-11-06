@@ -12,8 +12,8 @@ pub struct Config {
 
 impl Config {
     /// Abre el archivo config, guarda los datos en su estructura interna y devuelve la instancia
-    pub fn open(path: &str) -> Result<Self, CommandError> {
-        let config_path_str = join_paths_m(path, ".git/config")?;
+    pub fn open(git_path: &str) -> Result<Self, CommandError> {
+        let config_path_str = join_paths_m(git_path, "config")?;
 
         let mut config = Self::default_config(&config_path_str);
         let Ok(mut file) = std::fs::File::open(&config_path_str) else {
@@ -98,5 +98,9 @@ impl Config {
             configs.insert(key.to_string(), value.to_string());
             self.entries.insert(domain.to_string(), configs);
         }
+    }
+
+    pub fn remove_domain(&mut self, domain: &str) {
+        _ = self.entries.remove(domain)
     }
 }

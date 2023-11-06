@@ -18,6 +18,8 @@ pub struct ChangesController {
     index_changes: HashMap<String, ChangeType>,
     working_tree_changes: HashMap<String, ChangeType>,
     untracked: Vec<String>,
+    untracked_files: Vec<String>,
+    unmerged_changes: HashMap<String, ChangeType>,
 }
 
 impl ChangesController {
@@ -25,25 +27,35 @@ impl ChangesController {
     /// del index y el working tree desde el último commit.
     pub fn new(
         db: &ObjectsDatabase,
-        base_path: &str,
+        git_path: &str,
+        working_dir: &str,
         logger: &mut Logger,
         commit_tree: Option<Tree>,
     ) -> Result<ChangesController, CommandError> {
-        let index = StagingArea::open(base_path)?;
-        let working_tree = build_working_tree()?;
+        logger.log(&format!(
+            "ChangesController::new\ngit_path: {}\nworking_dir: {}",
+            git_path, working_dir
+        ));
+        let index = StagingArea::open(git_path)?;
+        logger.log("stagin area opened");
+        let working_tree = build_working_tree(working_dir)?;
+        logger.log("build_working_tree success");
         let index_changes = Self::check_staging_area_status(db, &index, &commit_tree, logger)?;
-        let (working_tree_changes, untracked) = Self::check_working_tree_status(
+        let (working_tree_changes, untracked, untracked_files) = Self::check_working_tree_status(
+            working_dir,
             working_tree,
             &index,
             &commit_tree,
             logger,
             &index_changes,
         )?;
-
+        let unmerged_changes = Self::check_unmerged_paths(&index, logger)?;
         Ok(Self {
             index_changes,
             working_tree_changes,
             untracked,
+            untracked_files,
+            unmerged_changes,
         })
     }
 
@@ -60,6 +72,47 @@ impl ChangesController {
     /// Devuelve los archivos desconocidos para git.
     pub fn get_untracked_files(&self) -> &Vec<String> {
         &self.untracked
+    }
+
+    /// Devuelve los cambios que no están mergeados.
+    pub fn get_unmerged_changes(&self) -> &HashMap<String, ChangeType> {
+        &self.unmerged_changes
+    }
+
+    pub fn get_untracked_files_interface(&self) -> &Vec<String> {
+        &self.untracked_files
+    }
+
+    /// Recolecta información sobre los merge conflicts
+    fn check_unmerged_paths(
+        staging_area: &StagingArea,
+        logger: &mut Logger,
+    ) -> Result<HashMap<String, ChangeType>, CommandError> {
+        let mut changes: HashMap<String, ChangeType> = HashMap::new();
+        let unmerged_files = staging_area.get_unmerged_files();
+        for (path, (common, head, destin)) in unmerged_files.iter() {
+            let path_str = path.to_string();
+            match (common, head, destin) {
+                (Some(_), Some(_), Some(_)) => {
+                    _ = changes.insert(path_str, ChangeType::ModifiedByBoth);
+                }
+                (None, Some(_), Some(_)) => {
+                    _ = changes.insert(path_str, ChangeType::AddedByBoth);
+                }
+                (Some(_), Some(_), None) => {
+                    _ = changes.insert(path_str, ChangeType::DeletedByThen);
+                }
+                (Some(_), None, Some(_)) => {
+                    _ = changes.insert(path_str, ChangeType::DeletedByUs);
+                }
+                _ => {
+                    return Err(CommandError::MergeConflict(
+                        "Invalid merge conflict".to_string(),
+                    ))
+                }
+            }
+        }
+        Ok(changes)
     }
 
     /// Obtiene los cambios que se incluirán en el próximo commit.
@@ -80,6 +133,13 @@ impl ChangesController {
         let mut changes: HashMap<String, ChangeType> =
             Self::check_files_in_staging_area(staging_files, logger, &mut tree)?;
         Self::get_deleted_changes_index(db, last_commit_tree, staging_area, &mut changes)?;
+        logger.log(&format!(
+            "Staging area files: {:?}",
+            staging_area.get_files().keys()
+        ));
+
+        logger.log(&format!("Staging area changes: {:?}", changes.keys()));
+
         Ok(changes)
     }
 
@@ -99,35 +159,38 @@ impl ChangesController {
             ));
             let actual_name = get_name(path)?;
             if !has_path && !has_hash {
+                logger.log(&format!("{} was added", path));
                 _ = changes.insert(path.to_string(), ChangeType::Added);
             } else if has_path && !has_hash {
+                logger.log(&format!("{} was modified", path));
                 _ = changes.insert(path.to_string(), ChangeType::Modified);
-            } else if has_path && has_hash {
+            } else {
                 _ = changes.insert(path.to_string(), ChangeType::Unmodified);
-            } else if has_hash && name != actual_name {
-                _ = changes.insert(path.to_string(), ChangeType::Renamed);
-            }
+            } 
         }
         Ok(changes)
     }
 
     /// Obtiene los cambios del working tree respecto al staging area.
     fn check_working_tree_status(
+        working_dir: &str,
         mut working_tree: Tree,
         staging_area: &StagingArea,
         last_commit: &Option<Tree>,
         logger: &mut Logger,
         staged_changes: &HashMap<String, ChangeType>,
-    ) -> Result<(HashMap<String, ChangeType>, Vec<String>), CommandError> {
+    ) -> Result<(HashMap<String, ChangeType>, Vec<String>, Vec<String>), CommandError> {
         let mut wt_changes: HashMap<String, ChangeType> = HashMap::new();
         let mut untracked: Vec<String> = Vec::new();
-
+        let mut untracked_files: Vec<String> = Vec::new();
         Self::check_working_tree_aux(
+            working_dir,
             &mut working_tree,
             staging_area,
             last_commit,
             &mut wt_changes,
             &mut untracked,
+            &mut untracked_files,
             logger,
             staged_changes,
         )?;
@@ -137,7 +200,10 @@ impl ChangesController {
             &mut wt_changes,
             logger,
         );
-        Ok((wt_changes, untracked))
+        logger.log(&format!("Changes not staged: {:?}", wt_changes.keys()));
+        logger.log(&format!("untracked files: {:?}", untracked));
+
+        Ok((wt_changes, untracked, untracked_files))
     }
 
     /// Obtiene los archivos eliminados en el working tree, pero presentes en el index.
@@ -164,7 +230,7 @@ impl ChangesController {
         staging_area: &StagingArea,
         changes: &mut HashMap<String, ChangeType>,
     ) -> Result<(), CommandError> {
-        let deleted_changes = staging_area.get_deleted_files(db, last_commit_tree)?;
+        let deleted_changes = staging_area.get_deleted_files(last_commit_tree);
         for deleted_file in deleted_changes.iter() {
             _ = changes.insert(deleted_file.to_string(), ChangeType::Deleted)
         }
@@ -173,11 +239,13 @@ impl ChangesController {
 
     /// Obtiene los cambios del working tree respecto al staging area.
     fn check_working_tree_aux(
+        working_dir: &str,
         tree: &mut Tree,
         staging_area: &StagingArea,
         last_commit: &Option<Tree>,
         changes: &mut HashMap<String, ChangeType>,
         untracked: &mut Vec<String>,
+        untracked_files: &mut Vec<String>,
         logger: &mut Logger,
         staged_changes: &HashMap<String, ChangeType>,
     ) -> Result<(), CommandError> {
@@ -186,16 +254,19 @@ impl ChangesController {
         for (_, object) in tree.get_objects().iter_mut() {
             if let Some(mut new_tree) = object.as_tree() {
                 Self::check_working_tree_aux(
+                    working_dir,
                     &mut new_tree,
                     staging_area,
                     last_commit,
                     changes,
                     untracked,
+                    untracked_files,
                     logger,
                     staged_changes,
                 )?
             } else {
-                let is_untracked = Self::check_file_status(
+                let (is_untracked, path) = Self::check_file_status(
+                    working_dir,
                     object,
                     staging_area,
                     last_commit,
@@ -206,6 +277,7 @@ impl ChangesController {
 
                 total_files_dir += 1;
                 if is_untracked {
+                    untracked_files.push(path);
                     untracked_number += 1;
                 }
             }
@@ -248,15 +320,16 @@ impl ChangesController {
 
     /// Obtiene el tipo de cambio del archivo respecto al staging area.
     fn check_file_status(
+        working_dir: &str,
         object: &mut GitObject,
         staging_area: &StagingArea,
         last_commit: &Option<Tree>,
         changes: &mut HashMap<String, ChangeType>,
         untracked: &mut Vec<String>,
         logger: &mut Logger,
-    ) -> Result<bool, CommandError> {
+    ) -> Result<(bool, String), CommandError> {
         let Some(path) = object.get_path() else {
-            return Err(CommandError::FileNameError);
+            return Err(CommandError::ObjectPathError);
         };
 
         let hash = object.get_hash_string()?;
@@ -269,16 +342,18 @@ impl ChangesController {
             && (!has_hash || (has_hash && content_differs(&path, object)?))
             && isnt_in_last_commit
         {
-            untracked.push(path);
-            return Ok(true);
+            logger.log(&format!("{} is untracked", path));
+
+            untracked.push(path.clone());
+            return Ok((true, path));
         } else if has_path && !has_hash {
-            _ = changes.insert(path, ChangeType::Modified);
-        } else if has_path && has_hash {
-            _ = changes.insert(path, ChangeType::Unmodified);
-        } else if has_path_renamed {
-            _ = changes.insert(path, ChangeType::Renamed);
+            logger.log(&format!("{} was modified", path));
+
+            _ = changes.insert(path.clone(), ChangeType::Modified);
+        } else {
+            _ = changes.insert(path.clone(), ChangeType::Unmodified);
         }
-        Ok(false)
+        Ok((false, path))
     }
 }
 

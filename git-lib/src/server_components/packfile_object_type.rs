@@ -13,7 +13,7 @@ pub enum PackfileObjectType {
 }
 
 impl PackfileObjectType {
-    pub(crate) fn from_u8(byte: u8) -> Result<Self, CommandError> {
+    pub fn from_u8(byte: u8) -> Result<Self, CommandError> {
         match byte {
             1 => Ok(PackfileObjectType::Commit),
             2 => Ok(PackfileObjectType::Tree),

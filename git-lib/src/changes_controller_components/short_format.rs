@@ -15,6 +15,9 @@ impl Format for ShortFormat {
         changes_not_staged: &HashMap<String, ChangeType>,
         untracked_files: &Vec<String>,
         _: (&str, bool, bool),
+        unmerged_paths: &HashMap<String, ChangeType>,
+        merge: bool,
+        _: (bool, usize, usize),
     ) -> Result<(), CommandError> {
         let mut changes: HashMap<String, ChangeObject> = HashMap::new();
         logger.log(&format!(
@@ -67,6 +70,10 @@ impl Format for ShortFormat {
             );
             _ = changes.insert(path.to_string(), change);
         }
+        if merge {
+            get_unmerged_changes(unmerged_paths, &mut changes);
+        }
+
         let mut output_message = "".to_string();
         let changes = sort_changes(changes);
         for change in changes.iter() {
@@ -92,4 +99,32 @@ fn sort_changes(changes: HashMap<String, ChangeObject>) -> Vec<ChangeObject> {
         }
     }
     sorted_changes
+}
+
+fn get_unmerged_changes(
+    unmerged_paths: &HashMap<String, ChangeType>,
+    changes: &mut HashMap<String, ChangeObject>,
+) {
+    for (path, change_type) in unmerged_paths.iter() {
+        let mut change = ChangeObject::new_default();
+        match change_type {
+            ChangeType::AddedByBoth => {
+                change = ChangeObject::new(path.to_string(), ChangeType::Added, ChangeType::Added);
+            }
+            ChangeType::DeletedByThen => {
+                change =
+                    ChangeObject::new(path.to_string(), ChangeType::Unmerged, ChangeType::Deleted);
+            }
+            ChangeType::DeletedByUs => {
+                change =
+                    ChangeObject::new(path.to_string(), ChangeType::Deleted, ChangeType::Unmerged);
+            }
+            ChangeType::ModifiedByBoth => {
+                change =
+                    ChangeObject::new(path.to_string(), ChangeType::Unmerged, ChangeType::Unmerged);
+            }
+            _ => {}
+        }
+        _ = changes.insert(path.to_string(), change);
+    }
 }
