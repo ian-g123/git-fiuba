@@ -38,6 +38,7 @@ use crate::{
     server_components::{
         history_analyzer::{get_analysis, get_parents_hash_map, rebuild_commits_tree},
         packfile_functions::make_packfile,
+        packfile_object_type::PackfileObjectType,
     },
     staging_area::StagingArea,
     utils::{aux::get_name, super_string::u8_vec_to_hex_string},
@@ -672,8 +673,11 @@ impl<'a> GitRepository<'a> {
 
         let mut staged_tree = {
             if files.is_empty() {
+                self.log("is_empty");
                 staging_area.get_working_tree_staged(&mut self.logger)?
             } else {
+                self.log("files isnt empty");
+
                 staging_area.get_working_tree_staged_bis(
                     &last_commit_tree,
                     &mut self.logger,
@@ -681,6 +685,7 @@ impl<'a> GitRepository<'a> {
                 )?
             }
         };
+        self.log("BBBBBB");
 
         let commit: CommitObject =
             self.get_commit(&message, parents, staged_tree.to_owned(), reuse_commit_info)?;
@@ -751,7 +756,7 @@ impl<'a> GitRepository<'a> {
         let datetime: DateTime<Local> = Local::now();
         let timestamp = datetime.timestamp();
         let offset = datetime.offset().local_minus_utc() / 60;
-        let commit = CommitObject::new(
+        let commit = CommitObject::new_from_tree(
             parents,
             message,
             author,
@@ -776,7 +781,7 @@ impl<'a> GitRepository<'a> {
         if let Some((message, author, committer, timestamp, offset)) =
             other_commit.get_info_commit()
         {
-            let commit = CommitObject::new(
+            let commit = CommitObject::new_from_tree(
                 parents,
                 message,
                 author,
@@ -999,6 +1004,17 @@ impl<'a> GitRepository<'a> {
         self.log(&format!("Wants {:#?}", wants));
         self.log(&format!("haves {:#?}", haves));
         let objects_decompressed_data = server.fetch_objects(wants, haves, &mut self.logger)?;
+        self.save_objects_from_packfile(objects_decompressed_data)?;
+
+        self.update_fetch_head(remote_branches, remote_reference)?;
+        Ok(())
+    }
+
+    pub fn save_objects_from_packfile(
+        &mut self,
+        objects_decompressed_data: Vec<(PackfileObjectType, usize, Vec<u8>)>,
+    ) -> Result<HashMap<String, (PackfileObjectType, usize, Vec<u8>)>, CommandError> {
+        let mut objects = HashMap::<String, (PackfileObjectType, usize, Vec<u8>)>::new();
         for (obj_type, len, content) in objects_decompressed_data {
             self.log(&format!(
                 "Saving object of type {} and len {}, with data {:?}",
@@ -1007,12 +1023,11 @@ impl<'a> GitRepository<'a> {
                 String::from_utf8_lossy(&content)
             ));
             let mut git_object: GitObject =
-                Box::new(ProtoObject::new(content, len, obj_type.to_string()));
-            self.db()?.write(&mut git_object, false, &mut self.logger)?;
+                Box::new(ProtoObject::new(content.clone(), len, obj_type.to_string()));
+            let hash = self.db()?.write(&mut git_object, false, &mut self.logger)?;
+            objects.insert(hash, (obj_type, len, content));
         }
-
-        self.update_fetch_head(remote_branches, remote_reference)?;
-        Ok(())
+        Ok(objects)
     }
 
     pub fn log(&mut self, content: &str) {
@@ -1244,7 +1259,7 @@ impl<'a> GitRepository<'a> {
                     error.to_string()
                 ))
             })?;
-            branches.insert(file_name.to_string(), sha1.trim().to_string());
+            branches.insert(file_name.trim().to_string(), sha1.trim().to_string());
         }
         Ok(branches)
     }
@@ -2001,8 +2016,9 @@ impl<'a> GitRepository<'a> {
             branches_with_their_last_hash = self.push_all_branch_hashes()?;
         } else {
             let current_branch = get_head_ref()?;
-            branches_with_their_last_hash =
-                self.get_last_commit_hash_branch_local_remote(&current_branch.clone())?;
+            let current_branch_name = current_branch[11..].to_string();
+            let hash_commit = self.get_last_commit_hash_branch(&current_branch_name)?;
+            branches_with_their_last_hash.push((current_branch, hash_commit));
         }
         for branch_with_commit in branches_with_their_last_hash {
             rebuild_commits_tree(
@@ -2011,7 +2027,7 @@ impl<'a> GitRepository<'a> {
                 &mut commits_map,
                 Some(branch_with_commit.0),
                 all,
-                &None,
+                &HashSet::<String>::new(),
                 false,
                 &mut self.logger,
             )?;
@@ -3040,12 +3056,30 @@ fn merge_trees(
         .chain(destin_entries.clone().into_keys())
         .collect::<HashSet<String>>();
     for key in all_keys {
-        let head_entry = head_entries.get_mut(&key);
-        let destin_entry = destin_entries.get_mut(&key);
+        let head_entry = match head_entries.get_mut(&key) {
+            Some((_head_entry_hash, head_entry_opt)) => {
+                let head_entry = head_entry_opt.to_owned().ok_or(CommandError::ShallowTree)?;
+                Some(head_entry)
+            }
+            None => None,
+        };
+        let destin_entry = match destin_entries.get_mut(&key) {
+            Some((_destin_entry_hash, destin_entry_opt)) => {
+                let destin_entry = destin_entry_opt
+                    .to_owned()
+                    .ok_or(CommandError::ShallowTree)?;
+                Some(destin_entry)
+            }
+            None => None,
+        };
         let common_entry = common_entries.get_mut(&key);
+
         let joint_path = join_paths!(parent_path, key).ok_or(CommandError::JoiningPaths)?;
         match common_entry {
-            Some(common_entry) => {
+            Some((_common_entry_hash, common_entry_opt)) => {
+                let common_entry = common_entry_opt
+                    .to_owned()
+                    .ok_or(CommandError::ShallowTree)?;
                 match is_in_common(
                     head_entry,
                     destin_entry,
@@ -3055,7 +3089,7 @@ fn merge_trees(
                     &joint_path,
                     staging_area,
                 )? {
-                    Some(merged_object) => merged_tree.add_object(key, merged_object),
+                    Some(merged_object) => merged_tree.add_object(key, merged_object)?,
                     _ => {}
                 }
             }
@@ -3068,7 +3102,7 @@ fn merge_trees(
                     &joint_path,
                     staging_area,
                 )?;
-                merged_tree.add_object(key, object)
+                merged_tree.add_object(key, object)?
             }
         }
     }
@@ -3076,16 +3110,16 @@ fn merge_trees(
 }
 
 fn is_in_common(
-    head_entry: Option<&mut GitObject>,
-    destin_entry: Option<&mut GitObject>,
-    common_entry: &mut GitObject,
+    head_entry: Option<GitObject>,
+    destin_entry: Option<GitObject>,
+    mut common_entry: GitObject,
     head_name: &str,
     destin_name: &str,
     parent_path: &str,
     staging_area: &mut StagingArea,
 ) -> Result<Option<GitObject>, CommandError> {
     match (head_entry, destin_entry) {
-        (Some(head_entry), Some(destin_entry)) => {
+        (Some(mut head_entry), Some(mut destin_entry)) => {
             match (head_entry.as_mut_tree(), destin_entry.as_mut_tree()) {
                 (Some(mut head_tree), Some(mut destin_tree)) => {
                     let mut common_tree = match common_entry.as_mut_tree() {
@@ -3139,12 +3173,22 @@ fn is_in_common(
                 },
             }
         }
-        (Some(head_entry), None) => {
-            staging_area.add_unmerged_object(common_entry, head_entry, parent_path, true)?;
+        (Some(mut head_entry), None) => {
+            staging_area.add_unmerged_object(
+                &mut common_entry,
+                &mut head_entry,
+                parent_path,
+                true,
+            )?;
             return Ok(Some(head_entry.to_owned()));
         }
-        (None, Some(destin_entry)) => {
-            staging_area.add_unmerged_object(common_entry, destin_entry, parent_path, false)?;
+        (None, Some(mut destin_entry)) => {
+            staging_area.add_unmerged_object(
+                &mut common_entry,
+                &mut destin_entry,
+                parent_path,
+                false,
+            )?;
 
             return Ok(Some(destin_entry.to_owned()));
         }
@@ -3153,15 +3197,15 @@ fn is_in_common(
 }
 
 fn is_not_in_common(
-    head_entry: Option<&mut GitObject>,
-    destin_entry: Option<&mut GitObject>,
+    head_entry: Option<GitObject>,
+    destin_entry: Option<GitObject>,
     head_name: &str,
     destin_name: &str,
     entry_path: &str,
     staging_area: &mut StagingArea,
 ) -> Result<GitObject, CommandError> {
     match (head_entry, destin_entry) {
-        (Some(head_entry), Some(destin_entry)) => {
+        (Some(mut head_entry), Some(mut destin_entry)) => {
             match (head_entry.as_mut_tree(), destin_entry.as_mut_tree()) {
                 (Some(mut head_tree), Some(mut destin_tree)) => {
                     let mut common_tree = Tree::new("".to_string());
@@ -3210,12 +3254,12 @@ fn is_not_in_common(
                 },
             }
         }
-        (Some(head_entry), None) => {
-            staging_area.add_object(head_entry, entry_path)?;
+        (Some(mut head_entry), None) => {
+            staging_area.add_object(&mut head_entry, entry_path)?;
             return Ok(head_entry.to_owned());
         }
-        (None, Some(destin_entry)) => {
-            staging_area.add_object(destin_entry, entry_path)?;
+        (None, Some(mut destin_entry)) => {
+            staging_area.add_object(&mut destin_entry, entry_path)?;
             return Ok(destin_entry.to_owned());
         }
         (None, None) => return Err(CommandError::MergeConflict("".to_string())),

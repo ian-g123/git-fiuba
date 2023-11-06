@@ -4,18 +4,6 @@ use std::{
     path::Path,
     process::Command,
 };
-pub fn get_head(path: &str) -> String {
-    let head_path = format!("{}/.git/HEAD", path);
-
-    let head_ref = fs::read_to_string(head_path.clone()).unwrap();
-    let head_ref = head_ref.trim();
-    let head_ref_parts: Vec<&str> = head_ref.split(" ").collect();
-
-    let head_ref_path = head_ref_parts[1];
-    let head_path: Vec<&str> = head_ref_path.split("/").collect();
-    let head = head_path[2..].join("/");
-    head
-}
 
 pub fn create_test_scene_1(path: &str) {
     create_base_scene(path);

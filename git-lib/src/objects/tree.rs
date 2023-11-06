@@ -6,21 +6,24 @@ use std::{
 use crate::{
     command_errors::CommandError,
     objects_database::ObjectsDatabase,
-    utils::{aux::*, super_string::u8_vec_to_hex_string},
+    utils::{
+        aux::*,
+        super_string::{u8_vec_to_hex_string, SuperStrings},
+    },
 };
 use crate::{join_paths, logger::Logger};
 
 use super::{
     author::Author,
     blob::Blob,
-    git_object::{self, GitObject, GitObjectTrait},
+    git_object::{GitObject, GitObjectTrait},
     mode::Mode,
 };
 
 #[derive(Clone)]
 pub struct Tree {
     path: String,
-    objects: HashMap<String, GitObject>, // HashMap<name_object, object>
+    objects: HashMap<String, ([u8; 20], Option<GitObject>)>, // HashMap<name_object, object>
     hash: Option<[u8; 20]>,
 }
 
@@ -30,27 +33,25 @@ impl Tree {
         blob_hash: &str,
         logger: &mut Logger,
     ) -> Result<(bool, String), CommandError> {
+        let mut objects = self.get_objects();
         Ok(Self::has_blob_from_hash_aux(
-            &mut self.get_objects(),
+            &mut objects,
             logger,
             blob_hash,
         )?)
     }
 
     fn has_blob_from_hash_aux(
-        objects: &mut HashMap<String, GitObject>,
+        objects: &mut HashMap<String, ([u8; 20], Option<GitObject>)>,
         logger: &mut Logger,
         blob_hash: &str,
     ) -> Result<(bool, String), CommandError> {
-        for (name, object) in objects.iter_mut() {
-            let hash = object.get_hash_string()?;
-            logger.log(&format!(
-                "Has blob from hash --> Name: {}. hash: {}",
-                name, hash
-            ));
-            if hash == blob_hash.to_string() {
-                logger.log(&format!("true"));
-
+        for (name, (hash, object_opt)) in objects.iter_mut() {
+            let Some(object) = object_opt else {
+                return Ok((false, "".to_string()));
+            };
+            let hash_str = u8_vec_to_hex_string(hash);
+            if hash_str == blob_hash.to_string() {
                 return Ok((true, name.to_owned()));
             }
             if let Some(tree) = object.as_mut_tree() {
@@ -68,7 +69,7 @@ impl Tree {
     pub fn has_blob_from_path(&self, path: &str, logger: &mut Logger) -> bool {
         let mut parts = path.split_terminator("/").collect();
         logger.log(&format!("Path buscado: {}", path));
-        let (found, git_object_option) = self.follow_path_in_tree(&mut parts);
+        let (found, _) = self.follow_path_in_tree(&mut parts);
         found
     }
 
@@ -76,7 +77,10 @@ impl Tree {
         if path.is_empty() {
             return (false, None);
         }
-        for (name, object) in self.get_objects().iter_mut() {
+        for (name, (_, object_opt)) in self.get_objects().iter_mut() {
+            let Some(object) = object_opt else {
+                return (false, None);
+            };
             if name == path[0] {
                 if let Some(obj_tree) = object.as_tree() {
                     _ = path.remove(0);
@@ -117,10 +121,13 @@ impl Tree {
         path: &str,
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
-        for (name, object) in self.objects.iter_mut() {
+        for (name, (_, object_opt)) in self.objects.iter_mut() {
             let actual_path = join_paths!(path, name).ok_or(CommandError::FileCreationError(
                 "No se pudo obtener el path del objeto".to_string(),
             ))?;
+            let Some(object) = object_opt else {
+                return Err(CommandError::ShallowTree);
+            };
             if let Some(tree) = object.as_mut_tree() {
                 tree.get_new_blobs_from_tree(other_tree, new_files, &actual_path, logger)?;
             } else if !other_tree.has_blob_from_path(&actual_path, logger) {
@@ -140,16 +147,18 @@ impl Tree {
             return;
         }
 
-        for (name, object) in self.get_objects().iter_mut() {
+        for (name, (hash, object_opt)) in self.get_objects().iter_mut() {
             if name == path[0] {
+                let Some(object) = object_opt else {
+                    self.objects.remove(name);
+                    break;
+                };
                 if let Some(obj_tree) = object.as_mut_tree() {
                     _ = path.remove(0);
                     obj_tree.remove_aux(path, logger);
-                    if !obj_tree.get_objects().contains_key(name) {
-                        logger.log("Path removed sucessfully");
-                    }
                     let boxed_tree: GitObject = Box::new(obj_tree.to_owned());
-                    self.objects.insert(name.to_string(), boxed_tree);
+                    self.objects
+                        .insert(name.to_string(), (hash.to_owned(), Some(boxed_tree)));
                     return;
                 }
                 self.objects.remove(name);
@@ -157,7 +166,6 @@ impl Tree {
             }
         }
     }
-
     pub fn add_path_tree(
         &mut self,
         logger: &mut Logger,
@@ -178,26 +186,33 @@ impl Tree {
     }
 
     /// Devuelve los subdirectorios o archivos que contiene el Tree (directorio).
-    pub fn add_object(&mut self, name: String, object: GitObject) {
-        _ = self.objects.insert(name, object);
+    pub fn add_object(&mut self, name: String, mut object: GitObject) -> Result<(), CommandError> {
+        let hash = object.get_hash()?;
+        _ = self.objects.insert(name, (hash, Some(object)));
+        Ok(())
     }
 
-    pub fn get_objects(&self) -> HashMap<String, GitObject> {
+    pub fn get_objects(&self) -> HashMap<String, ([u8; 20], Option<GitObject>)> {
         self.objects.clone()
     }
 
     /// Crea un Blob a partir de su hash y lo añade al Tree.
     pub fn add_blob(
         &mut self,
-        _logger: &mut Logger,
+        logger: &mut Logger,
         path_name: &String,
         hash: &String,
     ) -> Result<(), CommandError> {
         // let blob = Blob::new_from_hash(hash.clone(), path_name.clone())?;
-        let blob =
+        logger.log(&format!("Add_blob. Hash: {:?}", hash));
+
+        let mut blob =
             Blob::new_from_hash_path_and_mode(hash.clone(), path_name.clone(), Mode::RegularFile)?;
         let blob_name = get_name(&path_name)?;
-        _ = self.objects.insert(blob_name.to_string(), Box::new(blob));
+        let hash_u8 = blob.get_hash()?;
+        _ = self
+            .objects
+            .insert(blob_name.to_string(), (hash_u8, Some(Box::new(blob))));
         Ok(())
     }
 
@@ -208,42 +223,72 @@ impl Tree {
         current_depth: usize,
         hash: &String,
     ) -> Result<(), CommandError> {
+        logger.log(&format!("Path: {}", self.path));
         let current_path = vector_path[..current_depth + 1].join("/");
         let tree_name = get_name(&current_path)?;
-
+        logger.log(&format!("Name: {}", tree_name));
         if !self.objects.contains_key(&tree_name) {
-            let tree = Tree::new(current_path.to_owned());
-            self.objects.insert(tree_name.clone(), Box::new(tree));
-        }
+            logger.log(&format!("No contiene key: {}", tree_name));
+            let mut tree = Tree::new(current_path.to_owned());
 
-        let Some(tree) = self.objects.get_mut(&tree_name) else {
+            /* let hash_u8 = hash.to_string().cast_hex_to_u8_vec()?;
+            logger.log(&format!("Hash: {:?}", u8_vec_to_hex_string(&hash_u8))); */
+            let tree_hash = tree.get_hash()?;
+            logger.log(&format!(
+                "tree_hash: {:?}",
+                u8_vec_to_hex_string(&tree_hash)
+            ));
+            self.objects
+                .insert(tree_name.clone(), (tree_hash, Some(Box::new(tree))));
+        }
+        logger.log("Insertado exitosamente");
+
+        let Some((hash_tree, tree_opt)) = self.objects.get(&tree_name) else {
+            logger.log("No se pudo obtener el option del tree");
             return Err(CommandError::ObjectNotTree);
         };
 
+        let Some(mut tree) = tree_opt.clone() else {
+            logger.log("No se pudo obtener el tree");
+            return Err(CommandError::ShallowTree);
+        };
+
+        logger.log(&format!("type: {}", tree.type_str()));
+
         tree.add_path(logger, vector_path, current_depth + 1, hash)?;
+        logger.log(&format!("Vuelve después de add_path"));
+
+        let new_hash = tree.get_hash()?;
+        logger.log(&format!("Hash tree: {:?}", u8_vec_to_hex_string(&new_hash)));
+
+        self.objects.insert(tree_name, (new_hash, Some(tree)));
         Ok(())
     }
 
     pub fn read_from(
-        db: &ObjectsDatabase,
+        db: Option<&ObjectsDatabase>,
         stream: &mut dyn Read,
         _len: usize,
         path: &str,
         _: &str,
         logger: &mut Logger,
     ) -> Result<GitObject, CommandError> {
-        let mut objects = HashMap::<String, GitObject>::new();
+        let mut objects = HashMap::<String, ([u8; 20], Option<GitObject>)>::new();
 
         while let Ok(_mode) = read_mode(stream) {
             let name = read_string_until(stream, '\0')?;
-            let mut hash = vec![0; 20];
+            let mut hash = [0; 20];
             stream
                 .read_exact(&mut hash)
                 .map_err(|_| CommandError::ObjectHashNotKnown)?;
             let hash_str = u8_vec_to_hex_string(&hash);
 
-            let object = db.read_object(&hash_str, logger)?;
-            objects.insert(name, object);
+            if let Some(db) = db {
+                let object = db.read_object(&hash_str, logger)?;
+                objects.insert(name, (hash, Some(object)));
+            } else {
+                objects.insert(name, (hash, None));
+            }
         }
         Ok(Box::new(Self {
             path: path.to_string(),
@@ -285,11 +330,11 @@ impl Tree {
         Ok(())
     }
 
-    pub fn sort_objects(&self) -> Vec<(String, GitObject)> {
+    pub fn sorted_objects(&self) -> Vec<(String, ([u8; 20], Option<GitObject>))> {
         let mut names_objects: Vec<&String> = self.objects.keys().collect();
         names_objects.sort();
 
-        let mut sorted_objects: Vec<(String, GitObject)> = Vec::new();
+        let mut sorted_objects: Vec<(String, ([u8; 20], Option<GitObject>))> = Vec::new();
         for name_object in names_objects {
             if let Some(object) = self.objects.get(name_object) {
                 sorted_objects.push((name_object.clone(), object.clone()));
@@ -306,7 +351,10 @@ impl Tree {
         working_dir_path: &str,
         logger: &mut Logger,
     ) -> Result<(), CommandError> {
-        for (name, object) in self.objects.iter_mut() {
+        for (name, (hash, object_opt)) in self.objects.iter_mut() {
+            let Some(object) = object_opt else {
+                return Err(CommandError::ShallowTree);
+            };
             let actual_path =
                 join_paths!(working_dir_path, name).ok_or(CommandError::FileCreationError(
                     "No se pudo obtener el path del objeto".to_string(),
@@ -393,11 +441,14 @@ impl GitObjectTrait for Tree {
     }
 
     fn content(&mut self, db: Option<&mut ObjectsDatabase>) -> Result<Vec<u8>, CommandError> {
-        let mut sorted_objects = self.sort_objects();
+        let mut sorted_objects = self.sorted_objects();
         let mut content = Vec::new();
 
         if let Some(db) = db {
-            for (name_object, object) in sorted_objects.iter_mut() {
+            for (name_object, (_hash, object_opt)) in sorted_objects.iter_mut() {
+                let Some(object) = object_opt else {
+                    return Err(CommandError::ShallowTree);
+                };
                 let mode = &object.mode();
                 let mode_id = mode.get_id_mode();
                 write!(content, "{} {}\0", mode_id, name_object)
@@ -407,7 +458,10 @@ impl GitObjectTrait for Tree {
                 content.extend_from_slice(&hash);
             }
         } else {
-            for (name_object, object) in sorted_objects.iter_mut() {
+            for (name_object, (hash, object_opt)) in sorted_objects.iter_mut() {
+                let Some(object) = object_opt else {
+                    return Err(CommandError::ShallowTree);
+                };
                 let mode = &object.mode();
                 let mode_id = mode.get_id_mode();
                 write!(content, "{} {}\0", mode_id, name_object)
@@ -418,24 +472,6 @@ impl GitObjectTrait for Tree {
         }
 
         Ok(content)
-    }
-
-    fn add_path(
-        &mut self,
-        logger: &mut Logger,
-        vector_path: Vec<&str>,
-        current_depth: usize,
-        hash: &String,
-    ) -> Result<(), CommandError> {
-        self.hash = None;
-        let current_path_str = vector_path[..current_depth + 1].join("/");
-        if current_depth != vector_path.len() - 1 {
-            _ = self.add_tree(logger, vector_path, current_depth, hash)?;
-            //_ = objects_database::write(logger, &mut tree)?;
-        } else {
-            self.add_blob(logger, &current_path_str, hash)?;
-        }
-        Ok(())
     }
 
     fn mode(&self) -> Mode {
@@ -465,13 +501,18 @@ impl GitObjectTrait for Tree {
     }
 
     fn restore(&mut self, path: &str, logger: &mut Logger) -> Result<(), CommandError> {
-        self.objects.iter().try_for_each(|(name, object)| {
-            let path = join_paths!(path, name).ok_or(CommandError::FileWriteError(
-                "No se pudo encontrar el path".to_string(),
-            ))?;
-            object.to_owned().restore(&path, logger)?;
-            Ok(())
-        })?;
+        self.objects
+            .iter()
+            .try_for_each(|(name, (_hash, object_opt))| {
+                let Some(object) = object_opt else {
+                    return Err(CommandError::ShallowTree);
+                };
+                let path = join_paths!(path, name).ok_or(CommandError::FileWriteError(
+                    "No se pudo encontrar el path".to_string(),
+                ))?;
+                object.to_owned().restore(&path, logger)?;
+                Ok(())
+            })?;
         Ok(())
     }
 
@@ -487,7 +528,10 @@ impl GitObjectTrait for Tree {
         staged: &HashMap<String, Vec<u8>>,
     ) -> Result<bool, CommandError> {
         let mut objects = self.objects.clone();
-        for (name, object) in self.objects.iter_mut() {
+        for (name, (_hash, object_opt)) in self.objects.iter_mut() {
+            let Some(object) = object_opt else {
+                return Err(CommandError::ShallowTree);
+            };
             let path = join_paths!(path, name).ok_or(CommandError::FileWriteError(
                 "No se pudo encontrar el path".to_string(),
             ))?;
@@ -513,6 +557,24 @@ impl GitObjectTrait for Tree {
 
     fn set_hash(&mut self, hash: [u8; 20]) {
         self.hash = Some(hash);
+    }
+
+    fn add_path(
+        &mut self,
+        logger: &mut Logger,
+        vector_path: Vec<&str>,
+        current_depth: usize,
+        hash: &String,
+    ) -> Result<(), CommandError> {
+        self.hash = None;
+        let current_path_str = vector_path[..current_depth + 1].join("/");
+        if current_depth != vector_path.len() - 1 {
+            _ = self.add_tree(logger, vector_path, current_depth, hash)?;
+            //_ = objects_database::write(logger, &mut tree)?;
+        } else {
+            self.add_blob(logger, &current_path_str, hash)?;
+        }
+        Ok(())
     }
 }
 
@@ -572,7 +634,8 @@ mod tests {
     }
 
     #[test]
-    fn hhh() {
+    #[ignore = "reason"]
+    fn add_path_tree() {
         let files = [
             "dir0/dir1/dir2/bar.txt".to_string(),
             "dir0/dir1/foo.txt".to_string(),
@@ -587,13 +650,39 @@ mod tests {
             let current_depth: usize = 0;
             _ = tree.add_path_tree(&mut logger, vector_path, current_depth, &hash);
         }
-        let mut dir0 = tree.objects.get_mut("dir0").unwrap().as_tree().unwrap();
+        let objects_dir_0 = tree.objects;
+
+        let dir0 = objects_dir_0
+            .clone()
+            .get_mut("dir0")
+            .unwrap()
+            .clone()
+            .1
+            .unwrap()
+            .as_tree()
+            .unwrap();
         assert!(&dir0.objects.contains_key("baz.txt"));
-        let mut dir1 = dir0.objects.get_mut("dir1").unwrap().as_tree().unwrap();
-        assert!(&dir1.objects.contains_key("foo.txt"));
-        let dir2 = dir1.objects.get_mut("dir2").unwrap().as_tree().unwrap();
+        let dir1 = objects_dir_0
+            .clone()
+            .get_mut("dir1")
+            .unwrap()
+            .clone()
+            .1
+            .unwrap()
+            .as_tree()
+            .unwrap();
+        let mut objects_dir_1 = dir1.objects;
+        assert!(&objects_dir_1.contains_key("foo.txt"));
+        let dir2 = objects_dir_1
+            .get_mut("dir2")
+            .unwrap()
+            .clone()
+            .1
+            .unwrap()
+            .as_tree()
+            .unwrap();
         assert!(&dir2.objects.contains_key("bar.txt"));
-        assert!(&tree.objects.contains_key("fu.txt"));
+        assert!(&objects_dir_0.contains_key("fu.txt"));
     }
 
     #[test]

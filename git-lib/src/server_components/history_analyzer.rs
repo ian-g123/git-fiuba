@@ -1,6 +1,8 @@
 use std::{
     collections::{HashMap, HashSet},
+    hash::Hash,
     io::Cursor,
+    option,
 };
 
 use crate::{
@@ -40,13 +42,14 @@ pub fn get_analysis(
             logger.log("Local branch is up-to-date");
             continue;
         }
+        let hash_to_look_for = HashSet::<String>::from_iter(vec![remote_hash.clone()]);
         rebuild_commits_tree(
             &db,
             &local_hash,
             &mut commits_map,
             Some(local_branch.to_string()),
             false,
-            &Some(remote_hash.to_string()),
+            &hash_to_look_for,
             true,
             logger,
         )?;
@@ -79,10 +82,11 @@ pub fn rebuild_commits_tree(
     commits_map: &mut HashMap<String, (CommitObject, Option<String>)>, // HashMap<hash, (commit, branch)>
     branch: Option<String>,
     log_all: bool,
-    hash_to_look_for: &Option<String>,
+    hash_to_look_for: &HashSet<String>,
     build_tree: bool,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
+    logger.log("rebuild_commits_tree");
     if commits_map.contains_key(&hash_commit.to_string()) {
         return Ok(());
     }
@@ -100,13 +104,9 @@ pub fn rebuild_commits_tree(
 
     logger.log(&format!("string: {}, len: {}", string, len));
 
-    let mut commit_object_box = CommitObject::read_from(
-        &db,
-        &mut stream,
-        logger,
-        build_tree,
-        Some(hash_commit.clone()),
-    )?;
+    let option_db = if build_tree { Some(db) } else { None };
+    let mut commit_object_box =
+        CommitObject::read_from(option_db, &mut stream, logger, Some(hash_commit.clone()))?;
 
     logger.log(&format!(
         "commit_object_box: {:?}",
@@ -124,12 +124,10 @@ pub fn rebuild_commits_tree(
         return Err(CommandError::InvalidCommit);
     };
 
-    if let Some(hash_to_look_for) = &hash_to_look_for {
-        if hash_to_look_for == hash_commit {
-            let commit_with_branch = (commit_object.to_owned(), branch);
-            commits_map.insert(hash_commit.to_string(), commit_with_branch);
-            return Ok(());
-        }
+    if hash_to_look_for.contains(hash_commit) {
+        let commit_with_branch = (commit_object.to_owned(), branch);
+        commits_map.insert(hash_commit.to_string(), commit_with_branch);
+        return Ok(());
     }
 
     let parents_hash = commit_object.get_parents();
@@ -149,8 +147,8 @@ pub fn rebuild_commits_tree(
 
         if !log_all {
             for parent_hash in parents_hash.iter().skip(1) {
-                if let Some(hash_to_look_for) = &hash_to_look_for {
-                    if commits_map.contains_key(&hash_to_look_for.to_string()) {
+                for hash_to_look_for_one in hash_to_look_for.iter() {
+                    if commits_map.contains_key(&hash_to_look_for_one.to_string()) {
                         return Ok(());
                     }
                 }
@@ -158,7 +156,7 @@ pub fn rebuild_commits_tree(
                     db,
                     &parent_hash,
                     commits_map,
-                    branch.clone(),
+                    None,
                     log_all,
                     hash_to_look_for,
                     build_tree,

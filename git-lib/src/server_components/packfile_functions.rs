@@ -1,4 +1,8 @@
-use std::{collections::HashMap, io::Write};
+use std::{
+    collections::HashMap,
+    io::{Read, Write},
+    net::TcpStream,
+};
 
 use crate::{
     command_errors::CommandError,
@@ -12,11 +16,14 @@ use crate::{
     utils::aux::get_sha1,
 };
 
+use super::reader::TcpStreamBuffedReader;
+
 pub fn get_objects_from_tree(
     hash_objects: &mut HashMap<String, GitObject>,
     tree: &Tree,
 ) -> Result<(), CommandError> {
-    for (hash_object, mut git_object) in tree.get_objects() {
+    for (hash_object, (_git_object_hash, git_object_opt)) in tree.get_objects() {
+        let mut git_object = git_object_opt.ok_or(CommandError::ShallowTree)?;
         if let Some(son_tree) = git_object.as_tree() {
             get_objects_from_tree(hash_objects, &son_tree)?;
         }
@@ -116,4 +123,140 @@ pub fn make_packfile(
     })?;
 
     Ok(packfile)
+}
+
+/// lee la firma del packfile, los primeros 4 bytes del socket
+fn read_pack_signature(socket: &mut TcpStream) -> Result<String, CommandError> {
+    let signature_buf = &mut [0; 4];
+    socket
+        .read_exact(signature_buf)
+        .map_err(|_| CommandError::ErrorExtractingPackfile)?;
+    let signature = String::from_utf8(signature_buf.to_vec())
+        .map_err(|_| CommandError::ErrorExtractingPackfile)?;
+    Ok(signature)
+}
+
+/// lee la versión del packfile, los siguientes 4 bytes del socket
+fn read_version_number(socket: &mut TcpStream) -> Result<u32, CommandError> {
+    let mut version_buf = [0; 4];
+    socket
+        .read_exact(&mut version_buf)
+        .map_err(|_| CommandError::ErrorExtractingPackfile)?;
+    let version = u32::from_be_bytes(version_buf);
+    Ok(version)
+}
+
+/// lee la cantidad de objetos en el packfile, los siguientes 4 bytes del socket
+fn read_object_number(socket: &mut TcpStream) -> Result<u32, CommandError> {
+    let mut object_number_buf = [0; 4];
+    socket
+        .read_exact(&mut object_number_buf)
+        .map_err(|_| CommandError::ErrorExtractingPackfile)?;
+    let object_number = u32::from_be_bytes(object_number_buf);
+    Ok(object_number)
+}
+
+fn read_packfile_header(socket: &mut TcpStream) -> Result<u32, CommandError> {
+    let signature = read_pack_signature(socket)?;
+    if signature != "PACK" {
+        return Err(CommandError::ErrorReadingPkt);
+    }
+    let version = read_version_number(socket)?;
+    if version != 2 {
+        return Err(CommandError::ErrorReadingPkt);
+    }
+    let object_number = read_object_number(socket)?;
+    Ok(object_number)
+}
+
+/// Lee todos los objetos del packfile y devuelve un vector que contiene tuplas con:\
+/// `(tipo de objeto, tamaño del objeto, contenido del objeto en bytes)`
+fn read_objects_in_packfile(
+    socket: &mut TcpStream,
+    object_number: u32,
+) -> Result<Vec<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
+    let mut objects_data = Vec::new();
+    let mut buffed_reader = TcpStreamBuffedReader::new(socket);
+
+    for _ in 0..object_number {
+        let mut buffed_reader: &mut TcpStreamBuffedReader<'_> = &mut buffed_reader;
+        let (object_type, len) = read_object_header_from_packfile(buffed_reader)?;
+
+        buffed_reader.clean_up_to_pos();
+        let mut decoder = flate2::read::ZlibDecoder::new(&mut buffed_reader);
+        let mut deflated_data = Vec::new();
+
+        decoder
+            .read_to_end(&mut deflated_data)
+            .map_err(|_| CommandError::ErrorExtractingPackfile)?;
+        let bytes_used = decoder.total_in() as usize;
+        buffed_reader.set_pos(bytes_used);
+
+        let object = deflated_data;
+        objects_data.push((object_type, len, object));
+    }
+    Ok(objects_data)
+}
+
+pub fn read_object_header_from_packfile(
+    buffed_reader: &mut TcpStreamBuffedReader<'_>,
+) -> Result<(PackfileObjectType, usize), CommandError> {
+    let mut first_byte_buf = [0; 1];
+    buffed_reader
+        .read_exact(&mut first_byte_buf)
+        .map_err(|_| CommandError::ErrorExtractingPackfile)?;
+
+    let object_type_u8 = first_byte_buf[0] >> 4 & 0b00000111;
+    let object_type = PackfileObjectType::from_u8(object_type_u8)?;
+
+    let mut bits = Vec::new();
+    let first_byte_buf_len_bits = first_byte_buf[0] & 0b00001111;
+
+    let mut bit_chunk = Vec::new();
+    for i in (0..4).rev() {
+        let bit = (first_byte_buf_len_bits >> i) & 1;
+        bit_chunk.push(bit);
+    }
+
+    bits.splice(0..0, bit_chunk);
+    let mut is_last_byte: bool = first_byte_buf[0] >> 7 == 0;
+    while !is_last_byte {
+        let mut seven_bit_chunk = Vec::<u8>::new();
+        let mut current_byte_buf = [0; 1];
+        buffed_reader
+            .read_exact(&mut current_byte_buf)
+            .map_err(|_| CommandError::ErrorExtractingPackfile)?;
+        let current_byte = current_byte_buf[0];
+        let seven_bit_chunk_with_zero = current_byte & 0b01111111;
+        for i in (0..7).rev() {
+            let bit = (seven_bit_chunk_with_zero >> i) & 1;
+            seven_bit_chunk.push(bit);
+        }
+        bits.splice(0..0, seven_bit_chunk);
+        is_last_byte = current_byte >> 7 == 0;
+    }
+
+    let len = bits_to_usize(&bits);
+    Ok((object_type, len))
+}
+
+fn bits_to_usize(bits: &[u8]) -> usize {
+    let mut result = 0;
+    let max_power = bits.len() - 1;
+    for (i, bit) in bits.iter().enumerate() {
+        if *bit == 1 {
+            let exp = max_power - i;
+            result += 2usize.pow(exp as u32);
+        }
+    }
+    result
+}
+
+/// Lee los objetos del socket, primero lee el header del packfile y luego lee los objetos
+pub fn read_objects(
+    socket: &mut TcpStream,
+) -> Result<Vec<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
+    let object_number = read_packfile_header(socket)?;
+    let objects_data = read_objects_in_packfile(socket, object_number)?;
+    Ok(objects_data)
 }

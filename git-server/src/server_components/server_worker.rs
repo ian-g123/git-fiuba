@@ -1,4 +1,5 @@
 use std::{
+    collections::{HashMap, HashSet},
     io::{self, Cursor, Write},
     net::TcpStream,
 };
@@ -9,12 +10,15 @@ use git_lib::{
     git_repository::GitRepository,
     join_paths,
     logger::Logger,
-    objects,
+    objects::{blob::Blob, commit_object::CommitObject, tree::Tree},
+    objects_database::ObjectsDatabase,
     server_components::{
-        packfile_object_type::{self, PackfileObjectType},
+        history_analyzer::rebuild_commits_tree,
+        packfile_functions::{make_packfile, read_objects},
+        packfile_object_type::PackfileObjectType,
         pkt_strings::Pkt,
     },
-    utils::aux::read_string_until,
+    utils::{aux::read_string_until, super_string::u8_vec_to_hex_string},
 };
 
 pub struct ServerWorker {
@@ -47,7 +51,7 @@ impl ServerWorker {
             }
             "git-receive-pack" => {
                 println!("git-receive-pack");
-                todo!("git-receive-pack not implemented");
+                self.git_receive_pack(&repo_path[1..])
             }
             _ => {
                 println!("command not found");
@@ -56,20 +60,48 @@ impl ServerWorker {
         }
     }
 
-    fn git_upload_pack(&mut self, repo_path: &str) -> Result<(), CommandError> {
-        println!("git-upload-pack method");
+    fn git_upload_pack(&mut self, repo_relative_path: &str) -> Result<(), CommandError> {
+        println!("==========\ngit-upload-pack method\n==========");
         let mut stdout = io::stdout();
-        let joint_path = join_paths!(self.path, repo_path).ok_or(CommandError::Io {
-            message: format!(
-                "No se pudo unir el path {} con el path {}",
-                self.path, repo_path
-            ),
-            error: "".to_string(),
-        })?;
-        println!("joint path: {}", joint_path);
-        let mut repo = GitRepository::open(&joint_path, &mut stdout).map_err(|error| {
+        let repo_path = self.repo_path(repo_relative_path)?;
+        let mut repo = GitRepository::open(&repo_path, &mut stdout).map_err(|error| {
             CommandError::Io {
-                message: format!("No se pudo abrir el repositorio {}.\n Tal vez no sea el path correcto o no tengas acceso.", joint_path),
+                message: format!("No se pudo abrir el repositorio {}.\n Tal vez no sea el path correcto o no tengas acceso.", repo_path),
+                error: error.to_string(),
+            }
+        })?;
+        let local_branches = repo.local_branches()?;
+        let mut sorted_branches = local_branches
+            .into_iter()
+            .collect::<Vec<(String, String)>>();
+        sorted_branches.sort_unstable();
+        let (first_branch_name, first_branch_hash) = sorted_branches.remove(0);
+
+        self.send(&format!(
+            "{} refs/heads/{}\0\n",
+            first_branch_hash, first_branch_name
+        ))?;
+        for (branch_name, branch_hash) in sorted_branches {
+            self.send(&format!("{} refs/heads/{}\n", branch_hash, branch_name))?;
+        }
+        self.write_string_to_socket("0000")?;
+        let (want_lines, have_lines) = self.read_wants_and_haves()?;
+        self.send("NAK\n")?;
+        let packfile = self.build_pack_file(&mut repo, want_lines, have_lines)?;
+
+        self.socket.write_all(&packfile).map_err(|error| {
+            CommandError::SendingMessage(format!("Error enviando packfile: {}", error))
+        })?;
+        Ok(())
+    }
+
+    fn git_receive_pack(&mut self, repo_relative_path: &str) -> Result<(), CommandError> {
+        println!("==========\ngit-receive-pack method\n==========");
+        let mut stdout = io::stdout();
+        let repo_path = self.repo_path(repo_relative_path)?;
+        let mut repo = GitRepository::open(&repo_path, &mut stdout).map_err(|error| {
+            CommandError::Io {
+                message: format!("No se pudo abrir el repositorio {}.\n Tal vez no sea el path correcto o no tengas acceso.", repo_path),
                 error: error.to_string(),
             }
         })?;
@@ -78,24 +110,61 @@ impl ServerWorker {
         println!("head branch: {}", head_branch_name);
         let head_branch_hash = local_branches.get(&head_branch_name).unwrap().clone();
         let mut sorted_branches = local_branches
+            .clone()
             .into_iter()
             .collect::<Vec<(String, String)>>();
         sorted_branches.sort_unstable();
-        println!("local branches: {:?}", sorted_branches);
         self.send("version 1\n")?;
-        self.send(&format!("{} HEAD\0\n", head_branch_hash,))?;
+        self.send(&format!("{} HEAD\0\n", head_branch_hash))?;
         for (branch_name, branch_hash) in sorted_branches {
-            self.send(&format!("{} refs/heads{}\n", branch_hash, branch_name))?;
+            self.send(&format!("{} refs/heads/{}\n", branch_hash, branch_name))?;
         }
         self.write_string_to_socket("0000")?;
-        let (want_lines, have_lines) = self.read_wants_and_haves()?;
-        let packfile = self.build_pack_file(&mut repo, want_lines, have_lines)?;
-        self.socket.write_all(&packfile);
+        let ref_update_map = self.read_ref_update_map()?;
+
+        let objects = read_objects(&mut self.socket)?;
+        let objects_map = repo.save_objects_from_packfile(objects)?;
+        let mut status = HashMap::<String, Option<String>>::new();
+
+        self.send("unpack ok\n")?;
+        for (branch_path_name, (old_ref, new_ref)) in ref_update_map {
+            let branch_name = branch_path_name[11..].to_string();
+
+            let Some(local_branch_hash) = local_branches.get(&branch_name) else {
+                todo!("TODO new branch")
+            };
+            if local_branch_hash != &old_ref {
+                status.insert(branch_name, Some("non-fast-forward".to_string()));
+            } else {
+                if check_commits_between(
+                    &objects_map,
+                    &old_ref,
+                    &new_ref,
+                    &mut Logger::new_dummy(),
+                )? {
+                    status.insert(branch_name, None);
+                } else {
+                    status.insert(branch_name, Some("non-fast-forward".to_string()));
+                }
+            }
+        }
+
         Ok(())
     }
 
+    fn repo_path(&mut self, relative: &str) -> Result<String, CommandError> {
+        let joint_path = join_paths!(self.path, relative).ok_or(CommandError::Io {
+            message: format!(
+                "No se pudo unir el path {} con el path {}",
+                self.path, relative
+            ),
+            error: "".to_string(),
+        })?;
+        Ok(joint_path)
+    }
+
     fn read_wants_and_haves(&mut self) -> Result<(Vec<String>, Vec<String>), CommandError> {
-        let want_and_have_lines = get_response_until(&mut self.socket, "done\n")?;
+        let want_and_have_lines = get_responses_until(&mut self.socket, "done\n")?;
         let want_lines = want_and_have_lines
             .get(0)
             .ok_or(CommandError::PackageNegotiationError(
@@ -117,7 +186,7 @@ impl ServerWorker {
     }
 
     fn write_string_to_socket(&mut self, line: &str) -> Result<(), CommandError> {
-        // self.write_to_socket(line.as_bytes());
+        println!("|| ➡️ : \"{:?}\"", line);
         let message = line.as_bytes();
         self.socket
             .write_all(message)
@@ -131,73 +200,184 @@ impl ServerWorker {
         want_lines: Vec<String>,
         have_lines: Vec<String>,
     ) -> Result<Vec<u8>, CommandError> {
+        println!("build_pack_file");
         println!("want_lines: {:?}", want_lines);
         println!("have_lines: {:?}", have_lines);
         if !have_lines.is_empty() {
             todo!("TODO implementar have_lines")
         }
-        let mut pack_file = Vec::<u8>::new();
-        let mut objects = Vec::<Vec<u8>>::new();
-        for want_line in want_lines {
-            let (_, hash_str) =
-                want_line
-                    .split_once(' ')
-                    .ok_or(CommandError::PackageNegotiationError(
-                        "No se pudo leer la línea want".to_string(),
-                    ))?;
-            let (path, object_content) =
-                repo.db()?.read_file(hash_str, &mut Logger::new_dummy())?;
-            objects.push(object_content);
+        let haves: Result<HashSet<String>, CommandError> = have_lines
+            .into_iter()
+            .map(|have_line| {
+                let (_, hash_str) =
+                    have_line
+                        .split_once(' ')
+                        .ok_or(CommandError::PackageNegotiationError(
+                            "No se pudo leer la línea have".to_string(),
+                        ))?;
+                Ok(hash_str.trim().to_string())
+            })
+            .collect();
+
+        let haves = haves?;
+
+        let wants: Result<Vec<String>, CommandError> = want_lines
+            .into_iter()
+            .map(|want_line| {
+                let (_, hash_str) =
+                    want_line
+                        .split_once(' ')
+                        .ok_or(CommandError::PackageNegotiationError(
+                            "No se pudo leer la línea want".to_string(),
+                        ))?;
+                Ok(hash_str.trim().to_string())
+            })
+            .collect();
+
+        let wants = wants?;
+
+        println!("haves: {:?}", haves);
+        println!("wants: {:?}", wants);
+        let mut commits_map = HashMap::<String, (CommitObject, Option<String>)>::new();
+        for want in wants {
+            rebuild_commits_tree(
+                &repo.db()?,
+                &want,
+                &mut commits_map,
+                None,
+                false,
+                &haves,
+                true,
+                repo.logger(),
+            )?;
         }
-        pack_file.extend("PACK".as_bytes());
-        let version = (2 as u32).to_le_bytes();
-        println!("Version bytes: {:?}", version);
-        pack_file.extend(version);
-        let num_objects = (objects.len() as u32).to_le_bytes();
-        println!("Num objects bytes: {:?}", num_objects);
-        pack_file.extend(num_objects);
-        for object_content in objects {
-            let object_size = object_content.len();
-            let compressed_object = compress(&object_content)?;
-            let mut cursor = Cursor::new(object_content);
-            let type_str = read_string_until(&mut cursor, ' ')?;
-            let pf_type = PackfileObjectType::from_str(type_str.as_str())?;
 
-            // Size encoding
-            // This document uses the following "size encoding" of non-negative integers: From each byte, the seven least
-            // significant bits are used to form the resulting integer. As long as the most significant bit is 1, this
-            // process continues; the byte with MSB 0 provides the last seven bits. The seven-bit chunks are concatenated.
-            // Later values are more significant.
-            // This size encoding should not be confused with the "offset encoding", which is also used in this document.
+        make_packfile(commits_map)
+    }
 
-            let mut len_temp = object_size;
-            let first_four = (len_temp & 0b00001111) as u8;
-            len_temp >>= 4;
-            let mut len_bytes: Vec<u8> = Vec::new();
-            loop {
-                let mut byte = (len_temp & 0b01111111) as u8;
-                len_temp >>= 7;
-                if len_temp == 0 {
-                    len_bytes.push(byte);
-                    break;
-                }
-                byte |= 0b10000000;
-                len_bytes.push(byte);
+    fn read_ref_update_map(&mut self) -> Result<HashMap<String, (String, String)>, CommandError> {
+        let map_lines = get_response_until_flushpkt(&mut self.socket)?;
+        let mut map = HashMap::<String, (String, String)>::new();
+        let mut is_first = true;
+        for map_line in map_lines {
+            let parts = map_line.split(' ').collect::<Vec<&str>>();
+            let old_ref = parts[0].to_string();
+            let new_ref = parts[1].to_string();
+            let mut branch_name = parts[2].to_string();
+
+            if is_first {
+                branch_name.pop();
+                map.insert(
+                    branch_name.trim().to_string(),
+                    (old_ref.trim().to_string(), new_ref.trim().to_string()),
+                );
+                is_first = false;
+            } else {
+                map.insert(
+                    branch_name.trim().to_string(),
+                    (old_ref.trim().to_string(), new_ref.trim().to_string()),
+                );
             }
-
-            let type_and_len_byte = (pf_type as u8) << 4
-                | first_four
-                | if len_bytes.is_empty() { 0 } else { 0b10000000 };
-
-            pack_file.push(type_and_len_byte);
-            pack_file.extend(len_bytes);
-            pack_file.extend(compressed_object);
         }
-        todo!()
+        Ok(map)
     }
 }
 
-fn get_response_until(
+fn check_commits_between(
+    objects_map: &HashMap<String, (PackfileObjectType, usize, Vec<u8>)>,
+    old_ref: &str,
+    new_ref: &str,
+    logger: &mut Logger,
+) -> Result<bool, CommandError> {
+    if new_ref == old_ref {
+        return Ok(true);
+    }
+    let Some((object_type, _, object_content)) = objects_map.get(new_ref) else {
+        return Ok(false);
+    };
+
+    match object_type {
+        PackfileObjectType::Commit => {
+            let mut cursor = Cursor::new(object_content);
+            let git_object_trait = &mut CommitObject::read_from(None, &mut cursor, logger, None)?;
+            let commit_object = git_object_trait.as_mut_commit().ok_or(
+                CommandError::CheckingCommitsBetweenError("No se pudo leer el commit".to_string()),
+            )?;
+            let tree_hash = commit_object.get_tree_hash_string()?;
+            if !contains_all_elements(objects_map, &tree_hash)? {
+                return Ok(false);
+            }
+            let parents = commit_object.get_parents();
+            for parent in parents {
+                if !check_commits_between(objects_map, old_ref, &parent, logger)? {
+                    return Ok(false);
+                };
+            }
+            Ok(true)
+        }
+        _ => {
+            panic!("No debería pasar esto")
+        }
+    }
+}
+
+fn contains_all_elements(
+    objects_map: &HashMap<String, (PackfileObjectType, usize, Vec<u8>)>,
+    hash: &str,
+) -> Result<bool, CommandError> {
+    let Some((object_type, object_len, object_content)) = objects_map.get(hash) else {
+        return Ok(false);
+    };
+
+    match object_type {
+        PackfileObjectType::Commit => {
+            return Err(CommandError::ObjectNotTree);
+        }
+        PackfileObjectType::Tree => {
+            let mut cursor = Cursor::new(object_content);
+            let tree_object = &mut Tree::read_from(
+                None,
+                &mut cursor,
+                object_len.to_owned(),
+                "",
+                "",
+                &mut Logger::new_dummy(),
+            )?;
+            let Some(tree) = tree_object.as_mut_tree() else {
+                return Ok(false);
+            };
+            let objects_hashmap = tree.get_objects();
+            for (_, (object_hash, _)) in objects_hashmap {
+                let object_hash_str = u8_vec_to_hex_string(&object_hash);
+                if !contains_all_elements(objects_map, &object_hash_str)? {
+                    return Ok(false);
+                }
+            }
+        }
+        PackfileObjectType::Blob => {
+            let mut cursor = Cursor::new(object_content);
+            let blob_object = &mut Blob::read_from(
+                &mut cursor,
+                object_len.to_owned(),
+                "",
+                "",
+                &mut Logger::new_dummy(),
+            )?;
+            let Some(blob) = blob_object.as_mut_blob() else {
+                return Ok(false);
+            };
+            return Ok(true);
+        }
+
+        _ => {
+            return Ok(false);
+        }
+    }
+
+    Ok(true)
+}
+
+fn get_responses_until(
     socket: &mut TcpStream,
     stop_line: &str,
 ) -> Result<Vec<Vec<String>>, CommandError> {
@@ -220,6 +400,22 @@ fn get_response_until(
     }
 
     Ok(lines_groups)
+}
+
+fn get_response_until_flushpkt(socket: &mut TcpStream) -> Result<Vec<String>, CommandError> {
+    let mut response = Vec::<String>::new();
+    loop {
+        match String::read_pkt_format(socket)? {
+            Some(line) => {
+                response.push(line);
+            }
+            None => {
+                break;
+            }
+        }
+    }
+
+    Ok(response)
 }
 
 fn get_response(mut socket: &TcpStream) -> Result<Vec<String>, CommandError> {
