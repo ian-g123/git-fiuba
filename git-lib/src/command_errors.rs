@@ -138,6 +138,7 @@ pub enum CommandError {
     /// Error de recursividad de comando
     NotRecursive(String),
     RmFromStagingAreaError(String),
+    PullError(String),
 }
 
 impl Error for CommandError {}
@@ -374,6 +375,9 @@ impl fmt::Display for CommandError {
                     f,
                     "No se puede remover un archivo que no fue agregado al Staging Area: {path}"
                 )
+            }
+            CommandError::PullError(msg) => {
+                write!(f, "{}", msg)
             }
         }
     }
