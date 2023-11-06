@@ -40,7 +40,7 @@ impl StagingArea {
         }
     }
 
-    fn is_in_staging_area(&self, path: &String) -> bool {
+    pub fn is_in_staging_area(&self, path: &String) -> bool {
         return self.files.get(path).is_some();
     }
 
@@ -64,7 +64,6 @@ impl StagingArea {
         Ok(changes)
     }
 
-    /// Dado el árbol del último commit, devuelve los archivos borrados en el staging area
     pub fn remove_from_stagin_area(
         &mut self,
         path: &str,

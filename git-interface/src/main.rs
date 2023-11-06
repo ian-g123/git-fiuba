@@ -12,16 +12,13 @@ use gtk::{
 
 use git::commands::push::Push;
 use git_lib::{
-    changes_controller_components::{
-        changes_controller::ChangesController, long_format::sort_hashmap,
-    },
     command_errors::CommandError,
     git_repository::GitRepository,
     objects::{commit_object::CommitObject, git_object::GitObjectTrait},
 };
 
 // colores para el grafo en el futuro
-const GRAPH_COLORS: [(f64, f64, f64); 10] = [
+const _GRAPH_COLORS: [(f64, f64, f64); 10] = [
     (1.0, 0.0, 0.0), // Rojo
     (0.0, 1.0, 0.0), // Verde
     (0.0, 0.0, 1.0), // Azul
@@ -47,10 +44,10 @@ fn main() {
         return;
     }
 
-    let glade_src = include_str!("../git interface.glade");
-    let repo_git_path = "./git-interface/log".to_string();
-
     let mut output = io::stdout();
+    let repo_git_path = "./git-interface/log".to_string();
+    let glade_src = include_str!("../git interface.glade");
+
     let mut repo = match GitRepository::open(&repo_git_path, &mut output) {
         Ok(repo) => repo,
         Err(_) => {
@@ -59,9 +56,9 @@ fn main() {
         }
     };
 
-    let (staged_files, changes_file) = staged_area_func(repo_git_path.clone()).unwrap();
-    let staging_changes = Rc::new(RefCell::new(staged_files));
-    let unstaging_changes = Rc::new(RefCell::new(changes_file));
+    let (staging_changes, unstaging_changes) = staged_area_func(repo_git_path.to_string()).unwrap();
+    let staging_changes = Rc::new(RefCell::new(staging_changes));
+    let unstaging_changes = Rc::new(RefCell::new(unstaging_changes));
 
     let mut interface = Interface {
         builder: gtk::Builder::from_string(glade_src),
@@ -69,6 +66,8 @@ fn main() {
         staging_changes,
         unstaging_changes,
     };
+
+    let mut window: gtk::Window = interface.builder.object("window app").unwrap();
 
     let commits = match repo.get_log(true) {
         Ok(commits) => commits,
@@ -78,30 +77,10 @@ fn main() {
         }
     };
 
-    let mut window: gtk::Window = interface.builder.object("window app").unwrap();
-
-    let _stagin_changes_list: gtk::ListBox = interface.builder.object("staging_list").unwrap();
-
-    // cargamos la interfaz gráfica
-    let drawing_area: gtk::DrawingArea = interface.builder.object("drawing_area").unwrap();
-    let description_list: gtk::ListBox = interface.builder.object("description_list").unwrap();
-    let date_list: gtk::ListBox = interface.builder.object("date_list").unwrap();
-    let author_list: gtk::ListBox = interface.builder.object("author_list").unwrap();
-    let commits_hashes_list: gtk::ListBox = interface.builder.object("commit_hash_list").unwrap();
-
-    // cargamos los botones
-    interface.buttons_activation();
-
     interface.build_ui(&mut window);
+    interface.buttons_activation(&mut window);
 
-    set_right_area(
-        &drawing_area,
-        description_list,
-        date_list,
-        author_list,
-        commits_hashes_list,
-        commits,
-    );
+    interface.set_right_area(commits, &mut window);
 
     window.connect_delete_event(|_, _| {
         gtk::main_quit();
@@ -109,12 +88,36 @@ fn main() {
     });
 
     window.show_all();
-
     gtk::main();
 }
 
 impl Interface {
-    fn buttons_activation<'a>(&mut self) -> Result<(), CommandError> {
+    fn actualizar(&mut self) -> Option<Vec<(CommitObject, Option<String>)>> {
+        let (staging_changes, unstaging_changes) =
+            staged_area_func(self.repo_git_path.to_string()).unwrap();
+        self.staging_changes = Rc::new(RefCell::new(staging_changes));
+        self.unstaging_changes = Rc::new(RefCell::new(unstaging_changes));
+
+        let mut binding = io::stdout();
+        let mut repo = match GitRepository::open(&self.repo_git_path, &mut binding) {
+            Ok(repo) => repo,
+            Err(_) => {
+                eprintln!("No se pudo conectar satisfactoriamente a un repositorio Git.");
+                return None;
+            }
+        };
+
+        let commits = match repo.get_log(true) {
+            Ok(commits) => commits,
+            Err(_) => {
+                eprintln!("No se pudo conectar satisfactoriamente a un repositorio Git.");
+                return None;
+            }
+        };
+        Some(commits)
+    }
+
+    fn buttons_activation<'a>(&mut self, window: &gtk::Window) -> Result<(), CommandError> {
         let buttons = [
             ("pull", self.build_button("pull_button".to_string())),
             ("push", self.build_button("push_button".to_string())),
@@ -122,10 +125,11 @@ impl Interface {
             ("fetch", self.build_button("fetch_button".to_string())),
             ("branch", self.build_button("branch_button".to_string())),
             ("commit", self.build_button("commit_button".to_string())),
+            ("refresh", self.build_button("refresh_button".to_string())),
         ];
 
         for button in buttons.iter() {
-            self.connect_button(button.0.to_string(), &button.1)?;
+            self.connect_button(button.0.to_string(), &button.1, window)?;
         }
 
         Ok(())
@@ -141,14 +145,20 @@ impl Interface {
         &self,
         button_action: String,
         button: &gtk::Button,
+        window: &gtk::Window,
     ) -> Result<(), CommandError> {
         let repo_git_path = self.repo_git_path.clone();
         let clone_builder = self.builder.clone();
+        let unstaging_changes = Rc::clone(&self.unstaging_changes);
+        let staging_changes = Rc::clone(&self.staging_changes);
+        let window = window.clone();
 
         button.connect_clicked(move |_| {
+            let mut window = window.clone();
             let builder = clone_builder.clone();
             let output = io::stdout();
             let mut binding = &output;
+
             let mut repo = match GitRepository::open(&repo_git_path, &mut binding) {
                 Ok(repo) => repo,
                 Err(_) => {
@@ -159,15 +169,35 @@ impl Interface {
 
             match button_action.as_str() {
                 "pull" => {
-                    if let Err(err) = repo.pull() {
-                        eprintln!("Error en al presionar el botón pull: {}", err);
+                    let err = repo.pull();
+                    let mut message_for_pull =
+                        "Realice refresh para obtener los cambios".to_string();
+                    if err.is_err() {
+                        let err = err.unwrap_err();
+                        message_for_pull = err.to_string() + "\nPull no pudo realizarse con éxito";
                     }
-                    println!("se presionó pull");
+
+                    let window = Window::new(WindowType::Toplevel);
+                    window.set_title("Refresh please");
+                    window.set_default_size(300, 200);
+
+                    let dialog = gtk::MessageDialog::new(
+                        Some(&window),
+                        gtk::DialogFlags::MODAL,
+                        gtk::MessageType::Info,
+                        gtk::ButtonsType::Close,
+                        &message_for_pull,
+                    );
+
+                    dialog.connect_response(|dialog, _| {
+                        dialog.hide();
+                    });
+
+                    dialog.run();
                 }
                 "push" => {
                     let mut binding_for_push = &output;
                     push_function(&mut binding_for_push);
-                    println!("se presionó push");
                 }
                 "fetch" => {
                     if let Err(err) = repo.fetch() {
@@ -176,11 +206,24 @@ impl Interface {
                     println!("se presionó fetch");
                 }
                 "branch" => {
-                    // Aquí puedes agregar tu lógica para branch
                     println!("se presionó branch");
                 }
                 "commit" => {
                     commit_function(&mut repo, builder);
+                }
+                "refresh" => {
+                    let mut interface = Interface {
+                        builder: builder.clone(),
+                        repo_git_path: repo_git_path.to_string(),
+                        staging_changes: Rc::clone(&staging_changes),
+                        unstaging_changes: Rc::clone(&unstaging_changes),
+                    };
+                    interface.build_ui(&window);
+                    let commits = match interface.actualizar() {
+                        Some(commits) => commits,
+                        None => return,
+                    };
+                    interface.set_right_area(commits, &mut window);
                 }
                 _ => {
                     eprintln!("Acción no reconocida: {}", button_action);
@@ -190,16 +233,11 @@ impl Interface {
         Ok(())
     }
 
-    fn build_ui(self, window: &gtk::Window) {
+    fn build_ui(&self, window: &gtk::Window) {
         let staging_changes: gtk::ListBox = self.builder.object("staging_list").unwrap();
         let unstaging_changes: gtk::ListBox = self.builder.object("unstaging_list").unwrap();
-
-        unstaging_changes.foreach(|child| {
-            unstaging_changes.remove(child);
-        });
-        staging_changes.foreach(|child| {
-            staging_changes.remove(child);
-        });
+        remove_childs(&staging_changes);
+        remove_childs(&unstaging_changes);
 
         for file in self.unstaging_changes.borrow().iter() {
             let file = file.clone();
@@ -275,18 +313,44 @@ impl Interface {
                 let mut binding = io::stdout();
                 let mut repo = GitRepository::open(&repo_git_path, &mut binding).unwrap();
                 let vec_files = vec![file.clone()];
-                // repo.remove(vec_files).unwrap();
+                repo.remove_from_staging(vec_files);
 
                 interface.build_ui(&window);
             });
         }
+    }
+
+    fn set_right_area(
+        &mut self,
+        commits: Vec<(CommitObject, Option<String>)>,
+        window: &mut gtk::Window,
+    ) {
+        let _stagin_changes_list: gtk::ListBox = self.builder.object("staging_list").unwrap();
+        let drawing_area: gtk::DrawingArea = self.builder.object("drawing_area").unwrap();
+        let description_list: gtk::ListBox = self.builder.object("description_list").unwrap();
+        let date_list: gtk::ListBox = self.builder.object("date_list").unwrap();
+        let author_list: gtk::ListBox = self.builder.object("author_list").unwrap();
+        let commits_hashes_list: gtk::ListBox = self.builder.object("commit_hash_list").unwrap();
+        remove_childs(&description_list);
+        remove_childs(&date_list);
+        remove_childs(&author_list);
+        remove_childs(&commits_hashes_list);
+
+        let mut hash_sons: HashMap<String, Vec<(f64, f64)>> = HashMap::new(); // hash, Vec<(x,y)> de los hijos
+        let mut hash_branches: HashMap<String, usize> = HashMap::new();
+
+        for (mut commit, branch) in commits {
+            add_row_to_list(&commit.get_timestamp().to_string(), &date_list);
+            add_row_to_list(&commit.get_author(), &author_list);
+            add_row_to_list(&commit.get_hash_string().unwrap(), &commits_hashes_list);
+        }
+        window.show_all();
     }
 }
 
 fn staged_area_func(
     repo_git_path: String,
 ) -> Result<(HashSet<String>, HashSet<String>), CommandError> {
-    // staged_area, unstage_area
     let mut output = io::stdout();
     let mut repo = GitRepository::open(&repo_git_path, &mut output).unwrap();
     repo.get_stage_and_unstage_changes()
@@ -330,32 +394,10 @@ fn push_function(output: &mut dyn Write) {
     push.run(output).unwrap();
 }
 
-fn set_right_area(
-    _drawing_area: &DrawingArea, // TODO: implementar el grafo para la entrega final
-    description_list: ListBox,
-    date_list: ListBox,
-    author_list: ListBox,
-    commits_hashes_list: ListBox,
-    commits: Vec<(CommitObject, Option<String>)>,
-) {
-    let mut hash_sons: HashMap<String, Vec<(f64, f64)>> = HashMap::new(); // hash, Vec<(x,y)> de los hijos
-    let mut hash_branches: HashMap<String, usize> = HashMap::new();
-    //let mut identado: usize = 1;
-
-    for (mut commit, branch) in commits {
-        // let y = add_row_to_list(&commit.get_message(), &description_list);
-        //identado = make_graph(
-        //     &drawing_area,
-        //     &mut hash_branches,
-        //     &mut hash_sons,
-        //     &mut identado,
-        //     &commit_and_branches,
-        //     y,
-        // );
-        add_row_to_list(&commit.get_timestamp().to_string(), &date_list);
-        add_row_to_list(&commit.get_author(), &author_list);
-        add_row_to_list(&commit.get_hash_string().unwrap(), &commits_hashes_list);
-    }
+fn remove_childs(list: &ListBox) {
+    list.foreach(|child| {
+        list.remove(child);
+    });
 }
 
 fn add_row_to_list(row_information: &String, row_list: &ListBox) -> i32 {

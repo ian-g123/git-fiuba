@@ -310,6 +310,32 @@ impl<'a> GitRepository<'a> {
         return Ok(());
     }
 
+    pub fn remove_from_staging(&mut self, pathspecs: Vec<String>) {
+        let tree_last_commit = match self.get_last_commit_tree() {
+            Ok(Some(tree_last_commit_box)) => tree_last_commit_box,
+            _ => return,
+        };
+
+        let mut staging_area = match StagingArea::open(&self.git_path) {
+            Ok(staging_area) => staging_area,
+            _ => return,
+        };
+
+        for pathspec in &pathspecs {
+            if staging_area.is_in_staging_area(&pathspec.to_string()) {
+                let (exist, actual_hash) =
+                    tree_last_commit.has_blob_from_path(pathspec, &mut self.logger);
+                if exist && actual_hash.is_some() {
+                    let actual_hash_lc = match actual_hash {
+                        Some(hash) => hash,
+                        _ => return,
+                    };
+                    staging_area.add(pathspec, &actual_hash_lc);
+                }
+            }
+        }
+    }
+
     fn run_for_dir_rm(
         &mut self,
         path_str: &String,
@@ -442,7 +468,7 @@ impl<'a> GitRepository<'a> {
 
     fn is_in_last_commit_from_path(&mut self, path: &str, commit_tree: &Option<Tree>) -> bool {
         if let Some(tree) = commit_tree {
-            return tree.has_blob_from_path(path, &mut self.logger);
+            return tree.has_blob_from_path(path, &mut self.logger).0;
         }
         false
     }

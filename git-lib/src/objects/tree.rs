@@ -65,16 +65,19 @@ impl Tree {
         Ok((false, "".to_string()))
     }
 
-    pub fn has_blob_from_path(&self, path: &str, logger: &mut Logger) -> bool {
+    pub fn has_blob_from_path(&self, path: &str, logger: &mut Logger) -> (bool, Option<String>) {
         let mut parts: Vec<&str> = path.split_terminator("/").collect();
         return self.follow_path_in_tree(&mut parts, logger);
     }
 
-    fn follow_path_in_tree(&self, path: &mut Vec<&str>, logger: &mut Logger) -> bool {
+    fn follow_path_in_tree(
+        &self,
+        path: &mut Vec<&str>,
+        logger: &mut Logger,
+    ) -> (bool, Option<String>) {
         if path.is_empty() {
             logger.log(&format!("Path empty"));
-
-            return false;
+            return (false, None)
         }
         for (name, object) in self.get_objects().iter_mut() {
             logger.log(&format!("Name: {}, part: {}", name, path[0]));
@@ -87,11 +90,15 @@ impl Tree {
                     return obj_tree.follow_path_in_tree(path, logger);
                 }
                 logger.log(&format!("return true"));
+                let hash_res = match object.get_hash_string() {
+                    Ok(hash) => Some(hash),
+                    Err(_) => None,
+                };
 
-                return true;
+                return (true, hash_res);
             }
         }
-        false
+        (false, None)
     }
 
     pub fn get_deleted_blobs_from_path(
@@ -102,7 +109,7 @@ impl Tree {
         let mut deleted_blobs: Vec<String> = Vec::new();
         for file in files.iter() {
             logger.log(&format!("Path buscado: {}", file));
-            if !self.has_blob_from_path(file, logger) {
+            if !self.has_blob_from_path(file, logger).0 {
                 logger.log(&format!("No encontrado: {}", file));
 
                 deleted_blobs.push(file.to_string());

@@ -101,7 +101,7 @@ impl ChangesController {
     ) -> Result<HashMap<String, ChangeType>, CommandError> {
         let mut changes: HashMap<String, ChangeType> = HashMap::new();
         for (path, hash) in staging_files.iter() {
-            let has_path = tree.has_blob_from_path(path, logger);
+            let has_path = tree.has_blob_from_path(path, logger).0;
             let (has_hash, name) = tree.has_blob_from_hash(hash, logger)?;
 
             let actual_name = get_name(path)?;
@@ -314,7 +314,7 @@ fn check_isnt_in_last_commit(
     if let Some(mut tree) = last_commit.to_owned() {
         let (is_in_last_commit, name) = tree.has_blob_from_hash(hash, logger)?;
         return Ok((!is_in_last_commit || name != get_name(path)?)
-            && !tree.has_blob_from_path(path, logger));
+            && !tree.has_blob_from_path(path, logger).0);
     }
     Ok(true)
 }
