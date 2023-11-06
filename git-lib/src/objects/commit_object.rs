@@ -1,10 +1,17 @@
-use super::git_object::{GitObject, GitObjectTrait};
-use super::{author::Author, tree::Tree};
-use crate::command_errors::CommandError;
-use crate::logger::Logger;
-use crate::objects_database::ObjectsDatabase;
-use crate::utils::aux::{get_sha1, hex_string_to_u8_vec, read_string_until};
-use crate::utils::super_string::u8_vec_to_hex_string;
+use super::{
+    author::Author,
+    git_object::{GitObject, GitObjectTrait},
+    tree::Tree,
+};
+use crate::{
+    command_errors::CommandError,
+    logger::Logger,
+    objects_database::ObjectsDatabase,
+    utils::{
+        aux::{get_sha1, hex_string_to_u8_vec, read_string_until},
+        super_string::u8_vec_to_hex_string,
+    },
+};
 use std::io::{Cursor, Read, Write};
 
 extern crate chrono;
@@ -18,7 +25,7 @@ pub struct CommitObject {
     committer: Author,
     timestamp: i64,
     offset: i32,
-    tree: Tree,
+    tree: Option<Tree>,
     hash: Option<[u8; 20]>,
 }
 
@@ -41,8 +48,8 @@ impl CommitObject {
             committer,
             timestamp,
             offset,
-            tree,
             hash,
+            tree: Some(tree),
         })
     }
     pub fn get_parents(&self) -> Vec<String> {
@@ -55,7 +62,10 @@ impl CommitObject {
 
     /// Devuelve el hash del tree del Commit.
     pub fn get_tree_hash(&mut self) -> Result<String, CommandError> {
-        Ok(u8_vec_to_hex_string(&self.tree.get_hash()?))
+        let Some(tree) = &mut self.tree.as_mut() else {
+            return Err(CommandError::InvalidCommit);
+        };
+        Ok(tree.get_hash_string()?)
     }
 
     /// Crea un Commit a partir de la infromación leída del stream.
@@ -63,31 +73,48 @@ impl CommitObject {
         db: &ObjectsDatabase,
         stream: &mut dyn Read,
         logger: &mut Logger,
+        rebuild_tree: bool,
+        hash_commit: Option<String>,
     ) -> Result<GitObject, CommandError> {
         let (tree_hash, parents, author, author_timestamp, author_offset, committer, _, _, message) =
             read_commit_info_from(stream)?;
+
         let tree_hash_str = u8_vec_to_hex_string(&tree_hash);
+
         logger.log(&format!(
             "Reading tree hash from database: {}",
             tree_hash_str
         ));
-        let mut tree = db.read_object(&tree_hash_str)?;
-        logger.log(&format!(
-            "tree content en read_from : {}",
-            String::from_utf8_lossy(&(tree.to_owned().content()?))
-        ));
-        let Some(tree) = tree.as_tree() else {
-            return Err(CommandError::InvalidCommit);
+
+        let option_tree = if rebuild_tree {
+            let mut tree = db.read_object(&tree_hash_str, logger)?;
+            logger.log(&format!(
+                "tree content en read_from : {}",
+                String::from_utf8_lossy(&(tree.to_owned().content(None)?))
+            ));
+
+            let Some(tree) = tree.as_tree() else {
+                return Err(CommandError::InvalidCommit);
+            };
+            Some(tree)
+        } else {
+            None
         };
-        Ok(Box::new(Self {
-            tree,
+
+        let hash_u8: Option<[u8; 20]> = match hash_commit {
+            Some(hash) => Some(hex_string_to_u8_vec(&hash)),
+            None => None,
+        };
+
+        Ok(Box::new(CommitObject {
+            tree: option_tree,
             parents,
             author,
             committer,
             message,
             timestamp: author_timestamp,
             offset: author_offset,
-            hash: None,
+            hash: hash_u8,
         }))
     }
 
@@ -138,8 +165,19 @@ impl CommitObject {
         Ok(())
     }
 
-    pub fn get_tree(&self) -> &Tree {
-        &self.tree
+    pub fn get_tree(&self) -> Option<&Tree> {
+        self.tree.as_ref()
+    }
+
+    pub fn get_tree_some_or_err(&self) -> Result<Tree, CommandError> {
+        match self.tree {
+            Some(ref tree) => Ok(tree.clone()),
+            None => Err(CommandError::InvalidCommit),
+        }
+    }
+
+    fn is_merge(&self) -> bool {
+        self.parents.len() > 1
     }
 }
 
@@ -197,16 +235,7 @@ fn read_commit_info_from(
 
     lines_next(&mut lines)?;
     let message = lines.collect();
-    // let tree_hash_be = read_hash_from(stream)?;
-    // let number_of_parents = read_u32_from(stream)?;
-    // let parents = read_parents_from(number_of_parents, stream)?;
-    // let author = Author::read_from(stream)?;
-    // let author_timestamp = read_i64_from(stream)?;
-    // let author_offset = read_i32_from(stream)?;
-    // let committer = Author::read_from(stream)?;
-    // let committer_timestamp = read_i64_from(stream)?;
-    // let committer_offset = read_i32_from(stream)?;
-    // let message = read_string_until(stream, '\n')?;
+
     Ok((
         tree_hash_be,
         parents,
@@ -261,13 +290,13 @@ fn offset_str(minutes: i32) -> Result<String, CommandError> {
 }
 
 /// Devuelve un vector con el hash de cada commit padre.
-fn read_parents_from(
+fn _read_parents_from(
     number_of_parents: u32,
     stream: &mut dyn Read,
 ) -> Result<Vec<String>, CommandError> {
     let mut parents = Vec::<String>::new();
     for _ in 0..number_of_parents {
-        let parent_hash_be = read_hash_from(stream)?;
+        let parent_hash_be = _read_hash_from(stream)?;
         let parent_hash = u8_vec_to_hex_string(&parent_hash_be);
         parents.push(parent_hash);
     }
@@ -275,7 +304,7 @@ fn read_parents_from(
 }
 
 /// Lee el hash del stream y lo devuelve en formato  Vec<u8>
-fn read_hash_from(stream: &mut dyn Read) -> Result<[u8; 20], CommandError> {
+fn _read_hash_from(stream: &mut dyn Read) -> Result<[u8; 20], CommandError> {
     let mut tree_hash_be = [0; 20];
     stream
         .read_exact(&mut tree_hash_be)
@@ -295,7 +324,7 @@ impl GitObjectTrait for CommitObject {
         ))
     }
 
-    fn as_commit_mut(&mut self) -> Option<&mut CommitObject> {
+    fn as_mut_commit(&mut self) -> Option<&mut CommitObject> {
         Some(self)
     }
     fn get_path(&self) -> Option<String> {
@@ -309,11 +338,25 @@ impl GitObjectTrait for CommitObject {
         todo!()
     }
 
-    fn content(&mut self) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self, _db: Option<&mut ObjectsDatabase>) -> Result<Vec<u8>, CommandError> {
         let mut buf: Vec<u8> = Vec::new();
         let mut stream = Cursor::new(&mut buf);
-        writeln!(stream, "tree {}", self.tree.get_hash_string()?)
+
+        let Some(tree) = self.tree.as_mut() else {
+            return Err(CommandError::InvalidCommit);
+        };
+
+        writeln!(stream, "tree {}", tree.get_hash_string()?)
             .map_err(|err| CommandError::FileWriteError(err.to_string()))?;
+
+        // if self.tree.is_some() {
+        //     writeln!(
+        //         stream,
+        //         "tree {}",
+        //         self.tree.as_mut().unwrap().get_hash_string()?
+        //     )
+        //     .map_err(|err| CommandError::FileWriteError(err.to_string()))?;
+        // }
 
         for parent in &self.parents {
             writeln!(stream, "parent {}", parent)
@@ -382,7 +425,7 @@ impl GitObjectTrait for CommitObject {
             return Ok(hash);
         }
         let mut buf: Vec<u8> = Vec::new();
-        self.write_to(&mut buf)?;
+        self.write_to(&mut buf, None)?;
         let hash = get_sha1(&buf);
         self.set_hash(hash);
         Ok(hash)
@@ -400,7 +443,7 @@ impl GitObjectTrait for CommitObject {
 // }
 
 /// Crea un DateTime<Local> a partir de la información recibida.
-fn get_date(line: &mut Vec<&str>) -> Result<DateTime<Local>, CommandError> {
+fn _get_date(line: &mut Vec<&str>) -> Result<DateTime<Local>, CommandError> {
     let Some(time_zone_offset_str) = line.pop() else {
         return Err(CommandError::InvalidCommit);
     };
@@ -434,13 +477,13 @@ fn get_date(line: &mut Vec<&str>) -> Result<DateTime<Local>, CommandError> {
 } */
 
 pub fn write_commit_tree_to_database(
-    db: &ObjectsDatabase,
+    db: &mut ObjectsDatabase,
     tree: &mut Tree,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
     let mut boxed_tree: Box<dyn GitObjectTrait> = Box::new(tree.clone());
 
-    db.write(&mut boxed_tree)?;
+    db.write(&mut boxed_tree, false, logger)?;
     for (_, child) in tree.get_objects().iter_mut() {
         if let Some(child_tree) = child.as_mut_tree() {
             write_commit_tree_to_database(db, child_tree, logger)?;
@@ -451,46 +494,10 @@ pub fn write_commit_tree_to_database(
 
 #[cfg(test)]
 mod test {
-    use std::{fs::File, io::Write};
 
-    use crate::{
-        file_compressor::compress, objects::git_object, utils::super_string::SuperStrings,
-    };
+    use crate::{objects::git_object, utils::super_string::SuperStrings};
 
     use super::*;
-
-    fn write() -> Result<(), CommandError> {
-        let Ok(mut file) = File::create(".git/objects/e3/540872766f87b1de467a5e867d656a6e6fe959")
-        else {
-            return Err(CommandError::CompressionError);
-        };
-
-        // Contenido que deseas escribir en el archivo
-        let contenido = "100644 blob 09c857543fc52cd4267c3825644b4fd7f437dc3f .gitignore\n040000 tree d3a471637c78c8f67cca05221a942bd7efabb58c git".as_bytes();
-        let contenido = compress(&contenido)?;
-
-        // Escribe el contenido en el archivo
-        if file.write_all(&contenido).is_err() {
-            return Err(CommandError::CompressionError);
-        }
-
-        //
-
-        let Ok(mut file) = File::create(".git/objects/d3/a471637c78c8f67cca05221a942bd7efabb58c")
-        else {
-            return Err(CommandError::CompressionError);
-        };
-
-        // Contenido que deseas escribir en el archivo
-        let contenido = "100644 blob f0e37a3b70089bf8ead6970f2d4339527dc628a Cargo.lock\n100644 blob 5da01b81e6f2c1926d9e6df32dc160dfe5326239 Cargo.toml".as_bytes();
-        let contenido = compress(&contenido)?;
-
-        // Escribe el contenido en el archivo
-        if file.write_all(&contenido).is_err() {
-            return Err(CommandError::CompressionError);
-        }
-        Ok(())
-    }
 
     #[test]
     #[ignore]
@@ -511,8 +518,8 @@ mod test {
 
         let mut buf: Vec<u8> = Vec::new();
         let mut writer_stream = Cursor::new(&mut buf);
-        commit.write_to(&mut writer_stream).unwrap();
-        let mut reader_stream = Cursor::new(&mut buf);
+        commit.write_to(&mut writer_stream, None).unwrap();
+        let _reader_stream = Cursor::new(&mut buf);
         // let mut fetched_commit = git_object::read_git_object_from(
         //     &mut reader_stream,
         //     "",
@@ -551,7 +558,7 @@ mod test {
 
         let mut buf: Vec<u8> = Vec::new();
         let mut writer_stream = Cursor::new(&mut buf);
-        commit.write_to(&mut writer_stream).unwrap();
+        commit.write_to(&mut writer_stream, None).unwrap();
         let mut output: Vec<u8> = Vec::new();
         let mut output_writer = Cursor::new(&mut output);
         let mut reader_stream = Cursor::new(&mut buf);
@@ -564,4 +571,86 @@ mod test {
 
         assert_eq!(String::from_utf8(output).unwrap(), "tree a471637c78c8f67cca05221a942bd7efabb58caa\nauthor name <email> 1 -0300\ncommitter name <email> 1 -0300\n\nmessage\n".to_string());
     }
+}
+
+pub fn print_for_log(
+    stream: &mut dyn Write,
+    vec_commits: &mut Vec<(CommitObject, Option<String>)>,
+) -> Result<(), CommandError> {
+    let mut buf: Vec<u8> = Vec::new();
+    let mut writer_stream = Cursor::new(&mut buf);
+    for commit_with_branch in vec_commits {
+        if commit_with_branch.0.is_merge() {
+            print_merge_commit_for_log(&mut writer_stream, &mut commit_with_branch.0)?;
+        } else {
+            print_normal_commit_for_log(&mut writer_stream, &mut commit_with_branch.0)?;
+        }
+    }
+    _ = stream.write_all(&buf);
+    Ok(())
+}
+
+fn print_normal_commit_for_log(
+    stream: &mut dyn Write,
+    commit: &mut CommitObject,
+) -> Result<(), CommandError> {
+    let mut buf: Vec<u8> = Vec::new();
+    let mut writer_stream = Cursor::new(&mut buf);
+    _ = writeln!(writer_stream, "commit {}", commit.get_hash_string()?);
+    _ = writeln!(writer_stream, "Author: {}", commit.author);
+    _ = writeln!(writer_stream, "Date: {}", commit.timestamp);
+    _ = writeln!(writer_stream, "\n\t{}", commit.message);
+    _ = stream.write_all(&buf);
+    Ok(())
+}
+
+fn print_merge_commit_for_log(
+    stream: &mut dyn Write,
+    commit: &mut CommitObject,
+) -> Result<(), CommandError> {
+    let mut buf: Vec<u8> = Vec::new();
+    let mut writer_stream = Cursor::new(&mut buf);
+    let mut merges = "Merge:".to_string();
+    for parent in &commit.parents {
+        if parent.len() > 7 {
+            merges.push_str(&format!(" {}", &parent[..7]));
+        } else {
+            return Err(CommandError::InvalidCommit);
+        }
+    }
+    _ = writeln!(writer_stream, "commit {}", commit.get_hash_string()?);
+    _ = writeln!(writer_stream, "{}", merges);
+    _ = writeln!(writer_stream, "Author: {}", commit.author);
+    _ = writeln!(writer_stream, "Date: {}", commit.timestamp);
+    _ = writeln!(writer_stream, "\n\t{}", commit.message);
+    _ = stream.write_all(&buf);
+    Ok(())
+}
+
+// pub fn read_from_for_log(
+//     db: &ObjectsDatabase,
+//     stream: &mut dyn Read,
+//     logger: &mut Logger,
+//     hash_commit: &String,
+// ) -> Result<CommitObject, CommandError> {
+//     //let mut tree = db.read_object(&hash_commit)?;
+//     get_type_and_len(stream)?;
+
+//     let (_, parents, author, author_timestamp, author_offset, committer, _, _, message) =
+//         read_commit_info_from(stream)?;
+
+//     Ok(CommitObject {
+//         tree: None,
+//         parents,
+//         author,
+//         committer,
+//         message,
+//         timestamp: author_timestamp,
+//         offset: author_offset,
+//         hash: Some(hex_string_to_u8_vec(hash_commit)),
+//     })
+// }
+
+pub fn sort_commits_descending_date(vec_commits: &mut Vec<(CommitObject, Option<String>)>) {
+    vec_commits.sort_by(|a, b| b.0.timestamp.cmp(&a.0.timestamp));
 }

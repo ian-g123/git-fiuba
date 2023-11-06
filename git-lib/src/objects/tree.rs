@@ -20,7 +20,7 @@ use super::{
 #[derive(Clone)]
 pub struct Tree {
     path: String,
-    objects: HashMap<String, GitObject>,
+    objects: HashMap<String, GitObject>, // HashMap<name_object, object>
     hash: Option<[u8; 20]>,
 }
 
@@ -167,13 +167,13 @@ impl Tree {
     /// Crea un Blob a partir de su hash y lo añade al Tree.
     pub fn add_blob(
         &mut self,
-        logger: &mut Logger,
+        _logger: &mut Logger,
         path_name: &String,
         hash: &String,
     ) -> Result<(), CommandError> {
         // let blob = Blob::new_from_hash(hash.clone(), path_name.clone())?;
         let blob =
-            Blob::new_from_hash_and_mode(hash.clone(), path_name.clone(), Mode::RegularFile)?;
+            Blob::new_from_hash_path_and_mode(hash.clone(), path_name.clone(), Mode::RegularFile)?;
         let blob_name = get_name(&path_name)?;
         _ = self.objects.insert(blob_name.to_string(), Box::new(blob));
         Ok(())
@@ -212,7 +212,7 @@ impl Tree {
     ) -> Result<GitObject, CommandError> {
         let mut objects = HashMap::<String, GitObject>::new();
 
-        while let Ok(mode) = read_mode(stream) {
+        while let Ok(_mode) = read_mode(stream) {
             let name = read_string_until(stream, '\0')?;
             let mut hash = vec![0; 20];
             stream
@@ -220,7 +220,7 @@ impl Tree {
                 .map_err(|_| CommandError::ObjectHashNotKnown)?;
             let hash_str = u8_vec_to_hex_string(&hash);
 
-            let object = db.read_object(&hash_str)?;
+            let object = db.read_object(&hash_str, logger)?;
             objects.insert(name, object);
         }
         Ok(Box::new(Self {
@@ -234,7 +234,7 @@ impl Tree {
         stream: &mut dyn Read,
         _: usize,
         output: &mut dyn Write,
-        logger: &mut Logger,
+        _logger: &mut Logger,
     ) -> Result<(), CommandError> {
         let mut objects = Vec::<(Mode, String, String, String)>::new();
         loop {
@@ -249,7 +249,7 @@ impl Tree {
             };
             let hash_str = get_hash(stream)?;
             let mode = get_mode(mode)?;
-            let object_type = Mode::get_type_from_mode(&mode);
+            let object_type = mode.get_type_from_mode();
             objects.push((mode, object_type, hash_str, name.to_string()));
         }
 
@@ -292,7 +292,7 @@ fn get_mode(mode: &str) -> Result<Mode, CommandError> {
     Ok(mode)
 }
 
-fn get_mode_and_name(buf: Vec<u8>) -> Result<(String, String), CommandError> {
+fn _get_mode_and_name(buf: Vec<u8>) -> Result<(String, String), CommandError> {
     let string_mode_name = String::from_utf8(buf).map_err(|_| CommandError::InvalidMode)?;
     let Some((mode, name)) = string_mode_name.split_once(' ') else {
         return Err(CommandError::InvalidMode);
@@ -336,17 +336,29 @@ impl GitObjectTrait for Tree {
         "tree".to_string()
     }
 
-    fn content(&mut self) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self, db: Option<&mut ObjectsDatabase>) -> Result<Vec<u8>, CommandError> {
         let mut sorted_objects = self.sort_objects();
         let mut content = Vec::new();
-        for (name_object, object) in sorted_objects.iter_mut() {
-            let mode = &object.mode();
-            let mode_id = mode.get_id_mode();
-            // println!("{} {}", mode_id, name_object);
-            write!(content, "{} {}\0", mode_id, name_object)
-                .map_err(|err| CommandError::FileWriteError(format!("{err}")))?;
-            let hash = object.get_hash()?;
-            content.extend_from_slice(&hash);
+
+        if let Some(db) = db {
+            for (name_object, object) in sorted_objects.iter_mut() {
+                let mode = &object.mode();
+                let mode_id = mode.get_id_mode();
+                write!(content, "{} {}\0", mode_id, name_object)
+                    .map_err(|err| CommandError::FileWriteError(format!("{err}")))?;
+                let hash_str = db.write(object, true, &mut Logger::new_dummy())?;
+                let hash = hex_string_to_u8_vec(&hash_str);
+                content.extend_from_slice(&hash);
+            }
+        } else {
+            for (name_object, object) in sorted_objects.iter_mut() {
+                let mode = &object.mode();
+                let mode_id = mode.get_id_mode();
+                write!(content, "{} {}\0", mode_id, name_object)
+                    .map_err(|err| CommandError::FileWriteError(format!("{err}")))?;
+                let hash = object.get_hash()?;
+                content.extend_from_slice(&hash);
+            }
         }
 
         Ok(content)
@@ -390,7 +402,7 @@ impl GitObjectTrait for Tree {
             return Ok(hash);
         }
         let mut buf: Vec<u8> = Vec::new();
-        self.write_to(&mut buf)?;
+        self.write_to(&mut buf, None)?;
         let hash = get_sha1(&buf);
         self.set_hash(hash);
         Ok(hash)
@@ -418,7 +430,7 @@ impl GitObjectTrait for Tree {
 //     }
 // }
 
-fn type_id_object(type_str: &str) -> Result<u8, CommandError> {
+fn _type_id_object(type_str: &str) -> Result<u8, CommandError> {
     if type_str == "blob" {
         return Ok(0);
     }
@@ -599,7 +611,7 @@ mod test_write_y_display {
 
         let mut content = Vec::new();
         let mut writer_stream = Cursor::new(&mut content);
-        tree.write_to(&mut writer_stream).unwrap();
+        tree.write_to(&mut writer_stream, None).unwrap();
         assert!(!content.is_empty());
 
         let mut reader_stream = Cursor::new(&mut content);
@@ -634,7 +646,7 @@ mod test_write_y_display {
 
         let mut content = Vec::new();
         let mut writer_stream = Cursor::new(&mut content);
-        tree.write_to(&mut writer_stream).unwrap();
+        tree.write_to(&mut writer_stream, None).unwrap();
 
         writer_stream.seek(SeekFrom::Start(0)).unwrap();
 

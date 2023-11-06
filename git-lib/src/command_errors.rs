@@ -82,6 +82,8 @@ pub enum CommandError {
     Connection(String),
     /// Error al leer un pkt
     ErrorReadingPkt,
+    /// Error al leer un pkt con msg
+    ErrorReadingPktVerbose(String),
     /// Error al enviar un mensaje
     SendingMessage(String),
     /// Error al intentar abrir el archivo de configuración
@@ -102,6 +104,26 @@ pub enum CommandError {
     /// Error al intentar unir paths
     JoiningPaths,
     FailedToFindCommonAncestor,
+    /// Ocurre un error al encontrar las ramas de los commits en push
+    PushBranchesError,
+    /// Error al obtener el tree desde el option que debería ser tree en push
+    PushTreeError,
+    PushBranchBehindVerbose(String, String),
+    /// Octopus merge not supported
+    MergeMultipleCommits,
+    /// Merge conflict
+    MergeConflict(String),
+    /// You can only use merge with one option --continue | --abort | --quit
+    MergeOneOperation,
+    /// There is no merge to continue, abort or quit
+    NoMergeFound,
+    /// Couldn't continue with automerge
+    FailedToResumeMerge,
+    /// error: Committing is not possible because you have unmerged files.
+    UnmergedFiles,
+    /// There cannot be a file and a folder with the same name
+    CannotHaveFileAndFolderWithSameName(String),
+    PushBranchBehind(String),
 }
 
 impl Error for CommandError {}
@@ -220,6 +242,10 @@ impl fmt::Display for CommandError {
             CommandError::ErrorReadingPkt => {
                 write!(f, "Error al leer un pkt")
             }
+
+            CommandError::ErrorReadingPktVerbose(msg) => {
+                write!(f, "Error al leer un pkt: {}", msg)
+            }
             CommandError::SendingMessage(msg) => {
                 write!(f, "{}", msg)
             }
@@ -264,6 +290,55 @@ impl fmt::Display for CommandError {
             }
             CommandError::FailedToFindCommonAncestor => {
                 write!(f, "No se pudo encontrar un ancestro común.")
+            }
+            CommandError::PushBranchesError => {
+                write!(
+                    f,
+                    "Ocurre un error al encontrar las ramas de los commits en push"
+                )
+            }
+            CommandError::PushTreeError => {
+                write!(
+                    f,
+                    "Error al obtener el tree desde el option que debería ser tree en push"
+                )
+            }
+            CommandError::PushBranchBehindVerbose(url, branch) => {
+                write!(
+                    f,
+                    "! [rejected]        {branch} -> {branch} (non-fast-forward)\nerror: failed to push some refs to '{url}'\n"
+                )
+            }
+            CommandError::MergeMultipleCommits => {
+                write!(f, "Octopus merge not supported")
+            }
+            CommandError::MergeConflict(explanation) => {
+                write!(f, "Merge conflict! Error: {}", explanation)
+            }
+            CommandError::MergeOneOperation => {
+                write!(
+                    f,
+                    "You can only use merge with one option --continue | --abort | --quit"
+                )
+            }
+            CommandError::NoMergeFound => {
+                write!(f, "There is no merge to continue, abort or quit")
+            }
+            CommandError::FailedToResumeMerge => {
+                write!(f, "Couldn't continue with automerge")
+            }
+            CommandError::UnmergedFiles => {
+                write!(f, "error: Committing is not possible because you have unmerged files.\nhint: Fix them up in the work tree, and then use 'git add/rm <file>'\nhint: as appropriate to mark resolution and make a commit.\nfatal: Exiting because of an unresolved conflict.")
+            }
+            CommandError::CannotHaveFileAndFolderWithSameName(path) => {
+                write!(
+                    f,
+                    "There cannot be a file and a folder with the same name: {}",
+                    path
+                )
+            }
+            CommandError::PushBranchBehind(local_branch) => {
+                write!(f, "error: failed to push some refs to {}", local_branch)
             }
         }
     }

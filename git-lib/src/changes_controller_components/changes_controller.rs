@@ -25,10 +25,11 @@ impl ChangesController {
     /// del index y el working tree desde el último commit.
     pub fn new(
         db: &ObjectsDatabase,
+        base_path: &str,
         logger: &mut Logger,
         commit_tree: Option<Tree>,
     ) -> Result<ChangesController, CommandError> {
-        let index = StagingArea::open()?;
+        let index = StagingArea::open(base_path)?;
         let working_tree = build_working_tree()?;
         let index_changes = Self::check_staging_area_status(db, &index, &commit_tree, logger)?;
         let (working_tree_changes, untracked) = Self::check_working_tree_status(
@@ -283,7 +284,7 @@ impl ChangesController {
 
 /// Devuelve true si el contenido del objeto y el path pasados difieren.
 fn content_differs(path: &str, object: &mut GitObject) -> Result<bool, CommandError> {
-    let staged_content: String = String::from_utf8(object.content()?)
+    let staged_content: String = String::from_utf8(object.content(None)?)
         .map_err(|error| CommandError::FileReadError(error.to_string()))?;
 
     let Ok(mut current_file) = File::open(path) else {
