@@ -166,7 +166,7 @@ impl ChangesController {
                 _ = changes.insert(path.to_string(), ChangeType::Modified);
             } else {
                 _ = changes.insert(path.to_string(), ChangeType::Unmodified);
-            } 
+            }
         }
         Ok(changes)
     }
@@ -251,7 +251,8 @@ impl ChangesController {
     ) -> Result<(), CommandError> {
         let mut untracked_number = 0;
         let mut total_files_dir = 0;
-        for (_, object) in tree.get_objects().iter_mut() {
+        for (_, (object_hash, object_opt)) in tree.get_objects().iter_mut() {
+            let mut object = object_opt.to_owned().ok_or(CommandError::ShallowTree)?;
             if let Some(mut new_tree) = object.as_tree() {
                 Self::check_working_tree_aux(
                     working_dir,
@@ -267,7 +268,7 @@ impl ChangesController {
             } else {
                 let (is_untracked, path) = Self::check_file_status(
                     working_dir,
-                    object,
+                    &mut object,
                     staging_area,
                     last_commit,
                     changes,

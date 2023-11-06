@@ -134,6 +134,8 @@ pub enum CommandError {
     },
     /// Error al negociar paquetes con cliente
     PackageNegotiationError(String),
+    /// Error al intentar leer un archivo
+    CheckingCommitsBetweenError(String),
     /// Error al eliminar un archivo
     FileRemovingError(String),
     /// Error de recursividad de comando
@@ -177,6 +179,8 @@ pub enum CommandError {
     /// error: switch `b' requires a value
     SwitchRequiresValue,
     CheckoutConflictsError,
+    /// El tree guarda solo hashes y no sus objetos
+    ShallowTree,
 }
 
 impl Error for CommandError {}
@@ -469,6 +473,12 @@ impl fmt::Display for CommandError {
             CommandError::SwitchRequiresValue => write!(f, "error: switch `b' requires a value"),
             CommandError::CheckoutConflictsError => {
                 write!(f, "No se puede cambiar de rama. Hay conflictos")
+            }
+            CommandError::CheckingCommitsBetweenError(msg) => {
+                write!(f, "{}", msg)
+            }
+            CommandError::ShallowTree => {
+                write!(f, "El tree guarda solo hashes y no sus objetos")
             }
         }
     }

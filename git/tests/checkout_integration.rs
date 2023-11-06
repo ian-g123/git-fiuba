@@ -14,7 +14,7 @@ use std::{
 
 use crate::common::aux::{
     change_dir_testfile1_content_and_remove_dir_testfile2, change_testfile_content,
-    create_test_scene_1, create_test_scene_2, get_head,
+    create_test_scene_1, create_test_scene_2,
 };
 
 #[test]
@@ -46,13 +46,16 @@ fn test_update_pathspec() {
         .output()
         .unwrap();
 
-    _ = Command::new("../../../../../../target/debug/git")
+    let res = Command::new("../../../../../../target/debug/git")
         .arg("commit")
         .arg("-m")
         .arg("message")
         .current_dir(path)
         .output()
         .unwrap();
+
+    println!("Commit stdout:\n{:?}\n===", res.stdout);
+    println!("Commit stdout:\n{:?}\n===", res.stdout);
 
     check_commit(path);
 
@@ -410,17 +413,4 @@ fn check_commit(path: &str) {
         stderr,
         stdout.clone()
     );
-    /* assert_eq!(
-        output_lines[0],
-        "tree 43a028a569110ece7d1d1ee46f3d1e50fdcf7946"
-    );
-    assert!(output_lines[1]
-        .to_string()
-        .starts_with("author Foo Bar <example@email.org>"));
-    assert!(output_lines[1].to_string().ends_with(" -0300"));
-    assert!(output_lines[2]
-        .to_string()
-        .starts_with("committer Foo Bar <example@email.org>"));
-    assert!(output_lines[2].to_string().ends_with("-0300"));
-    assert_eq!(output_lines[3], ""); */
 }

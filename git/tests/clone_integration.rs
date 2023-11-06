@@ -7,6 +7,8 @@ use std::{
 
 use git_lib::{file_compressor::extract, join_paths};
 
+// Comando para iniciar daemon
+// cd ../server-files/; clear; git daemon --verbose --reuseaddr --enable=receive-pack --informative-errors --base-path=. .
 #[test]
 #[ignore = "Needs server"]
 fn test_clone() {

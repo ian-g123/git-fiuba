@@ -55,11 +55,12 @@ pub trait GitObjectTrait {
     /// Si el objeto no es un Tree, devuelve un error
     fn add_path(
         &mut self,
-        _logger: &mut Logger,
+        logger: &mut Logger,
         _vector_path: Vec<&str>,
         _current_depth: usize,
         _hash: &String,
     ) -> Result<(), CommandError> {
+        logger.log("ERROR: No se puede agregar un path a un objeto que no es un árbol");
         Err(CommandError::ObjectNotTree)
     }
 
@@ -192,10 +193,10 @@ pub fn read_git_object_from(
         return Ok(blob);
     };
     if type_str == "tree" {
-        return Tree::read_from(db, stream, len, path, hash_str, logger);
+        return Tree::read_from(Some(db), stream, len, path, hash_str, logger);
     };
     if type_str == "commit" {
-        return CommitObject::read_from(db, stream, logger, true, None);
+        return CommitObject::read_from(Some(db), stream, logger, None);
     };
 
     Err(CommandError::ObjectTypeError)

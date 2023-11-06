@@ -319,6 +319,14 @@ fn test_flag_all_with_deleted_files() {
         .unwrap();
 
     assert!(result.status.success());
+    println!(
+        "commit stderr: {}",
+        String::from_utf8(result.stderr).unwrap()
+    );
+    println!(
+        "commit stdout: {}",
+        String::from_utf8(result.stdout).unwrap()
+    );
 
     change_dir_testfile1_content_and_remove_dir_testfile2(path);
 
@@ -332,6 +340,14 @@ fn test_flag_all_with_deleted_files() {
         .unwrap();
 
     assert!(result.status.success());
+    println!(
+        "commit stderr: {}",
+        String::from_utf8(result.stderr).unwrap()
+    );
+    println!(
+        "commit stdout: {}",
+        String::from_utf8(result.stdout).unwrap()
+    );
 
     let result = Command::new("../../../../../../target/debug/git")
         .arg("hash-object")
