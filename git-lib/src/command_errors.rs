@@ -101,7 +101,7 @@ pub enum CommandError {
     MessageIncomplete(String),
     AllAndFilesFlagsCombination(String),
     /// No se pudo obtener el commit de HEAD
-    NoHeadCommit,
+    NoHeadCommit(String),
     /// Error al intentar unir paths
     JoiningPaths,
     FailedToFindCommonAncestor,
@@ -342,8 +342,8 @@ impl fmt::Display for CommandError {
             CommandError::AllAndFilesFlagsCombination(path) => {
                 write!(f, "fatal: paths '{} ...' with -a does not make sense", path)
             }
-            CommandError::NoHeadCommit => {
-                write!(f, "fatal: Not a valid object name HEAD")
+            CommandError::NoHeadCommit(name) => {
+                write!(f, "No se pudo obtener el commit de HEAD: \"{}\"", name)
             }
             CommandError::JoiningPaths => {
                 write!(f, "Error al intentar unir paths")
