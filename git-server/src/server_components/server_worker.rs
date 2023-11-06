@@ -10,7 +10,7 @@ use git_lib::{
     git_repository::GitRepository,
     join_paths,
     logger::Logger,
-    objects::commit_object::CommitObject,
+    objects::{blob::Blob, commit_object::CommitObject, tree::Tree},
     objects_database::ObjectsDatabase,
     server_components::{
         history_analyzer::rebuild_commits_tree,
@@ -18,7 +18,7 @@ use git_lib::{
         packfile_object_type::PackfileObjectType,
         pkt_strings::Pkt,
     },
-    utils::aux::read_string_until,
+    utils::{aux::read_string_until, super_string::u8_vec_to_hex_string},
 };
 
 pub struct ServerWorker {
@@ -79,7 +79,7 @@ impl ServerWorker {
 
         self.send(&format!(
             "{} refs/heads/{}\0\n",
-            first_branch_name, first_branch_hash
+            first_branch_hash, first_branch_name
         ))?;
         for (branch_name, branch_hash) in sorted_branches {
             self.send(&format!("{} refs/heads/{}\n", branch_hash, branch_name))?;
@@ -114,9 +114,7 @@ impl ServerWorker {
             .into_iter()
             .collect::<Vec<(String, String)>>();
         sorted_branches.sort_unstable();
-        println!("local branches: {:?}", sorted_branches);
         self.send("version 1\n")?;
-        println!("head_branch_hash:{} HEAD\0\n", head_branch_hash);
         self.send(&format!("{} HEAD\0\n", head_branch_hash))?;
         for (branch_name, branch_hash) in sorted_branches {
             self.send(&format!("{} refs/heads/{}\n", branch_hash, branch_name))?;
@@ -127,23 +125,27 @@ impl ServerWorker {
         let objects = read_objects(&mut self.socket)?;
         let objects_map = repo.save_objects_from_packfile(objects)?;
         let mut status = HashMap::<String, Option<String>>::new();
-        for (branch_name, (old_ref, new_ref)) in ref_update_map {
-            let Some(local_branche_hash) = local_branches.get(&branch_name) else {
+
+        self.send("unpack ok\n")?;
+        for (branch_path_name, (old_ref, new_ref)) in ref_update_map {
+            let branch_name = branch_path_name[11..].to_string();
+
+            let Some(local_branch_hash) = local_branches.get(&branch_name) else {
                 todo!("TODO new branch")
             };
-            if local_branche_hash != &old_ref {
+            if local_branch_hash != &old_ref {
                 status.insert(branch_name, Some("non-fast-forward".to_string()));
             } else {
-                // check if we have all commits between new_ref and old_ref
-                status.insert(
-                    branch_name,
-                    check_commits_between(
-                        &objects_map,
-                        &old_ref,
-                        &new_ref,
-                        &mut Logger::new_dummy(),
-                    )?,
-                );
+                if check_commits_between(
+                    &objects_map,
+                    &old_ref,
+                    &new_ref,
+                    &mut Logger::new_dummy(),
+                )? {
+                    status.insert(branch_name, None);
+                } else {
+                    status.insert(branch_name, Some("non-fast-forward".to_string()));
+                }
             }
         }
 
@@ -256,16 +258,26 @@ impl ServerWorker {
     fn read_ref_update_map(&mut self) -> Result<HashMap<String, (String, String)>, CommandError> {
         let map_lines = get_response_until_flushpkt(&mut self.socket)?;
         let mut map = HashMap::<String, (String, String)>::new();
+        let mut is_first = true;
         for map_line in map_lines {
             let parts = map_line.split(' ').collect::<Vec<&str>>();
             let old_ref = parts[0].to_string();
             let new_ref = parts[1].to_string();
-            let branch_name = parts[2].to_string();
+            let mut branch_name = parts[2].to_string();
 
-            map.insert(
-                branch_name.trim().to_string(),
-                (old_ref.trim().to_string(), new_ref.trim().to_string()),
-            );
+            if is_first {
+                branch_name.pop();
+                map.insert(
+                    branch_name.trim().to_string(),
+                    (old_ref.trim().to_string(), new_ref.trim().to_string()),
+                );
+                is_first = false;
+            } else {
+                map.insert(
+                    branch_name.trim().to_string(),
+                    (old_ref.trim().to_string(), new_ref.trim().to_string()),
+                );
+            }
         }
         Ok(map)
     }
@@ -276,36 +288,93 @@ fn check_commits_between(
     old_ref: &str,
     new_ref: &str,
     logger: &mut Logger,
-) -> Result<Option<String>, CommandError> {
-    while let Some((object_type, _, object_content)) = objects_map.get(old_ref) {
-        match object_type {
-            PackfileObjectType::Commit => {
-                let mut cursor = Cursor::new(object_content);
-                let git_object_trait =
-                    &mut CommitObject::read_from(None, &mut cursor, logger, None)?;
-                let commit_object = git_object_trait.as_mut_commit().ok_or(
-                    CommandError::CheckingCommitsBetweenError(
-                        "No se pudo leer el commit".to_string(),
-                    ),
-                )?;
-                let tree =
-                    commit_object
-                        .get_tree()
-                        .ok_or(CommandError::CheckingCommitsBetweenError(
-                            "No se pudo leer el árbol del commit".to_string(),
-                        ))?;
-                // let tree_hash = tree.get_hash_string()?;
-                // if tree_hash == new_ref {
-                //     return Ok(None);
-                // }
+) -> Result<bool, CommandError> {
+    if new_ref == old_ref {
+        return Ok(true);
+    }
+    let Some((object_type, _, object_content)) = objects_map.get(new_ref) else {
+        return Ok(false);
+    };
+
+    match object_type {
+        PackfileObjectType::Commit => {
+            let mut cursor = Cursor::new(object_content);
+            let git_object_trait = &mut CommitObject::read_from(None, &mut cursor, logger, None)?;
+            let commit_object = git_object_trait.as_mut_commit().ok_or(
+                CommandError::CheckingCommitsBetweenError("No se pudo leer el commit".to_string()),
+            )?;
+            let tree_hash = commit_object.get_tree_hash_string()?;
+            if !contains_all_elements(objects_map, &tree_hash)? {
+                return Ok(false);
             }
-            _ => {
-                panic!("No debería pasar esto")
+            let parents = commit_object.get_parents();
+            for parent in parents {
+                if !check_commits_between(objects_map, old_ref, &parent, logger)? {
+                    return Ok(false);
+                };
             }
+            Ok(true)
+        }
+        _ => {
+            panic!("No debería pasar esto")
+        }
+    }
+}
+
+fn contains_all_elements(
+    objects_map: &HashMap<String, (PackfileObjectType, usize, Vec<u8>)>,
+    hash: &str,
+) -> Result<bool, CommandError> {
+    let Some((object_type, object_len, object_content)) = objects_map.get(hash) else {
+        return Ok(false);
+    };
+
+    match object_type {
+        PackfileObjectType::Commit => {
+            return Err(CommandError::ObjectNotTree);
+        }
+        PackfileObjectType::Tree => {
+            let mut cursor = Cursor::new(object_content);
+            let tree_object = &mut Tree::read_from(
+                None,
+                &mut cursor,
+                object_len.to_owned(),
+                "",
+                "",
+                &mut Logger::new_dummy(),
+            )?;
+            let Some(tree) = tree_object.as_mut_tree() else {
+                return Ok(false);
+            };
+            let objects_hashmap = tree.get_objects();
+            for (_, (object_hash, _)) in objects_hashmap {
+                let object_hash_str = u8_vec_to_hex_string(&object_hash);
+                if !contains_all_elements(objects_map, &object_hash_str)? {
+                    return Ok(false);
+                }
+            }
+        }
+        PackfileObjectType::Blob => {
+            let mut cursor = Cursor::new(object_content);
+            let blob_object = &mut Blob::read_from(
+                &mut cursor,
+                object_len.to_owned(),
+                "",
+                "",
+                &mut Logger::new_dummy(),
+            )?;
+            let Some(blob) = blob_object.as_mut_blob() else {
+                return Ok(false);
+            };
+            return Ok(true);
+        }
+
+        _ => {
+            return Ok(false);
         }
     }
 
-    Ok(None)
+    Ok(true)
 }
 
 fn get_responses_until(

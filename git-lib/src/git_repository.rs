@@ -1261,7 +1261,7 @@ impl<'a> GitRepository<'a> {
                     error.to_string()
                 ))
             })?;
-            branches.insert(file_name.to_string(), sha1.trim().to_string());
+            branches.insert(file_name.trim().to_string(), sha1.trim().to_string());
         }
         Ok(branches)
     }
