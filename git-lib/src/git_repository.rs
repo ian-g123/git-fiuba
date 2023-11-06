@@ -2411,11 +2411,7 @@ impl<'a> GitRepository<'a> {
         let Some(mut last_commit) = self.get_last_commit_tree()? else {
             return Err(CommandError::UntrackedError(current_branch));
         };
-        self.log(&format!(
-            "Actual hash:{} tree hash {}",
-            actual_hash,
-            last_commit.clone().get_hash_string()?,
-        ));
+        
         let current_changes = ChangesController::new(
             &self.db()?,
             &self.git_path,
@@ -2434,18 +2430,11 @@ impl<'a> GitRepository<'a> {
             &mut self.db()?,
             &mut self.logger,
         )?;
-        let log: Vec<&String> = changes_staged.iter().map(|(s, _)| s).collect();
-        self.log(&format!("Staging files después del content {:?}", log));
-        self.log(&format!(
-            "Current branch:{} untracked {:?}, not staged {:?}",
-            current_branch,
-            untracked_files,
-            changes_not_staged.len(),
-        ));
+        
         let merge_files = staging_area.get_unmerged_files();
         if !merge_files.is_empty() {
-            let mut merge_conflicts: Vec<&String> = merge_files.keys().collect();
-            self.get_checkout_merge_conflicts_output(merge_conflicts);
+            let merge_conflicts: Vec<&String> = merge_files.keys().collect();
+            self.get_checkout_merge_conflicts_output(merge_conflicts)?;
             return Ok(());
         }
 
@@ -2486,7 +2475,6 @@ impl<'a> GitRepository<'a> {
         conflicts: Vec<String>,
         untracked_files: &Vec<String>,
     ) -> Result<(), CommandError> {
-        self.log(&format!("Conflictos: {:?}", conflicts));
 
         let mut untracked_conflicts: Vec<String> = Vec::new();
         let mut unstaged_conflicts: Vec<String> = Vec::new();
@@ -2605,7 +2593,6 @@ impl<'a> GitRepository<'a> {
         self.log("Restoring files");
 
         let staging_files = self.staging_area()?.get_files();
-        self.log("Buscando untracked conflictos de checkout");
 
         self.look_for_checkout_conflicts(
             &mut source_tree,
@@ -2615,9 +2602,6 @@ impl<'a> GitRepository<'a> {
             false,
             &staging_files,
         )?;
-        self.log(&format!("Untracked conflicts: {:?}", conflicts));
-
-        self.log("Buscando unstaged conflictos de checkout");
 
         self.look_for_checkout_conflicts(
             &mut source_tree,
@@ -2627,9 +2611,7 @@ impl<'a> GitRepository<'a> {
             false,
             &staging_files,
         )?;
-        self.log(&format!("Unstaged conflicts: {:?}", conflicts));
 
-        self.log("Buscando staged conflictos de checkout");
 
         let staged_paths: Vec<&String> = staged.keys().collect();
         //self.log(&format!("Staged paths antes: {:?}", staged_paths));

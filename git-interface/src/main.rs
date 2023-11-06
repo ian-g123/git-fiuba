@@ -97,6 +97,8 @@ impl Interface {
     fn actualizar(&mut self) -> Option<Vec<(CommitObject, Option<String>)>> {
         let (staging_changes, unstaging_changes) =
             staged_area_func(self.repo_git_path.to_string()).unwrap();
+        print!("stage: {:?}",staging_changes);
+        print!("unstage: {:?}",unstaging_changes);
         self.staging_changes = Rc::new(RefCell::new(staging_changes));
         self.unstaging_changes = Rc::new(RefCell::new(unstaging_changes));
 
@@ -212,6 +214,7 @@ impl Interface {
                         None => return,
                     };
                     interface.set_right_area(commits);
+                    interface.staged_area_ui();
                 }
                 _ => {
                     eprintln!("Acción no reconocida: {}", button_action);
@@ -313,6 +316,7 @@ impl Interface {
             add_row_to_list(&commit.get_timestamp_string(), &date_list);
             add_row_to_list(&commit.get_author(), &author_list);
             add_row_to_list(&commit.get_hash_string().unwrap(), &commits_hashes_list);
+            add_row_to_list(&commit.get_message(), &description_list);
         }
         self.window.borrow_mut().show_all();
     }

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs, io::Read};
+use std::{collections::HashMap};
 
 use crate::objects::git_object::GitObjectTrait;
 use crate::{
