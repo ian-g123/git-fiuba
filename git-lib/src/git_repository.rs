@@ -494,9 +494,7 @@ impl<'a> GitRepository<'a> {
     ) -> Result<(), CommandError> {
         let blob = Blob::new_from_path(path.to_string())?;
         let mut git_object: GitObject = Box::new(blob);
-        println!("Escribiendo");
         let hex_str = self.db()?.write(&mut git_object, false, &mut self.logger)?;
-        println!("Escribio");
         staging_area.add(path, &hex_str);
         Ok(())
     }
