@@ -6,8 +6,10 @@ use std::{
     process::Command,
 };
 
-// #[ignore = "Needs server"]
+// Comando para correr el servidor
+// cargo build; clear; cd ../server-files/; ../../../../../target/debug/git-server
 #[test]
+#[ignore = "Needs server"]
 fn test_push() {
     let path = "./tests/data/test1";
 

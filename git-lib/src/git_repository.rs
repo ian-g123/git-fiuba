@@ -671,8 +671,6 @@ impl<'a> GitRepository<'a> {
             parents.push(padre);
         }
 
-        self.log("AAAAA");
-
         let mut staged_tree = {
             if files.is_empty() {
                 self.log("is_empty");
