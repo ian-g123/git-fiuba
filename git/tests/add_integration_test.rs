@@ -253,6 +253,8 @@ fn create_base_scene(path: &str) {
         Command::new("git")
             .arg("init")
             .arg("-q")
+            .arg("-b")
+            .arg("master")
             .current_dir(path)
             .status()
             .is_ok(),

@@ -93,7 +93,10 @@ impl ChangesController {
         for (path, hash) in staging_files.iter() {
             let has_path = tree.has_blob_from_path(path, logger);
             let (has_hash, name) = tree.has_blob_from_hash(hash, logger)?;
-
+            logger.log(&format!(
+                "Path: {}, has_name: {}, has_hash: {}",
+                path, has_path, has_hash
+            ));
             let actual_name = get_name(path)?;
             if !has_path && !has_hash {
                 _ = changes.insert(path.to_string(), ChangeType::Added);

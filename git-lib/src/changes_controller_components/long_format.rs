@@ -80,7 +80,7 @@ impl Format for LongFormat {
     }
 }
 
-fn sort_hashmap(files: &HashMap<String, ChangeType>) -> Vec<(String, ChangeType)> {
+pub fn sort_hashmap(files: &HashMap<String, ChangeType>) -> Vec<(String, ChangeType)> {
     let mut keys: Vec<&String> = files.keys().collect();
     keys.sort();
 

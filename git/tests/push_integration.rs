@@ -102,7 +102,8 @@ fn create_base_scene(path: &str) {
     assert!(
         Command::new("git")
             .arg("init")
-            .arg("--initial-branch=master")
+            .arg("-b")
+            .arg("master")
             .arg("-q")
             .arg("--bare")
             .current_dir(path.to_owned() + "/server-files/repo")

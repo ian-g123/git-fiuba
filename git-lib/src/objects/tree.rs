@@ -67,31 +67,40 @@ impl Tree {
 
     pub fn has_blob_from_path(&self, path: &str, logger: &mut Logger) -> bool {
         let mut parts: Vec<&str> = path.split_terminator("/").collect();
-        return self.follow_path_in_tree(&mut parts, logger);
+        let (found, _) = self.follow_path_in_tree(&mut parts, logger);
+        found
     }
 
-    fn follow_path_in_tree(&self, path: &mut Vec<&str>, logger: &mut Logger) -> bool {
+    fn follow_path_in_tree(
+        &self,
+        path: &mut Vec<&str>,
+        logger: &mut Logger,
+    ) -> (bool, Option<GitObject>) {
         if path.is_empty() {
             logger.log(&format!("Path empty"));
 
-            return false;
+            return (false, None);
         }
         for (name, object) in self.get_objects().iter_mut() {
             logger.log(&format!("Name: {}, part: {}", name, path[0]));
 
             if name == path[0] {
-                logger.log(&format!("found"));
-
                 if let Some(obj_tree) = object.as_tree() {
                     _ = path.remove(0);
                     return obj_tree.follow_path_in_tree(path, logger);
                 }
-                logger.log(&format!("return true"));
 
-                return true;
+                return (true, Some(object.to_owned()));
             }
         }
-        false
+        (false, None)
+    }
+
+    pub fn get_blob(&self, path: &str, logger: &mut Logger) -> Option<GitObject> {
+        let mut parts: Vec<&str> = path.split_terminator("/").collect();
+
+        let (_, object) = self.follow_path_in_tree(&mut parts, logger);
+        object
     }
 
     pub fn get_deleted_blobs_from_path(

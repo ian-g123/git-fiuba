@@ -9,7 +9,8 @@ use chrono::{DateTime, Local};
 
 use crate::{
     changes_controller_components::{
-        format::Format, long_format::LongFormat, short_format::ShortFormat,
+        commit_format::CommitFormat, format::Format, long_format::LongFormat,
+        short_format::ShortFormat,
     },
     command_errors::CommandError,
     config::Config,
@@ -385,18 +386,26 @@ impl<'a> GitRepository<'a> {
     ) -> Result<(), CommandError> {
         self.log("Running pathspec configuration");
         let staging_area_files = staging_area.get_files();
+        self.log("staging area files");
 
         for path in files.iter() {
+            self.log(&format!("Updating: {}", path));
             if !Path::new(path).exists() {
+                self.log(&format!("Removed from index: {}", path));
+
                 staging_area.remove(path);
-            }
-            if !self.is_untracked(path, &staging_area_files)? {
+            } else if !self.is_untracked(path, &staging_area_files)? {
+                self.log(&format!("It's untracked: {}", path));
+
                 self.add_file(path, staging_area)?;
             } else {
                 return Err(CommandError::UntrackedError(path.to_owned()));
             }
         }
+        self.log("Saving staging area changes");
+
         staging_area.save()?;
+        self.log("Finished running pathspec configuration");
 
         Ok(())
     }
@@ -431,6 +440,7 @@ impl<'a> GitRepository<'a> {
     ) -> Result<(), CommandError> {
         self.log("commit_priv");
         let last_commit_tree = self.get_last_commit_tree()?;
+        self.log("Checking if index is empty");
         if !staging_area.has_changes(&self.db()?, &last_commit_tree, &mut self.logger)? {
             self.logger.log("Nothing to commit");
             self.status_long_format(true)?;
@@ -460,17 +470,28 @@ impl<'a> GitRepository<'a> {
             self.get_commit(&message, parents, staged_tree.to_owned(), reuse_commit_info)?;
 
         let mut git_object: GitObject = Box::new(commit);
-
+        let current_branch = &self.get_current_branch_name()?;
         if !dry_run {
             write_commit_tree_to_database(&mut self.db()?, &mut staged_tree, &mut self.logger)?;
             let commit_hash = self.db()?.write(&mut git_object, false, &mut self.logger)?;
             update_last_commit(&commit_hash)?;
+
+            self.logger.log("Last commit updated");
+            if !quiet {
+                CommitFormat::show(
+                    staging_area.get_files(),
+                    &self.db()?,
+                    &mut self.logger,
+                    last_commit_tree,
+                    &commit_hash,
+                    current_branch,
+                    &message,
+                    &mut self.output,
+                    &self.path,
+                )?;
+            }
         } else {
             self.status_long_format(true)?;
-        }
-
-        if !quiet {
-            // salida de commit
         }
 
         Ok(())
