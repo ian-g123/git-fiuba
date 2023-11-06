@@ -129,8 +129,8 @@ fn read_content(
     logger: &mut Logger,
     db: &ObjectsDatabase,
 ) -> Result<Vec<String>, CommandError> {
-    let mut object = db.read_object(hash)?;
-    let content = object.content()?;
+    let mut object = db.read_object(hash, logger)?;
+    let content = object.content(None)?;
     let content = String::from_utf8(content)
         .map_err(|error| CommandError::FileReadError(error.to_string()))?;
     logger.log(&format!("content {:?}", content));
@@ -151,7 +151,7 @@ fn read_blob_content(
     let Some(blob) = object.as_mut_blob() else {
         return Err(CommandError::UnknownObjectType);
     };
-    let content = blob.content()?;
+    let content = blob.content(None)?;
     let content_str: String = format!("{}", String::from_utf8_lossy(&content));
     let content_vec: Vec<&str> = content_str.lines().collect();
     let content_vec: Vec<String> = content_vec.iter().map(|s| s.to_string()).collect();

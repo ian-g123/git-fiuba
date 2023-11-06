@@ -27,7 +27,7 @@ impl CommitFormat {
         output: &mut dyn Write,
         curr_path: &str,
     ) -> Result<(), CommandError> {
-        let changes_controller = ChangesController::new(db, logger, commit_tree.clone())?;
+        let changes_controller = ChangesController::new(db, curr_path, logger, commit_tree.clone())?;
         let changes_to_be_commited = changes_controller.get_changes_to_be_commited();
         let (files_changed, insertions, deletions) = CommitChanges::new(
             staging_area_changes,
