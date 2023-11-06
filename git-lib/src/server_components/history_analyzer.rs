@@ -113,13 +113,6 @@ pub fn rebuild_commits_tree(
         commit_object_box.content(None),
     ));
 
-    // println!("commit_object_box: {:?}", commit_object_box.content());
-    //get_type_and_len(&mut stream)?;
-
-    // let mut commit_object = read_from_for_log(&db, &mut stream, &mut logger.logger, hash_commit)?;
-
-    // println!("commit_object: {:?}", commit_object.content());
-
     let Some(commit_object) = commit_object_box.as_mut_commit() else {
         return Err(CommandError::InvalidCommit);
     };

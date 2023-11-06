@@ -1377,7 +1377,6 @@ impl<'a> GitRepository<'a> {
             let branch_remote_hash = (branch_name_remote, branch_remote_hash.1.to_string());
             branches_with_their_commits.push(branch_remote_hash);
         }
-        // println!("branches_with_their_commits : {:?}", branches_with_their_commits);
         Ok(branches_with_their_commits)
     }
 
@@ -2032,32 +2031,9 @@ impl<'a> GitRepository<'a> {
                 &mut self.logger,
             )?;
         }
-        let mut commits: Vec<_> = commits_map.values().cloned().collect();
 
-        match self.get_last_commit_hash() {
-            Ok(Some(last_commit)) => {
-                // let mut parents_hash = HashMap::new();
-                // let mut sons_hash = HashMap::new();
-                // get_parents_hash_map(
-                //     &last_commit,
-                //     &mut commits_map,
-                //     &mut parents_hash,
-                //     &mut sons_hash,
-                // )?;
-
-                //println!("parents_hash: {:?}", parents_hash);
-                sort_commits_descending_date(&mut commits);
-            }
-            _ => return Ok(commits),
-        }
-
-        // let Ok(Some(last_commit)) = match self.get_last_commit_hash() else {return Ok(commits)};
-
-        // let parents_hash = HashMap::new();
-        // let sons_hash = HashMap::new();
-        // get_parents_hashMap(last_commit, &mut commits_map, parents_hash, sons_hash)?;
-        // sort_commits_descending_date(&mut commits);
-
+        let mut commits = commits_map.drain().map(|(_, v)| v).collect();
+        sort_commits_descending_date(&mut commits);
         Ok(commits)
     }
 
