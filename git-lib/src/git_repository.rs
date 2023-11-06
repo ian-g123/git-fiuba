@@ -2058,9 +2058,10 @@ impl<'a> GitRepository<'a> {
         let changes_not_staged = current_changes.get_changes_not_staged();
         let changes_not_staged = get_modified_paths(changes_not_staged);
         let changes_staged = current_changes.get_changes_to_be_commited();
+        let staging_area = self.staging_area()?;
         let changes_staged = get_staged_paths_and_content(
             changes_staged,
-            &self.staging_area()?,
+            &staging_area,
             &mut self.db()?,
             &mut self.logger,
         )?;
@@ -2072,12 +2073,13 @@ impl<'a> GitRepository<'a> {
             untracked_files,
             changes_not_staged.len(),
         ));
-        //let merge_conflicts = current_changes.ge
-        /*
-        if !merge_conflicts.is_empty(){
-            return Err(CommandError::MergeConflictsDuringCheckout(current_branch));
+        let merge_files = staging_area.get_unmerged_files();
+        if !merge_files.is_empty() {
+            let mut merge_conflicts: Vec<&String> = merge_files.keys().collect();
+            self.get_checkout_merge_conflicts_output(merge_conflicts);
+            return Ok(());
         }
-         */
+
         let (new_hash, mut new_tree) = self.get_checkout_branch_info(branch, &self.db()?)?;
         let local_new_files =
             add_local_new_files(untracked_files, &mut new_tree, &mut self.logger)?;
@@ -2147,6 +2149,21 @@ impl<'a> GitRepository<'a> {
         if !unstaged_conflicts.is_empty() {
             message += "Please move or remove them before you switch branches.\nAborting\n"
         }
+        write!(self.output, "{}", message)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        Ok(())
+    }
+
+    fn get_checkout_merge_conflicts_output(
+        &mut self,
+        merge_conflicts: Vec<&String>,
+    ) -> Result<(), CommandError> {
+        let mut message = String::new();
+
+        for path in merge_conflicts.iter() {
+            message += &format!("{path}: needs\n");
+        }
+        message += &format!("error: you need to resolve your current index first\n");
         write!(self.output, "{}", message)
             .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
         Ok(())
@@ -2412,31 +2429,6 @@ fn remove_new_files_commited(
         }
     }
 
-    /*     for path in untracked.iter() {
-        if !new_branch.has_blob_from_path(path, logger) {
-            logger.log(&format!("Deleting new file commitd: {}", path));
-            new_branch.remove_object_from_path(path, logger);
-            fs::remove_file(path.clone())
-                .map_err(|error| CommandError::RemoveFileError(error.to_string()))?;
-        }
-    }
-    for path in unstaged.iter() {
-        if !new_branch.has_blob_from_path(path, logger) {
-            logger.log(&format!("Deleting new file commitd: {}", path));
-
-
-            fs::remove_file(path.clone())
-                .map_err(|error| CommandError::RemoveFileError(error.to_string()))?;
-        }
-    }
-    for (path, _) in staged.iter() {
-        if !new_branch.has_blob_from_path(path, logger) {
-            logger.log(&format!("Deleting new file commitd: {}", path));
-
-            fs::remove_file(path.clone())
-                .map_err(|error| CommandError::RemoveFileError(error.to_string()))?;
-        }
-    } */
     Ok(())
 }
 
