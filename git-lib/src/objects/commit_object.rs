@@ -70,10 +70,9 @@ impl CommitObject {
 
     /// Crea un Commit a partir de la infromación leída del stream.
     pub fn read_from(
-        db: &ObjectsDatabase,
+        db: Option<&ObjectsDatabase>,
         stream: &mut dyn Read,
         logger: &mut Logger,
-        rebuild_tree: bool,
         hash_commit: Option<String>,
     ) -> Result<GitObject, CommandError> {
         let (tree_hash, parents, author, author_timestamp, author_offset, committer, _, _, message) =
@@ -86,19 +85,20 @@ impl CommitObject {
             tree_hash_str
         ));
 
-        let option_tree = if rebuild_tree {
-            let mut tree = db.read_object(&tree_hash_str, logger)?;
-            logger.log(&format!(
-                "tree content en read_from : {}",
-                String::from_utf8_lossy(&(tree.to_owned().content(None)?))
-            ));
+        let option_tree = match db {
+            Some(db) => {
+                let mut tree = db.read_object(&tree_hash_str, logger)?;
+                logger.log(&format!(
+                    "tree content en read_from : {}",
+                    String::from_utf8_lossy(&(tree.to_owned().content(None)?))
+                ));
 
-            let Some(tree) = tree.as_tree() else {
-                return Err(CommandError::InvalidCommit);
-            };
-            Some(tree)
-        } else {
-            None
+                let Some(tree) = tree.as_tree() else {
+                    return Err(CommandError::InvalidCommit);
+                };
+                Some(tree)
+            }
+            None => None,
         };
 
         let hash_u8: Option<[u8; 20]> = match hash_commit {

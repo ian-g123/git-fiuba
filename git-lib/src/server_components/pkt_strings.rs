@@ -27,6 +27,7 @@ impl Pkt for String {
             .read_exact(&mut line_buffer)
             .map_err(|_| CommandError::ErrorReadingPkt)?;
         let line = String::from_utf8(line_buffer).map_err(|_| CommandError::ErrorReadingPkt)?;
+        println!("|| <= : \"{:?}\"", line);
         Ok(Some(line))
     }
 }

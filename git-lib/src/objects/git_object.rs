@@ -174,10 +174,10 @@ pub fn read_git_object_from(
         return Ok(blob);
     };
     if type_str == "tree" {
-        return Tree::read_from(db, stream, len, path, hash_str, logger);
+        return Tree::read_from(Some(db), stream, len, path, hash_str, logger);
     };
     if type_str == "commit" {
-        return CommitObject::read_from(db, stream, logger, true, None);
+        return CommitObject::read_from(Some(db), stream, logger, None);
     };
 
     Err(CommandError::ObjectTypeError)

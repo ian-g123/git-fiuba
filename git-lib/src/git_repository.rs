@@ -31,6 +31,7 @@ use crate::{
         git_server::GitServer,
         history_analyzer::{get_analysis, rebuild_commits_tree},
         packfile_functions::make_packfile,
+        packfile_object_type::PackfileObjectType,
     },
     staging_area::StagingArea,
     utils::{aux::get_name, super_string::u8_vec_to_hex_string},
@@ -668,6 +669,17 @@ impl<'a> GitRepository<'a> {
         self.log(&format!("Wants {:#?}", wants));
         self.log(&format!("haves {:#?}", haves));
         let objects_decompressed_data = server.fetch_objects(wants, haves, &mut self.logger)?;
+        self.save_objects_from_packfile(objects_decompressed_data)?;
+
+        self.update_fetch_head(remote_branches, remote_reference)?;
+        Ok(())
+    }
+
+    pub fn save_objects_from_packfile(
+        &mut self,
+        objects_decompressed_data: Vec<(PackfileObjectType, usize, Vec<u8>)>,
+    ) -> Result<HashMap<String, (PackfileObjectType, usize, Vec<u8>)>, CommandError> {
+        let mut objects = HashMap::<String, (PackfileObjectType, usize, Vec<u8>)>::new();
         for (obj_type, len, content) in objects_decompressed_data {
             self.log(&format!(
                 "Saving object of type {} and len {}, with data {:?}",
@@ -676,12 +688,11 @@ impl<'a> GitRepository<'a> {
                 String::from_utf8_lossy(&content)
             ));
             let mut git_object: GitObject =
-                Box::new(ProtoObject::new(content, len, obj_type.to_string()));
-            self.db()?.write(&mut git_object, false, &mut self.logger)?;
+                Box::new(ProtoObject::new(content.clone(), len, obj_type.to_string()));
+            let hash = self.db()?.write(&mut git_object, false, &mut self.logger)?;
+            objects.insert(hash, (obj_type, len, content));
         }
-
-        self.update_fetch_head(remote_branches, remote_reference)?;
-        Ok(())
+        Ok(objects)
     }
 
     pub fn log(&mut self, content: &str) {

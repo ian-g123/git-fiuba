@@ -131,6 +131,8 @@ pub enum CommandError {
     /// Error al negociar paquetes con cliente
     PackageNegotiationError(String),
     PushBranchBehind(String),
+    /// Error al intentar leer un archivo
+    CheckingCommitsBetweenError(String),
 }
 
 impl Error for CommandError {}
@@ -352,6 +354,9 @@ impl fmt::Display for CommandError {
             }
             CommandError::PushBranchBehind(local_branch) => {
                 write!(f, "error: failed to push some refs to {}", local_branch)
+            }
+            CommandError::CheckingCommitsBetweenError(msg) => {
+                write!(f, "{}", msg)
             }
         }
     }

@@ -20,7 +20,7 @@ use super::{
 #[derive(Clone)]
 pub struct Tree {
     path: String,
-    objects: HashMap<String, GitObject>, // HashMap<name_object, object>
+    objects: HashMap<String, (String, Option<GitObject>)>, // HashMap<name_object, object>
     hash: Option<[u8; 20]>,
 }
 
@@ -194,7 +194,7 @@ impl Tree {
     }
 
     pub fn read_from(
-        db: &ObjectsDatabase,
+        db: Option<&ObjectsDatabase>,
         stream: &mut dyn Read,
         _len: usize,
         path: &str,

@@ -2,6 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     hash::Hash,
     io::Cursor,
+    option,
 };
 
 use crate::{
@@ -102,13 +103,9 @@ pub fn rebuild_commits_tree(
 
     logger.log(&format!("string: {}, len: {}", string, len));
 
-    let mut commit_object_box = CommitObject::read_from(
-        &db,
-        &mut stream,
-        logger,
-        build_tree,
-        Some(hash_commit.clone()),
-    )?;
+    let option_db = if build_tree { Some(db) } else { None };
+    let mut commit_object_box =
+        CommitObject::read_from(option_db, &mut stream, logger, Some(hash_commit.clone()))?;
 
     logger.log(&format!(
         "commit_object_box: {:?}",

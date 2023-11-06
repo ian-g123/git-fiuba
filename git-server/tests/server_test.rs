@@ -35,34 +35,34 @@ fn test_push() {
     readme.read_to_string(&mut contents).unwrap();
     assert_eq!(contents, "Commit inicial\n");
 
-    let mut file = File::create(path.to_owned() + "/repocan/testfile").unwrap();
+    let mut file = File::create(path.to_owned() + "/repo/testfile").unwrap();
     file.write_all(b"contenido\n").unwrap();
 
     assert!(
-        Command::new("../".to_string() + "git")
+        Command::new("git")
             .arg("add")
             .arg("testfile")
-            .current_dir(path.to_owned() + "/repocan")
+            .current_dir(path.to_owned() + "/repo")
             .status()
             .is_ok(),
         "No se pudo agregar el archivo testfile"
     );
 
     assert!(
-        Command::new("../".to_string() + "git")
+        Command::new("git")
             .arg("commit")
             .arg("-m")
             .arg("hi2")
-            .current_dir(path.to_owned() + "/repocan")
+            .current_dir(path.to_owned() + "/repo")
             .status()
             .is_ok(),
         "No se pudo hacer commit"
     );
 
     assert!(
-        Command::new("../".to_owned() + "git")
+        Command::new("git")
             .arg("push")
-            .current_dir(&format!("{}/repocan", path))
+            .current_dir(&format!("{}/repo", path))
             .status()
             .is_ok(),
         "No se pudo agregar el archivo testfile"
@@ -73,7 +73,7 @@ fn test_push() {
     file.write_all(b"contenido\n").unwrap();
 
     assert!(
-        Command::new("../".to_string() + "git")
+        Command::new("git")
             .arg("add")
             .arg("testfile")
             .current_dir(path.to_owned() + "/repo")
@@ -83,7 +83,7 @@ fn test_push() {
     );
 
     assert!(
-        Command::new("../".to_string() + "git")
+        Command::new("git")
             .arg("commit")
             .arg("-m")
             .arg("hi2")
