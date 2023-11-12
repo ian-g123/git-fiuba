@@ -159,6 +159,148 @@ fn test_general() {
     _ = std::fs::remove_dir_all(format!("{}", path));
 }
 
+#[test]
+fn test_unmerged() {
+    let path = "./tests/data/commands/ls_files/repo2";
+
+    create_test_scene_5(path);
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("dir/testfile1.txt")
+        .arg("dir/testfile2.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let master_path = format!("{}/.git/refs/heads/master", path);
+    let master_commit = fs::read_to_string(master_path.clone()).unwrap();
+    println!("Common commit {}", master_commit);
+    let testfile1_hash_common = get_hash("dir/testfile1.txt", path);
+    let testfile2_hash_common = get_hash("dir/testfile2.txt", path);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("checkout")
+        .arg("-b")
+        .arg("branch1")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    println!(
+        "Checkout error: {}",
+        String::from_utf8(result.stderr).unwrap()
+    );
+    println!(
+        "Checkout stdout: {}",
+        String::from_utf8(result.stdout).unwrap()
+    );
+
+    change_dir_testfile1_content_and_remove_dir_testfile2_bis(path);
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("dir/testfile1.txt")
+        .arg("dir/testfile2.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let branch1_path = format!("{}/.git/refs/heads/branch1", path);
+    let branch1_commit = fs::read_to_string(branch1_path).unwrap();
+    println!("Branch1 commit {}", branch1_commit.clone());
+    println!(
+        "Commit error: {}",
+        String::from_utf8(result.stderr).unwrap()
+    );
+    println!(
+        "Commit stdout: {}",
+        String::from_utf8(result.stdout).unwrap()
+    );
+
+    let testfile1_hash_remote = get_hash("dir/testfile1.txt", path);
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("checkout")
+        .arg("master")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    change_dir_testfile1_testfile2_unmgerged(path);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .arg("-a")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let master_path = format!("{}/.git/refs/heads/master", path);
+    let master_commit = fs::read_to_string(master_path.clone()).unwrap();
+    println!("Master commit {}", master_commit);
+
+    println!(
+        "Commit error: {}",
+        String::from_utf8(result.stderr).unwrap()
+    );
+    println!(
+        "Commit stdout: {}",
+        String::from_utf8(result.stdout).unwrap()
+    );
+
+    let testfile1_hash_head = get_hash("dir/testfile1.txt", path);
+    let testfile2_hash_head = get_hash("dir/testfile2.txt", path);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("merge")
+        .arg("branch1")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    println!("Stderr: {}", String::from_utf8(result.stderr).unwrap());
+
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    println!("Stdout: {}", stdout);
+
+    let master_commit = fs::read_to_string(master_path.clone()).unwrap();
+    println!("Master commit {}", master_commit);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("ls-files")
+        .arg("-u")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    println!("Stderr: {}", String::from_utf8(result.stderr).unwrap());
+
+    let stdout = String::from_utf8(result.stdout).unwrap();
+
+    let expected = format!("100644 {testfile1_hash_common} 0\tdir/testfile1.txt\n100644 {testfile1_hash_head} 1\tdir/testfile1.txt\n100644 {testfile1_hash_remote} 2\tdir/testfile1.txt\n100644 {testfile2_hash_common} 0\tdir/testfile2.txt\n100644 {testfile2_hash_head} 1\tdir/testfile2.txt\n");
+    assert_eq!(stdout, expected);
+
+    _ = std::fs::remove_dir_all(format!("{}", path));
+}
+
 fn get_hash(file: &str, path: &str) -> String {
     let result = Command::new("../../../../../../target/debug/git")
         .arg("hash-object")
@@ -167,4 +309,19 @@ fn get_hash(file: &str, path: &str) -> String {
         .output()
         .unwrap();
     String::from_utf8(result.stdout).unwrap().trim().to_string()
+}
+
+fn change_dir_testfile1_testfile2_unmgerged(path: &str) {
+    let mut file = File::create(path.to_owned() + "/dir/testfile1.txt").unwrap();
+    file.write_all(b"linea 1\nlinea 5\nlinea 3").unwrap();
+
+    let mut file = File::create(path.to_owned() + "/dir/testfile2.txt").unwrap();
+    file.write_all(b"Conflicto porque en la otra rama se borro y en esta se modifico!")
+        .unwrap();
+}
+
+pub fn change_dir_testfile1_content_and_remove_dir_testfile2_bis(path: &str) {
+    let mut file = File::create(path.to_owned() + "/dir/testfile1.txt").unwrap();
+    file.write_all(b"linea 1\nlinea 6\nlinea 3").unwrap();
+    _ = fs::remove_file(path.to_string() + "/dir/testfile2.txt").unwrap();
 }

@@ -127,6 +127,10 @@ pub fn create_test_scene_5(path: &str) {
     let Ok(_) = fs::create_dir_all(path.to_owned() + "/dir/dir1/") else {
         panic!("No se pudo crear el directorio")
     };
+
+    let mut file = File::create(path.to_owned() + "/dir/testfile1.txt").unwrap();
+    file.write_all(b"linea 1\nlinea 2\nlinea 3").unwrap();
+
     let mut file = File::create(path.to_owned() + "/dir/testfile3.txt").unwrap();
     file.write_all(b"file 3!").unwrap();
 

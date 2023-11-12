@@ -94,9 +94,6 @@ impl ChangesController {
     pub fn get_staged_files(&self) -> Vec<String> {
         let files: Vec<&String> = self.index_changes.keys().collect();
         let mut files: Vec<String> = files.iter().map(|s| s.to_string()).collect();
-        let unmerged: Vec<&String> = self.unmerged_changes.keys().collect();
-        let unmerged: Vec<String> = unmerged.iter().map(|s| s.to_string()).collect();
-        files.extend_from_slice(&unmerged);
         files.sort();
         files
     }
@@ -181,6 +178,7 @@ impl ChangesController {
         logger: &mut Logger,
     ) -> Result<HashMap<String, ChangeType>, CommandError> {
         let staging_files = staging_area.get_files();
+        logger.log(&format!("Staging area files: {:?}", staging_files));
         let Some(mut tree) = last_commit_tree.to_owned() else {
             let changes: HashMap<String, ChangeType> = staging_files
                 .iter()
@@ -190,13 +188,16 @@ impl ChangesController {
         };
         let mut changes: HashMap<String, ChangeType> =
             Self::check_files_in_staging_area(staging_files, logger, &mut tree)?;
-        Self::get_deleted_changes_index(db, last_commit_tree, staging_area, &mut changes)?;
         logger.log(&format!(
-            "Staging area files: {:?}",
+            "Staging area changes: {:?}",
             staging_area.get_files().keys()
         ));
+        Self::get_deleted_changes_index(db, last_commit_tree, staging_area, &mut changes, logger)?;
 
-        logger.log(&format!("Staging area changes: {:?}", changes.keys()));
+        logger.log(&format!(
+            "Staging area changes + deleted: {:?}",
+            changes.keys()
+        ));
 
         Ok(changes)
     }
@@ -287,6 +288,7 @@ impl ChangesController {
         last_commit_tree: &Option<Tree>,
         staging_area: &StagingArea,
         changes: &mut HashMap<String, ChangeType>,
+        logger: &mut Logger,
     ) -> Result<(), CommandError> {
         let deleted_changes = staging_area.get_deleted_files(last_commit_tree);
         for deleted_file in deleted_changes.iter() {

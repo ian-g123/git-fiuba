@@ -137,7 +137,7 @@ impl Ls_files {
     fn run(&mut self, output: &mut dyn Write) -> Result<(), CommandError> {
         let mut repo = GitRepository::open("", output)?;
 
-        if !self.deleted && !self.unmerged && !self.others && !self.unmerged && !self.modified
+        if !self.deleted && !self.others && !self.modified
         //&& self.files.is_empty()
         {
             self.cached = true;
