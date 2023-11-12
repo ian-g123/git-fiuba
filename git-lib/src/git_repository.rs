@@ -498,6 +498,7 @@ impl<'a> GitRepository<'a> {
         let blob = Blob::new_from_path(path.to_string())?;
         let mut git_object: GitObject = Box::new(blob);
         let hex_str = self.db()?.write(&mut git_object, false, &mut self.logger)?;
+        self.log(&format!("File {} (hash: {}) added to index", path, hex_str));
         staging_area.add(path, &hex_str);
         Ok(())
     }
@@ -2862,7 +2863,7 @@ impl<'a> GitRepository<'a> {
     ) -> Result<(), CommandError> {
         let last_commit = self.get_last_commit_tree()?;
         let index = self.staging_area()?;
-
+        self.log(&format!("ls-files args: cached: {}, deleted: {}, modified: {}, others: {}, stage: {}, unmerged: {}, files: {:?}", cached, deleted, modified, others, stage, unmerged, files));
         let changes_controller = ChangesController::new(
             &self.db()?,
             &self.git_path,
@@ -2879,7 +2880,7 @@ impl<'a> GitRepository<'a> {
         }
 
         let mut staged_list = changes_controller.get_staged_files();
-        let mut modifications_list = changes_controller.get_modified_files_working_tree();
+        let modifications_list = changes_controller.get_modified_files_working_tree();
         let staging_area_conflicts = index.get_unmerged_files();
         let staging_area_files = index.get_files();
         let unmerged_modifications_list = changes_controller.get_modified_files_unmerged();
@@ -2921,11 +2922,15 @@ impl<'a> GitRepository<'a> {
         aux_list.sort();
         let message: String;
         let extended_list = self.get_extended_ls_files_info(
-            aux_list,
+            aux_list.clone(),
             staging_area_conflicts,
             staging_area_files,
             unmerged_modifications_list,
         )?;
+        self.log(&format!(
+            "others_list: {:?}, aux_list: {:?}",
+            others_list, aux_list
+        ));
         if stage || unmerged {
             message = self.get_extended_ls_files_output(others_list.clone(), extended_list);
         } else {
@@ -2985,18 +2990,20 @@ impl<'a> GitRepository<'a> {
     ) -> Result<Vec<(Mode, String, usize, String)>, CommandError> {
         let mut result = Vec::<(Mode, String, usize, String)>::new();
         let db = self.db()?;
-
         for path in list.iter() {
-            if let Some(hash) = staging_area_files.get(path) {
-                let object = db.read_object(hash, &mut self.logger)?;
-                let mode = object.mode();
-                result.push((mode, hash.to_string(), 0, path.to_string()));
-            };
             let is_modified = if unmerged_modifications_list.contains(path) {
                 true
             } else {
                 false
             };
+
+            if let Some(hash) = staging_area_files.get(path) {
+                let object = db.read_object(hash, &mut self.logger)?;
+                let mode = object.mode();
+                result.push((mode, hash.to_string(), 0, path.to_string()));
+                self.log(&format!("Ls --> Path: {}, hash: {}", path, hash));
+            };
+
             if let Some((common, head, remote)) = staging_area_conflicts.get(path) {
                 match (common, head, remote) {
                     (Some(common_hash), Some(head_hash), Some(remote_hash)) => {

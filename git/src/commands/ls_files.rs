@@ -61,7 +61,7 @@ impl Ls_files {
 
     fn new_default() -> Self {
         Self {
-            cached: true,
+            cached: false,
             deleted: false,
             modified: false,
             others: false,
@@ -103,6 +103,7 @@ impl Ls_files {
         let options: Vec<String> = ["--stage".to_string(), "-s".to_string()].to_vec();
         Self::check_errors_flags(i, args, &options)?;
         self.stage = true;
+        self.cached = true;
         Ok(i + 1)
     }
 
@@ -135,14 +136,11 @@ impl Ls_files {
 
     fn run(&mut self, output: &mut dyn Write) -> Result<(), CommandError> {
         let mut repo = GitRepository::open("", output)?;
-        if !self.modified
-            && !self.deleted
-            && !self.unmerged
-            && self.others
-            && !self.unmerged
-            && self.files.is_empty()
+
+        if !self.deleted && !self.unmerged && !self.others && !self.unmerged && !self.modified
+        //&& self.files.is_empty()
         {
-            self.cached = false;
+            self.cached = true;
         }
         repo.ls_files(
             self.cached,

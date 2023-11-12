@@ -8,7 +8,10 @@ use crate::{
 };
 use std::{collections::HashMap, fs::File, io::Read};
 
-use super::{changes_types::ChangeType, working_tree::build_working_tree};
+use super::{
+    changes_types::ChangeType, long_format::sort_hashmap_and_filter_unmodified,
+    working_tree::build_working_tree,
+};
 
 /// Contiene información acerca de:
 /// - Diferencias entre Index y el último commit, que es lo que está en la Base de datos
@@ -111,14 +114,19 @@ impl ChangesController {
     }
 
     pub fn get_modified_files_working_tree(&self) -> Vec<String> {
-        let mut modifications = Vec::<String>::new();
+        /* let mut modifications = Vec::<String>::new();
         for (path, change_type) in self.working_tree_changes.iter() {
             if matches!(change_type, ChangeType::Modified) {
                 modifications.push(path.to_string());
             }
-        }
+        } */
 
-        modifications.sort();
+        let working_tree_changes = sort_hashmap_and_filter_unmodified(&self.working_tree_changes);
+        let modifications = working_tree_changes
+            .iter()
+            .map(|(s, _)| s.to_string())
+            .collect();
+        //modifications.sort();
         modifications
     }
 
