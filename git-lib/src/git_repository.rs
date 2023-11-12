@@ -30,6 +30,7 @@ use crate::{
             sort_commits_descending_date, write_commit_tree_to_database, CommitObject,
         },
         git_object::{self, GitObject, GitObjectTrait},
+        mode::Mode,
         proto_object::ProtoObject,
         tree::Tree,
     },
@@ -700,7 +701,7 @@ impl<'a> GitRepository<'a> {
             self.logger.log("Last commit updated");
             if !quiet {
                 CommitFormat::show(
-                    staging_area.get_files(),
+                    &staging_area,
                     &self.db()?,
                     &mut self.logger,
                     last_commit_tree,
@@ -834,7 +835,7 @@ impl<'a> GitRepository<'a> {
         let last_commit_tree = self.get_last_commit_tree()?;
         let merge = self.is_merge()?;
         let diverge_info = self.get_commits_ahead_and_behind_remote(&branch)?;
-
+        let index = self.staging_area()?;
         long_format.show(
             &self.db()?,
             &self.git_path,
@@ -846,6 +847,7 @@ impl<'a> GitRepository<'a> {
             commit_output,
             merge,
             diverge_info,
+            &index,
         )
     }
 
@@ -855,6 +857,7 @@ impl<'a> GitRepository<'a> {
         let last_commit_tree = self.get_last_commit_tree()?;
         let merge = self.is_merge()?;
         let diverge_info = self.get_commits_ahead_and_behind_remote(&branch)?;
+        let index = self.staging_area()?;
 
         short_format.show(
             &self.db()?,
@@ -867,6 +870,7 @@ impl<'a> GitRepository<'a> {
             commit_output,
             merge,
             diverge_info,
+            &index,
         )
     }
 
@@ -2049,6 +2053,7 @@ impl<'a> GitRepository<'a> {
                 return Err(CommandError::FileWriteError(err.to_string()));
             }
         };
+        let index = self.staging_area()?;
 
         let changes_controller = ChangesController::new(
             &self.db()?,
@@ -2056,6 +2061,7 @@ impl<'a> GitRepository<'a> {
             &self.working_dir_path,
             &mut self.logger,
             last_commit_tree,
+            &index,
         )
         .unwrap();
 
@@ -2506,6 +2512,7 @@ impl<'a> GitRepository<'a> {
         let Some(mut last_commit) = self.get_last_commit_tree()? else {
             return Err(CommandError::UntrackedError(current_branch));
         };
+        let index = self.staging_area()?;
 
         let current_changes = ChangesController::new(
             &self.db()?,
@@ -2513,6 +2520,7 @@ impl<'a> GitRepository<'a> {
             &self.working_dir_path,
             &mut self.logger,
             Some(last_commit.clone()),
+            &index,
         )?;
         let untracked_files = current_changes.get_untracked_files();
         let changes_not_staged = current_changes.get_changes_not_staged();
@@ -2838,6 +2846,246 @@ impl<'a> GitRepository<'a> {
         let mut object = self.db()?.read_object(hash, &mut self.logger)?;
 
         Ok(object.content(None)?)
+    }
+
+    // ----- Ls-files -----
+
+    pub fn ls_files(
+        &mut self,
+        cached: bool,
+        deleted: bool,
+        modified: bool,
+        others: bool,
+        stage: bool,
+        unmerged: bool,
+        files: Vec<String>,
+    ) -> Result<(), CommandError> {
+        let last_commit = self.get_last_commit_tree()?;
+        let index = self.staging_area()?;
+
+        let changes_controller = ChangesController::new(
+            &self.db()?,
+            &self.git_path,
+            &self.working_dir_path,
+            &mut self.logger,
+            last_commit,
+            &index,
+        )?;
+        let mut others_list = Vec::<String>::new();
+        let mut aux_list = Vec::<String>::new();
+
+        if others {
+            others_list.extend_from_slice(&changes_controller.get_untracked_files_bis());
+        }
+
+        let mut staged_list = changes_controller.get_staged_files();
+        let mut modifications_list = changes_controller.get_modified_files_working_tree();
+        let staging_area_conflicts = index.get_unmerged_files();
+        let staging_area_files = index.get_files();
+        let unmerged_modifications_list = changes_controller.get_modified_files_unmerged();
+        self.add_unmerged_files_to_list(&mut staged_list, staging_area_conflicts.clone());
+
+        if cached {
+            aux_list.extend_from_slice(&staged_list);
+        }
+        if unmerged {
+            aux_list = aux_list
+                .iter()
+                .filter(|p| staging_area_conflicts.contains_key(p.to_owned()))
+                .map(|p| p.to_string())
+                .collect();
+        }
+        if modified {
+            aux_list.extend_from_slice(&modifications_list);
+        }
+
+        if deleted {
+            let deleted_list = changes_controller.get_deleted_files();
+            aux_list.extend_from_slice(&deleted_list);
+        }
+
+        if !files.is_empty() {
+            others_list = others_list
+                .iter()
+                .filter(|p| files.contains(p.to_owned()))
+                .map(|p| p.to_string())
+                .collect();
+
+            aux_list = aux_list
+                .iter()
+                .filter(|p| files.contains(p.to_owned()))
+                .map(|p| p.to_string())
+                .collect();
+        }
+
+        aux_list.sort();
+        let message: String;
+        let extended_list = self.get_extended_ls_files_info(
+            aux_list,
+            staging_area_conflicts,
+            staging_area_files,
+            unmerged_modifications_list,
+        )?;
+        if stage || unmerged {
+            message = self.get_extended_ls_files_output(others_list.clone(), extended_list);
+        } else {
+            message = self.get_normal_ls_files_output(others_list, extended_list);
+        }
+        write!(self.output, "{}", message)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        Ok(())
+    }
+
+    fn add_unmerged_files_to_list(
+        &mut self,
+        staged_list: &mut Vec<String>,
+        staging_area_conflicts: HashMap<String, (Option<String>, Option<String>, Option<String>)>,
+    ) {
+        for (path, _) in staging_area_conflicts.iter() {
+            staged_list.push(path.to_string());
+        }
+    }
+
+    fn get_normal_ls_files_output(
+        &mut self,
+        others: Vec<String>,
+        extended_list: Vec<(Mode, String, usize, String)>,
+    ) -> String {
+        let mut message = String::new();
+        for path in others {
+            message += &format!("{}\n", path);
+        }
+        for (_, _, _, path) in extended_list {
+            message += &format!("{}\n", path);
+        }
+        message
+    }
+
+    fn get_extended_ls_files_output(
+        &mut self,
+        others: Vec<String>,
+        extended_list: Vec<(Mode, String, usize, String)>,
+    ) -> String {
+        let mut message = String::new();
+        for path in others {
+            message += &format!("{}\n", path);
+        }
+        for (mode, hash, stage_number, path) in extended_list {
+            message += &format!("{} {} {}\t{}\n", mode, hash, stage_number, path);
+        }
+        message
+    }
+
+    fn get_extended_ls_files_info(
+        &mut self,
+        list: Vec<String>,
+        staging_area_conflicts: HashMap<String, (Option<String>, Option<String>, Option<String>)>,
+        staging_area_files: HashMap<String, String>,
+        unmerged_modifications_list: Vec<String>,
+    ) -> Result<Vec<(Mode, String, usize, String)>, CommandError> {
+        let mut result = Vec::<(Mode, String, usize, String)>::new();
+        let db = self.db()?;
+
+        for path in list.iter() {
+            if let Some(hash) = staging_area_files.get(path) {
+                let object = db.read_object(hash, &mut self.logger)?;
+                let mode = object.mode();
+                result.push((mode, hash.to_string(), 0, path.to_string()));
+            };
+            let is_modified = if unmerged_modifications_list.contains(path) {
+                true
+            } else {
+                false
+            };
+            if let Some((common, head, remote)) = staging_area_conflicts.get(path) {
+                match (common, head, remote) {
+                    (Some(common_hash), Some(head_hash), Some(remote_hash)) => {
+                        let object = db.read_object(common_hash, &mut self.logger)?;
+                        let mode = object.mode();
+                        result.push((mode.clone(), common_hash.to_string(), 0, path.to_string()));
+                        if is_modified {
+                            result.push((
+                                mode.clone(),
+                                common_hash.to_string(),
+                                0,
+                                path.to_string(),
+                            ));
+                        }
+                        result.push((mode.clone(), head_hash.to_string(), 1, path.to_string()));
+                        if is_modified {
+                            result.push((mode.clone(), head_hash.to_string(), 1, path.to_string()));
+                        }
+                        result.push((mode.clone(), remote_hash.to_string(), 2, path.to_string()));
+                        if is_modified {
+                            result.push((
+                                mode.clone(),
+                                remote_hash.to_string(),
+                                2,
+                                path.to_string(),
+                            ));
+                        }
+                    }
+                    (Some(common_hash), Some(head_hash), None) => {
+                        let object = db.read_object(common_hash, &mut self.logger)?;
+                        let mode = object.mode();
+                        result.push((mode.clone(), common_hash.to_string(), 0, path.to_string()));
+                        if is_modified {
+                            result.push((
+                                mode.clone(),
+                                common_hash.to_string(),
+                                0,
+                                path.to_string(),
+                            ));
+                        }
+                        result.push((mode.clone(), head_hash.to_string(), 1, path.to_string()));
+                        if is_modified {
+                            result.push((mode.clone(), head_hash.to_string(), 1, path.to_string()));
+                        }
+                    }
+                    (Some(common_hash), None, Some(remote_hash)) => {
+                        let object = db.read_object(common_hash, &mut self.logger)?;
+                        let mode = object.mode();
+                        result.push((mode.clone(), common_hash.to_string(), 0, path.to_string()));
+                        if is_modified {
+                            result.push((
+                                mode.clone(),
+                                common_hash.to_string(),
+                                0,
+                                path.to_string(),
+                            ));
+                        }
+                        result.push((mode.clone(), remote_hash.to_string(), 2, path.to_string()));
+                        if is_modified {
+                            result.push((
+                                mode.clone(),
+                                remote_hash.to_string(),
+                                2,
+                                path.to_string(),
+                            ));
+                        }
+                    }
+                    (None, Some(head_hash), Some(remote_hash)) => {
+                        let object = db.read_object(head_hash, &mut self.logger)?;
+                        let mode = object.mode();
+                        result.push((mode.clone(), head_hash.to_string(), 1, path.to_string()));
+                        if is_modified {
+                            result.push((mode.clone(), head_hash.to_string(), 1, path.to_string()));
+                        }
+                        result.push((mode.clone(), remote_hash.to_string(), 2, path.to_string()));
+                        if is_modified {
+                            result.push((
+                                mode.clone(),
+                                remote_hash.to_string(),
+                                2,
+                                path.to_string(),
+                            ));
+                        }
+                    }
+                    _ => {}
+                }
+            };
+        }
+        Ok(result)
     }
 }
 

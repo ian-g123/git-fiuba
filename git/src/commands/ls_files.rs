@@ -28,7 +28,7 @@ impl Command for Ls_files {
             return Err(CommandError::Name);
         }
 
-        let instance = Self::new(args)?;
+        let mut instance = Self::new(args)?;
         instance.run(output)?;
         Ok(())
     }
@@ -61,7 +61,7 @@ impl Ls_files {
 
     fn new_default() -> Self {
         Self {
-            cached: false,
+            cached: true,
             deleted: false,
             modified: false,
             others: false,
@@ -133,8 +133,26 @@ impl Ls_files {
         Ok(())
     }
 
-    fn run(&self, output: &mut dyn Write) -> Result<(), CommandError> {
+    fn run(&mut self, output: &mut dyn Write) -> Result<(), CommandError> {
         let mut repo = GitRepository::open("", output)?;
+        if !self.modified
+            && !self.deleted
+            && !self.unmerged
+            && self.others
+            && !self.unmerged
+            && self.files.is_empty()
+        {
+            self.cached = false;
+        }
+        repo.ls_files(
+            self.cached,
+            self.deleted,
+            self.modified,
+            self.others,
+            self.stage,
+            self.unmerged,
+            self.files.clone(),
+        )?;
         Ok(())
     }
 }

@@ -322,6 +322,9 @@ impl StagingArea {
         } else {
             path.to_string()
         };
+        if self.files.contains_key(path) {
+            _ = self.files.remove(path);
+        }
         self.unmerged_files
             .insert(key, (common_hash, head_hash, destin_hash));
     }
