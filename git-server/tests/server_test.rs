@@ -18,29 +18,46 @@ fn test_push() {
     let result = Command::new("git")
         .arg("clone")
         .arg("git://127.1.0.0:9418/repo")
-        .arg("repo")
+        .arg("user1")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    let temp = String::from_utf8(result.stderr).unwrap();
+    println!("{}", temp);
+    assert!(temp.starts_with("Cloning into 'user1'...\nReceiving objects:"));
+
+    let result = Command::new("git")
+        .arg("clone")
+        .arg("git://127.1.0.0:9418/repo")
+        .arg("user2")
         .current_dir(path)
         .output()
         .unwrap();
     assert!(String::from_utf8(result.stderr)
         .unwrap()
-        .starts_with("Cloning into 'repo'...\nReceiving objects:"));
-    let mut readme = File::open(path.to_owned() + "/repo/README.md").unwrap();
+        .starts_with("Cloning into 'user2'...\nReceiving objects:"));
+
+    let mut readme = File::open(path.to_owned() + "/user1/README.md").unwrap();
     let mut contents = String::new();
     readme.read_to_string(&mut contents).unwrap();
     assert_eq!(contents, "Commit inicial\n");
 
-    let mut file = File::create(path.to_owned() + "/repo/testfile").unwrap();
+    let mut readme = File::open(path.to_owned() + "/user2/README.md").unwrap();
+    let mut contents = String::new();
+    readme.read_to_string(&mut contents).unwrap();
+    assert_eq!(contents, "Commit inicial\n");
+
+    let mut file = File::create(path.to_owned() + "/user1/README.md").unwrap();
     file.write_all(b"contenido\n").unwrap();
 
     assert!(
         Command::new("git")
             .arg("add")
-            .arg("testfile")
-            .current_dir(path.to_owned() + "/repo")
+            .arg("README.md")
+            .current_dir(path.to_owned() + "/user1")
             .status()
             .is_ok(),
-        "No se pudo agregar el archivo testfile"
+        "No se pudo agregar el archivo README.md"
     );
 
     assert!(
@@ -48,7 +65,7 @@ fn test_push() {
             .arg("commit")
             .arg("-m")
             .arg("hi2")
-            .current_dir(path.to_owned() + "/repo")
+            .current_dir(path.to_owned() + "/user1")
             .status()
             .is_ok(),
         "No se pudo hacer commit"
@@ -56,7 +73,7 @@ fn test_push() {
 
     let result = Command::new("git")
         .arg("push")
-        .current_dir(&format!("{}/repo", path))
+        .current_dir(&format!("{}/user1", path))
         .output()
         .unwrap();
     assert!(String::from_utf8(result.stderr.clone())
@@ -66,11 +83,47 @@ fn test_push() {
         .unwrap()
         .ends_with(" master -> master\n"));
 
-    // _ = fs::remove_dir_all(path);
+    assert!(
+        Command::new("git")
+            .arg("pull")
+            .current_dir(path.to_owned() + "/user2")
+            .status()
+            .is_ok(),
+        "No se pudo hacer commit"
+    );
+
+    let mut readme = File::open(path.to_owned() + "/user2/README.md").unwrap();
+    let mut contents = String::new();
+    readme.read_to_string(&mut contents).unwrap();
+    assert_eq!(contents, "contenido\n");
+
+    let result = Command::new("git")
+        .arg("clone")
+        .arg("git://127.1.0.0:9418/repo")
+        .arg("user3")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    assert!(String::from_utf8(result.stderr)
+        .unwrap()
+        .starts_with("Cloning into 'user3'...\nReceiving objects:"));
+
+    let mut readme = File::open(path.to_owned() + "/user3/README.md").unwrap();
+    let mut contents = String::new();
+    readme.read_to_string(&mut contents).unwrap();
+    assert_eq!(contents, "contenido\n");
+
+    _ = fs::remove_dir_all(format!("{}/server-files/repo", path));
+    _ = fs::remove_dir_all(format!("{}/user1", path));
+    _ = fs::remove_dir_all(format!("{}/user2", path));
+    _ = fs::remove_dir_all(format!("{}/user3", path));
 }
 
 fn create_base_scene(path: &str) {
     _ = fs::remove_dir_all(format!("{}/server-files/repo", path));
+    _ = fs::remove_dir_all(format!("{}/user1", path));
+    _ = fs::remove_dir_all(format!("{}/user2", path));
+    _ = fs::remove_dir_all(format!("{}/user3", path));
     // Copy repo_backup to repo
     copy_dir_all(
         format!("{}/server-files/repo_backup", path),
