@@ -295,7 +295,7 @@ fn test_unmerged() {
 
     let stdout = String::from_utf8(result.stdout).unwrap();
 
-    let expected = format!("100644 {testfile1_hash_common} 0\tdir/testfile1.txt\n100644 {testfile1_hash_head} 1\tdir/testfile1.txt\n100644 {testfile1_hash_remote} 2\tdir/testfile1.txt\n100644 {testfile2_hash_common} 0\tdir/testfile2.txt\n100644 {testfile2_hash_head} 1\tdir/testfile2.txt\n");
+    let expected = format!("100644 {testfile1_hash_common} 1\tdir/testfile1.txt\n100644 {testfile1_hash_head} 2\tdir/testfile1.txt\n100644 {testfile1_hash_remote} 3\tdir/testfile1.txt\n100644 {testfile2_hash_common} 1\tdir/testfile2.txt\n100644 {testfile2_hash_head} 2\tdir/testfile2.txt\n");
     assert_eq!(stdout, expected);
 
     _ = std::fs::remove_dir_all(format!("{}", path));

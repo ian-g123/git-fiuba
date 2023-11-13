@@ -638,9 +638,7 @@ impl<'a> GitRepository<'a> {
                 staging_area.remove(&path);
             }
         }
-        let last_commit_tree = self.get_last_commit_tree()?;
 
-        //staging_area.remove_changes(&last_commit_tree, &mut self.logger)?;
         self.log("Saving entries\n");
 
         self.save_entries("./", staging_area, files)?;
@@ -3067,25 +3065,25 @@ impl<'a> GitRepository<'a> {
                     (Some(common_hash), Some(head_hash), Some(remote_hash)) => {
                         let object = db.read_object(common_hash, &mut self.logger)?;
                         let mode = object.mode();
-                        result.push((mode.clone(), common_hash.to_string(), 0, path.to_string()));
+                        result.push((mode.clone(), common_hash.to_string(), 1, path.to_string()));
                         if is_modified {
                             result.push((
                                 mode.clone(),
                                 common_hash.to_string(),
-                                0,
+                                1,
                                 path.to_string(),
                             ));
                         }
-                        result.push((mode.clone(), head_hash.to_string(), 1, path.to_string()));
+                        result.push((mode.clone(), head_hash.to_string(), 2, path.to_string()));
                         if is_modified {
-                            result.push((mode.clone(), head_hash.to_string(), 1, path.to_string()));
+                            result.push((mode.clone(), head_hash.to_string(), 2, path.to_string()));
                         }
-                        result.push((mode.clone(), remote_hash.to_string(), 2, path.to_string()));
+                        result.push((mode.clone(), remote_hash.to_string(), 3, path.to_string()));
                         if is_modified {
                             result.push((
                                 mode.clone(),
                                 remote_hash.to_string(),
-                                2,
+                                3,
                                 path.to_string(),
                             ));
                         }
@@ -3093,38 +3091,38 @@ impl<'a> GitRepository<'a> {
                     (Some(common_hash), Some(head_hash), None) => {
                         let object = db.read_object(common_hash, &mut self.logger)?;
                         let mode = object.mode();
-                        result.push((mode.clone(), common_hash.to_string(), 0, path.to_string()));
+                        result.push((mode.clone(), common_hash.to_string(), 1, path.to_string()));
                         if is_modified {
                             result.push((
                                 mode.clone(),
                                 common_hash.to_string(),
-                                0,
+                                1,
                                 path.to_string(),
                             ));
                         }
-                        result.push((mode.clone(), head_hash.to_string(), 1, path.to_string()));
+                        result.push((mode.clone(), head_hash.to_string(), 2, path.to_string()));
                         if is_modified {
-                            result.push((mode.clone(), head_hash.to_string(), 1, path.to_string()));
+                            result.push((mode.clone(), head_hash.to_string(), 2, path.to_string()));
                         }
                     }
                     (Some(common_hash), None, Some(remote_hash)) => {
                         let object = db.read_object(common_hash, &mut self.logger)?;
                         let mode = object.mode();
-                        result.push((mode.clone(), common_hash.to_string(), 0, path.to_string()));
+                        result.push((mode.clone(), common_hash.to_string(), 1, path.to_string()));
                         if is_modified {
                             result.push((
                                 mode.clone(),
                                 common_hash.to_string(),
-                                0,
+                                1,
                                 path.to_string(),
                             ));
                         }
-                        result.push((mode.clone(), remote_hash.to_string(), 2, path.to_string()));
+                        result.push((mode.clone(), remote_hash.to_string(), 3, path.to_string()));
                         if is_modified {
                             result.push((
                                 mode.clone(),
                                 remote_hash.to_string(),
-                                2,
+                                3,
                                 path.to_string(),
                             ));
                         }
@@ -3132,16 +3130,16 @@ impl<'a> GitRepository<'a> {
                     (None, Some(head_hash), Some(remote_hash)) => {
                         let object = db.read_object(head_hash, &mut self.logger)?;
                         let mode = object.mode();
-                        result.push((mode.clone(), head_hash.to_string(), 1, path.to_string()));
+                        result.push((mode.clone(), head_hash.to_string(), 2, path.to_string()));
                         if is_modified {
-                            result.push((mode.clone(), head_hash.to_string(), 1, path.to_string()));
+                            result.push((mode.clone(), head_hash.to_string(), 2, path.to_string()));
                         }
-                        result.push((mode.clone(), remote_hash.to_string(), 2, path.to_string()));
+                        result.push((mode.clone(), remote_hash.to_string(), 3, path.to_string()));
                         if is_modified {
                             result.push((
                                 mode.clone(),
                                 remote_hash.to_string(),
-                                2,
+                                3,
                                 path.to_string(),
                             ));
                         }
