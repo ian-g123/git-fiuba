@@ -1570,10 +1570,13 @@ impl<'a> GitRepository<'a> {
     }
 
     /// Guarda en el archivo de la rama actual el hash del commit que se quiere hacer merge.
-    fn set_head_branch_commit_to(&mut self, commits: &str) -> Result<(), CommandError> {
-        let branch = self.get_head_branch_path()?;
+    fn set_head_branch_commit_to(
+        &mut self,
+        merge_commit_hash_str: &str,
+    ) -> Result<(), CommandError> {
+        let branch_path = self.get_head_branch_path()?;
 
-        self.write_to_file(&branch, commits)?;
+        self.write_to_internal_file(&branch_path, merge_commit_hash_str)?;
         Ok(())
     }
 
@@ -1893,9 +1896,9 @@ impl<'a> GitRepository<'a> {
             let mut boxed_tree: GitObject = Box::new(merged_tree.clone());
             let merge_tree_hash_str = self.db()?.write(&mut boxed_tree, true, &mut self.logger)?;
 
-            self.write_to_file("MERGE_MSG", &message)?;
-            self.write_to_file("AUTO_MERGE", &merge_tree_hash_str)?;
-            self.write_to_file("MERGE_HEAD", &destin.get_hash_string()?)?;
+            self.write_to_internal_file("MERGE_MSG", &message)?;
+            self.write_to_internal_file("AUTO_MERGE", &merge_tree_hash_str)?;
+            self.write_to_internal_file("MERGE_HEAD", &destin.get_hash_string()?)?;
 
             self.restore_merge_conflict(merged_tree)?;
             Ok(())
@@ -1965,7 +1968,11 @@ impl<'a> GitRepository<'a> {
     }
 
     /// Dado un path, crea el archivo correspondiente y escribe el contenido pasado.
-    fn write_to_file(&self, relative_path: &str, content: &str) -> Result<(), CommandError> {
+    pub fn write_to_internal_file(
+        &self,
+        relative_path: &str,
+        content: &str,
+    ) -> Result<(), CommandError> {
         let path_f = join_paths!(self.git_path, relative_path).ok_or(
             CommandError::FileWriteError("Error guardando FETCH_HEAD:".to_string()),
         )?;

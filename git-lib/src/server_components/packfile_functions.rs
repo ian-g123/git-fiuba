@@ -13,7 +13,7 @@ use crate::{
         tree::Tree,
     },
     server_components::packfile_object_type::PackfileObjectType,
-    utils::aux::get_sha1,
+    utils::{aux::get_sha1, super_string::u8_vec_to_hex_string},
 };
 
 use super::reader::TcpStreamBuffedReader;
@@ -22,12 +22,13 @@ pub fn get_objects_from_tree(
     hash_objects: &mut HashMap<String, GitObject>,
     tree: &Tree,
 ) -> Result<(), CommandError> {
-    for (hash_object, (_git_object_hash, git_object_opt)) in tree.get_objects() {
+    for (_object_name, (object_hash, git_object_opt)) in tree.get_objects() {
         let mut git_object = git_object_opt.ok_or(CommandError::ShallowTree)?;
         if let Some(son_tree) = git_object.as_tree() {
             get_objects_from_tree(hash_objects, &son_tree)?;
         }
-        hash_objects.insert(hash_object, git_object);
+        let object_hash_str = u8_vec_to_hex_string(&object_hash);
+        hash_objects.insert(object_hash_str, git_object);
     }
     Ok(())
 }
@@ -105,6 +106,7 @@ pub fn make_packfile(
             Box::new(tree_owned.to_owned()),
         );
     }
+    println!("hash_objects: {:?}", hash_objects.keys());
 
     let mut packfile: Vec<u8> = Vec::new();
     let packfile_header = packfile_header(hash_objects.len() as u32);
@@ -181,7 +183,11 @@ fn read_objects_in_packfile(
     for _ in 0..object_number {
         let mut buffed_reader: &mut TcpStreamBuffedReader<'_> = &mut buffed_reader;
         let (object_type, len) = read_object_header_from_packfile(buffed_reader)?;
-
+        if object_type == PackfileObjectType::RefDelta
+            || object_type == PackfileObjectType::OfsDelta
+        {
+            todo!("❌ Delta objects not implemented");
+        }
         buffed_reader.clean_up_to_pos();
         let mut decoder = flate2::read::ZlibDecoder::new(&mut buffed_reader);
         let mut deflated_data = Vec::new();

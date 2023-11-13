@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::command_errors::CommandError;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum PackfileObjectType {
     Commit,
     Tree,
