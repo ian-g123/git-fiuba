@@ -190,16 +190,23 @@ fn read_objects_in_packfile(
         }
         buffed_reader.clean_up_to_pos();
         let mut decoder = flate2::read::ZlibDecoder::new(&mut buffed_reader);
-        let mut deflated_data = Vec::new();
+        let mut object_content = Vec::new();
 
         decoder
-            .read_to_end(&mut deflated_data)
+            .read_to_end(&mut object_content)
             .map_err(|_| CommandError::ErrorExtractingPackfile)?;
         let bytes_used = decoder.total_in() as usize;
         buffed_reader.set_pos(bytes_used);
 
-        let object = deflated_data;
-        objects_data.push((object_type, len, object));
+        if object_content.len() != len {
+            return Err(CommandError::ErrorDecompressingObject(format!(
+                "Expected length: {}, Decompressed data length: {}",
+                len,
+                object_content.len()
+            )));
+        }
+
+        objects_data.push((object_type, len, object_content));
     }
     Ok(objects_data)
 }
@@ -211,7 +218,6 @@ pub fn read_object_header_from_packfile(
     buffed_reader
         .read_exact(&mut first_byte_buf)
         .map_err(|_| CommandError::ErrorExtractingPackfile)?;
-
     let object_type_u8 = first_byte_buf[0] >> 4 & 0b00000111;
     let object_type = PackfileObjectType::from_u8(object_type_u8)?;
 

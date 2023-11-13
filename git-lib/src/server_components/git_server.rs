@@ -85,7 +85,7 @@ impl GitServer {
         if !haves_commits.is_empty() {
             for have in haves_commits {
                 let line = format!("have {}\n", have);
-                logger.log(&format!("Sending:: {}", line));
+                logger.log(&format!("Sending: {}", line));
                 self.write_in_tpk_to_socket(&line)?;
             }
             self.write_string_to_socket("0000")?;
@@ -186,7 +186,7 @@ impl GitServer {
         loop {
             match String::read_pkt_format(&mut self.socket)? {
                 Some(line) => {
-                    println!("pushing: {:?}", line);
+                    println!("<=: {:?}", line);
                     lines.push(line);
                 }
                 None => break,

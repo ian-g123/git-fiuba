@@ -58,17 +58,35 @@ fn test_clone() {
 
     modify_file_and_commit_in_server_repo(&path);
 
-    let _result = Command::new("../".to_owned() + git_bin)
+    let result = Command::new("../".to_owned() + git_bin)
         .arg("fetch")
         .current_dir(&format!("{}/repo/", path))
         .output()
         .unwrap();
 
-    let _result = Command::new("../".to_owned() + git_bin)
+    println!(
+        "result.stdout: {}",
+        String::from_utf8(result.stdout).unwrap()
+    );
+    println!(
+        "result.stderr: {}",
+        String::from_utf8(result.stderr).unwrap()
+    );
+
+    let result = Command::new("../".to_owned() + git_bin)
         .arg("merge")
         .current_dir(&format!("{}/repo/", path))
         .output()
         .unwrap();
+
+    println!(
+        "merge result.stdout: {}",
+        String::from_utf8(result.stdout).unwrap()
+    );
+    println!(
+        "merge result.stderr: {}",
+        String::from_utf8(result.stderr).unwrap()
+    );
 
     let mut file = File::open(path.to_owned() + "/repo/testfile").unwrap();
     let mut content = String::new();

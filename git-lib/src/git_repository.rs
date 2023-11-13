@@ -1129,17 +1129,15 @@ impl<'a> GitRepository<'a> {
                 let mut destin_branch_name = "".to_string();
                 let mut head_branch_name = "".to_string();
                 for (branch_name, branch_hash) in self.remote_branches()? {
-                    println!("branch_name: {}, branch_hash: {}", branch_name, branch_hash);
                     if branch_hash == destin_commit {
-                        println!("hhhh");
                         destin_branch_name = branch_name;
-                        return Ok(());
+                        break;
                     }
                 }
                 for (branch_name, branch_hash) in self.local_branches()? {
                     if branch_hash == last_commit {
                         head_branch_name = branch_name;
-                        return Ok(());
+                        break;
                     }
                 }
 

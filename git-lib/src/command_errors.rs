@@ -124,6 +124,7 @@ pub enum CommandError {
     UnmergedFiles,
     /// There cannot be a file and a folder with the same name
     CannotHaveFileAndFolderWithSameName(String),
+
     PushBranchBehind(String),
 
     // InterfaceError(String),
@@ -181,6 +182,8 @@ pub enum CommandError {
     CheckoutConflictsError,
     /// El tree guarda solo hashes y no sus objetos
     ShallowTree,
+    /// Errror in object decompression
+    ErrorDecompressingObject(String),
 }
 
 impl Error for CommandError {}
@@ -479,6 +482,9 @@ impl fmt::Display for CommandError {
             }
             CommandError::ShallowTree => {
                 write!(f, "El tree guarda solo hashes y no sus objetos")
+            }
+            CommandError::ErrorDecompressingObject(msg) => {
+                write!(f, "Errror in object decompression: {}", msg)
             }
         }
     }
