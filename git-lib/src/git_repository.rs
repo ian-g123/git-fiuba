@@ -956,7 +956,7 @@ impl<'a> GitRepository<'a> {
             "Address: {}, repository_path: {}, repository_url: {}",
             address, repository_path, repository_url
         ));
-        let mut server = GitServer::connect_to(&address)?;
+        let mut server = GitServer::connect_to(&address, &mut self.logger)?;
 
         let _remote_branches =
             self.update_remote_branches(&mut server, &repository_path, &repository_url)?;
@@ -1052,7 +1052,7 @@ impl<'a> GitRepository<'a> {
             address, repository_path, repository_url
         ));
 
-        let mut server = GitServer::connect_to(&address)?;
+        let mut server = GitServer::connect_to(&address, &mut self.logger)?;
         let refs_hash = self.receive_pack(&mut server, &repository_path, &repository_url)?; // ref_hash: HashMap<branch, hash>
 
         // verificamos que todas las branches locales esten actualizadas
@@ -1076,24 +1076,12 @@ impl<'a> GitRepository<'a> {
             return Ok(());
         }
 
-        self.log(&format!("hash_branch_status: {:?}", hash_branch_status));
-
         server.negociate_recieve_pack(hash_branch_status)?;
 
-        self.log("Sending packfile");
         let pack_file: Vec<u8> = make_packfile(commits_map)?;
-        self.log(&format!(
-            "pack_file: {:?}",
-            String::from_utf8_lossy(&pack_file)
-        ));
-
-        server.write_to_socket(&pack_file)?;
-        self.log("sent! Reading response");
-        println!("sent! Reading response");
+        server.send_packfile(&pack_file)?;
 
         let response = server.get_response()?;
-        // let response = server.just_read()?;
-        self.log(&format!("response: {:?}", response));
 
         Ok(())
     }

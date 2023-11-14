@@ -1,4 +1,4 @@
-use crate::{command_errors::CommandError, logger::Logger};
+use crate::{command_errors::CommandError, logger::Logger, logger_sender::LoggerSender};
 use std::{
     collections::HashMap,
     io::{Read, Write},
@@ -12,17 +12,26 @@ use super::{
 
 pub struct GitServer {
     pub socket: TcpStream,
+    logger_sender: LoggerSender,
 }
 
 impl GitServer {
-    pub fn connect_to(address: &str) -> Result<GitServer, CommandError> {
+    pub fn connect_to(address: &str, logger: &mut Logger) -> Result<GitServer, CommandError> {
         let socket = TcpStream::connect(address).map_err(|error| {
             CommandError::Connection(format!(
                 "No se pudo conectar al servidor en la dirección {}",
                 error
             ))
         })?;
-        Ok(GitServer { socket })
+        Ok(GitServer {
+            socket,
+            logger_sender: logger.get_logs_sender()?,
+        })
+    }
+
+    fn log(&mut self, message: &str) {
+        let time = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+        self.logger_sender.log(&format!("{}: {}", time, message));
     }
 
     /// envía un mensaje al servidor y devuelve la respuesta
@@ -104,11 +113,16 @@ impl GitServer {
     }
 
     fn write_string_to_socket(&mut self, line: &str) -> Result<(), CommandError> {
-        // self.write_to_socket(line.as_bytes());
-        let message = line.as_bytes();
-        self.socket
-            .write_all(message)
-            .map_err(|error| CommandError::SendingMessage(error.to_string()))?;
+        self.log(&format!("⏫: {:?}", line));
+        let message = line.as_bytes().to_owned();
+        self.write_to_socket(&message)?;
+        Ok(())
+    }
+
+    pub fn send_packfile(&mut self, packfile: &Vec<u8>) -> Result<(), CommandError> {
+        self.log(&format!("⏫: [PACKFILE]"));
+
+        self.write_to_socket(packfile)?;
         Ok(())
     }
 
@@ -121,6 +135,7 @@ impl GitServer {
 
     fn write_in_tpk_to_socket(&mut self, line: &str) -> Result<(), CommandError> {
         let line = line.to_string().to_pkt_format();
+
         self.write_string_to_socket(&line)
     }
 
@@ -140,7 +155,6 @@ impl GitServer {
 
         let mut refs_hash = HashMap::<String, String>::new();
 
-        println!("lines: {:?}", lines);
         let _version = lines.remove(0);
         let first_line = lines.remove(0);
 
@@ -168,7 +182,7 @@ impl GitServer {
     ) -> Result<(), CommandError> {
         for (branch, (new_hash, old_hash)) in hash_branch_status {
             let line = format!("{} {} refs/heads/{}\n", new_hash, old_hash, branch);
-            println!("Sending: {}", line);
+
             self.write_in_tpk_to_socket(&line).map_err(|_| {
                 return CommandError::SendingMessage(
                     "Error al enviar el hash del branch".to_string(),

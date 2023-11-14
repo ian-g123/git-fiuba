@@ -184,6 +184,8 @@ pub enum CommandError {
     ShallowTree,
     /// Errror in object decompression
     ErrorDecompressingObject(String),
+    /// No se pudo obtener el sender del logger
+    NotValidLogger,
 }
 
 impl Error for CommandError {}
@@ -485,6 +487,9 @@ impl fmt::Display for CommandError {
             }
             CommandError::ErrorDecompressingObject(msg) => {
                 write!(f, "Errror in object decompression: {}", msg)
+            }
+            CommandError::NotValidLogger => {
+                write!(f, "No se pudo obtener el sender del logger")
             }
         }
     }

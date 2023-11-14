@@ -50,11 +50,7 @@ pub fn write_object_to_packfile(
     // git_object.write_to(&mut cursor)?;
 
     let type_str = git_object.type_str();
-    println!("type_str: {:?}", type_str);
-    println!(
-        "object_content: {:?}",
-        String::from_utf8_lossy(&object_content)
-    );
+
     let object_len = object_content.len();
 
     let compressed_object = compress(&object_content)?;
@@ -79,10 +75,7 @@ pub fn write_object_to_packfile(
 
     let type_and_len_byte =
         (pf_type.to_u8()) << 4 | first_four | if len_bytes.is_empty() { 0 } else { 0b10000000 };
-    println!("writing: {:?}", &type_and_len_byte);
-    println!("object_len: {:?}", object_len);
-    println!("writing: {:?}", &len_bytes);
-    println!("writing: {:?}", String::from_utf8_lossy(&compressed_object));
+
     packfile.push(type_and_len_byte);
     packfile.extend(len_bytes);
     packfile.extend(compressed_object);
@@ -106,14 +99,8 @@ pub fn make_packfile(
             Box::new(tree_owned.to_owned()),
         );
     }
-    println!("hash_objects: {:?}", hash_objects.keys());
-
     let mut packfile: Vec<u8> = Vec::new();
     let packfile_header = packfile_header(hash_objects.len() as u32);
-    println!(
-        "packfile_header: {:?}",
-        String::from_utf8_lossy(&packfile_header)
-    );
     packfile.write(&packfile_header).map_err(|error| {
         CommandError::FileWriteError(format!("Error escribiendo en packfile: {}", error))
     })?;

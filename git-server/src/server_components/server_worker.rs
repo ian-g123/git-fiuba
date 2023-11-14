@@ -10,6 +10,7 @@ use git_lib::{
     git_repository::GitRepository,
     join_paths,
     logger::Logger,
+    logger_sender::{self, LoggerSender},
     objects::{
         blob::Blob,
         commit_object::CommitObject,
@@ -29,18 +30,36 @@ use git_lib::{
 pub struct ServerWorker {
     path: String,
     socket: TcpStream,
+    thread_id: String,
+    logger_sender: LoggerSender,
 }
 
 impl ServerWorker {
-    pub fn new(path: String, stream: TcpStream) -> Self {
+    pub fn new(path: String, stream: TcpStream, logger_sender: LoggerSender) -> Self {
+        let thread_id = format!("{:?}", std::process::id());
         Self {
             path,
             socket: stream,
+            thread_id,
+            logger_sender,
         }
     }
 
-    pub fn handle_connection(&mut self) -> Result<(), CommandError> {
-        let Some(presentation) = read_tpk(&mut self.socket)? else {
+    fn log(&mut self, message: &str) {
+        let time = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+        self.logger_sender
+            .log(&format!("[{}] {}: {}", self.thread_id, time, message));
+    }
+
+    pub fn handle_connection(&mut self) {
+        match self.handle_connection_priv() {
+            Ok(_) => self.log("Connection handled successfully"),
+            Err(error) => eprintln!("{error}"),
+        }
+    }
+
+    fn handle_connection_priv(&mut self) -> Result<(), CommandError> {
+        let Some(presentation) = self.read_tpk()? else {
             return Err(CommandError::ErrorReadingPkt);
         };
         let presentation_components: Vec<&str> = presentation.split("\0").collect();
@@ -53,14 +72,14 @@ impl ServerWorker {
             "git-upload-pack" => self.git_upload_pack(&repo_path[1..]),
             "git-receive-pack" => self.git_receive_pack(&repo_path[1..]),
             _ => {
-                println!("command not found");
+                self.log("command not found");
                 todo!("command not found not implemented");
             }
         }
     }
 
     fn git_upload_pack(&mut self, repo_relative_path: &str) -> Result<(), CommandError> {
-        println!("==========git-upload-pack method==========");
+        self.log("==========git-upload-pack method==========");
         let mut stdout = io::stdout();
         let repo_path = self.repo_path(repo_relative_path)?;
         let mut repo = GitRepository::open(&repo_path, &mut stdout).map_err(|error| {
@@ -72,7 +91,6 @@ impl ServerWorker {
 
         let head_branch_name = repo.get_head_branch_name()?;
         let local_branches = repo.local_branches()?;
-        println!("head branch: {}", head_branch_name);
         let head_branch_hash = local_branches.get(&head_branch_name).unwrap().clone();
         let mut sorted_branches = local_branches
             .clone()
@@ -97,7 +115,7 @@ impl ServerWorker {
     }
 
     fn git_receive_pack(&mut self, repo_relative_path: &str) -> Result<(), CommandError> {
-        println!("==========git-receive-pack method==========");
+        self.log("==========git-receive-pack method==========");
         let mut stdout = io::stdout();
         let repo_path = self.repo_path(repo_relative_path)?;
         let mut repo = GitRepository::open(&repo_path, &mut stdout).map_err(|error| {
@@ -169,7 +187,7 @@ impl ServerWorker {
     }
 
     fn read_wants_and_haves(&mut self) -> Result<(Vec<String>, Vec<String>), CommandError> {
-        let want_and_have_lines = get_responses_until(&mut self.socket, "done\n")?;
+        let want_and_have_lines = self.get_responses_until("done\n")?;
         let want_lines = want_and_have_lines
             .get(0)
             .ok_or(CommandError::PackageNegotiationError(
@@ -191,7 +209,7 @@ impl ServerWorker {
     }
 
     fn write_string_to_socket(&mut self, line: &str) -> Result<(), CommandError> {
-        println!("|| ⏫ : {:?}", line);
+        self.log(&format!("⏫: {:?}", line));
         let message = line.as_bytes();
         self.socket
             .write_all(message)
@@ -200,12 +218,12 @@ impl ServerWorker {
     }
 
     fn build_pack_file(
-        &self,
+        &mut self,
         repo: &mut GitRepository<'_>,
         want_lines: Vec<String>,
         have_lines: Vec<String>,
     ) -> Result<Vec<u8>, CommandError> {
-        println!("build_pack_file");
+        self.log("build_pack_file");
         let haves: Result<HashSet<String>, CommandError> = have_lines
             .into_iter()
             .map(|have_line| {
@@ -236,8 +254,8 @@ impl ServerWorker {
 
         let wants = wants?;
 
-        println!("haves: {:?}", haves);
-        println!("wants: {:?}", wants);
+        self.log(&format!("haves: {:?}", haves));
+        self.log(&format!("wants: {:?}", wants));
         let mut commits_map = HashMap::<String, (CommitObject, Option<String>)>::new();
         for want in wants {
             rebuild_commits_tree(
@@ -254,9 +272,10 @@ impl ServerWorker {
         for have in haves {
             commits_map.remove(&have);
         }
-        println!("Packfile summary");
+        self.log("╔==========");
+        self.log("║ Packfile summary");
         for (hash, (commit, _)) in &commits_map {
-            println!("{}: {}", hash, commit.get_message());
+            self.log(&format!("║ {}: {}", hash, commit.get_message()));
             let mut hash_stack = Vec::<Tree>::new();
             let value = commit
                 .get_tree()
@@ -266,7 +285,7 @@ impl ServerWorker {
                 .to_owned();
             hash_stack.push(value);
             while let Some(mut tree) = hash_stack.pop() {
-                println!("tree: {}", tree.get_hash_string()?);
+                self.log(&format!("║     tree: {}", tree.get_hash_string()?));
                 for (_, (_, object_opt)) in tree.get_objects() {
                     let Some(mut object) = object_opt else {
                         continue;
@@ -275,17 +294,18 @@ impl ServerWorker {
                         hash_stack.push(subtree.to_owned());
                     }
                     if let Some(blob) = object.as_mut_blob() {
-                        println!("blob: {}", blob.get_hash_string()?);
+                        self.log(&format!("║     blob: {}", blob.get_hash_string()?));
                     }
                 }
             }
         }
+        self.log("╚==========");
 
         make_packfile(commits_map)
     }
 
     fn read_ref_update_map(&mut self) -> Result<HashMap<String, (String, String)>, CommandError> {
-        let map_lines = get_response_until_flushpkt(&mut self.socket)?;
+        let map_lines = self.get_response_until_flushpkt()?;
         let mut map = HashMap::<String, (String, String)>::new();
         let mut is_first = true;
         for map_line in map_lines {
@@ -309,6 +329,52 @@ impl ServerWorker {
             }
         }
         Ok(map)
+    }
+
+    fn get_responses_until(&mut self, stop_line: &str) -> Result<Vec<Vec<String>>, CommandError> {
+        let mut lines_groups = Vec::<Vec<String>>::new();
+        let mut current_lines_group = Vec::<String>::new();
+        loop {
+            match self.read_tpk()? {
+                Some(line) => {
+                    if line == stop_line {
+                        lines_groups.push(current_lines_group);
+                        break;
+                    }
+                    current_lines_group.push(line);
+                }
+                None => {
+                    lines_groups.push(current_lines_group);
+                    current_lines_group = Vec::<String>::new();
+                }
+            }
+        }
+
+        Ok(lines_groups)
+    }
+
+    fn get_response_until_flushpkt(&mut self) -> Result<Vec<String>, CommandError> {
+        let mut response = Vec::<String>::new();
+        loop {
+            match self.read_tpk()? {
+                Some(line) => {
+                    response.push(line);
+                }
+                None => {
+                    break;
+                }
+            }
+        }
+
+        Ok(response)
+    }
+
+    fn read_tpk(&mut self) -> Result<Option<String>, CommandError> {
+        let line = String::read_pkt_format(&mut self.socket)?;
+        if let Some(s_line) = line.to_owned() {
+            self.log(&format!("⬇️: {:?}", s_line));
+        }
+        Ok(line)
     }
 }
 
@@ -404,55 +470,6 @@ fn contains_all_elements(
     }
 
     Ok(true)
-}
-
-fn get_responses_until(
-    socket: &mut TcpStream,
-    stop_line: &str,
-) -> Result<Vec<Vec<String>>, CommandError> {
-    let mut lines_groups = Vec::<Vec<String>>::new();
-    let mut current_lines_group = Vec::<String>::new();
-    loop {
-        match read_tpk(socket)? {
-            Some(line) => {
-                if line == stop_line {
-                    lines_groups.push(current_lines_group);
-                    break;
-                }
-                current_lines_group.push(line);
-            }
-            None => {
-                lines_groups.push(current_lines_group);
-                current_lines_group = Vec::<String>::new();
-            }
-        }
-    }
-
-    Ok(lines_groups)
-}
-
-fn get_response_until_flushpkt(socket: &mut TcpStream) -> Result<Vec<String>, CommandError> {
-    let mut response = Vec::<String>::new();
-    loop {
-        match read_tpk(socket)? {
-            Some(line) => {
-                response.push(line);
-            }
-            None => {
-                break;
-            }
-        }
-    }
-
-    Ok(response)
-}
-
-fn read_tpk(socket: &mut TcpStream) -> Result<Option<String>, CommandError> {
-    let line = String::read_pkt_format(socket)?;
-    if let Some(s_line) = line.to_owned() {
-        println!("|| ⬇️  : {:?}", s_line);
-    }
-    Ok(line)
 }
 
 fn get_response(mut socket: &TcpStream) -> Result<Vec<String>, CommandError> {

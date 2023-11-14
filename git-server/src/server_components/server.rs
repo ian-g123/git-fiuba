@@ -1,6 +1,6 @@
 use std::{net::TcpListener, thread};
 
-use git_lib::command_errors::CommandError;
+use git_lib::{command_errors::CommandError, logger::Logger, logger_sender};
 
 use crate::server_components::server_worker::ServerWorker;
 
@@ -19,16 +19,15 @@ impl Server {
         })?;
         let path_str = path.to_string();
         let listener_handle = thread::spawn(move || {
+            let logger = Logger::new("logs").unwrap();
             let mut worker_threads = vec![];
             for client_stream in listener.incoming() {
                 let path = path_str.clone();
+                let logger_sender = logger.get_logs_sender().unwrap();
                 let worker_thread = thread::spawn(move || {
                     let path = path.clone();
-                    let mut worker = ServerWorker::new(path, client_stream.unwrap());
-                    match worker.handle_connection() {
-                        Ok(_) => println!("Connection handled successfully"),
-                        Err(error) => eprintln!("{error}"),
-                    }
+                    let mut worker = ServerWorker::new(path, client_stream.unwrap(), logger_sender);
+                    worker.handle_connection()
                 });
                 worker_threads.push(worker_thread);
             }

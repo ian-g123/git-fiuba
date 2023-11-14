@@ -7,7 +7,7 @@ use std::{
 };
 
 // Comando para correr el servidor
-// cargo build; clear; cd ../server-files/; ../../../../../target/debug/git-server
+// cargo build; clear; cd ../server_files/; ../../../../../target/debug/git-server
 #[test]
 #[ignore = "Needs server"]
 fn test_push() {
@@ -113,21 +113,21 @@ fn test_push() {
     readme.read_to_string(&mut contents).unwrap();
     assert_eq!(contents, "contenido\n");
 
-    _ = fs::remove_dir_all(format!("{}/server-files/repo", path));
+    _ = fs::remove_dir_all(format!("{}/server_files/repo", path));
     _ = fs::remove_dir_all(format!("{}/user1", path));
     _ = fs::remove_dir_all(format!("{}/user2", path));
     _ = fs::remove_dir_all(format!("{}/user3", path));
 }
 
 fn create_base_scene(path: &str) {
-    _ = fs::remove_dir_all(format!("{}/server-files/repo", path));
+    _ = fs::remove_dir_all(format!("{}/server_files/repo", path));
     _ = fs::remove_dir_all(format!("{}/user1", path));
     _ = fs::remove_dir_all(format!("{}/user2", path));
     _ = fs::remove_dir_all(format!("{}/user3", path));
     // Copy repo_backup to repo
     copy_dir_all(
-        format!("{}/server-files/repo_backup", path),
-        format!("{}/server-files/repo", path),
+        format!("{}/server_files/repo_backup", path),
+        format!("{}/server_files/repo", path),
     )
     .unwrap();
 
@@ -137,11 +137,7 @@ fn create_base_scene(path: &str) {
         panic!("No se pudo crear el directorio")
     };
 
-    let Ok(_) = fs::create_dir_all(format!("{}/server-files/repo", path)) else {
-        panic!("No se pudo crear el directorio")
-    };
-
-    let Ok(_) = fs::create_dir_all(format!("{}/other_user", path)) else {
+    let Ok(_) = fs::create_dir_all(format!("{}/server_files/repo", path)) else {
         panic!("No se pudo crear el directorio")
     };
 }
