@@ -2,11 +2,12 @@ use std::{
     fs::{self, File},
     io::Write,
     path::Path,
+    process::Command,
     sync::mpsc::{channel, Sender},
     thread,
 };
 
-use crate::command_errors::CommandError;
+use crate::{command_errors::CommandError, logger_sender::LoggerSender};
 
 pub struct Logger {
     logs_sender: Option<Sender<String>>,
@@ -59,6 +60,13 @@ impl Logger {
         if let Some(sender) = &self.logs_sender {
             let _ = sender.send(msg.to_string());
             let _ = sender.send("\n".to_string());
+        }
+    }
+
+    pub fn get_logs_sender(&self) -> Result<LoggerSender, CommandError> {
+        match self.logs_sender.clone() {
+            Some(sender) => Ok(LoggerSender::new(sender)),
+            None => Err(CommandError::NotValidLogger),
         }
     }
 }
