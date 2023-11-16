@@ -143,7 +143,7 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
         dialog_window(err_activation.unwrap_err().to_string());
         return ControlFlow::Break(());
     }
-    interface.set_right_area(commits);
+    interface.set_right_area(&commits);
     interface.window.borrow_mut().connect_delete_event(|_, _| {
         gtk::main_quit();
         Inhibit(false)
@@ -283,7 +283,7 @@ impl Interface {
                         Some(commits) => commits,
                         None => return,
                     };
-                    interface.set_right_area(commits);
+                    interface.set_right_area(&commits);
                     interface.staged_area_ui();
                 }
                 "checkout" => {
@@ -369,33 +369,6 @@ impl Interface {
         }
     }
 
-    fn set_right_area(&mut self, commits: Vec<(CommitObject, Option<String>)>) {
-        let date_list: gtk::ListBox = self.builder.object("date_list").unwrap();
-        let author_list: gtk::ListBox = self.builder.object("author_list").unwrap();
-        // let drawing_area: gtk::DrawingArea = self.builder.object("drawing_area").unwrap();
-        let _stagin_changes_list: gtk::ListBox = self.builder.object("staging_list").unwrap();
-        let description_list: gtk::ListBox = self.builder.object("description_list").unwrap();
-        let commits_hashes_list: gtk::ListBox = self.builder.object("commit_hash_list").unwrap();
-
-        remove_childs(&description_list);
-        remove_childs(&date_list);
-        remove_childs(&author_list);
-        remove_childs(&commits_hashes_list);
-
-        // let hash_sons: HashMap<String, Vec<(f64, f64)>> = HashMap::new(); // hash, Vec<(x,y)> de los hijos
-        // let hash_branches: HashMap<String, usize> = HashMap::new();
-
-        self.set_graph(&commits);
-
-        // for (mut commit, _branch) in commits {
-        //     add_row_to_list(&commit.get_timestamp_string(), &date_list);
-        //     add_row_to_list(&commit.get_author(), &author_list);
-        //     add_row_to_list(&commit.get_hash_string().unwrap(), &commits_hashes_list);
-        //     add_row_to_list(&commit.get_message(), &description_list);
-        // }
-        self.window.borrow_mut().show_all();
-    }
-
     fn branch_function(&mut self) {
         let branch_window: gtk::Window = self.builder.object("branch_window").unwrap();
         let branches_list: gtk::ListBox = self.builder.object("branches_list").unwrap();
@@ -417,6 +390,7 @@ impl Interface {
         for branch in &local_branches {
             add_row_to_list(&branch.0, &branches_list);
         }
+
         branch_window.show_all();
         let new_name_branch: gtk::Entry = self.builder.object("entry_for_new_branch").unwrap();
 
@@ -445,7 +419,7 @@ impl Interface {
         });
     }
 
-    fn set_graph(&mut self, commits: &Vec<(CommitObject, Option<String>)>) {
+    fn set_right_area(&mut self, commits: &Vec<(CommitObject, Option<String>)>) {
         let date_list: gtk::ListBox = self.builder.object("date_list").unwrap();
         let author_list: gtk::ListBox = self.builder.object("author_list").unwrap();
         let drawing_area: gtk::DrawingArea = self.builder.object("drawing_area").unwrap();
@@ -453,14 +427,32 @@ impl Interface {
         let description_list: gtk::ListBox = self.builder.object("description_list").unwrap();
         let commits_hashes_list: gtk::ListBox = self.builder.object("commit_hash_list").unwrap();
 
+        let children = self.window.to_owned().borrow().children();
+        for child in children {
+            if child.is::<gtk::DrawingArea>() {
+                self.window.to_owned().borrow_mut().remove(&child); // VER COMO REMOVER EL DIBUJO
+            }
+        }
+
+        drawing_area.queue_draw();
+
+        remove_childs(&description_list);
+        remove_childs(&date_list);
+        remove_childs(&author_list);
+        remove_childs(&commits_hashes_list);
+
         let mut hash_sons: HashMap<String, Vec<(f64, f64, String)>> = HashMap::new(); // hash, Vec<(x,y)> de los hijos
         let mut hash_branches: HashMap<String, usize> = HashMap::new();
         let mut identado: usize = 1;
-        let mut y = 10;
+        let mut y = 11;
 
         for commit_and_branches in commits {
             let mut commit = commit_and_branches.0.to_owned();
             add_row_to_list(&commit.get_message(), &description_list);
+            add_row_to_list(&commit.get_timestamp_string(), &date_list);
+            add_row_to_list(&commit.get_author(), &author_list);
+            add_row_to_list(&commit.get_hash_string().unwrap(), &commits_hashes_list);
+
             identado = make_graph(
                 &drawing_area,
                 &mut hash_branches,
@@ -469,12 +461,10 @@ impl Interface {
                 &commit_and_branches,
                 y,
             );
-            // let mut commit = commit_and_branches.0;
-            add_row_to_list(&commit.get_timestamp_string(), &date_list);
-            add_row_to_list(&commit.get_author(), &author_list);
-            add_row_to_list(&commit.get_hash_string().unwrap(), &commits_hashes_list);
             y += 20;
         }
+
+        self.window.borrow_mut().show_all();
     }
 }
 
@@ -543,10 +533,6 @@ fn add_row_to_list(row_information: &String, row_list: &ListBox) {
     let row_date = ListBoxRow::new();
     row_date.add(&label);
     row_list.add(&row_date);
-
-    // let pos = row_date.allocation().y();
-    // println!("pos: {}", pos);
-    // pos
 }
 
 fn make_graph(
@@ -568,11 +554,11 @@ fn make_graph(
     let index_color = i % GRAPH_COLORS.len();
     let (c1, c2, c3): (f64, f64, f64) = GRAPH_COLORS[index_color];
     let x: f64 = *i as f64 * 30.0;
-
     // Conéctate al evento "draw" del DrawingArea para dibujar
     draw_commit_point(drawing_area, c1, c2, c3, x, y as f64);
 
     let commit_hash = commit.0.to_owned().get_hash_string().unwrap();
+
     draw_lines_to_sons(
         hash_sons,
         &commit_hash,
