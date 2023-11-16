@@ -1,13 +1,15 @@
 extern crate gtk;
 use std::{
     cell::RefCell,
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     io::{self, Write},
     ops::ControlFlow,
     rc::Rc,
 };
 
-use gtk::{prelude::*, Button, Label, ListBox, ListBoxRow, Orientation, Window, WindowType};
+use gtk::{
+    prelude::*, Button, DrawingArea, Label, ListBox, ListBoxRow, Orientation, Window, WindowType,
+};
 
 use git::commands::push::Push;
 use git_lib::{
@@ -17,7 +19,7 @@ use git_lib::{
 };
 
 // colores para el grafo en el futuro
-const _GRAPH_COLORS: [(f64, f64, f64); 10] = [
+const GRAPH_COLORS: [(f64, f64, f64); 10] = [
     (1.0, 0.0, 0.0), // Rojo
     (0.0, 1.0, 0.0), // Verde
     (0.0, 0.0, 1.0), // Azul
@@ -89,7 +91,6 @@ fn ventana_inicial(
         let repo_dir = repo_dir.clone();
         let repo_dir_text = repo_dir.text().to_string();
         println!("repo_dir_text: {:?}", repo_dir_text);
-        // let inicial_window = inicial_window.clone();
         let mut binding = io::stdout();
         if GitRepository::open(&repo_dir_text, &mut binding).is_err() {
             repo_dir.set_text("");
@@ -371,7 +372,7 @@ impl Interface {
     fn set_right_area(&mut self, commits: Vec<(CommitObject, Option<String>)>) {
         let date_list: gtk::ListBox = self.builder.object("date_list").unwrap();
         let author_list: gtk::ListBox = self.builder.object("author_list").unwrap();
-        let drawing_area: gtk::DrawingArea = self.builder.object("drawing_area").unwrap();
+        // let drawing_area: gtk::DrawingArea = self.builder.object("drawing_area").unwrap();
         let _stagin_changes_list: gtk::ListBox = self.builder.object("staging_list").unwrap();
         let description_list: gtk::ListBox = self.builder.object("description_list").unwrap();
         let commits_hashes_list: gtk::ListBox = self.builder.object("commit_hash_list").unwrap();
@@ -384,12 +385,14 @@ impl Interface {
         // let hash_sons: HashMap<String, Vec<(f64, f64)>> = HashMap::new(); // hash, Vec<(x,y)> de los hijos
         // let hash_branches: HashMap<String, usize> = HashMap::new();
 
-        for (mut commit, branch) in commits {
-            add_row_to_list(&commit.get_timestamp_string(), &date_list);
-            add_row_to_list(&commit.get_author(), &author_list);
-            add_row_to_list(&commit.get_hash_string().unwrap(), &commits_hashes_list);
-            add_row_to_list(&commit.get_message(), &description_list);
-        }
+        self.set_graph(&commits);
+
+        // for (mut commit, _branch) in commits {
+        //     add_row_to_list(&commit.get_timestamp_string(), &date_list);
+        //     add_row_to_list(&commit.get_author(), &author_list);
+        //     add_row_to_list(&commit.get_hash_string().unwrap(), &commits_hashes_list);
+        //     add_row_to_list(&commit.get_message(), &description_list);
+        // }
         self.window.borrow_mut().show_all();
     }
 
@@ -415,7 +418,7 @@ impl Interface {
             add_row_to_list(&branch.0, &branches_list);
         }
         branch_window.show_all();
-        let name_branch: gtk::Entry = self.builder.object("entry_for_new_branch").unwrap();
+        let new_name_branch: gtk::Entry = self.builder.object("entry_for_new_branch").unwrap();
 
         let repo_git_path = self.repo_git_path.clone();
         apply_button.connect_clicked(move |_| {
@@ -426,7 +429,7 @@ impl Interface {
                 );
                 return;
             };
-            let name_branch_text = name_branch.text();
+            let name_branch_text = new_name_branch.text();
             if name_branch_text.is_empty() {
                 dialog_window("No se ha ingresado un nombre para la rama".to_string());
                 return;
@@ -438,8 +441,40 @@ impl Interface {
                 Err(err) => dialog_window(err.to_string()),
             };
             remove_childs(&branches_list);
-            branch_window.hide();
+            gtk::main_quit();
         });
+    }
+
+    fn set_graph(&mut self, commits: &Vec<(CommitObject, Option<String>)>) {
+        let date_list: gtk::ListBox = self.builder.object("date_list").unwrap();
+        let author_list: gtk::ListBox = self.builder.object("author_list").unwrap();
+        let drawing_area: gtk::DrawingArea = self.builder.object("drawing_area").unwrap();
+        let _stagin_changes_list: gtk::ListBox = self.builder.object("staging_list").unwrap();
+        let description_list: gtk::ListBox = self.builder.object("description_list").unwrap();
+        let commits_hashes_list: gtk::ListBox = self.builder.object("commit_hash_list").unwrap();
+
+        let mut hash_sons: HashMap<String, Vec<(f64, f64, String)>> = HashMap::new(); // hash, Vec<(x,y)> de los hijos
+        let mut hash_branches: HashMap<String, usize> = HashMap::new();
+        let mut identado: usize = 1;
+        let mut y = 10;
+
+        for commit_and_branches in commits {
+            let mut commit = commit_and_branches.0.to_owned();
+            add_row_to_list(&commit.get_message(), &description_list);
+            identado = make_graph(
+                &drawing_area,
+                &mut hash_branches,
+                &mut hash_sons,
+                &mut identado,
+                &commit_and_branches,
+                y,
+            );
+            // let mut commit = commit_and_branches.0;
+            add_row_to_list(&commit.get_timestamp_string(), &date_list);
+            add_row_to_list(&commit.get_author(), &author_list);
+            add_row_to_list(&commit.get_hash_string().unwrap(), &commits_hashes_list);
+            y += 20;
+        }
     }
 }
 
@@ -503,81 +538,107 @@ fn remove_childs(list: &ListBox) {
     });
 }
 
-fn add_row_to_list(row_information: &String, row_list: &ListBox) -> i32 {
+fn add_row_to_list(row_information: &String, row_list: &ListBox) {
     let label = Label::new(Some(&row_information));
     let row_date = ListBoxRow::new();
     row_date.add(&label);
     row_list.add(&row_date);
-    row_date.allocation().y()
+
+    // let pos = row_date.allocation().y();
+    // println!("pos: {}", pos);
+    // pos
 }
 
-// fn make_graph(
-//     drawing_area: &DrawingArea,
-//     hash_branches: &mut HashMap<String, usize>,
-//     hash_sons: &mut HashMap<String, Vec<(f64, f64)>>,
-//     identado: &mut usize,
-//     commit: &(CommitObject, Option<String>),
-//     y: i32,
-// ) -> usize {
-//     let commit_branch = commit.1.as_ref().unwrap();
-//     //let commit_obj = &commit.0;
-//     if !hash_branches.contains_key(commit_branch) {
-//         hash_branches.insert(commit_branch.clone(), *identado);
-//         *identado += 1;
-//     }
+fn make_graph(
+    drawing_area: &DrawingArea,
+    hash_branches: &mut HashMap<String, usize>,
+    hash_sons: &mut HashMap<String, Vec<(f64, f64, String)>>,
+    identado: &mut usize,
+    commit: &(CommitObject, Option<String>),
+    y: i32,
+) -> usize {
+    let commit_branch = commit.1.as_ref().unwrap();
+    //let commit_obj = &commit.0;
+    if !hash_branches.contains_key(commit_branch) {
+        hash_branches.insert(commit_branch.clone(), *identado);
+        *identado += 1;
+    }
 
-//     let i = hash_branches.get(commit_branch).unwrap();
-//     let index_color = i % GRAPH_COLORS.len();
-//     let (c1, c2, c3): (f64, f64, f64) = GRAPH_COLORS[index_color];
-//     let x: f64 = *i as f64 * 3.0;
-//     let y: f64 = y as f64 * 1.0;
+    let i = hash_branches.get(commit_branch).unwrap();
+    let index_color = i % GRAPH_COLORS.len();
+    let (c1, c2, c3): (f64, f64, f64) = GRAPH_COLORS[index_color];
+    let x: f64 = *i as f64 * 30.0;
 
-//     // Conéctate al evento "draw" del DrawingArea para dibujar
-//     draw_commit_point(drawing_area, c1, c2, c3, x, y);
+    // Conéctate al evento "draw" del DrawingArea para dibujar
+    draw_commit_point(drawing_area, c1, c2, c3, x, y as f64);
 
-//     let commit_hash = &commit.0.get_hash_string().unwrap();
-//     draw_lines_to_sons(hash_sons, commit_hash, drawing_area, c1, c2, c3, x, y);
+    let commit_hash = commit.0.to_owned().get_hash_string().unwrap();
+    draw_lines_to_sons(
+        hash_sons,
+        &commit_hash,
+        drawing_area,
+        hash_branches,
+        x,
+        y as f64,
+    );
 
-//     for parent in &commit.0.get_parents() {
-//         let sons_parent = hash_sons.entry(parent.clone()).or_default();
-//         sons_parent.push((x, y));
-//     }
+    for parent in &commit.0.get_parents() {
+        let sons_parent = hash_sons.entry(parent.clone()).or_default();
+        sons_parent.push((x, y as f64, commit_branch.clone()));
+    }
 
-//     return *identado;
-// }
+    return *identado;
+}
 
-// fn draw_lines_to_sons(
-//     hash_sons: &mut HashMap<String, Vec<(f64, f64)>>,
-//     commit_hash: &String,
-//     drawing_area: &DrawingArea,
-//     c1: f64,
-//     c2: f64,
-//     c3: f64,
-//     x: f64,
-//     y: f64,
-// ) {
-//     if hash_sons.contains_key(commit_hash) {
-//         for sons in hash_sons.get(commit_hash).unwrap() {
-//             let sons_clone// extern crate gtk;
-//             // use std::collections::HashMap;
+fn draw_lines_to_sons(
+    hash_sons: &mut HashMap<String, Vec<(f64, f64, String)>>,
+    commit_hash: &String,
+    drawing_area: &DrawingArea,
+    hash_branches: &mut HashMap<String, usize>,
+    // c1: f64,
+    // c2: f64,
+    // c3: f64,
+    x: f64,
+    y: f64,
+) {
+    if hash_sons.contains_key(commit_hash) {
+        for sons in hash_sons.get(commit_hash).unwrap() {
+            let sons_clone = sons.clone();
+            let i = hash_branches.get(&sons.2).unwrap();
+            let index_color = i % GRAPH_COLORS.len();
+            let (c1, c2, c3): (f64, f64, f64) = GRAPH_COLORS[index_color];
 
-//             // use git::*;
-//             // use git_lib::objects::{author, commit_object::CommitObject};
-//             // // use git_lib::*;
-//             // use gtk::{prelude::*, DrawingArea, Label, ListBox, ListBoxRow};
+            drawing_area.connect_draw(move |_, context| {
+                // Dibuja una línea en el DrawingArea
+                context.set_source_rgb(c1, c2, c3);
+                context.set_line_width(5.0);
+                context.move_to(x, y);
+                context.line_to(sons_clone.0.clone(), sons_clone.1.clone());
+                context.stroke().unwrap();
+                Inhibit(false)
+            });
+            // drawing_area.connect_draw(move |_, context| {
+            //     // Dibuja una línea en el DrawingArea
+            //     context.set_source_rgb(c1, c2, c3);
+            //     context.set_line_width(5.0);
+            //     context.move_to(x, sons_clone.1.clone());
+            //     context.line_to(sons_clone.0.clone(), sons_clone.1.clone());
+            //     context.stroke().unwrap();
+            //     Inhibit(false)
+            // });
+        }
+    }
+}
 
-//             // const GRAPH_COLORS: [(f64, f64, f64); 10] = [
-//             //     (1.0, 0.0, 0.0), // Rojo
-//             //     (0.0, 1.0, 0.0), // Verde
-//             //     (0.0, 0.0, 1.0), // Azul
-//             //     (1.0, 1.0, 0.0), // Amarillo
-//             //     (1.0, 0.5, 0.0), // Naranja
-//             //     (0.5, 0.0, 1.0), // Morado
-//             //     (0.0, 1.0, 1.0), // Cian
-//             //     (1.0, 0.0, 1.0), // Magenta
-//             //     (0.0, 0.0, 0.0), // Negro
-//             //     (1.0, 1.0, 1.0), // Blanco
-//             // ];
+fn draw_commit_point(drawing_area: &DrawingArea, c1: f64, c2: f64, c3: f64, x: f64, y: f64) {
+    drawing_area.connect_draw(move |_, context| {
+        // Dibuja un punto en la posición (100, 100)
+        context.set_source_rgb(c1, c2, c3); // Establece el color en rojo
+        context.arc(x, y, 5.0, 0.0, 2.0 * std::f64::consts::PI); // Dibuja un círculo (punto)
+        context.fill().unwrap();
+        Inhibit(false)
+    });
+}
 
 //             // fn main() {
 //             //     if gtk::init().is_err() {
@@ -620,35 +681,6 @@ fn add_row_to_list(row_information: &String, row_list: &ListBox) -> i32 {
 //             //     gtk::main();
 //             // }
 
-//             // fn set_graph(
-//             //     drawing_area: &DrawingArea,
-//             //     description_list: ListBox,
-//             //     date_list: ListBox,
-//             //     author_list: ListBox,
-//             //     commits_hashes_list: ListBox,
-//             //     commits: Vec<(CommitObject, Option<String>)>,
-//             // ) {
-//             //     let mut hash_sons: HashMap<String, Vec<(f64, f64)>> = HashMap::new(); // hash, Vec<(x,y)> de los hijos
-//             //     let mut hash_branches: HashMap<String, usize> = HashMap::new();
-//             //     let mut identado: usize = 1;
-//             //     for commit_and_branches in commits {
-//             //         let mut commit = &commit_and_branches.0;
-//             //         let y = add_row_to_list(&commit.message, &description_list);
-//             //         identado = make_graph(
-//             //             &drawing_area,
-//             //             &mut hash_branches,
-//             //             &mut hash_sons,
-//             //             &mut identado,
-//             //             &commit_and_branches,
-//             //             y,
-//             //         );
-//             //         let mut commit = commit_and_branches.0;
-//             //         add_row_to_list(&commit.timestamp.to_string(), &date_list);
-//             //         add_row_to_list(&commit.author.to_string(), &author_list);
-//             //         add_row_to_list(&commit.get_hash_string().unwrap(), &commits_hashes_list);
-//             //     }
-//             // }
-
 //             // fn make_graph(
 //             //     drawing_area: &DrawingArea,
 //             //     hash_branches: &mut HashMap<String, usize>,
@@ -682,41 +714,6 @@ fn add_row_to_list(row_information: &String, row_list: &ListBox) -> i32 {
 //             //     }
 
 //             //     return *identado;
-//             // }
-
-//             // fn draw_lines_to_sons(
-//             //     hash_sons: &mut HashMap<String, Vec<(f64, f64)>>,
-//             //     commit_hash: &String,
-//             //     drawing_area: &DrawingArea,
-//             //     c1: f64,
-//             //     c2: f64,
-//             //     c3: f64,
-//             //     x: f64,
-//             //     y: f64,
-//             // ) {
-//             //     if hash_sons.contains_key(commit_hash) {
-//             //         for sons in hash_sons.get(commit_hash).unwrap() {
-//             //             let sons_clone = sons.clone();
-//             //             drawing_area.connect_draw(move |_, context| {
-//             //                 // Dibuja una línea en el DrawingArea
-//             //                 context.set_source_rgb(c1, c2, c3);
-//             //                 context.set_line_width(5.0);
-//             //                 context.move_to(x, y);
-//             //                 context.line_to(x, sons_clone.1.clone());
-//             //                 context.stroke();
-//             //                 Inhibit(false)
-//             //             });
-//             //             drawing_area.connect_draw(move |_, context| {
-//             //                 // Dibuja una línea en el DrawingArea
-//             //                 context.set_source_rgb(c1, c2, c3);
-//             //                 context.set_line_width(5.0);
-//             //                 context.move_to(x, sons_clone.1.clone());
-//             //                 context.line_to(sons_clone.0.clone(), sons_clone.1.clone());
-//             //                 context.stroke();
-//             //                 Inhibit(false)
-//             //             });
-//             //         }
-//             //     }
 //             // }
 
 //             // fn draw_commit_point(drawing_area: &DrawingArea, c1: f64, c2: f64, c3: f64, x: f64, y: f64) {
@@ -807,14 +804,4 @@ fn add_row_to_list(row_information: &String, row_list: &ListBox) -> i32 {
 //             });
 //         }
 //     }
-// }
-
-// fn draw_commit_point(drawing_area: &DrawingArea, c1: f64, c2: f64, c3: f64, x: f64, y: f64) {
-//     drawing_area.connect_draw(move |_, context| {
-//         // Dibuja un punto en la posición (100, 100)
-//         context.set_source_rgb(c1, c2, c3); // Establece el color en rojo
-//         context.arc(x, y, 5.0, 0.0, 2.0 * std::f64::consts::PI); // Dibuja un círculo (punto)
-//         context.fill();
-//         Inhibit(false)
-//     });
 // }

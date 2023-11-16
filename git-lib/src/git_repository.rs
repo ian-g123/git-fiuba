@@ -2033,8 +2033,14 @@ impl<'a> GitRepository<'a> {
                 &mut self.logger,
             )?;
         }
-
+        
+        
+        let mut _parents_hash: HashMap<String, HashSet<String>> = HashMap::new();
+        let mut sons_hash: HashMap<String, HashSet<String>> = HashMap::new();
+        // get_parents_hash_map(self.get_last_commit_hash(), )
+        
         let mut commits = commits_map.drain().map(|(_, v)| v).collect();
+
         sort_commits_descending_date(&mut commits);
         Ok(commits)
     }
