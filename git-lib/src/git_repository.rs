@@ -689,8 +689,6 @@ impl<'a> GitRepository<'a> {
                 )?
             }
         };
-        self.log("BBBBBB");
-
         let commit: CommitObject =
             self.get_commit(&message, parents, staged_tree.to_owned(), reuse_commit_info)?;
 

@@ -1,11 +1,9 @@
 use core::panic;
 use std::{
     fs::{self, File},
-    io::{Error, Read, Write},
-    process::{Child, Command},
+    io::{Read, Write},
+    process::Command,
 };
-
-use git_lib::{file_compressor::extract, join_paths};
 
 #[test]
 fn test_merge() {
@@ -50,11 +48,11 @@ fn test_merge() {
     file.read_to_string(&mut content).unwrap();
     assert_eq!(
         content,
-        "Primera linea modificada en servidor\nSeparador\nTercera linea modificada en local\n"
+        "Primera linea modificada en rama2\nSeparador\nTercera linea modificada en master\n"
     );
 
     modify_file_and_commit_in_both_repos_overlaping_changes(&path, git_bin);
-
+    panic!("PAUSA");
     let result = Command::new(git_bin)
         .arg("merge")
         .arg("rama3")
@@ -62,14 +60,15 @@ fn test_merge() {
         .output()
         .unwrap();
 
-    println!("{}", String::from_utf8(result.stderr).unwrap());
+    println!("3: {}", String::from_utf8(result.stderr).unwrap());
+    println!("3: {}", String::from_utf8(result.stdout).unwrap());
 
     let mut file = File::open(path.to_owned() + "/testfile").unwrap();
     let mut content = String::new();
     file.read_to_string(&mut content).unwrap();
     assert_eq!(
         content,
-        "Primera linea modificada en servidor de nuevo\nSeparador\n<<<<<<< HEAD\nTercera linea modificada en local\n=======\nTercera linea modificada en servidor\n>>>>>>> origin\n"
+        "Primera linea modificada en rama3 de nuevo\nSeparador\n<<<<<<< HEAD\nTercera linea modificada en master\n=======\nTercera linea modificada en rama3\n>>>>>>> origin\n"
     );
 
     let result = Command::new(git_bin)
@@ -108,7 +107,8 @@ fn test_merge() {
 fn modify_file_and_commit_in_both_repos_none_overlaping_lines(path: &str, git_bin: &str) {
     assert!(
         Command::new(git_bin)
-            .arg("branch")
+            .arg("checkout")
+            .arg("-b")
             .arg("rama2")
             .current_dir(path)
             .status()
@@ -134,7 +134,7 @@ fn modify_file_and_commit_in_both_repos_none_overlaping_lines(path: &str, git_bi
         Command::new(git_bin)
             .arg("commit")
             .arg("-m")
-            .arg("modificacion_servidor_not_overlaping")
+            .arg("modificacion_rama2_not_overlaping")
             .current_dir(path)
             .status()
             .is_ok(),
@@ -180,7 +180,8 @@ fn modify_file_and_commit_in_both_repos_none_overlaping_lines(path: &str, git_bi
 fn modify_file_and_commit_in_both_repos_overlaping_changes(path: &str, git_bin: &str) {
     assert!(
         Command::new(git_bin)
-            .arg("branch")
+            .arg("checkout")
+            .arg("-b")
             .arg("rama3")
             .current_dir(path)
             .status()
@@ -190,7 +191,7 @@ fn modify_file_and_commit_in_both_repos_overlaping_changes(path: &str, git_bin: 
 
     let mut file = File::create(path.to_owned() + "/testfile").unwrap();
     file.write_all(
-        b"Primera linea modificada en servidor de nuevo\nSeparador\nTercera linea modificada en servidor\n",
+        b"Primera linea modificada en rama3\nSeparador\nTercera linea modificada en rama3\n",
     )
     .unwrap();
 
@@ -208,7 +209,7 @@ fn modify_file_and_commit_in_both_repos_overlaping_changes(path: &str, git_bin: 
         Command::new(git_bin)
             .arg("commit")
             .arg("-m")
-            .arg("modificacion_servidor_overlaping")
+            .arg("modificacion_rama3_overlaping")
             .current_dir(path)
             .status()
             .is_ok(),
@@ -227,7 +228,7 @@ fn modify_file_and_commit_in_both_repos_overlaping_changes(path: &str, git_bin: 
 
     let mut file = File::create(path.to_owned() + "/testfile").unwrap();
     file.write_all(
-        b"Primera linea modificada en servidor\nSeparador\nTercera linea modificada en local\n",
+        b"Primera linea modificada en rama2\nSeparador\nTercera linea modificada en master\n",
     )
     .unwrap();
 
@@ -253,7 +254,8 @@ fn modify_file_and_commit_in_both_repos_overlaping_changes(path: &str, git_bin: 
 fn modify_file_and_commit_in_both_repos_not_overlaping_files(path: &str, git_bin: &str) {
     assert!(
         Command::new(git_bin)
-            .arg("branch")
+            .arg("checkout")
+            .arg("-b")
             .arg("rama1")
             .current_dir(path)
             .status()
@@ -278,7 +280,7 @@ fn modify_file_and_commit_in_both_repos_not_overlaping_files(path: &str, git_bin
         Command::new(git_bin)
             .arg("commit")
             .arg("-m")
-            .arg("modificacion_rama_no_overlaping_files")
+            .arg("modificacion_rama1_no_overlaping_files")
             .current_dir(path)
             .status()
             .is_ok(),
