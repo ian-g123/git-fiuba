@@ -1310,10 +1310,6 @@ impl<'a> GitRepository<'a> {
             ),
         )?;
         let Ok(paths) = fs::read_dir(branches_path) else {
-            /* CommandError::FileReadError(format!(
-                "Error leyendo directorio de branches: {}",
-                error.to_string()
-            )) */
             return Ok(branches);
         };
         for path in paths {
