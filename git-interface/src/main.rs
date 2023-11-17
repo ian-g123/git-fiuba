@@ -648,6 +648,7 @@ impl Interface {
 
         let button_name = button_name.to_string();
         let builder = self.builder.clone();
+
         accept_button.connect_clicked(move |_| {
             let mut new_content_clone = new_content_clone.clone();
             let mut current_content_clone = current_content_clone.clone();
@@ -850,50 +851,6 @@ fn draw_commit_point(drawing_area: &DrawingArea, c1: f64, c2: f64, c3: f64, x: f
     });
 }
 
-// fn inicialize_conflicts(
-//     reader: &mut BufReader<File>,
-//     new_content: &mut String,
-//     current_content: &mut String,
-//     incomming_content: &mut String,
-//     old_content: &mut String,
-// ) {
-//     let mut line = String::new();
-//     let mut found_first_conflict = false;
-
-//     while let Ok(bytes) = reader.read_line(&mut line) {
-//         if line.starts_with("<<<<<<<") && !found_first_conflict {
-//             found_first_conflict = true;
-//             while let Ok(bytes) = reader.read_line(&mut line) {
-//                 if line.starts_with("=======") {
-//                     line = String::new();
-//                     break;
-//                 }
-//                 current_content.push_str(&line);
-//                 current_content.push('\n');
-//                 line = String::new();
-//             }
-
-//             while let Ok(bytes) = reader.read_line(&mut line) {
-//                 if line.starts_with(">>>>>>>") {
-//                     line = String::new();
-//                     break;
-//                 }
-//                 incomming_content.push_str(&line);
-//                 incomming_content.push('\n');
-//                 line = String::new();
-//             }
-//         }
-//         if !found_first_conflict {
-//             new_content.push_str(&line);
-//             new_content.push('\n');
-//         } else {
-//             old_content.push_str(&line);
-//             old_content.push('\n');
-//         }
-//         line = String::new();
-//     }
-// }
-
 fn actualize_conflicts(
     accept_changes: &str,
     new_content: &mut Rc<RefCell<String>>,
@@ -921,8 +878,8 @@ fn actualize_conflicts(
     }
 
     let mut old_new_content = String::new();
-    *current_content = Rc::new(RefCell::new(String::new()));
-    *incoming_content = Rc::new(RefCell::new(String::new()));
+    current_content.borrow_mut().clear();
+    incoming_content.borrow_mut().clear();
 
     let binding = old_content.borrow_mut().clone();
     let mut lines = binding.lines();
@@ -957,5 +914,6 @@ fn actualize_conflicts(
         }
     }
 
-    *old_content = Rc::new(RefCell::new(old_new_content));
+    old_content.borrow_mut().clear();
+    old_content.borrow_mut().push_str(old_new_content.as_str());
 }
