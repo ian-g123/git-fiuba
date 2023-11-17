@@ -8,7 +8,10 @@ use crate::{
 };
 use std::{collections::HashMap, fs::File, io::Read};
 
-use super::{changes_types::ChangeType, working_tree::build_working_tree};
+use super::{
+    changes_types::ChangeType, long_format::sort_hashmap_and_filter_unmodified,
+    working_tree::build_working_tree,
+};
 
 /// Contiene información acerca de:
 /// - Diferencias entre Index y el último commit, que es lo que está en la Base de datos
@@ -31,25 +34,30 @@ impl ChangesController {
         working_dir: &str,
         logger: &mut Logger,
         commit_tree: Option<Tree>,
+        index: &StagingArea,
     ) -> Result<ChangesController, CommandError> {
         logger.log(&format!(
             "ChangesController::new\ngit_path: {}\nworking_dir: {}",
             git_path, working_dir
         ));
-        let index = StagingArea::open(git_path)?;
+
         logger.log("stagin area opened");
         let working_tree = build_working_tree(working_dir)?;
         logger.log("build_working_tree success");
         let index_changes = Self::check_staging_area_status(db, &index, &commit_tree, logger)?;
-        let (working_tree_changes, untracked, untracked_files) = Self::check_working_tree_status(
-            working_dir,
-            working_tree,
-            &index,
-            &commit_tree,
-            logger,
-            &index_changes,
-        )?;
+        let (working_tree_changes, mut untracked, mut untracked_files) =
+            Self::check_working_tree_status(
+                working_dir,
+                working_tree,
+                &index,
+                &commit_tree,
+                logger,
+                &index_changes,
+            )?;
+        untracked.sort();
+        untracked_files.sort();
         let unmerged_changes = Self::check_unmerged_paths(&index, logger)?;
+
         Ok(Self {
             index_changes,
             working_tree_changes,
@@ -79,8 +87,48 @@ impl ChangesController {
         &self.unmerged_changes
     }
 
-    pub fn get_untracked_files_interface(&self) -> &Vec<String> {
+    pub fn get_untracked_files_bis(&self) -> &Vec<String> {
         &self.untracked_files
+    }
+
+    pub fn get_staged_files(&self) -> Vec<String> {
+        let files: Vec<&String> = self.index_changes.keys().collect();
+        let mut files: Vec<String> = files.iter().map(|s| s.to_string()).collect();
+        files.sort();
+        files
+    }
+
+    pub fn get_deleted_files(&self) -> Vec<String> {
+        let mut deletions = Vec::<String>::new();
+
+        for (path, change_type) in self.working_tree_changes.iter() {
+            if matches!(change_type, ChangeType::Deleted) {
+                deletions.push(path.to_string());
+            }
+        }
+        deletions.sort();
+        deletions
+    }
+
+    pub fn get_modified_files_working_tree(&self) -> Vec<String> {
+        let working_tree_changes = sort_hashmap_and_filter_unmodified(&self.working_tree_changes);
+        let mut modifications: Vec<String> = working_tree_changes
+            .iter()
+            .map(|(s, _)| s.to_string())
+            .collect();
+        modifications.sort();
+        modifications
+    }
+
+    pub fn get_modified_files_unmerged(&self) -> Vec<String> {
+        let mut modifications = Vec::<String>::new();
+        for (path, change_type) in self.unmerged_changes.iter() {
+            if matches!(change_type, ChangeType::Modified) {
+                modifications.push(path.to_string());
+            }
+        }
+        modifications.sort();
+        modifications
     }
 
     /// Recolecta información sobre los merge conflicts
@@ -123,6 +171,7 @@ impl ChangesController {
         logger: &mut Logger,
     ) -> Result<HashMap<String, ChangeType>, CommandError> {
         let staging_files = staging_area.get_files();
+        logger.log(&format!("Staging area files: {:?}", staging_files));
         let Some(mut tree) = last_commit_tree.to_owned() else {
             let changes: HashMap<String, ChangeType> = staging_files
                 .iter()
@@ -132,13 +181,16 @@ impl ChangesController {
         };
         let mut changes: HashMap<String, ChangeType> =
             Self::check_files_in_staging_area(staging_files, logger, &mut tree)?;
-        Self::get_deleted_changes_index(db, last_commit_tree, staging_area, &mut changes)?;
         logger.log(&format!(
-            "Staging area files: {:?}",
+            "Staging area changes: {:?}",
             staging_area.get_files().keys()
         ));
+        Self::get_deleted_changes_index(db, last_commit_tree, staging_area, &mut changes, logger)?;
 
-        logger.log(&format!("Staging area changes: {:?}", changes.keys()));
+        logger.log(&format!(
+            "Staging area changes + deleted: {:?}",
+            changes.keys()
+        ));
 
         Ok(changes)
     }
@@ -229,6 +281,7 @@ impl ChangesController {
         last_commit_tree: &Option<Tree>,
         staging_area: &StagingArea,
         changes: &mut HashMap<String, ChangeType>,
+        logger: &mut Logger,
     ) -> Result<(), CommandError> {
         let deleted_changes = staging_area.get_deleted_files(last_commit_tree);
         for deleted_file in deleted_changes.iter() {

@@ -127,7 +127,7 @@ impl StagingArea {
     }
 
     pub fn has_file_from_path(&self, path: &str) -> bool {
-        self.get_files().contains_key(path)
+        self.get_files().contains_key(path) || self.unmerged_files.contains_key(path)
     }
 
     /// Verifica si hay un cambio del working tree respecto del staging area
@@ -322,6 +322,9 @@ impl StagingArea {
         } else {
             path.to_string()
         };
+        if self.files.contains_key(path) {
+            _ = self.files.remove(path);
+        }
         self.unmerged_files
             .insert(key, (common_hash, head_hash, destin_hash));
     }

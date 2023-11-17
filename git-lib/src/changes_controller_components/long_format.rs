@@ -56,7 +56,6 @@ impl Format for LongFormat {
             output_message = format!("{}\t{}:   {}\n", output_message, change, path);
         }
 
-        let untracked_files = sort_vector(untracked_files);
         if !untracked_files.is_empty() {
             output_message = format!("{}\nUntracked files:\n  (use \"git add <file>...\" to include in what will be committed)\n", output_message);
         }

@@ -199,7 +199,7 @@ fn test_ckeckout() {
     let stdout = String::from_utf8(result.stdout).unwrap();
     println!("Status: {}", stdout);
 
-    _ = Command::new("../../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("commit")
         .arg("-m")
         .arg("message")
@@ -207,6 +207,14 @@ fn test_ckeckout() {
         .current_dir(path)
         .output()
         .unwrap();
+    println!(
+        "Commit error: {}",
+        String::from_utf8(result.stderr).unwrap()
+    );
+    println!(
+        "Commit stdout: {}",
+        String::from_utf8(result.stdout).unwrap()
+    );
     check_commit(path);
 
     let result = Command::new("../../../../../../target/debug/git")

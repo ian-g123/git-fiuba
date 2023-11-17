@@ -182,6 +182,8 @@ pub enum CommandError {
     CheckoutConflictsError,
     /// El tree guarda solo hashes y no sus objetos
     ShallowTree,
+
+    MergeConflictsCommit,
     /// Errror in object decompression
     ErrorDecompressingObject(String),
     /// No se pudo obtener el sender del logger
@@ -485,6 +487,7 @@ impl fmt::Display for CommandError {
             CommandError::ShallowTree => {
                 write!(f, "El tree guarda solo hashes y no sus objetos")
             }
+            CommandError::MergeConflictsCommit => write!(f, "error: Committing is not possible because you have unmerged files.\nhint: Fix them up in the work tree, and then use 'git add/rm <file>'\nhint: as appropriate to mark resolution and make a commit.\nfatal: Exiting because of an unresolved conflict."),
             CommandError::ErrorDecompressingObject(msg) => {
                 write!(f, "Errror in object decompression: {}", msg)
             }
