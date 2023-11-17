@@ -43,7 +43,7 @@ pub enum CommandError {
     /// El flag -m de Commit no se puede combinar con -C.
     MessageAndReuseError,
     CommitMessageEmptyValue,
-    CommitMessageNoValue,
+    MessageNoValue,
     InvalidAuthor,
     ReuseMessageNoValue,
     CommitLookUp(String),
@@ -188,6 +188,13 @@ pub enum CommandError {
     ErrorDecompressingObject(String),
     /// No se pudo obtener el sender del logger
     NotValidLogger,
+
+    // Tags
+    TagNameDuplicated(String),
+    TagNameNeeded,
+    TagTooManyArgs,
+    TagCreateAndDelete,
+    TagMessageEmpty,
 }
 
 impl Error for CommandError {}
@@ -230,7 +237,7 @@ impl fmt::Display for CommandError {
             CommandError::MessageAndReuseError => {
                 write!(f, "fatal: Option -m cannot be combined with -C")
             }
-            CommandError::CommitMessageNoValue => write!(f, "error: switch `m' requires a value"),
+            CommandError::MessageNoValue => write!(f, "error: switch `m' requires a value"),
             CommandError::CommitMessageEmptyValue => {
                 write!(f, "Aborting commit due to empty commit message.")
             }
@@ -494,6 +501,11 @@ impl fmt::Display for CommandError {
             CommandError::NotValidLogger => {
                 write!(f, "No se pudo obtener el sender del logger")
             }
+            CommandError::TagNameDuplicated(name) => write!(f, "fatal: tag '{name}' already exists"),
+            CommandError::TagNameNeeded => write!(f, "No se puede crear un tag sin un nombre"),
+            CommandError::TagTooManyArgs => write!(f, "fatal: too many arguments"),
+            CommandError::TagCreateAndDelete => write!(f, "No se puede crear y eliminar tags al mismo tiempo"),
+            CommandError::TagMessageEmpty => write!(f, "fatal: no tag message?"),
         }
     }
 }

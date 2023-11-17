@@ -80,44 +80,15 @@ impl Commit {
     fn add_message_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options = ["-m".to_string()].to_vec();
         Self::check_errors_flags(i, args, &options)?;
-        self.check_next_arg(i, args, CommandError::CommitMessageNoValue)?;
+        self.check_next_arg(i, args, CommandError::MessageNoValue)?;
         let mut new_message: String = String::new();
         if let Some(message) = &self.message {
             new_message = format!("{}\n\n", message)
         }
-        let (message, words) = Self::read_message_completely(i, args)?;
+        let (message, words) = read_message_completely(i, args)?;
         new_message += &message;
         self.message = Some(new_message);
         Ok(i + words + 1)
-    }
-
-    fn read_message_completely(i: usize, args: &[String]) -> Result<(String, usize), CommandError> {
-        let mut message = String::new();
-        let mut number_of_words: usize = 1;
-        message += &args[i + 1];
-        let end: char;
-        if message.starts_with('"') {
-            end = '"';
-        } else if message.starts_with("'") {
-            end = '\'';
-        } else {
-            return Ok((message, number_of_words));
-        }
-
-        message = message[1..].to_string();
-        for pos in i + 2..args.len() {
-            number_of_words += 1;
-            message += &format!(" {}", &args[pos]);
-            if args[pos].ends_with(end) {
-                message = message[..message.len() - 1].to_string();
-                break;
-            }
-            if pos == args.len() - 1 {
-                return Err(CommandError::MessageIncomplete(end.to_string()));
-            }
-        }
-
-        Ok((message, number_of_words))
     }
 
     /// Configura el flag --dry-run.
@@ -178,36 +149,6 @@ impl Commit {
         Ok(())
     }
 
-    /// Lee el mensaje introducido por el usuario por entrada estandar.
-    fn run_enter_message(stdin: &mut dyn Read) -> Result<String, CommandError> {
-        let stdout = get_enter_message_text()?;
-        println!("{}#\n", stdout);
-        let mut message = read_from_stdin(stdin)?;
-        message = ignore_commented_lines(message);
-
-        if message.is_empty() {
-            return Err(CommandError::CommitMessageEmptyValue);
-        }
-
-        Ok(message.trim().to_string())
-    }
-
-    /// Devuelve el mesage del Commit. Si se usó el flag -m, devuelve el mensaje asociado.\
-    /// Si hay que reusar el de otro commit (-C), devuelve un string vacío.\
-    /// Si no se ha usado ninguno de esos flags, se pide al usuario que introduzca el mensaje nuevamente.
-    fn get_commit_message(&self, stdin: &mut dyn Read) -> Result<String, CommandError> {
-        let message = {
-            if let Some(message) = self.message.clone() {
-                message
-            } else if self.reuse_message.is_some() {
-                "".to_string()
-            } else {
-                Self::run_enter_message(stdin)?
-            }
-        };
-        Ok(message)
-    }
-
     /// Ejecuta el Comando Commit.
     fn run(&self, stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), CommandError> {
         if self.message.is_some() && self.reuse_message.is_some() {
@@ -250,24 +191,40 @@ impl Commit {
         }
     }
 
-    /// Obtiene la salida por stdout del comando Commit.
-    fn _get_status_output(&self, _output: &mut dyn Write) -> Result<(), CommandError> {
-        /*
-        si el staging area está vacía, se usa el output de status.
-         */
-
-        /* let mut status = Status::new_default();
-        status.get_output(output)?; */
-        Ok(())
+    /// Devuelve el mensage del Commit. Si se usó el flag -m, devuelve el mensaje asociado.\
+    /// Si hay que reusar el de otro commit (-C), devuelve un string vacío.\
+    /// Si no se ha usado ninguno de esos flags, se pide al usuario que introduzca el mensaje nuevamente.
+    fn get_commit_message(&self, stdin: &mut dyn Read) -> Result<String, CommandError> {
+        let message = {
+            if let Some(message) = self.message.clone() {
+                message
+            } else if self.reuse_message.is_some() {
+                "".to_string()
+            } else {
+                let stdout: String = get_enter_message_text()?;
+                run_enter_message(stdin, stdout)?
+            }
+        };
+        Ok(message)
     }
+}
+
+/// Lee el mensaje introducido por el usuario por entrada estandar.
+pub fn run_enter_message(stdin: &mut dyn Read, stdout: String) -> Result<String, CommandError> {
+    println!("{}#\n", stdout);
+    let mut message = read_from_stdin(stdin)?;
+    message = ignore_commented_lines(message);
+
+    if message.is_empty() {
+        return Err(CommandError::CommitMessageEmptyValue);
+    }
+
+    Ok(message.trim().to_string())
 }
 
 /// Devuelve el texto que se mostrará si el Cliente no ha introducido un mensaje para el Commit.
 fn get_enter_message_text() -> Result<String, CommandError> {
     let mensaje = "# Please enter the commit message for your changes. Lines starting\n# with '#' will be ignored, and an empty message aborts the commit.\n#\n";
-    /* let branch_path = get_current_branch()?;
-    let branch_split: Vec<&str> = branch_path.split("/").collect();
-    let branch_name = branch_split[branch_split.len() - 1]; */
     Ok(format!("{}#\n# Output de status\n#\n", mensaje))
 }
 
@@ -309,6 +266,35 @@ fn ignore_commented_lines(message: String) -> String {
     split_message.join("\n")
 }
 
+pub fn read_message_completely(i: usize, args: &[String]) -> Result<(String, usize), CommandError> {
+    let mut message = String::new();
+    let mut number_of_words: usize = 1;
+    message += &args[i + 1];
+    let end: char;
+    if message.starts_with('"') {
+        end = '"';
+    } else if message.starts_with("'") {
+        end = '\'';
+    } else {
+        return Ok((message, number_of_words));
+    }
+
+    message = message[1..].to_string();
+    for pos in i + 2..args.len() {
+        number_of_words += 1;
+        message += &format!(" {}", &args[pos]);
+        if args[pos].ends_with(end) {
+            message = message[..message.len() - 1].to_string();
+            break;
+        }
+        if pos == args.len() - 1 {
+            return Err(CommandError::MessageIncomplete(end.to_string()));
+        }
+    }
+
+    Ok((message, number_of_words))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -339,7 +325,7 @@ mod tests {
 
         let args = ["-m".to_string()];
         match Commit::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
-            Err(error) => assert_eq!(error, CommandError::CommitMessageNoValue),
+            Err(error) => assert_eq!(error, CommandError::MessageNoValue),
             Ok(_) => assert!(false),
         }
     }
@@ -400,7 +386,7 @@ mod tests {
         let expected = "Message".to_string();
         let mut stdin_mock = Cursor::new(input.as_bytes());
 
-        match Commit::run_enter_message(&mut stdin_mock) {
+        match run_enter_message(&mut stdin_mock, get_enter_message_text().unwrap()) {
             Err(error) => assert!(false, "{}", error),
             Ok(message) => assert_eq!(message, expected),
         }
