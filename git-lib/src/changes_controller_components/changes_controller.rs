@@ -111,19 +111,12 @@ impl ChangesController {
     }
 
     pub fn get_modified_files_working_tree(&self) -> Vec<String> {
-        /* let mut modifications = Vec::<String>::new();
-        for (path, change_type) in self.working_tree_changes.iter() {
-            if matches!(change_type, ChangeType::Modified) {
-                modifications.push(path.to_string());
-            }
-        } */
-
         let working_tree_changes = sort_hashmap_and_filter_unmodified(&self.working_tree_changes);
-        let modifications = working_tree_changes
+        let mut modifications: Vec<String> = working_tree_changes
             .iter()
             .map(|(s, _)| s.to_string())
             .collect();
-        //modifications.sort();
+        modifications.sort();
         modifications
     }
 

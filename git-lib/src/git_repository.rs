@@ -2946,22 +2946,9 @@ impl<'a> GitRepository<'a> {
                 .collect();
             aux_list = aux_str_list.iter().map(|p| p.to_string()).collect();
         }
-        self.log(&format!(
-            "Aux list: {:?}, Modified: {:?}",
-            aux_list,
-            modifications_list.clone()
-        ));
+
         if modified {
             aux_list.extend_from_slice(&modifications_list);
-            /* if !cached && !stage {
-                let aux_str_list: Vec<&String> = aux_list
-                    .iter()
-                    .filter(|p| modifications_list.contains(p.to_owned()))
-                    .collect();
-                aux_list = aux_str_list.iter().map(|p| p.to_string()).collect();
-            } else {
-                aux_list.extend_from_slice(&modifications_list);
-            } */
         }
 
         if deleted {
@@ -2991,10 +2978,7 @@ impl<'a> GitRepository<'a> {
             staging_area_files,
             unmerged_modifications_list,
         )?;
-        self.log(&format!(
-            "others_list: {:?}, aux_list: {:?}",
-            others_list, aux_list
-        ));
+
         if stage || unmerged {
             message = self.get_extended_ls_files_output(others_list.clone(), extended_list);
         } else {
@@ -3065,7 +3049,6 @@ impl<'a> GitRepository<'a> {
                 let object = db.read_object(hash, &mut self.logger)?;
                 let mode = object.mode();
                 result.push((mode, hash.to_string(), 0, path.to_string()));
-                self.log(&format!("Ls --> Path: {}, hash: {}", path, hash));
             };
 
             if let Some((common, head, remote)) = staging_area_conflicts.get(path) {
