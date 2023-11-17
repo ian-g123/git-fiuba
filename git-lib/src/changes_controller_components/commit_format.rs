@@ -5,6 +5,7 @@ use crate::{
     logger::Logger,
     objects::{mode::Mode, tree::Tree},
     objects_database::ObjectsDatabase,
+    staging_area::StagingArea,
 };
 
 use super::{
@@ -16,7 +17,7 @@ pub struct CommitFormat;
 
 impl CommitFormat {
     pub fn show(
-        staging_area_changes: HashMap<String, String>,
+        staging_area: &StagingArea,
         db: &ObjectsDatabase,
         logger: &mut Logger,
         commit_tree: Option<Tree>,
@@ -27,11 +28,17 @@ impl CommitFormat {
         git_path: &str,
         working_dir: &str,
     ) -> Result<(), CommandError> {
-        let changes_controller =
-            ChangesController::new(db, git_path, working_dir, logger, commit_tree.clone())?;
+        let changes_controller = ChangesController::new(
+            db,
+            git_path,
+            working_dir,
+            logger,
+            commit_tree.clone(),
+            staging_area,
+        )?;
         let changes_to_be_commited = changes_controller.get_changes_to_be_commited();
         let (files_changed, insertions, deletions) = CommitChanges::new(
-            staging_area_changes,
+            staging_area.get_files(),
             db,
             logger,
             commit_tree.clone(),

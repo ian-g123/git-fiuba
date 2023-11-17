@@ -25,16 +25,16 @@ impl ObjectsDatabase {
         &mut self,
         git_object: &mut GitObject,
         recursive: bool,
-        _logger: &mut Logger,
+        logger: &mut Logger,
     ) -> Result<String, CommandError> {
         let mut data = Vec::new();
         if recursive {
             git_object.write_to(&mut data, Some(self))?;
         } else {
-            
             git_object.write_to(&mut data, None)?;
         };
         let hash_str = get_sha1_str(&data);
+        logger.log(&format!("Writing {} to database", hash_str));
         self.save_to(hash_str, data)
     }
 
