@@ -267,14 +267,14 @@ fn read_commit_info_from(
     ))
 }
 
-fn lines_next(lines: &mut std::str::Lines<'_>) -> Result<String, CommandError> {
+pub fn lines_next(lines: &mut std::str::Lines<'_>) -> Result<String, CommandError> {
     let Some(tree_line) = lines.next() else {
         return Err(CommandError::InvalidCommit);
     };
     Ok(tree_line.to_string())
 }
 
-fn get_author_info(commiter_info: &str) -> Result<(Author, i64, i32), CommandError> {
+pub fn get_author_info(commiter_info: &str) -> Result<(Author, i64, i32), CommandError> {
     let mut stream = Cursor::new(commiter_info.as_bytes());
     let author = Author::read_from(&mut stream)?;
 
@@ -300,7 +300,7 @@ fn get_author_info(commiter_info: &str) -> Result<(Author, i64, i32), CommandErr
 }
 
 /// Devuelve el offset en string.
-fn offset_str(minutes: i32) -> Result<String, CommandError> {
+pub fn offset_str(minutes: i32) -> Result<String, CommandError> {
     let sign = if minutes < 0 { "-" } else { "+" };
     let hours = minutes.abs() / 60;
     let minutes = minutes.abs() % 60;
