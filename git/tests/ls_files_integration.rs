@@ -8,7 +8,7 @@ use common::aux::create_base_scene;
 
 use crate::common::aux::{
     change_dir_testfile1_content_and_remove_dir_testfile2, change_test_scene_4,
-    create_test_scene_2, create_test_scene_4, create_test_scene_5,
+    change_testfile_content, create_test_scene_2, create_test_scene_4, create_test_scene_5,
 };
 
 mod common {
@@ -301,6 +301,140 @@ fn test_unmerged() {
     _ = std::fs::remove_dir_all(format!("{}", path));
 }
 
+#[test]
+fn test_modified() {
+    let path = "./tests/data/commands/ls_files/repo3";
+
+    create_test_scene_5(path);
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("testfile.txt")
+        .arg("dir/testfile1.txt")
+        .arg("dir/testfile2.txt")
+        .arg("dir/testfile3.txt")
+        .arg("dir/testfile4.txt")
+        .arg("dir/dir1/testfile5.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    change_dir_testfile1_content_and_remove_dir_testfile2_bis(path);
+    change_testfile_content(path);
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("testfile.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("ls-files")
+        .arg("-m")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    println!("Stderr: {}", String::from_utf8(result.stderr).unwrap());
+
+    let stdout = String::from_utf8(result.stdout).unwrap();
+
+    let expected = "dir/testfile1.txt\ndir/testfile2.txt\n";
+
+    assert_eq!(stdout, expected);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("ls-files")
+        .arg("-m")
+        .arg("-d")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    println!("Stderr: {}", String::from_utf8(result.stderr).unwrap());
+
+    let stdout = String::from_utf8(result.stdout).unwrap();
+
+    let expected = "dir/testfile1.txt\ndir/testfile2.txt\ndir/testfile2.txt\n";
+
+    assert_eq!(stdout, expected);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("ls-files")
+        .arg("-m")
+        .arg("-c")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    println!("Stderr: {}", String::from_utf8(result.stderr).unwrap());
+
+    let stdout = String::from_utf8(result.stdout).unwrap();
+
+    let expected = "dir/dir1/testfile5.txt\ndir/testfile1.txt\ndir/testfile1.txt\ndir/testfile2.txt\ndir/testfile2.txt\ndir/testfile3.txt\ndir/testfile4.txt\ntestfile.txt\n";
+
+    assert_eq!(stdout, expected);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("ls-files")
+        .arg("-m")
+        .arg("-o")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    println!("Stderr: {}", String::from_utf8(result.stderr).unwrap());
+
+    let stdout = String::from_utf8(result.stdout).unwrap();
+
+    let expected = "dir/dir1/testfile6.txt\ndir/testfile1.txt\ndir/testfile2.txt\n";
+
+    assert_eq!(stdout, expected);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("ls-files")
+        .arg("-m")
+        .arg("dir/testfile1.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    println!("Stderr: {}", String::from_utf8(result.stderr).unwrap());
+
+    let stdout = String::from_utf8(result.stdout).unwrap();
+
+    let expected = "dir/testfile1.txt\n";
+
+    assert_eq!(stdout, expected);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("ls-files")
+        .arg("-m")
+        .arg("dir/testfile3.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    println!("Stderr: {}", String::from_utf8(result.stderr).unwrap());
+
+    let stdout = String::from_utf8(result.stdout).unwrap();
+
+    let expected = "";
+
+    assert_eq!(stdout, expected);
+
+    _ = std::fs::remove_dir_all(format!("{}", path));
+}
+
 fn get_hash(file: &str, path: &str) -> String {
     let result = Command::new("../../../../../../target/debug/git")
         .arg("hash-object")
@@ -324,4 +458,9 @@ pub fn change_dir_testfile1_content_and_remove_dir_testfile2_bis(path: &str) {
     let mut file = File::create(path.to_owned() + "/dir/testfile1.txt").unwrap();
     file.write_all(b"linea 1\nlinea 6\nlinea 3").unwrap();
     _ = fs::remove_file(path.to_string() + "/dir/testfile2.txt").unwrap();
+}
+
+pub fn change_testfile_content_bis(path: &str) {
+    let mut file = File::create(path.to_owned() + "/testfile.txt").unwrap();
+    file.write_all(b"cambio x2").unwrap();
 }

@@ -2929,31 +2929,39 @@ impl<'a> GitRepository<'a> {
         }
 
         let mut staged_list = changes_controller.get_staged_files();
-        self.log(&format!("Staged list: {:?}", staged_list,));
         let modifications_list = changes_controller.get_modified_files_working_tree();
         let staging_area_conflicts = index.get_unmerged_files();
         let staging_area_files = index.get_files();
-        self.log(&format!("Staging list: {:?}", staging_area_files));
 
         let unmerged_modifications_list = changes_controller.get_modified_files_unmerged();
         self.add_unmerged_files_to_list(&mut staged_list, staging_area_conflicts.clone());
-        self.log(&format!(
-            "Staged list: {:?}, unmerged: {:?}",
-            staged_list,
-            staging_area_conflicts.clone()
-        ));
+
         if cached {
             aux_list.extend_from_slice(&staged_list);
         }
-        if unmerged && !cached {
+        if unmerged && !cached && !stage {
             let aux_str_list: Vec<&String> = aux_list
                 .iter()
                 .filter(|p| staging_area_conflicts.contains_key(p.to_owned()))
                 .collect();
             aux_list = aux_str_list.iter().map(|p| p.to_string()).collect();
         }
+        self.log(&format!(
+            "Aux list: {:?}, Modified: {:?}",
+            aux_list,
+            modifications_list.clone()
+        ));
         if modified {
             aux_list.extend_from_slice(&modifications_list);
+            /* if !cached && !stage {
+                let aux_str_list: Vec<&String> = aux_list
+                    .iter()
+                    .filter(|p| modifications_list.contains(p.to_owned()))
+                    .collect();
+                aux_list = aux_str_list.iter().map(|p| p.to_string()).collect();
+            } else {
+                aux_list.extend_from_slice(&modifications_list);
+            } */
         }
 
         if deleted {
