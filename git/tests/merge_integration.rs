@@ -117,7 +117,7 @@ fn modify_file_and_commit_in_both_repos_none_overlaping_lines(path: &str, git_bi
     );
 
     let mut file = File::create(path.to_owned() + "/testfile").unwrap();
-    file.write_all(b"Primera linea modificada en servidor\nSeparador\nTercera linea\n")
+    file.write_all(b"Primera linea modificada en rama2\nSeparador\nTercera linea\n")
         .unwrap();
 
     assert!(
@@ -152,7 +152,7 @@ fn modify_file_and_commit_in_both_repos_none_overlaping_lines(path: &str, git_bi
     );
 
     let mut file = File::create(path.to_owned() + "/testfile").unwrap();
-    file.write_all(b"Primera linea\nSeparador\nTercera linea modificada en local\n")
+    file.write_all(b"Primera linea\nSeparador\nTercera linea modificada en master\n")
         .unwrap();
 
     assert!(
