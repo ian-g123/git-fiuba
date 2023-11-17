@@ -2,7 +2,7 @@ extern crate gtk;
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
-    io::{self, Write},
+    io::{self, BufRead, Write},
     ops::ControlFlow,
     rc::Rc,
 };
@@ -37,6 +37,7 @@ struct Interface {
     repo_git_path: String,
     staging_changes: Rc<RefCell<HashSet<String>>>,
     unstaging_changes: Rc<RefCell<HashSet<String>>>,
+    files_merge_conflict: Rc<RefCell<HashSet<String>>>,
     window: Rc<RefCell<gtk::Window>>,
 }
 
@@ -47,7 +48,7 @@ fn main() {
     }
 
     let repo_dir_text = "".to_string();
-    let glade_src = include_str!("../git interface.glade");
+    let glade_src = include_str!("../git_interface.glade");
     let builder = gtk::Builder::from_string(glade_src);
 
     let inicial_window: gtk::Window = builder.object("inicial_window").unwrap();
@@ -119,7 +120,8 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
             return ControlFlow::Break(());
         }
     };
-    let (staging_changes, unstaging_changes) = staged_area_func(repo_git_path.to_string()).unwrap();
+    let (staging_changes, unstaging_changes, files_merge_conflict) =
+        staged_area_func(repo_git_path.to_string()).unwrap();
     let window: gtk::Window = builder.borrow_mut().object("window app").unwrap();
 
     let builder_interface = builder.borrow_mut().clone();
@@ -128,6 +130,7 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
         repo_git_path,
         staging_changes: Rc::new(RefCell::new(staging_changes)),
         unstaging_changes: Rc::new(RefCell::new(unstaging_changes)),
+        files_merge_conflict: Rc::new(RefCell::new(files_merge_conflict)),
         window: Rc::new(RefCell::new(window)),
     };
     let commits = match repo.get_log(true) {
@@ -155,10 +158,11 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
 
 impl Interface {
     fn actualizar(&mut self) -> Option<Vec<(CommitObject, Option<String>)>> {
-        let (staging_changes, unstaging_changes) =
+        let (staging_changes, unstaging_changes, merge_conflicts) =
             staged_area_func(self.repo_git_path.to_string()).unwrap();
         self.staging_changes = Rc::new(RefCell::new(staging_changes));
         self.unstaging_changes = Rc::new(RefCell::new(unstaging_changes));
+        self.files_merge_conflict = Rc::new(RefCell::new(merge_conflicts));
 
         let mut binding = io::stdout();
         let mut repo = match GitRepository::open(&self.repo_git_path, &mut binding) {
@@ -212,6 +216,7 @@ impl Interface {
         let clone_builder = self.builder.clone();
         let unstaging_changes = Rc::clone(&self.unstaging_changes);
         let staging_changes = Rc::clone(&self.staging_changes);
+        let files_merge_conflict = Rc::clone(&self.files_merge_conflict);
         let window = self.window.clone();
 
         button.connect_clicked(move |_| {
@@ -263,6 +268,7 @@ impl Interface {
                         repo_git_path: repo_git_path.to_string(),
                         staging_changes: Rc::clone(&staging_changes),
                         unstaging_changes: Rc::clone(&unstaging_changes),
+                        files_merge_conflict: Rc::clone(&files_merge_conflict),
                         window,
                     };
                     interface.branch_function();
@@ -276,6 +282,7 @@ impl Interface {
                         repo_git_path: repo_git_path.to_string(),
                         staging_changes: Rc::clone(&staging_changes),
                         unstaging_changes: Rc::clone(&unstaging_changes),
+                        files_merge_conflict: Rc::clone(&files_merge_conflict),
                         window,
                     };
                     interface.staged_area_ui();
@@ -300,27 +307,80 @@ impl Interface {
     fn staged_area_ui(&self) {
         let staging_changes: gtk::ListBox = self.builder.object("staging_list").unwrap();
         let unstaging_changes: gtk::ListBox = self.builder.object("unstaging_list").unwrap();
+        let merge_conflicts: gtk::ListBox = self.builder.object("merge_conflicts_list").unwrap();
 
         remove_childs(&staging_changes);
         remove_childs(&unstaging_changes);
+        remove_childs(&merge_conflicts);
 
-        self.stage_and_unstage_ui(unstaging_changes, self.unstaging_changes.clone(), true);
-        self.stage_and_unstage_ui(staging_changes, self.staging_changes.clone(), false);
+        self.stage_and_unstage_ui(
+            unstaging_changes,
+            self.unstaging_changes.clone(),
+            "unstaging".to_string(),
+        );
+        self.stage_and_unstage_ui(
+            staging_changes,
+            self.staging_changes.clone(),
+            "staging".to_string(),
+        );
+        self.stage_and_unstage_ui(
+            merge_conflicts,
+            self.files_merge_conflict.clone(),
+            "merge".to_string(),
+        );
     }
 
     fn stage_and_unstage_ui(
         &self,
         list_box: ListBox,
         files: Rc<RefCell<HashSet<String>>>,
-        is_unstaging: bool,
+        field: String,
     ) {
+        let clone_field = field.clone();
+
         for file in files.borrow_mut().iter() {
             let file = file.clone();
-            let box_outer = gtk::Box::new(Orientation::Horizontal, 0);
+            let field2 = clone_field.clone();
+            let window = self.window.clone();
+            let window2 = self.window.clone();
+            let builder = self.builder.clone();
+            let builder2 = self.builder.clone();
+            let staging_changes = Rc::clone(&self.staging_changes);
+            let staging_changes2 = Rc::clone(&self.staging_changes);
+            let unstaging_changes = Rc::clone(&self.unstaging_changes);
+            let unstaging_changes2 = Rc::clone(&self.unstaging_changes);
+            let files_merge_conflict = Rc::clone(&self.files_merge_conflict);
+            let repo_git_path = self.repo_git_path.clone();
 
+            let box_outer = gtk::Box::new(Orientation::Horizontal, 0);
             let mut button = Button::with_label("stage");
-            if !is_unstaging {
-                button = Button::with_label("unstage");
+
+            match field2.as_str() {
+                "staging" => {
+                    button = Button::with_label("unstage");
+                }
+                "merge" => {
+                    let add_button = Button::with_label("resolve");
+                    box_outer.pack_end(&add_button, false, false, 0);
+                    let repo_git_path_clone = repo_git_path.clone();
+
+                    let files_merge_conflict_clone = Rc::clone(&files_merge_conflict);
+
+                    let clone_file = file.clone();
+                    add_button.connect_clicked(move |_| {
+                        let clone_file = clone_file.clone();
+                        let mut interface = Interface {
+                            builder: builder.clone(),
+                            repo_git_path: repo_git_path_clone.to_string(),
+                            staging_changes: Rc::clone(&staging_changes),
+                            unstaging_changes: Rc::clone(&unstaging_changes),
+                            files_merge_conflict: Rc::clone(&files_merge_conflict_clone),
+                            window: window.clone(),
+                        };
+                        interface.inicialize(clone_file);
+                    });
+                }
+                _ => {}
             }
             let label = Label::new(Some(&format!("{}", file)));
 
@@ -329,40 +389,52 @@ impl Interface {
 
             list_box.add(&box_outer);
 
-            let window = self.window.clone();
-            let builder = self.builder.clone();
-            let staging_changes = Rc::clone(&self.staging_changes);
-            let unstaging_changes = Rc::clone(&self.unstaging_changes);
-
             self.window.borrow_mut().show_all();
 
-            let repo_git_path = self.repo_git_path.clone();
+            let files_merge_conflict = files_merge_conflict.clone();
+
+            let clone_file = file.clone();
             button.connect_clicked(move |_| {
                 let mut binding = io::stdout();
                 let mut repo = GitRepository::open(&repo_git_path, &mut binding).unwrap();
                 let vec_files = vec![file.clone()];
 
-                if is_unstaging {
-                    _ = unstaging_changes.borrow_mut().take(&file);
-                    staging_changes.borrow_mut().insert(file.clone());
-                    let err = repo.add(vec_files);
-                    if err.is_err() {
-                        dialog_window(err.unwrap_err().to_string());
-                        return;
+                match field2.clone().as_str() {
+                    "unstaging" => {
+                        _ = unstaging_changes2.borrow_mut().take(&clone_file);
+                        staging_changes2.borrow_mut().insert(file.clone());
+                        let err = repo.add(vec_files);
+                        if err.is_err() {
+                            dialog_window(err.unwrap_err().to_string());
+                            return;
+                        }
                     }
-                    println!("unstaged files: {:?}", unstaging_changes.borrow());
-                } else {
-                    _ = staging_changes.borrow_mut().take(&file);
-                    unstaging_changes.borrow_mut().insert(file.clone());
-                    repo.remove_cached(vec_files).unwrap();
-                    println!("staged files: {:?}", unstaging_changes.borrow());
+                    "merge" => {
+                        _ = files_merge_conflict.borrow_mut().take(&clone_file);
+                        staging_changes2.borrow_mut().insert(file.clone());
+                        let err = repo.add(vec_files);
+                        if err.is_err() {
+                            dialog_window(err.unwrap_err().to_string());
+                            return;
+                        }
+                    }
+                    "staging" => {
+                        _ = staging_changes2.borrow_mut().take(&clone_file);
+                        unstaging_changes2.borrow_mut().insert(file.clone());
+                        repo.remove_cached(vec_files).unwrap();
+                    }
+                    _ => {
+                        eprintln!("Acción no reconocida: {}", field2.clone());
+                    }
                 }
+
                 let interface = Interface {
-                    builder: builder.clone(),
+                    builder: builder2.clone(),
                     repo_git_path: repo_git_path.to_string(),
-                    staging_changes: Rc::clone(&staging_changes),
-                    unstaging_changes: Rc::clone(&unstaging_changes),
-                    window: window.clone(),
+                    staging_changes: Rc::clone(&staging_changes2),
+                    unstaging_changes: Rc::clone(&unstaging_changes2),
+                    files_merge_conflict: Rc::clone(&files_merge_conflict),
+                    window: window2.clone(),
                 };
                 interface.staged_area_ui();
             });
@@ -466,14 +538,175 @@ impl Interface {
 
         self.window.borrow_mut().show_all();
     }
+
+    fn inicialize(&mut self, path_file: String) {
+        let mut new_content = Rc::new(RefCell::new(String::new()));
+        let mut current_content = Rc::new(RefCell::new(String::new()));
+        let mut incoming_content = Rc::new(RefCell::new(String::new()));
+        let mut old_content = Rc::new(RefCell::new(String::new()));
+
+        let mut binding = io::stdout();
+        let repo = GitRepository::open(&self.repo_git_path, &mut binding).unwrap();
+        let mut reader = repo.get_file_reader(path_file.to_string()).unwrap();
+
+        let mut line = String::new();
+
+        while let Ok(byte) = reader.read_line(&mut line) {
+            if byte == 0 {
+                break;
+            }
+            old_content.borrow_mut().push_str(&line);
+            old_content.borrow_mut().push('\n');
+            line = String::new();
+        }
+
+        actualize_conflicts(
+            "current",
+            &mut new_content,
+            &mut current_content,
+            &mut incoming_content,
+            &mut old_content,
+        );
+
+        let merge_window: gtk::Window = self.builder.object("merge_window").unwrap();
+        merge_window.show_all();
+
+        let buttons = ["current", "incoming", "next"];
+
+        for button in buttons {
+            self.function_button(
+                button,
+                &new_content,
+                &current_content,
+                &incoming_content,
+                &old_content,
+            );
+        }
+
+        let finalize_conflict_button: gtk::Button =
+            self.builder.object("finalize_conflict_button").unwrap();
+
+        let new_content_clone = new_content.clone();
+        let current_content_clone = current_content.clone();
+        let incoming_content_clone = incoming_content.clone();
+        let old_content_clone = old_content.clone();
+        let repo_git_path = self.repo_git_path.clone();
+
+        let label_contents = [
+            ("new", new_content),
+            ("current", current_content),
+            ("incoming", incoming_content),
+            ("old", old_content),
+        ];
+
+        for (label_name, content) in label_contents {
+            let mut builder = self.builder.clone();
+
+            actualize_label(&mut builder, label_name, &content);
+        }
+
+        finalize_conflict_button.connect_clicked(move |_| {
+            let new_content_clone = new_content_clone.clone();
+            let current_content_clone = current_content_clone.clone();
+            let incoming_content_clone = incoming_content_clone.clone();
+            let old_content_clone = old_content_clone.clone();
+            let repo_git_path = repo_git_path.clone();
+
+            // actualizamos el contenido de new_content con los contenidos restantes de los otros
+            new_content_clone
+                .borrow_mut()
+                .push_str(&current_content_clone.borrow_mut());
+            new_content_clone
+                .borrow_mut()
+                .push_str(&incoming_content_clone.borrow_mut());
+            new_content_clone
+                .borrow_mut()
+                .push_str(&old_content_clone.borrow_mut());
+
+            let mut binding = io::stdout();
+            let mut repo = GitRepository::open(&repo_git_path, &mut binding).unwrap();
+            repo.write_file(&path_file, &mut new_content_clone.borrow_mut())
+                .unwrap();
+        });
+    }
+
+    fn function_button(
+        &mut self,
+        button_name: &str,
+        new_content: &Rc<RefCell<String>>,
+        current_content: &Rc<RefCell<String>>,
+        incoming_content: &Rc<RefCell<String>>,
+        old_content: &Rc<RefCell<String>>,
+    ) {
+        let button_str = format!("accept_{}_button", button_name);
+        let accept_button: gtk::Button = self.builder.object(&button_str).unwrap();
+
+        let new_content_clone = new_content.clone();
+        let current_content_clone = current_content.clone();
+        let incoming_content_clone = incoming_content.clone();
+        let old_content_clone = old_content.clone();
+
+        let button_name = button_name.to_string();
+        let builder = self.builder.clone();
+        accept_button.connect_clicked(move |_| {
+            let mut new_content_clone = new_content_clone.clone();
+            let mut current_content_clone = current_content_clone.clone();
+            let mut incoming_content_clone = incoming_content_clone.clone();
+            let mut old_content_clone = old_content_clone.clone();
+
+            actualize_conflicts(
+                &button_name,
+                &mut new_content_clone,
+                &mut current_content_clone,
+                &mut incoming_content_clone,
+                &mut old_content_clone,
+            );
+
+            let label_contents = [
+                ("new", new_content_clone),
+                ("current", current_content_clone),
+                ("incoming", incoming_content_clone),
+                ("old", old_content_clone),
+            ];
+
+            for (label_name, content) in label_contents {
+                let mut builder = builder.clone();
+                actualize_label(&mut builder, label_name, &content);
+            }
+        });
+    }
+}
+
+fn actualize_label(builder: &mut gtk::Builder, label_name: &str, content: &Rc<RefCell<String>>) {
+    let label_name = format!("{}_content_label", label_name);
+    let content_label: gtk::Label = builder.object(&label_name).unwrap();
+    content_label.set_text(&content.borrow().to_string());
 }
 
 fn staged_area_func(
     repo_git_path: String,
-) -> Result<(HashSet<String>, HashSet<String>), CommandError> {
+) -> Result<(HashSet<String>, HashSet<String>, HashSet<String>), CommandError> {
     let mut output = io::stdout();
     let mut repo = GitRepository::open(&repo_git_path, &mut output).unwrap();
-    repo.get_stage_and_unstage_changes()
+    let (staging_changes, mut unstaging_changes) = repo.get_stage_and_unstage_changes()?;
+    // let staging_area = repo.staging_area()?;
+    //let merge_conflicts = staging_area.get_unmerged_files();
+    //let files_merge_conflict = merge_conflicts.keys().cloned().collect::<HashSet<String>>();
+
+    let mut files_merge_conflict = HashSet::new();
+    files_merge_conflict.insert("meli.txt".to_string());
+    files_merge_conflict.insert("ian.txt".to_string());
+
+    //ELIMINARRRRRRR
+    for conflict in &staging_changes {
+        files_merge_conflict.remove(conflict);
+        println!("conflict: {}", conflict);
+    }
+
+    for conflict in &files_merge_conflict {
+        unstaging_changes.remove(conflict);
+    }
+    Ok((staging_changes, unstaging_changes, files_merge_conflict))
 }
 
 fn commit_function(repo: &mut GitRepository, builder: gtk::Builder) {
@@ -603,15 +836,6 @@ fn draw_lines_to_sons(
                 context.stroke().unwrap();
                 Inhibit(false)
             });
-            // drawing_area.connect_draw(move |_, context| {
-            //     // Dibuja una línea en el DrawingArea
-            //     context.set_source_rgb(c1, c2, c3);
-            //     context.set_line_width(5.0);
-            //     context.move_to(x, sons_clone.1.clone());
-            //     context.line_to(sons_clone.0.clone(), sons_clone.1.clone());
-            //     context.stroke().unwrap();
-            //     Inhibit(false)
-            // });
         }
     }
 }
@@ -626,168 +850,112 @@ fn draw_commit_point(drawing_area: &DrawingArea, c1: f64, c2: f64, c3: f64, x: f
     });
 }
 
-//             // fn main() {
-//             //     if gtk::init().is_err() {
-//             //         println!("Failed to initialize GTK.");
-//             //         return;
-//             //     }
+// fn inicialize_conflicts(
+//     reader: &mut BufReader<File>,
+//     new_content: &mut String,
+//     current_content: &mut String,
+//     incomming_content: &mut String,
+//     old_content: &mut String,
+// ) {
+//     let mut line = String::new();
+//     let mut found_first_conflict = false;
 
-//             //     let commits = git::commands::log::Log::run_for_graph().unwrap();
+//     while let Ok(bytes) = reader.read_line(&mut line) {
+//         if line.starts_with("<<<<<<<") && !found_first_conflict {
+//             found_first_conflict = true;
+//             while let Ok(bytes) = reader.read_line(&mut line) {
+//                 if line.starts_with("=======") {
+//                     line = String::new();
+//                     break;
+//                 }
+//                 current_content.push_str(&line);
+//                 current_content.push('\n');
+//                 line = String::new();
+//             }
 
-//             //     let glade_src = include_str!("../../git interface.glade");
-//             //     let builder = gtk::Builder::from_string(glade_src);
-//             //     let window: gtk::Window = builder.object("window app").unwrap();
-
-//             //     set_buttons();
-
-//             //     let stagin_changes_list: gtk::ListBox = builder.object("lista_staging_changes").unwrap();
-
-//             //     let drawing_area: gtk::DrawingArea = builder.object("drawing_area").unwrap();
-//             //     let description_list: gtk::ListBox = builder.object("description_list").unwrap();
-//             //     let date_list: gtk::ListBox = builder.object("date_list").unwrap();
-//             //     let author_list: gtk::ListBox = builder.object("author_list").unwrap();
-//             //     let commits_hashes_list: gtk::ListBox = builder.object("commit_hash_list").unwrap();
-
-//             //     set_graph(
-//             //         &drawing_area,
-//             //         description_list,
-//             //         date_list,
-//             //         author_list,
-//             //         commits_hashes_list,
-//             //         commits,
-//             //     );
-
-//             //     window.connect_delete_event(|_, _| {
-//             //         gtk::main_quit();
-//             //         Inhibit(false)
-//             //     });
-
-//             //     window.show_all();
-
-//             //     gtk::main();
-//             // }
-
-//             // fn make_graph(
-//             //     drawing_area: &DrawingArea,
-//             //     hash_branches: &mut HashMap<String, usize>,
-//             //     hash_sons: &mut HashMap<String, Vec<(f64, f64)>>,
-//             //     identado: &mut usize,
-//             //     commit: &(CommitObject, Option<String>),
-//             //     y: i32,
-//             // ) -> usize {
-//             //     let commit_branch = commit.1.as_ref().unwrap();
-//             //     //let commit_obj = &commit.0;
-//             //     if !hash_branches.contains_key(commit_branch) {
-//             //         hash_branches.insert(commit_branch.clone(), *identado);
-//             //         *identado += 1;
-//             //     }
-
-//             //     let i = hash_branches.get(commit_branch).unwrap();
-//             //     let index_color = i % GRAPH_COLORS.len();
-//             //     let (c1, c2, c3): (f64, f64, f64) = GRAPH_COLORS[index_color];
-//             //     let x: f64 = *i as f64 * 3.0;
-//             //     let y: f64 = y as f64 * 1.0;
-
-//             //     // Conéctate al evento "draw" del DrawingArea para dibujar
-//             //     draw_commit_point(drawing_area, c1, c2, c3, x, y);
-
-//             //     let commit_hash = &commit.0.get_hash_string().unwrap();
-//             //     draw_lines_to_sons(hash_sons, commit_hash, drawing_area, c1, c2, c3, x, y);
-
-//             //     for parent in &commit.0.get_parents() {
-//             //         let sons_parent = hash_sons.entry(parent.clone()).or_default();
-//             //         sons_parent.push((x, y));
-//             //     }
-
-//             //     return *identado;
-//             // }
-
-//             // fn draw_commit_point(drawing_area: &DrawingArea, c1: f64, c2: f64, c3: f64, x: f64, y: f64) {
-//             //     drawing_area.connect_draw(move |_, context| {
-//             //         // Dibuja un punto en la posición (100, 100)
-//             //         context.set_source_rgb(c1, c2, c3); // Establece el color en rojo
-//             //         context.arc(x, y, 5.0, 0.0, 2.0 * std::f64::consts::PI); // Dibuja un círculo (punto)
-//             //         context.fill();
-//             //         Inhibit(false)
-//             //     });
-//             // }
-
-//             // fn add_row_to_list(row_information: &String, row_list: &ListBox) -> i32 {
-//             //     let label = Label::new(Some(&row_information));
-//             //     let row_date = ListBoxRow::new();
-//             //     row_date.add(&label);
-//             //     row_list.add(&row_date);
-//             //     row_date.allocation().y()
-//             // }
-
-//             // // fn add_
-
-//             // // for _ in 1..50 {
-//             // //     let drawing_area = DrawingArea::new();
-//             // //     drawing_area.set_size_request(300, 300);
-//             // //     drawing_area.connect_draw(|_, context| {
-//             // //         // Dibuja una línea en el DrawingArea
-//             // //         context.set_source_rgb(1.0, 1.0, 0.0);
-//             // //         context.set_line_width(5.0);
-//             // //         context.move_to(10.0, 10.0);
-//             // //         context.line_to(190.0, 190.0);
-//             // //         context.stroke();
-//             // //         Inhibit(false)
-//             // //     });
-//             // //     stagin_changes_list.add(&drawing_area);
-//             // // }
-//             // // }
-
-//             // fn set_buttons() {
-//             //     // let commit: gtk::Button = builder.object("commit").unwrap();
-//             //     // let more_options: gtk::Button = builder.object("more options").unwrap();
-//             //     // let git_graph: gtk::Button = builder.object("git graph").unwrap();
-//             //     // let refresh: gtk::Button = builder.object("refresh").unwrap();
-//             //     // let mensaje_commit: gtk::Entry = builder.object("mensaje commit").unwrap();
-//             // }
-
-//             // // commit.connect_clicked(move |_| {
-//             // //     if mensaje_commit.text().len() == 0 {
-//             // //         let dialog = gtk::MessageDialog::new(
-//             // //             Some(&window),
-//             // //             gtk::DialogFlags::MODAL,
-//             // //             gtk::MessageType::Error,
-//             // //             gtk::ButtonsType::Ok,
-//             // //             "No se ha ingresado un mensaje de commit",
-//             // //         );
-//             // //         dialog.run();
-//             // //         dialog.hide();
-//             // //     } else {
-//             // //         let dialog = gtk::MessageDialog::new(
-//             // //             Some(&window),
-//             // //             gtk::DialogFlags::MODAL,
-//             // //             gtk::MessageType::Info,
-//             // //             gtk::ButtonsType::Ok,
-//             // //             "Commit realizado con exito",
-//             // //         );
-//             // //         dialog.run();
-//             // //         dialog.hide();
-//             // //     }
-//             // // });
-//              = sons.clone();
-//             drawing_area.connect_draw(move |_, context| {
-//                 // Dibuja una línea en el DrawingArea
-//                 context.set_source_rgb(c1, c2, c3);
-//                 context.set_line_width(5.0);
-//                 context.move_to(x, y);
-//                 context.line_to(x, sons_clone.1.clone());
-//                 context.stroke();
-//                 Inhibit(false)
-//             });
-//             drawing_area.connect_draw(move |_, context| {
-//                 // Dibuja una línea en el DrawingArea
-//                 context.set_source_rgb(c1, c2, c3);
-//                 context.set_line_width(5.0);
-//                 context.move_to(x, sons_clone.1.clone());
-//                 context.line_to(sons_clone.0.clone(), sons_clone.1.clone());
-//                 context.stroke();
-//                 Inhibit(false)
-//             });
+//             while let Ok(bytes) = reader.read_line(&mut line) {
+//                 if line.starts_with(">>>>>>>") {
+//                     line = String::new();
+//                     break;
+//                 }
+//                 incomming_content.push_str(&line);
+//                 incomming_content.push('\n');
+//                 line = String::new();
+//             }
 //         }
+//         if !found_first_conflict {
+//             new_content.push_str(&line);
+//             new_content.push('\n');
+//         } else {
+//             old_content.push_str(&line);
+//             old_content.push('\n');
+//         }
+//         line = String::new();
 //     }
 // }
+
+fn actualize_conflicts(
+    accept_changes: &str,
+    new_content: &mut Rc<RefCell<String>>,
+    current_content: &mut Rc<RefCell<String>>,
+    incoming_content: &mut Rc<RefCell<String>>,
+    old_content: &mut Rc<RefCell<String>>,
+) {
+    let mut found_next_conflict = false;
+
+    if accept_changes == "current" {
+        new_content
+            .borrow_mut()
+            .push_str(current_content.borrow().as_str());
+    } else if accept_changes == "incoming" {
+        new_content
+            .borrow_mut()
+            .push_str(incoming_content.borrow().as_str());
+    } else {
+        new_content
+            .borrow_mut()
+            .push_str(current_content.borrow().as_str());
+        new_content
+            .borrow_mut()
+            .push_str(incoming_content.borrow().as_str());
+    }
+
+    let mut old_new_content = String::new();
+    *current_content = Rc::new(RefCell::new(String::new()));
+    *incoming_content = Rc::new(RefCell::new(String::new()));
+
+    let binding = old_content.borrow_mut().clone();
+    let mut lines = binding.lines();
+
+    while let Some(line) = lines.next() {
+        if line.starts_with("<<<<<<<") && !found_next_conflict {
+            found_next_conflict = true;
+            while let Some(current_line) = lines.next() {
+                if current_line.starts_with("=======") {
+                    break;
+                }
+                current_content.borrow_mut().push_str(current_line);
+                current_content.borrow_mut().push('\n');
+            }
+
+            while let Some(inner_line) = lines.next() {
+                if inner_line.starts_with(">>>>>>>") {
+                    break;
+                }
+                incoming_content.borrow_mut().push_str(inner_line);
+                incoming_content.borrow_mut().push('\n');
+            }
+            continue;
+        }
+
+        if !found_next_conflict {
+            new_content.borrow_mut().push_str(line);
+            new_content.borrow_mut().push('\n');
+        } else {
+            old_new_content.push_str(line);
+            old_new_content.push('\n');
+        }
+    }
+
+    *old_content = Rc::new(RefCell::new(old_new_content));
+}

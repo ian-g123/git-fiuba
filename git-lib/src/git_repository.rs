@@ -2,7 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     env,
     fs::{self, DirEntry, File, OpenOptions, ReadDir},
-    io::{Read, Write},
+    io::{Read, Write, BufReader},
     path::{Path, PathBuf},
 };
 
@@ -185,6 +185,15 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    pub fn get_file_reader(&self, file_path: String) -> Result<BufReader<File>, CommandError> {
+        let Some(path) = join_paths!(self.working_dir_path, file_path) else {
+            return Err(CommandError::FileNotFound(file_path.to_string()));
+        };
+
+        let file = File::open(path).unwrap();
+        return Ok(BufReader::new(file));
+    }
+
     pub fn hash_object(&mut self, mut object: GitObject, write: bool) -> Result<(), CommandError> {
         let hex_string = u8_vec_to_hex_string(&mut object.get_hash()?);
         if write {
@@ -194,6 +203,15 @@ impl<'a> GitRepository<'a> {
         }
         let _ = writeln!(self.output, "{}", hex_string);
 
+        Ok(())
+    }
+
+    pub fn write_file(&mut self, path_file : &String, new_content : &mut String) -> Result<(), CommandError> {
+        let Some(path) = join_paths!(self.working_dir_path, path_file) else {
+            return Err(CommandError::FileNotFound(path_file.to_string()));
+        };
+        let mut file = File::create(path).unwrap();
+        file.write_all(new_content.as_bytes()).unwrap();
         Ok(())
     }
 
@@ -1948,7 +1966,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    fn staging_area(&mut self) -> Result<StagingArea, CommandError> {
+    pub fn staging_area(&mut self) -> Result<StagingArea, CommandError> {
         Ok(StagingArea::open(&self.git_path)?)
     }
 
