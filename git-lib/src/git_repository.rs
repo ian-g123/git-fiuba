@@ -968,7 +968,7 @@ impl<'a> GitRepository<'a> {
             "Address: {}, repository_path: {}, repository_url: {}",
             address, repository_path, repository_url
         ));
-        let mut server = GitServer::connect_to(&address)?;
+        let mut server = GitServer::connect_to(&address, &mut self.logger)?;
 
         let _remote_branches =
             self.update_remote_branches(&mut server, &repository_path, &repository_url)?;
@@ -1064,7 +1064,7 @@ impl<'a> GitRepository<'a> {
             address, repository_path, repository_url
         ));
 
-        let mut server = GitServer::connect_to(&address)?;
+        let mut server = GitServer::connect_to(&address, &mut self.logger)?;
         let refs_hash = self.receive_pack(&mut server, &repository_path, &repository_url)?; // ref_hash: HashMap<branch, hash>
 
         // verificamos que todas las branches locales esten actualizadas
@@ -1088,24 +1088,12 @@ impl<'a> GitRepository<'a> {
             return Ok(());
         }
 
-        self.log(&format!("hash_branch_status: {:?}", hash_branch_status));
-
         server.negociate_recieve_pack(hash_branch_status)?;
 
-        self.log("Sending packfile");
         let pack_file: Vec<u8> = make_packfile(commits_map)?;
-        self.log(&format!(
-            "pack_file: {:?}",
-            String::from_utf8_lossy(&pack_file)
-        ));
-
-        server.write_to_socket(&pack_file)?;
-        self.log("sent! Reading response");
-        println!("sent! Reading response");
+        server.send_packfile(&pack_file)?;
 
         let response = server.get_response()?;
-        // let response = server.just_read()?;
-        self.log(&format!("response: {:?}", response));
 
         Ok(())
     }
@@ -1600,10 +1588,13 @@ impl<'a> GitRepository<'a> {
     }
 
     /// Guarda en el archivo de la rama actual el hash del commit que se quiere hacer merge.
-    fn set_head_branch_commit_to(&mut self, commits: &str) -> Result<(), CommandError> {
-        let branch = self.get_head_branch_path()?;
+    fn set_head_branch_commit_to(
+        &mut self,
+        merge_commit_hash_str: &str,
+    ) -> Result<(), CommandError> {
+        let branch_path = self.get_head_branch_path()?;
 
-        self.write_to_file(&branch, commits)?;
+        self.write_to_internal_file(&branch_path, merge_commit_hash_str)?;
         Ok(())
     }
 
@@ -1943,9 +1934,9 @@ impl<'a> GitRepository<'a> {
             let mut boxed_tree: GitObject = Box::new(merged_tree.clone());
             let merge_tree_hash_str = self.db()?.write(&mut boxed_tree, true, &mut self.logger)?;
 
-            self.write_to_file("MERGE_MSG", &message)?;
-            self.write_to_file("AUTO_MERGE", &merge_tree_hash_str)?;
-            self.write_to_file("MERGE_HEAD", &destin.get_hash_string()?)?;
+            self.write_to_internal_file("MERGE_MSG", &message)?;
+            self.write_to_internal_file("AUTO_MERGE", &merge_tree_hash_str)?;
+            self.write_to_internal_file("MERGE_HEAD", &destin.get_hash_string()?)?;
 
             self.restore_merge_conflict(merged_tree)?;
             Ok(())
@@ -2015,7 +2006,11 @@ impl<'a> GitRepository<'a> {
     }
 
     /// Dado un path, crea el archivo correspondiente y escribe el contenido pasado.
-    fn write_to_file(&self, relative_path: &str, content: &str) -> Result<(), CommandError> {
+    pub fn write_to_internal_file(
+        &self,
+        relative_path: &str,
+        content: &str,
+    ) -> Result<(), CommandError> {
         let path_f = join_paths!(self.git_path, relative_path).ok_or(
             CommandError::FileWriteError("Error guardando FETCH_HEAD:".to_string()),
         )?;

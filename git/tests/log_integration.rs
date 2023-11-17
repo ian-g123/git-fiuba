@@ -5,7 +5,7 @@ mod common {
 }
 
 #[test]
-#[ignore]
+#[ignore = "./tests/data/commands/log must be extracted before running the test"]
 fn testx() {
     let path = "./tests/data/commands/log";
     let result = Command::new("../../../../../target/debug/git")

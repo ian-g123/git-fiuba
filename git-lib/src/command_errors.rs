@@ -124,6 +124,7 @@ pub enum CommandError {
     UnmergedFiles,
     /// There cannot be a file and a folder with the same name
     CannotHaveFileAndFolderWithSameName(String),
+
     PushBranchBehind(String),
 
     // InterfaceError(String),
@@ -183,6 +184,10 @@ pub enum CommandError {
     ShallowTree,
 
     MergeConflictsCommit,
+    /// Errror in object decompression
+    ErrorDecompressingObject(String),
+    /// No se pudo obtener el sender del logger
+    NotValidLogger,
 }
 
 impl Error for CommandError {}
@@ -483,6 +488,12 @@ impl fmt::Display for CommandError {
                 write!(f, "El tree guarda solo hashes y no sus objetos")
             }
             CommandError::MergeConflictsCommit => write!(f, "error: Committing is not possible because you have unmerged files.\nhint: Fix them up in the work tree, and then use 'git add/rm <file>'\nhint: as appropriate to mark resolution and make a commit.\nfatal: Exiting because of an unresolved conflict."),
+            CommandError::ErrorDecompressingObject(msg) => {
+                write!(f, "Errror in object decompression: {}", msg)
+            }
+            CommandError::NotValidLogger => {
+                write!(f, "No se pudo obtener el sender del logger")
+            }
         }
     }
 }
