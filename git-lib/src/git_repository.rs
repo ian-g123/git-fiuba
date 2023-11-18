@@ -3176,28 +3176,42 @@ impl<'a> GitRepository<'a> {
             }
         };
 
-        file.write_all(tag_ref.as_bytes()).map_err(|error| {
+        let mut db = self.db()?;
+
+        if !db.has_object(&tag_ref)? {
+            return Err(CommandError::InvalidRef(tag_ref));
+        }
+
+        let tag_object = db.read_object(&tag_ref, &mut self.logger)?;
+        let tag_object_type = tag_object.type_str();
+        let (tagger, timestamp, offset) = self.get_tagger_info()?;
+        let mut tag = TagObject::new(
+            name.to_string(),
+            tag_ref.clone(),
+            tag_object_type,
+            message.to_string(),
+            tagger,
+            timestamp,
+            offset,
+        );
+
+        let file_content = {
+            if write {
+                tag.get_hash_string()?
+            } else {
+                tag_ref
+            }
+        };
+
+        file.write_all(file_content.as_bytes()).map_err(|error| {
             CommandError::FileWriteError(
                 "Error guardando objeto en la nueva tag:".to_string() + &error.to_string(),
             )
         })?;
         if write {
-            let mut db = self.db()?;
-            let tag_object = db.read_object(&tag_ref, &mut self.logger)?;
-            let tag_object_type = tag_object.type_str();
-            let (tagger, timestamp, offset) = self.get_tagger_info()?;
-            let tag = TagObject::new(
-                name.to_string(),
-                tag_ref,
-                tag_object_type,
-                message.to_string(),
-                tagger,
-                timestamp,
-                offset,
-            );
             let mut git_object: GitObject = Box::new(tag);
 
-            let _ = self.db()?.write(&mut git_object, false, &mut self.logger)?;
+            let _ = db.write(&mut git_object, false, &mut self.logger)?;
         }
 
         write!(self.output, "{}", output_message)
