@@ -3150,7 +3150,17 @@ impl<'a> GitRepository<'a> {
         if exists && !force {
             return Err(CommandError::TagAlreadyExists(name.to_string()));
         }
-        // FALTA LEER ANTERIOR: UPDATE REF
+
+        let output_message = {
+            if exists {
+                let hash = fs::read_to_string(path.clone())
+                    .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+                format!("Updated tag '{}' (was {})\n", name, hash[..6].to_string())
+            } else {
+                "".to_string()
+            }
+        };
+
         let Ok(mut file) = File::create(&path) else {
             return Err(CommandError::FileOpenError(path));
         };
@@ -3189,6 +3199,9 @@ impl<'a> GitRepository<'a> {
 
             let _ = self.db()?.write(&mut git_object, false, &mut self.logger)?;
         }
+
+        write!(self.output, "{}", output_message)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
 
         Ok(())
     }

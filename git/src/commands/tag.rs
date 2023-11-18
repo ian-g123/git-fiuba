@@ -178,20 +178,34 @@ impl Tag {
         if self.name.is_empty() {
             return Err(CommandError::TagNameNeeded);
         }
+        let message = self.get_tag_message(stdin)?;
+        if self.create_tag && message.is_empty() {
+            return Err(CommandError::TagMessageEmpty);
+        }
+
+        let mut repo = GitRepository::open("", output)?;
+
         if self.name.is_empty()
             && self.object.is_none()
             && !self.create_tag
             && !self.force
             && self.delete.is_empty()
         {
-            self.list = true;
+            // return repo.list_tags();
         }
 
-        let message = self.get_tag_message(stdin)?;
-
-        if self.create_tag == message.is_empty() {
-            return Err(CommandError::TagMessageEmpty);
+        if !self.delete.is_empty() {
+            // repo.delete_tags(&self.delete)?;
+        } else {
+            repo.create_tag(
+                &self.name,
+                &message,
+                self.object.clone(),
+                self.create_tag,
+                self.force,
+            )?;
         }
+
         Ok(())
     }
 
