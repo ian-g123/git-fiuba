@@ -32,6 +32,7 @@ use crate::{
         git_object::{self, GitObject, GitObjectTrait},
         mode::Mode,
         proto_object::ProtoObject,
+        tag_object::TagObject,
         tree::Tree,
     },
     objects_database::ObjectsDatabase,
@@ -3131,6 +3132,80 @@ impl<'a> GitRepository<'a> {
             };
         }
         Ok(result)
+    }
+
+    // ----- Tag -----
+    pub fn create_tag(
+        &mut self,
+        name: &str,
+        message: &str,
+        object: Option<String>,
+        write: bool,
+        force: bool,
+    ) -> Result<(), CommandError> {
+        let path = join_paths!(self.git_path, "refs/tags/", name).ok_or(
+            CommandError::FileCreationError("Error creando path de tags".to_string()),
+        )?;
+        let exists = Path::new(&path).exists();
+        if exists && !force {
+            return Err(CommandError::TagAlreadyExists(name.to_string()));
+        }
+        // FALTA LEER ANTERIOR: UPDATE REF
+        let Ok(mut file) = File::create(&path) else {
+            return Err(CommandError::FileOpenError(path));
+        };
+        let tag_ref = {
+            if let Some(obj) = object {
+                obj
+            } else {
+                if let Some(hash) = self.get_last_commit_hash()? {
+                    hash
+                } else {
+                    return Err(CommandError::InvalidRef("HEAD".to_string()));
+                }
+            }
+        };
+
+        file.write_all(tag_ref.as_bytes()).map_err(|error| {
+            CommandError::FileWriteError(
+                "Error guardando objeto en la nueva tag:".to_string() + &error.to_string(),
+            )
+        })?;
+        if write {
+            let mut db = self.db()?;
+            let tag_object = db.read_object(&tag_ref, &mut self.logger)?;
+            let tag_object_type = tag_object.type_str();
+            let (tagger, timestamp, offset) = self.get_tagger_info()?;
+            let tag = TagObject::new(
+                name.to_string(),
+                tag_ref,
+                tag_object_type,
+                message.to_string(),
+                tagger,
+                timestamp,
+                offset,
+            );
+            let mut git_object: GitObject = Box::new(tag);
+
+            let _ = self.db()?.write(&mut git_object, false, &mut self.logger)?;
+        }
+
+        Ok(())
+    }
+
+    fn get_tagger_info(&mut self) -> Result<(Author, i64, i32), CommandError> {
+        let config = self.open_config()?;
+        let Some(tagger_email) = config.get("user", "email") else {
+            return Err(CommandError::UserConfigurationError);
+        };
+        let Some(tagger_name) = config.get("user", "name") else {
+            return Err(CommandError::UserConfigurationError);
+        };
+        let tagger = Author::new(tagger_name, tagger_email);
+        let datetime: DateTime<Local> = Local::now();
+        let timestamp = datetime.timestamp();
+        let offset = datetime.offset().local_minus_utc() / 60;
+        Ok((tagger, timestamp, offset))
     }
 }
 

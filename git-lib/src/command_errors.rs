@@ -195,6 +195,8 @@ pub enum CommandError {
     TagTooManyArgs,
     TagCreateAndDelete,
     TagMessageEmpty,
+    TagAlreadyExists(String),
+    InvalidRef(String),
 }
 
 impl Error for CommandError {}
@@ -506,6 +508,8 @@ impl fmt::Display for CommandError {
             CommandError::TagTooManyArgs => write!(f, "fatal: too many arguments"),
             CommandError::TagCreateAndDelete => write!(f, "No se puede crear y eliminar tags al mismo tiempo"),
             CommandError::TagMessageEmpty => write!(f, "fatal: no tag message?"),
+            CommandError::TagAlreadyExists(tag) => write!(f, "fatal: tag '{tag}' already exists"),
+            CommandError::InvalidRef(tag_ref) => write!(f, "fatal: Failed to resolve '{tag_ref}' as a valid ref."),
         }
     }
 }

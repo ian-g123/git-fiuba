@@ -24,11 +24,11 @@ pub struct TagObject {
     tagger: Author,
     timestamp: i64,
     offset: i32,
-    hash: [u8; 20],
+    hash: Option<[u8; 20]>,
 }
 
 impl TagObject {
-    pub fn new(
+    pub fn new_from_hash(
         name: String,
         object: String,
         object_type: String,
@@ -46,9 +46,31 @@ impl TagObject {
             tagger,
             timestamp,
             offset,
-            hash,
+            hash: Some(hash),
         }
     }
+
+    pub fn new(
+        name: String,
+        object: String,
+        object_type: String,
+        message: String,
+        tagger: Author,
+        timestamp: i64,
+        offset: i32,
+    ) -> TagObject {
+        Self {
+            name,
+            object,
+            object_type,
+            message,
+            tagger,
+            timestamp,
+            offset,
+            hash: None,
+        }
+    }
+
     pub fn read_from(
         stream: &mut dyn Read,
         logger: &mut Logger,
@@ -57,7 +79,7 @@ impl TagObject {
         let (object_hash, object_type, tag_name, tagger, timestamp, offset, message) =
             read_tag_info_from(stream)?;
         let hash = hash_tag.cast_hex_to_u8_vec()?;
-        let tag = TagObject::new(
+        let tag = TagObject::new_from_hash(
             tag_name,
             object_hash,
             object_type,
@@ -100,6 +122,10 @@ impl TagObject {
             .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
 
         Ok(())
+    }
+
+    fn set_hash(&mut self, hash: [u8; 20]) {
+        self.hash = Some(hash);
     }
 }
 
@@ -222,7 +248,14 @@ impl GitObjectTrait for TagObject {
     }
 
     fn get_hash(&mut self) -> Result<[u8; 20], CommandError> {
-        Ok(self.hash)
+        if let Some(hash) = self.hash {
+            return Ok(hash);
+        }
+        let mut buf: Vec<u8> = Vec::new();
+        self.write_to(&mut buf, None)?;
+        let hash = get_sha1(&buf);
+        self.set_hash(hash);
+        Ok(hash)
     }
 
     fn get_info_commit(&self) -> Option<(String, Author, Author, i64, i32)> {
@@ -248,7 +281,7 @@ mod test {
             .to_string()
             .cast_hex_to_u8_vec()
             .unwrap();
-        let mut tag = TagObject::new(
+        let mut tag = TagObject::new_from_hash(
             "tag1".to_string(),
             "754f91b7ebd0c7c2d0c962aaac5e96e2548d6e34".to_string(),
             "commit".to_string(),
