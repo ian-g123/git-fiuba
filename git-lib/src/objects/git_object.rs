@@ -16,6 +16,10 @@ use std::{
 pub type GitObject = Box<dyn GitObjectTrait>;
 
 pub trait GitObjectTrait {
+    fn as_mut_tag(&mut self) -> Option<&mut TagObject> {
+        None
+    }
+
     fn as_mut_blob(&mut self) -> Option<&mut Blob> {
         None
     }

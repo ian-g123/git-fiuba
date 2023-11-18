@@ -3,7 +3,10 @@ use std::io::{Cursor, Read, Write};
 use crate::{
     command_errors::CommandError,
     logger::Logger,
-    utils::{aux::hex_string_to_u8_vec, super_string::SuperStrings},
+    utils::{
+        aux::{get_sha1, hex_string_to_u8_vec},
+        super_string::SuperStrings,
+    },
 };
 
 use super::{
@@ -12,6 +15,7 @@ use super::{
     git_object::{self, GitObject, GitObjectTrait},
 };
 
+#[derive(PartialEq, Debug)]
 pub struct TagObject {
     name: String,
     object: String,
@@ -114,16 +118,16 @@ fn read_tag_info_from(
     };
 
     let object_type_line = lines_next(&mut lines)?;
-    let Some((_, object_type)) = object_line.split_once(' ') else {
+    let Some((_, object_type)) = object_type_line.split_once(' ') else {
         return Err(CommandError::InvalidCommit);
     };
 
     let tag_name_line = lines_next(&mut lines)?;
-    let Some((_, tag_name)) = object_line.split_once(' ') else {
+    let Some((_, tag_name)) = tag_name_line.split_once(' ') else {
         return Err(CommandError::InvalidCommit);
     };
 
-    let mut tagger_line = lines_next(&mut lines)?;
+    let tagger_line = lines_next(&mut lines)?;
 
     let Some((_, tagger_info)) = tagger_line.split_once(' ') else {
         return Err(CommandError::InvalidCommit);
@@ -145,6 +149,10 @@ fn read_tag_info_from(
 }
 
 impl GitObjectTrait for TagObject {
+    fn as_mut_tag(&mut self) -> Option<&mut TagObject> {
+        Some(self)
+    }
+
     fn as_mut_tree(&mut self) -> Option<&mut super::tree::Tree> {
         None
     }
@@ -214,7 +222,7 @@ impl GitObjectTrait for TagObject {
     }
 
     fn get_hash(&mut self) -> Result<[u8; 20], CommandError> {
-        Ok(self.hash.clone())
+        Ok(self.hash)
     }
 
     fn get_info_commit(&self) -> Option<(String, Author, Author, i64, i32)> {
@@ -223,5 +231,49 @@ impl GitObjectTrait for TagObject {
 
     fn get_path(&self) -> Option<String> {
         None
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use std::io::{Seek, SeekFrom};
+
+    use super::*;
+    use crate::{objects::git_object::read_git_object_from, objects_database::ObjectsDatabase};
+
+    #[test]
+    fn test_read_and_write() {
+        let hash = "9bba3e612249063ee15b2cf537d303ef33b2032d"
+            .to_string()
+            .cast_hex_to_u8_vec()
+            .unwrap();
+        let mut tag = TagObject::new(
+            "tag1".to_string(),
+            "754f91b7ebd0c7c2d0c962aaac5e96e2548d6e34".to_string(),
+            "commit".to_string(),
+            "tag1".to_string(),
+            Author::new("name", "email"),
+            1700314430,
+            -0300,
+            hash,
+        );
+
+        let mut buf: Vec<u8> = Vec::new();
+        let mut stream = Cursor::new(&mut buf);
+        tag.write_to(&mut stream, None).unwrap();
+
+        stream.seek(SeekFrom::Start(0)).unwrap();
+
+        let mut tag2 = read_git_object_from(
+            &ObjectsDatabase::new("").unwrap(),
+            &mut stream,
+            "",
+            "9bba3e612249063ee15b2cf537d303ef33b2032d",
+            &mut Logger::new_dummy(),
+        )
+        .unwrap();
+        let tag2 = tag2.as_mut_tag().unwrap();
+        assert_eq!(&mut tag, tag2);
     }
 }
