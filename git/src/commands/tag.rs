@@ -3,7 +3,10 @@ use std::{io::Read, io::Write};
 use crate::commands::command::{Command, ConfigAdderFunction};
 use git_lib::{command_errors::CommandError, git_repository::GitRepository};
 
-use super::commit::{read_message_completely, run_enter_message};
+use super::{
+    command::check_errors_flags,
+    commit::{read_message_completely, run_enter_message},
+};
 
 /// Hace referencia a un Comando Tag.
 pub struct Tag {
@@ -68,7 +71,7 @@ impl Tag {
     /// Configura el flag -m.
     fn add_message_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options = ["-m".to_string()].to_vec();
-        Self::check_errors_flags(i, args, &options)?;
+        check_errors_flags(i, args, &options)?;
         self.check_next_arg(i, args, CommandError::MessageNoValue)?;
         if !self.delete.is_empty() {
             return Err(CommandError::TagCreateAndDelete);
@@ -109,7 +112,7 @@ impl Tag {
     /// Configura el flag -a.
     fn add_create_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options = ["-a".to_string(), "--annotate".to_string()].to_vec();
-        Self::check_errors_flags(i, args, &options)?;
+        check_errors_flags(i, args, &options)?;
         if !self.delete.is_empty() {
             return Err(CommandError::TagCreateAndDelete);
         }
@@ -120,7 +123,7 @@ impl Tag {
     /// Configura el flag -f.
     fn add_force_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options = ["-f".to_string(), "--force".to_string()].to_vec();
-        Self::check_errors_flags(i, args, &options)?;
+        check_errors_flags(i, args, &options)?;
         self.force = true;
         Ok(i + 1)
     }
@@ -128,7 +131,7 @@ impl Tag {
     /// Configura el flag -d.
     fn add_delete_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options = ["-d".to_string(), "--delete".to_string()].to_vec();
-        Self::check_errors_flags(i, args, &options)?;
+        check_errors_flags(i, args, &options)?;
         if self.create_tag || self.message.is_some() || self.force {
             return Err(CommandError::TagCreateAndDelete);
         }
@@ -146,31 +149,7 @@ impl Tag {
         Ok(args.len())
     }
 
-    /// Devuelve true si el siguiente argumento es un flag.
-    fn check_next_arg(
-        &mut self,
-        i: usize,
-        args: &[String],
-        error: CommandError,
-    ) -> Result<(), CommandError> {
-        if i >= args.len() - 1 || Self::is_flag(&args[i + 1]) {
-            return Err(error);
-        }
-        Ok(())
-    }
-
-    /// Comprueba si el flag es invalido. En ese caso, devuelve error.
-    fn check_errors_flags(
-        i: usize,
-        args: &[String],
-        options: &[String],
-    ) -> Result<(), CommandError> {
-        if !options.contains(&args[i]) {
-            return Err(CommandError::WrongFlag);
-        }
-        Ok(())
-    }
-
+    /// Ejecuta el comando Tag.
     fn run(&mut self, stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), CommandError> {
         let message = self.get_tag_message(stdin)?;
         if self.create_tag && message.is_empty() {
@@ -206,6 +185,7 @@ impl Tag {
         Ok(())
     }
 
+    /// Devuelve el mensage del tag.
     fn get_tag_message(&self, stdin: &mut dyn Read) -> Result<String, CommandError> {
         let message = {
             if let Some(message) = self.message.clone() {
@@ -220,10 +200,92 @@ impl Tag {
         Ok(message)
     }
 
+    /// Devuelve el mensaje que se muestra si se intenta crear un tag (-a) sin pasarle un mensaje.
     fn get_enter_message_text_tag(&self) -> String {
         format!(
             "#\n# Write a message for tag:\n#   {}\n# Lines starting with '#' will be ignored.",
             self.name
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_invalid_name() {
+        let mut output_string = Vec::new();
+        let mut stdout_mock = Cursor::new(&mut output_string);
+
+        let input = "prueba1";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+
+        let args = ["".to_string()];
+        match Tag::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
+            Err(error) => assert_eq!(error, CommandError::Name),
+            Ok(_) => assert!(false),
+        }
+    }
+
+    #[test]
+    fn test_invalid_arg() {
+        let mut output_string = Vec::new();
+        let mut stdout_mock = Cursor::new(&mut output_string);
+
+        let input = "prueba1";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+
+        let args = ["-no".to_string()];
+        match Tag::run_from("tag", &args, &mut stdin_mock, &mut stdout_mock) {
+            Err(error) => assert_eq!(error, CommandError::InvalidArguments),
+            Ok(_) => assert!(false),
+        }
+    }
+
+    #[test]
+    fn test_no_name() {
+        let mut output_string = Vec::new();
+        let mut stdout_mock = Cursor::new(&mut output_string);
+
+        let input = "prueba1";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+
+        let args = ["-a".to_string(), "-m".to_string(), "message".to_string()];
+        match Tag::run_from("tag", &args, &mut stdin_mock, &mut stdout_mock) {
+            Err(error) => assert_eq!(error, CommandError::TagNameNeeded),
+            Ok(_) => assert!(false),
+        }
+    }
+
+    #[test]
+    fn test_too_many_args() {
+        let mut output_string = Vec::new();
+        let mut stdout_mock = Cursor::new(&mut output_string);
+
+        let input = "prueba1";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+
+        let args = ["name".to_string(), "ref".to_string(), "third".to_string()];
+        match Tag::run_from("tag", &args, &mut stdin_mock, &mut stdout_mock) {
+            Err(error) => assert_eq!(error, CommandError::TagTooManyArgs),
+            Ok(_) => assert!(false),
+        }
+    }
+
+    #[test]
+    fn test_create_and_delete() {
+        let mut output_string = Vec::new();
+        let mut stdout_mock = Cursor::new(&mut output_string);
+
+        let input = "prueba1";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+
+        let args = ["-a".to_string(), "name".to_string(), "-d".to_string()];
+        match Tag::run_from("tag", &args, &mut stdin_mock, &mut stdout_mock) {
+            Err(error) => assert_eq!(error, CommandError::TagCreateAndDelete),
+            Ok(_) => assert!(false),
+        }
     }
 }

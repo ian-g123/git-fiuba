@@ -3135,6 +3135,8 @@ impl<'a> GitRepository<'a> {
     }
 
     // ----- Tag -----
+
+    /// Crea un tag con la información pasada. Si se usó el flag -a, lo escribe a la base de datos.
     pub fn create_tag(
         &mut self,
         name: &str,
@@ -3144,12 +3146,80 @@ impl<'a> GitRepository<'a> {
         force: bool,
     ) -> Result<(), CommandError> {
         self.log(&format!(
-            "Tag args --> name: {}, message: {}, points to: {:?}, force: {}, write to database: {}",
+            "Creating tag --> name: {}, message: {}, points to: {:?}, force: {}, write to database: {}",
             name, message, object, force, write
         ));
         let path = join_paths!(self.git_path, "refs/tags/", name).ok_or(
             CommandError::FileCreationError("Error creando path de tags".to_string()),
         )?;
+        let output_message = Self::get_create_tag_message(&path, force, name)?;
+        let mut db = self.db()?;
+        let (mut tag, tag_ref) = self.create_tag_object(name, message, object, &db)?;
+        let file_content = {
+            if write {
+                tag.get_hash_string()?
+            } else {
+                tag_ref
+            }
+        };
+        let Ok(mut file) = File::create(&path) else {
+            return Err(CommandError::FileOpenError(path));
+        };
+        file.write_all(file_content.as_bytes()).map_err(|error| {
+            CommandError::FileWriteError(
+                "Error guardando objeto en la nueva tag:".to_string() + &error.to_string(),
+            )
+        })?;
+        if write {
+            let mut git_object: GitObject = Box::new(tag);
+            let _ = db.write(&mut git_object, false, &mut self.logger)?;
+        }
+        write!(self.output, "{}", output_message)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        Ok(())
+    }
+
+    /// Crea un TagObject.
+    fn create_tag_object(
+        &mut self,
+        name: &str,
+        message: &str,
+        object: Option<String>,
+        db: &ObjectsDatabase,
+    ) -> Result<(TagObject, String), CommandError> {
+        let tag_ref = {
+            if let Some(obj) = object {
+                obj
+            } else {
+                if let Some(hash) = self.get_last_commit_hash()? {
+                    hash
+                } else {
+                    return Err(CommandError::InvalidRef("HEAD".to_string()));
+                }
+            }
+        };
+
+        if !db.has_object(&tag_ref)? {
+            return Err(CommandError::InvalidRef(tag_ref));
+        }
+
+        let tag_object = db.read_object(&tag_ref, &mut self.logger)?;
+        let tag_object_type = tag_object.type_str();
+        let (tagger, timestamp, offset) = self.get_tagger_info()?;
+        let tag = TagObject::new(
+            name.to_string(),
+            tag_ref.clone(),
+            tag_object_type,
+            message.to_string(),
+            tagger,
+            timestamp,
+            offset,
+        );
+        Ok((tag, tag_ref))
+    }
+
+    /// Devuelve el mensaje que se mostrará al crear el tag.
+    fn get_create_tag_message(path: &str, force: bool, name: &str) -> Result<String, CommandError> {
         let exists = Path::new(&path).exists();
         if exists && !force {
             return Err(CommandError::TagAlreadyExists(name.to_string()));
@@ -3164,67 +3234,10 @@ impl<'a> GitRepository<'a> {
                 "".to_string()
             }
         };
-
-        let tag_ref = {
-            if let Some(obj) = object {
-                obj
-            } else {
-                if let Some(hash) = self.get_last_commit_hash()? {
-                    hash
-                } else {
-                    return Err(CommandError::InvalidRef("HEAD".to_string()));
-                }
-            }
-        };
-
-        let mut db = self.db()?;
-
-        if !db.has_object(&tag_ref)? {
-            return Err(CommandError::InvalidRef(tag_ref));
-        }
-
-        let tag_object = db.read_object(&tag_ref, &mut self.logger)?;
-        let tag_object_type = tag_object.type_str();
-        let (tagger, timestamp, offset) = self.get_tagger_info()?;
-        let mut tag = TagObject::new(
-            name.to_string(),
-            tag_ref.clone(),
-            tag_object_type,
-            message.to_string(),
-            tagger,
-            timestamp,
-            offset,
-        );
-
-        let file_content = {
-            if write {
-                tag.get_hash_string()?
-            } else {
-                tag_ref
-            }
-        };
-
-        let Ok(mut file) = File::create(&path) else {
-            return Err(CommandError::FileOpenError(path));
-        };
-
-        file.write_all(file_content.as_bytes()).map_err(|error| {
-            CommandError::FileWriteError(
-                "Error guardando objeto en la nueva tag:".to_string() + &error.to_string(),
-            )
-        })?;
-        if write {
-            let mut git_object: GitObject = Box::new(tag);
-
-            let _ = db.write(&mut git_object, false, &mut self.logger)?;
-        }
-
-        write!(self.output, "{}", output_message)
-            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-
-        Ok(())
+        Ok(output_message)
     }
 
+    /// Devuelve información sobre un Tagger, incluyendo el timestamp y offset del tag.
     fn get_tagger_info(&mut self) -> Result<(Author, i64, i32), CommandError> {
         let config = self.open_config()?;
         let Some(tagger_email) = config.get("user", "email") else {
@@ -3240,7 +3253,10 @@ impl<'a> GitRepository<'a> {
         Ok((tagger, timestamp, offset))
     }
 
+    /// Recibe un vector con nombres de tags y las elimina. Si alguna no existe, devuelve error y
+    /// continúa con el resto.
     pub fn delete_tags(&mut self, tags: &Vec<String>) -> Result<(), CommandError> {
+        self.log(&format!("Deleting tags --> {:?}", tags));
         let tags_path = join_paths!(self.git_path, "refs/tags/").ok_or(
             CommandError::DirectoryCreationError(
                 "No se pudo crear el directorio .git/refs/tags".to_string(),
@@ -3269,7 +3285,26 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Lista los tags de refs/tags/
     pub fn list_tags(&mut self) -> Result<(), CommandError> {
+        self.log("Listing tags...");
+        let mut tags = self.get_tags()?;
+
+        tags.sort();
+
+        let mut message = String::new();
+        for tag in tags {
+            message += &format!("{}\n", tag);
+        }
+
+        write!(self.output, "{}", message)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Devuelve un vector con los nombres de tags.
+    fn get_tags(&mut self) -> Result<Vec<String>, CommandError> {
         self.log("Listing tags...");
         let mut tags: Vec<String> = Vec::new();
         let tags_path = join_paths!(self.git_path, "refs/tags/").ok_or(
@@ -3297,18 +3332,7 @@ impl<'a> GitRepository<'a> {
 
             tags.push(tag_name.to_string());
         }
-
-        tags.sort();
-
-        let mut message = String::new();
-        for tag in tags {
-            message += &format!("{}\n", tag);
-        }
-
-        write!(self.output, "{}", message)
-            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-
-        Ok(())
+        Ok(tags)
     }
 }
 

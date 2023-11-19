@@ -3,16 +3,13 @@ use std::io::{Cursor, Read, Write};
 use crate::{
     command_errors::CommandError,
     logger::Logger,
-    utils::{
-        aux::{get_sha1, hex_string_to_u8_vec},
-        super_string::SuperStrings,
-    },
+    utils::{aux::get_sha1, super_string::SuperStrings},
 };
 
 use super::{
     author::Author,
     commit_object::{get_author_info, lines_next, offset_str},
-    git_object::{self, GitObject, GitObjectTrait},
+    git_object::{GitObject, GitObjectTrait},
 };
 
 #[derive(PartialEq, Debug)]
@@ -28,6 +25,7 @@ pub struct TagObject {
 }
 
 impl TagObject {
+    /// Crea un TagObject con su hash.
     pub fn new_from_hash(
         name: String,
         object: String,
@@ -50,6 +48,7 @@ impl TagObject {
         }
     }
 
+    /// Crea un TagObject sin su hash.
     pub fn new(
         name: String,
         object: String,
@@ -71,6 +70,7 @@ impl TagObject {
         }
     }
 
+    /// Crea un GitObject de tipo Tag a partir de su contenido.
     pub fn read_from(
         stream: &mut dyn Read,
         logger: &mut Logger,
@@ -93,6 +93,7 @@ impl TagObject {
         Ok(Box::new(tag))
     }
 
+    /// Muestra información del tag a partir de su contenido.
     pub(crate) fn display_from_stream(
         stream: &mut dyn Read,
         _: usize,
@@ -124,6 +125,7 @@ impl TagObject {
         Ok(())
     }
 
+    /// Guarda el hash del tag.
     fn set_hash(&mut self, hash: [u8; 20]) {
         self.hash = Some(hash);
     }
@@ -197,7 +199,7 @@ impl GitObjectTrait for TagObject {
 
     fn content(
         &mut self,
-        db: Option<&mut crate::objects_database::ObjectsDatabase>,
+        _db: Option<&mut crate::objects_database::ObjectsDatabase>,
     ) -> Result<Vec<u8>, CommandError> {
         let mut buf: Vec<u8> = Vec::new();
         let mut stream = Cursor::new(&mut buf);

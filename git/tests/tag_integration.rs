@@ -1,15 +1,11 @@
 use std::{
-    fs::{self, File},
-    io::{Error, Read, Write},
+    fs::{self},
     path::Path,
     process::Command,
 };
 
-use common::aux::create_base_scene;
-
 use crate::common::aux::{
-    change_dir_testfile1_content_and_remove_dir_testfile2, change_test_scene_4,
-    change_testfile_content, create_test_scene_2, create_test_scene_4, create_test_scene_5,
+    change_dir_testfile1_content_and_remove_dir_testfile2, create_test_scene_2,
 };
 
 mod common {
@@ -243,7 +239,7 @@ fn test_delete_tags() {
         .output()
         .unwrap();
 
-    let result = Command::new("../../../../../../target/debug/git")
+    let _result = Command::new("../../../../../../target/debug/git")
         .arg("tag")
         .arg("tag1")
         .current_dir(path)
@@ -264,7 +260,7 @@ fn test_delete_tags() {
         .output()
         .unwrap();
 
-    let result = Command::new("../../../../../../target/debug/git")
+    let _result = Command::new("../../../../../../target/debug/git")
         .arg("tag")
         .arg("tag2")
         .arg("-a")
