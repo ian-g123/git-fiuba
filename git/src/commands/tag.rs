@@ -13,7 +13,6 @@ pub struct Tag {
     create_tag: bool,
     force: bool,
     delete: Vec<String>,
-    list: bool,
 }
 
 impl Command for Tag {
@@ -63,7 +62,6 @@ impl Tag {
             create_tag: false,
             force: false,
             delete: Vec::new(),
-            list: false,
         }
     }
 
@@ -187,7 +185,7 @@ impl Tag {
             && !self.force
             && self.delete.is_empty()
         {
-            // return repo.list_tags();
+            return repo.list_tags();
         }
 
         if !self.delete.is_empty() {

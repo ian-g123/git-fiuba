@@ -3268,6 +3268,48 @@ impl<'a> GitRepository<'a> {
 
         Ok(())
     }
+
+    pub fn list_tags(&mut self) -> Result<(), CommandError> {
+        self.log("Listing tags...");
+        let mut tags: Vec<String> = Vec::new();
+        let tags_path = join_paths!(self.git_path, "refs/tags/").ok_or(
+            CommandError::DirectoryCreationError(
+                "No se pudo crear el directorio .git/refs/tags".to_string(),
+            ),
+        )?;
+
+        let Ok(paths) = fs::read_dir(tags_path.clone()) else {
+            return Err(CommandError::FileReadError(tags_path));
+        };
+        for path in paths {
+            let path = path.map_err(|error| {
+                CommandError::FileReadError(format!(
+                    "Error leyendo directorio de tags: {}",
+                    error.to_string()
+                ))
+            })?;
+            let file_name = &path.file_name();
+            let Some(tag_name) = file_name.to_str() else {
+                return Err(CommandError::FileReadError(
+                    "Error leyendo directorio de tags".to_string(),
+                ));
+            };
+
+            tags.push(tag_name.to_string());
+        }
+
+        tags.sort();
+
+        let mut message = String::new();
+        for tag in tags {
+            message += &format!("{}\n", tag);
+        }
+
+        write!(self.output, "{}", message)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+
+        Ok(())
+    }
 }
 
 pub fn get_current_file_content(path: &str) -> Result<Vec<u8>, CommandError> {
