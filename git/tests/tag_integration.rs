@@ -222,6 +222,79 @@ fn test_create_ref() {
     _ = std::fs::remove_dir_all(format!("{}", path));
 }
 
+#[test]
+fn test_delete_tags() {
+    let path = "./tests/data/commands/tag/repo3";
+    create_test_scene_2(path);
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("dir/testfile1.txt")
+        .arg("dir/testfile2.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("tag")
+        .arg("tag1")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let tag1_path = format!("{}/.git/refs/tags/tag1", path);
+    let tag1_object = fs::read_to_string(tag1_path).unwrap();
+
+    change_dir_testfile1_content_and_remove_dir_testfile2(path);
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .arg("-a")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("tag")
+        .arg("tag2")
+        .arg("-a")
+        .arg("-m")
+        .arg("message")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let tag2_path = format!("{}/.git/refs/tags/tag2", path);
+    let tag2_object = fs::read_to_string(tag2_path).unwrap();
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("tag")
+        .arg("tag1")
+        .arg("no-existe")
+        .arg("-d")
+        .arg("tag2")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    println!("Tag error: {}", String::from_utf8(result.stderr).unwrap());
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = format!("error: tag 'no-existe' not found.\nDeleted tag tag1 (was {}).\nDeleted tag tag2 (was {}).\n", tag1_object[..7].to_string(), tag2_object[..7].to_string());
+    assert_eq!(expected, stdout);
+
+    _ = std::fs::remove_dir_all(format!("{}", path));
+}
+
 fn check_tag_info(
     path: &str,
     tag_path: &str,

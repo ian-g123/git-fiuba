@@ -137,8 +137,7 @@ impl Tag {
 
         self.name = "".to_string();
         self.object = None;
-        for arg in 1..args.len() {
-            // 0 = 'tag'
+        for arg in 0..args.len() {
             if Self::is_flag(&args[arg]) && !options.contains(&args[arg]) {
                 return Err(CommandError::TagCreateAndDelete);
             }
@@ -175,9 +174,6 @@ impl Tag {
     }
 
     fn run(&mut self, stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), CommandError> {
-        if self.name.is_empty() {
-            return Err(CommandError::TagNameNeeded);
-        }
         let message = self.get_tag_message(stdin)?;
         if self.create_tag && message.is_empty() {
             return Err(CommandError::TagMessageEmpty);
@@ -197,6 +193,9 @@ impl Tag {
         if !self.delete.is_empty() {
             repo.delete_tags(&self.delete)?;
         } else {
+            if self.name.is_empty() {
+                return Err(CommandError::TagNameNeeded);
+            }
             repo.create_tag(
                 &self.name,
                 &message,
