@@ -7,6 +7,8 @@ use crate::commands::command::Command;
 use git_lib::command_errors::CommandError;
 use git_lib::git_repository::GitRepository;
 
+use super::command::check_errors_flags;
+
 pub struct Status {
     short: bool,
 }
@@ -53,23 +55,12 @@ impl Status {
     /// Caso contrario, devuelve el índice del próximo flag.
     fn add_short_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options: Vec<String> = ["--short".to_string(), "-s".to_string()].to_vec();
-        Self::check_errors_flags(i, args, &options)?;
+        check_errors_flags(i, args, &options)?;
         self.short = true;
         Ok(i + 1)
     }
 
-    /// Comprueba si el flag es invalido. En ese caso, devuelve error.
-    fn check_errors_flags(
-        i: usize,
-        args: &[String],
-        options: &[String],
-    ) -> Result<(), CommandError> {
-        if !options.contains(&args[i]) {
-            return Err(CommandError::WrongFlag);
-        }
-        Ok(())
-    }
-
+    /// Ejecuta el comando Status
     fn run(&self, output: &mut dyn Write) -> Result<(), CommandError> {
         let mut repo = GitRepository::open("", output)?;
         if self.short {
@@ -157,7 +148,7 @@ mod tests {
         let args = ["no-existe".to_string()];
         let options: Vec<String> = ["--short".to_string(), "-s".to_string()].to_vec();
 
-        let result = Status::check_errors_flags(i, &args, &options);
+        let result = check_errors_flags(i, &args, &options);
 
         assert!(matches!(result, Err(CommandError::WrongFlag)));
     }
@@ -169,7 +160,7 @@ mod tests {
         let args = ["-b".to_string()];
         let options: Vec<String> = ["--branch".to_string(), "-b".to_string()].to_vec();
 
-        let result = Status::check_errors_flags(i, &args, &options);
+        let result = check_errors_flags(i, &args, &options);
 
         assert!(result.is_ok());
     }

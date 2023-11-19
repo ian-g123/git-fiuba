@@ -3,6 +3,8 @@ use std::{io::Read, io::Write};
 use crate::commands::command::{Command, ConfigAdderFunction};
 use git_lib::{command_errors::CommandError, git_repository::GitRepository};
 
+use super::command::check_errors_flags;
+
 /// Hace referencia a un Comando Commit.
 pub struct Commit {
     all: bool,
@@ -70,7 +72,7 @@ impl Commit {
         args: &[String],
     ) -> Result<usize, CommandError> {
         let options = ["-C".to_string(), "--reuse-message".to_string()].to_vec();
-        Self::check_errors_flags(i, args, &options)?;
+        check_errors_flags(i, args, &options)?;
         self.check_next_arg(i, args, CommandError::ReuseMessageNoValue)?;
         self.reuse_message = Some(args[i + 1].clone());
         Ok(i + 2)
@@ -79,7 +81,7 @@ impl Commit {
     /// Configura el flag -m.
     fn add_message_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options = ["-m".to_string()].to_vec();
-        Self::check_errors_flags(i, args, &options)?;
+        check_errors_flags(i, args, &options)?;
         self.check_next_arg(i, args, CommandError::MessageNoValue)?;
         let mut new_message: String = String::new();
         if let Some(message) = &self.message {
@@ -94,7 +96,7 @@ impl Commit {
     /// Configura el flag --dry-run.
     fn add_dry_run_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options = ["--dry-run".to_string()].to_vec();
-        Self::check_errors_flags(i, args, &options)?;
+        check_errors_flags(i, args, &options)?;
         self.dry_run = true;
         Ok(i + 1)
     }
@@ -102,7 +104,7 @@ impl Commit {
     /// Configura el flag -q.
     fn add_quiet_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options = ["-q".to_string(), "--quiet".to_string()].to_vec();
-        Self::check_errors_flags(i, args, &options)?;
+        check_errors_flags(i, args, &options)?;
         self.quiet = true;
         Ok(i + 1)
     }
@@ -110,7 +112,7 @@ impl Commit {
     /// Configura el flag (--all | -a).
     fn add_all_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options = ["-a".to_string(), "--all".to_string()].to_vec();
-        Self::check_errors_flags(i, args, &options)?;
+        check_errors_flags(i, args, &options)?;
         self.all = true;
         Ok(i + 1)
     }
@@ -122,31 +124,6 @@ impl Commit {
         }
         self.files.push(args[i].clone());
         Ok(i + 1)
-    }
-
-    /// Devuelve true si el siguiente argumento es un flag.
-    fn check_next_arg(
-        &mut self,
-        i: usize,
-        args: &[String],
-        error: CommandError,
-    ) -> Result<(), CommandError> {
-        if i >= args.len() - 1 || Self::is_flag(&args[i + 1]) {
-            return Err(error);
-        }
-        Ok(())
-    }
-
-    /// Comprueba si el flag es invalido. En ese caso, devuelve error.
-    fn check_errors_flags(
-        i: usize,
-        args: &[String],
-        options: &[String],
-    ) -> Result<(), CommandError> {
-        if !options.contains(&args[i]) {
-            return Err(CommandError::WrongFlag);
-        }
-        Ok(())
     }
 
     /// Ejecuta el Comando Commit.

@@ -14,7 +14,7 @@ use crate::{
         changes_types::{self, ChangeType},
         commit_format::CommitFormat,
         format::Format,
-        long_format::{sort_hashmap_and_filter_unmodified, LongFormat},
+        long_format::{set_diverge_message, sort_hashmap_and_filter_unmodified, LongFormat},
         short_format::ShortFormat,
         working_tree::{build_working_tree, get_path_name},
     },
@@ -533,6 +533,9 @@ impl<'a> GitRepository<'a> {
         git_object::display_from_hash(&self.db()?, self.output, hash, &mut self.logger)
     }
 
+    // ----- Commit -----
+
+    /// Hace un commit con los files pasados al comando.
     pub fn commit_files(
         &mut self,
         message: String,
@@ -541,7 +544,7 @@ impl<'a> GitRepository<'a> {
         reuse_commit_info: Option<String>,
         quiet: bool,
     ) -> Result<(), CommandError> {
-        let mut staging_area = StagingArea::open(&self.git_path)?;
+        let mut staging_area = self.staging_area()?;
         self.update_staging_area_files(&files, &mut staging_area)?;
 
         self.commit_priv(
@@ -554,6 +557,7 @@ impl<'a> GitRepository<'a> {
         )
     }
 
+    /// Incluye en el commit la versión del working tree de todos los archivos conocidos por git.
     pub fn commit_all(
         &mut self,
         message: String,
@@ -562,7 +566,7 @@ impl<'a> GitRepository<'a> {
         reuse_commit_info: Option<String>,
         quiet: bool,
     ) -> Result<(), CommandError> {
-        let mut staging_area = StagingArea::open(&self.git_path)?;
+        let mut staging_area = self.staging_area()?;
         self.run_all_config(&mut staging_area)?;
 
         self.commit_priv(
@@ -575,6 +579,7 @@ impl<'a> GitRepository<'a> {
         )
     }
 
+    /// Crea un Commit.
     pub fn commit(
         &mut self,
         message: String,
@@ -584,8 +589,7 @@ impl<'a> GitRepository<'a> {
         quiet: bool,
     ) -> Result<(), CommandError> {
         self.log("Running commit");
-        let mut staging_area = StagingArea::open(&self.git_path)?;
-        self.log("StagingArea opened");
+        let mut staging_area = self.staging_area()?;
         self.commit_priv(
             message,
             &mut staging_area,
@@ -605,13 +609,10 @@ impl<'a> GitRepository<'a> {
         staging_area: &mut StagingArea,
     ) -> Result<(), CommandError> {
         self.log("Running pathspec configuration");
-        self.log("staging area files");
 
         for path in files.iter() {
             self.log(&format!("Updating: {}", path));
             if !Path::new(path).exists() {
-                self.log(&format!("Removed from index: {}", path));
-
                 staging_area.remove(path);
             } else if !self.is_untracked(path, &staging_area)? {
                 self.log(&format!("It's untracked: {}", path));
@@ -624,7 +625,6 @@ impl<'a> GitRepository<'a> {
         self.log("Saving staging area changes");
 
         staging_area.save()?;
-        self.log("Finished running pathspec configuration");
 
         Ok(())
     }
@@ -678,11 +678,8 @@ impl<'a> GitRepository<'a> {
 
         let mut staged_tree = {
             if files.is_empty() {
-                self.log("is_empty");
                 staging_area.get_working_tree_staged(&mut self.logger)?
             } else {
-                self.log("files isnt empty");
-
                 staging_area.get_working_tree_staged_bis(
                     &last_commit_tree,
                     &mut self.logger,
@@ -690,8 +687,6 @@ impl<'a> GitRepository<'a> {
                 )?
             }
         };
-        self.log("BBBBBB");
-
         let commit: CommitObject =
             self.get_commit(&message, parents, staged_tree.to_owned(), reuse_commit_info)?;
 
@@ -801,6 +796,7 @@ impl<'a> GitRepository<'a> {
         Err(CommandError::CommitLookUp(commit_hash))
     }
 
+    /// Devuelve true si hay un merge en proceso.
     fn is_merge(&self) -> Result<bool, CommandError> {
         let path = join_paths!(self.git_path, "MERGE_HEAD").ok_or(CommandError::FileNameError)?;
         if Path::new(&path).exists() {
@@ -809,6 +805,9 @@ impl<'a> GitRepository<'a> {
         Ok(false)
     }
 
+    // ----- Status -----
+
+    /// Compara los commits entre la rama local y la remota.
     fn get_commits_ahead_and_behind_remote(
         &mut self,
         branch: &str,
@@ -838,6 +837,7 @@ impl<'a> GitRepository<'a> {
         Ok((true, ahead, behind))
     }
 
+    /// Ejecuta el comando Status con Long Format.
     pub fn status_long_format(&mut self, commit_output: bool) -> Result<(), CommandError> {
         let branch = self.get_current_branch_name()?;
         let long_format = LongFormat;
@@ -860,6 +860,7 @@ impl<'a> GitRepository<'a> {
         )
     }
 
+    /// Ejecuta el comando Status con Short Format.
     pub fn status_short_format(&mut self, commit_output: bool) -> Result<(), CommandError> {
         let branch = self.get_current_branch_name()?;
         let short_format = ShortFormat;
@@ -883,6 +884,7 @@ impl<'a> GitRepository<'a> {
         )
     }
 
+    /// Cuenta los commits en que divergen la rama local y la remota.
     fn count_commits_ahead_and_behind(
         &mut self,
         commit_destin_str: Option<&String>,
@@ -945,6 +947,8 @@ impl<'a> GitRepository<'a> {
         *branch_tips = new_branch_tips;
         Ok(())
     }
+
+    // -----
 
     pub fn open_config(&self) -> Result<Config, CommandError> {
         Config::open(&self.git_path)
@@ -2127,8 +2131,10 @@ impl<'a> GitRepository<'a> {
 
         return Ok((changes_to_be_commited, changes_not_staged));
     }
+
     // ----- Branch -----
 
+    /// Cambia la referencia de HEAD.
     fn change_current_branch_name(&mut self, new_name: &str) -> Result<(), CommandError> {
         let path = join_paths!(self.git_path, "HEAD").ok_or(CommandError::FileCreationError(
             " No se pudo obtener .git/HEAD".to_string(),
@@ -2146,6 +2152,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Cambia el nombre de una rama.
     pub fn rename_branch(&mut self, branches: &Vec<String>) -> Result<(), CommandError> {
         let head = self.get_current_branch_name()?;
         if branches.len() == 1 {
@@ -2166,6 +2173,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Crea una nueva rama.
     pub fn create_branch(&mut self, new_branch_info: &Vec<String>) -> Result<(), CommandError> {
         let commit_hash: String;
         let mut new_is_remote = false;
@@ -2492,6 +2500,18 @@ impl<'a> GitRepository<'a> {
     }
 
     // ----- Checkout -----
+
+    pub fn show_tracking_info(&mut self) -> Result<(), CommandError> {
+        let branch = self.get_current_branch_name()?;
+        let (diverge, ahead, behind) = self.get_commits_ahead_and_behind_remote(&branch)?;
+        if diverge {
+            let message = set_diverge_message(ahead, behind, &branch);
+            writeln!(self.output, "{}", message.trim())
+                .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        }
+
+        Ok(())
+    }
 
     fn branch_exists(&mut self, branch: &str) -> bool {
         if let Ok(locals) = self.local_branches() {
