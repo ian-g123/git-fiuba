@@ -195,7 +195,7 @@ impl Tag {
         }
 
         if !self.delete.is_empty() {
-            // repo.delete_tags(&self.delete)?;
+            repo.delete_tags(&self.delete)?;
         } else {
             repo.create_tag(
                 &self.name,

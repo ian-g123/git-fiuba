@@ -195,10 +195,29 @@ fn test_create_ref() {
         .current_dir(path)
         .output()
         .unwrap();
-
     let stderr = String::from_utf8(result.stderr).unwrap();
     let expected = format!("fatal: Failed to resolve 'no-existe' as a valid ref.\n");
     assert_eq!(expected, stderr);
+
+    let master_path = format!("{}/.git/refs/heads/master", path);
+    let master_commit = fs::read_to_string(master_path.clone()).unwrap();
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("tag")
+        .arg("tag1")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    println!("Tag error: {}", String::from_utf8(result.stderr).unwrap());
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = "";
+    assert_eq!(expected, stdout);
+
+    let tag1_path = format!("{}/.git/refs/tags/tag1", path);
+    let tag_object = fs::read_to_string(tag1_path).unwrap();
+
+    assert_eq!(master_commit, tag_object);
 
     _ = std::fs::remove_dir_all(format!("{}", path));
 }

@@ -3143,6 +3143,10 @@ impl<'a> GitRepository<'a> {
         write: bool,
         force: bool,
     ) -> Result<(), CommandError> {
+        self.log(&format!(
+            "Tag args --> name: {}, message: {}, points to: {:?}, force: {}, write to database: {}",
+            name, message, object, force, write
+        ));
         let path = join_paths!(self.git_path, "refs/tags/", name).ok_or(
             CommandError::FileCreationError("Error creando path de tags".to_string()),
         )?;
@@ -3161,9 +3165,6 @@ impl<'a> GitRepository<'a> {
             }
         };
 
-        let Ok(mut file) = File::create(&path) else {
-            return Err(CommandError::FileOpenError(path));
-        };
         let tag_ref = {
             if let Some(obj) = object {
                 obj
@@ -3203,6 +3204,10 @@ impl<'a> GitRepository<'a> {
             }
         };
 
+        let Ok(mut file) = File::create(&path) else {
+            return Err(CommandError::FileOpenError(path));
+        };
+
         file.write_all(file_content.as_bytes()).map_err(|error| {
             CommandError::FileWriteError(
                 "Error guardando objeto en la nueva tag:".to_string() + &error.to_string(),
@@ -3233,6 +3238,35 @@ impl<'a> GitRepository<'a> {
         let timestamp = datetime.timestamp();
         let offset = datetime.offset().local_minus_utc() / 60;
         Ok((tagger, timestamp, offset))
+    }
+
+    pub fn delete_tags(&mut self, tags: &Vec<String>) -> Result<(), CommandError> {
+        let tags_path = join_paths!(self.git_path, "refs/tags/").ok_or(
+            CommandError::DirectoryCreationError(
+                "No se pudo crear el directorio .git/refs/tags".to_string(),
+            ),
+        )?;
+        let mut errors: String = String::new();
+        let mut deletions = String::new();
+
+        for tag in tags {
+            let path = tags_path.clone() + tag;
+            if !Path::new(&path).exists() {
+                errors += &format!("error: tag '{tag}' not found.\n");
+                continue;
+            };
+            let hash = fs::read_to_string(path.clone())
+                .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+
+            fs::remove_file(path.clone())
+                .map_err(|error| CommandError::RemoveFileError(error.to_string()))?;
+
+            deletions += &format!("Deleted tag {tag} (was {}).\n", hash[..7].to_string());
+        }
+        write!(self.output, "{}{}", errors, deletions)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+
+        Ok(())
     }
 }
 
