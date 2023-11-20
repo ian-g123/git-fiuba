@@ -65,7 +65,7 @@ fn main() {
 
     let clone_rc_repo_dir_text = rc_repo_dir_text.clone();
 
-    ventana_inicial(
+    initial_window(
         inicial_apply,
         rc_correct_path,
         clone_rc_repo_dir_text,
@@ -76,7 +76,7 @@ fn main() {
     gtk::main();
 }
 
-fn ventana_inicial(
+fn initial_window(
     inicial_apply: Button,
     rc_correct_path: Rc<RefCell<bool>>,
     clone_rc_repo_dir_text: Rc<RefCell<String>>,
@@ -87,7 +87,6 @@ fn ventana_inicial(
     inicial_apply.connect_clicked(move |_| {
         let clone_correct_path_clone = clone_rc_correct_path.clone();
         let repo_dir_text_clone = clone_rc_repo_dir_text.clone();
-        // let inicial_window = inicial_window.clone();
         let repo_dir = repo_dir.clone();
 
         let repo_dir = repo_dir.clone();
@@ -156,6 +155,7 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
             Inhibit(false)
         });
     interface.principal_window.borrow_mut().show_all();
+    interface.inicialize_apply_button();
 
     ControlFlow::Continue(())
 }
@@ -275,6 +275,9 @@ impl Interface {
                         files_merge_conflict: Rc::clone(&files_merge_conflict),
                         principal_window: window,
                     };
+                    // let branch_window: gtk::Window = self.builder.object("branch_window").unwrap();
+                    // let branch_window_grid: gtk::Grid = self.builder.object("branch_window_grid").unwrap();
+                    // branch_window.remove(&branch_window_grid);
                     interface.branch_function();
                 }
                 "commit" => {
@@ -377,8 +380,9 @@ impl Interface {
                             files_merge_conflict: Rc::clone(&files_merge_conflict_clone),
                             principal_window: window.clone(),
                         };
-                        println!("inicialize");
-                        interface.inicialize(clone_file);
+                        println!("merge");
+                        interface.add_widgets_to_merge_window();
+                        interface.initialize_merge(clone_file);
                     });
                 }
                 _ => {}
@@ -443,9 +447,10 @@ impl Interface {
     }
 
     fn branch_function(&mut self) {
-        let branch_window: gtk::Window = self.builder.object("branch_window").unwrap();
+        // Agregamos los widgets a la ventana de branches
+        let branch_window = self.add_widgets_to_branch_window();
         let branches_list: gtk::ListBox = self.builder.object("branches_list").unwrap();
-        let apply_button: gtk::Button = self.builder.object("apply_button").unwrap();
+
         let mut binding = io::stdout();
         let Ok(mut repo) = GitRepository::open(&self.repo_git_path, &mut binding) else {
             dialog_window(
@@ -465,9 +470,24 @@ impl Interface {
         }
 
         branch_window.show_all();
-        let new_name_branch: gtk::Entry = self.builder.object("entry_for_new_branch").unwrap();
 
+        // Eliminamos todos los widgets de la ventana de branches
+        let branch_window_clone = branch_window.clone();
+        let builder = self.builder.clone();
+        branch_window.connect_delete_event(move |_, _| {
+            let branches_list = branches_list.clone();
+            let builder = builder.clone();
+            let branch_window_clone = branch_window_clone.clone();
+            remove_childs(&branches_list);
+            remove_widgets_to_branch_window(builder, branch_window_clone);
+            Inhibit(false)
+        });
+    }
+
+    fn inicialize_apply_button(&mut self) {
         let repo_git_path = self.repo_git_path.clone();
+        let apply_button: gtk::Button = self.builder.object("apply_button").unwrap();
+        let new_name_branch: gtk::Entry = self.builder.object("entry_for_new_branch").unwrap();
         apply_button.connect_clicked(move |_| {
             let mut binding = io::stdout();
             let Ok(mut repo) = GitRepository::open(&repo_git_path, &mut binding) else {
@@ -482,23 +502,99 @@ impl Interface {
                 return;
             }
             let vec_branch = vec![name_branch_text.to_string()];
-            println!("vec_branch: {:?}", vec_branch);
             match repo.create_branch(&vec_branch) {
                 Ok(_) => dialog_window("Rama creada con éxito".to_string()),
                 Err(err) => dialog_window(err.to_string()),
             };
-            remove_childs(&branches_list);
-
-            branch_window.connect_delete_event(|_, _| {
-                // Devolver `Inhibit(false)` para cerrar la ventana principal.
-                // Devolver `Inhibit(true)` para evitar que la ventana principal se cierre.
-                Inhibit(false)
-            });
-
-            branch_window.connect_destroy(|_| {
-                gtk::main_quit();
-            });
         });
+    }
+
+    fn add_widgets_to_merge_window(&mut self) {
+        let merge_window: gtk::Window = self.builder.object("merge_window").unwrap();
+        let merge_grid: gtk::Grid = self.builder.object("merge_grid").unwrap();
+        let merge_conflicts_label: gtk::Label = self.builder.object("merge_conflicts").unwrap();
+        let grid_buttons: gtk::Grid = self.builder.object("grid_buttons").unwrap();
+
+        let accept_current_button: gtk::Button =
+            self.builder.object("accept_current_button").unwrap();
+        let accept_incoming_button: gtk::Button =
+            self.builder.object("accept_incoming_button").unwrap();
+        let accept_next_button: gtk::Button = self.builder.object("accept_next_button").unwrap();
+
+        let current_scrolled: gtk::ScrolledWindow =
+            self.builder.object("current_scrolled").unwrap();
+        let viewport_current: gtk::Viewport = self.builder.object("viewport_current").unwrap();
+        let current_label: gtk::Label = self.builder.object("current_content_label").unwrap();
+
+        let old_scrolled: gtk::ScrolledWindow = self.builder.object("old_scrolled").unwrap();
+        let viewport_old: gtk::Viewport = self.builder.object("viewport_old").unwrap();
+        let old_label: gtk::Label = self.builder.object("old_content_label").unwrap();
+
+        let incoming_scrolled: gtk::ScrolledWindow =
+            self.builder.object("incoming_scrolled").unwrap();
+        let viewport_incoming: gtk::Viewport = self.builder.object("viewport_incoming").unwrap();
+        let incoming_label: gtk::Label = self.builder.object("incoming_content_label").unwrap();
+
+        let new_scrolled: gtk::ScrolledWindow = self.builder.object("new_scrolled").unwrap();
+        let view_port_new: gtk::Viewport = self.builder.object("viewport_new").unwrap();
+        let new_label: gtk::Label = self.builder.object("new_content_label").unwrap();
+
+        let finalize_conflict_button: gtk::Button =
+            self.builder.object("finalize_conflict_button").unwrap();
+
+        grid_buttons.attach(&accept_current_button, 0, 0, 1, 1);
+        grid_buttons.attach(&accept_incoming_button, 1, 0, 1, 1);
+        grid_buttons.attach(&accept_next_button, 2, 0, 1, 1);
+
+        viewport_current.add(&current_label);
+        current_scrolled.add(&viewport_current);
+
+        viewport_old.add(&old_label);
+        old_scrolled.add(&viewport_old);
+
+        view_port_new.add(&new_label);
+        new_scrolled.add(&view_port_new);
+
+        viewport_incoming.add(&incoming_label);
+        incoming_scrolled.add(&viewport_incoming);
+
+        merge_grid.attach(&merge_conflicts_label, 0, 0, 1, 1);
+        merge_grid.attach(&new_scrolled, 0, 1, 1, 1);
+        merge_grid.attach(&grid_buttons, 0, 2, 1, 1);
+        merge_grid.attach(&current_scrolled, 0, 3, 1, 1);
+        merge_grid.attach(&incoming_scrolled, 0, 4, 1, 1);
+        merge_grid.attach(&old_scrolled, 0, 5, 1, 1);
+        merge_grid.attach(&finalize_conflict_button, 0, 6, 1, 1);
+
+        merge_window.add(&merge_grid);
+    }
+
+    fn add_widgets_to_branch_window(&mut self) -> gtk::Window {
+        let branch_window: gtk::Window = self.builder.object("branch_window").unwrap();
+        let branch_window_grid: gtk::Grid = self.builder.object("branch_window_grid").unwrap();
+        let entry_grid: gtk::Grid = self.builder.object("entry_grid").unwrap();
+        let scrolled_window: gtk::ScrolledWindow = self.builder.object("scrolled_window").unwrap();
+        let new_branch_label: gtk::Label = self.builder.object("new_branch_label").unwrap();
+        let branch_names: gtk::Label = self.builder.object("branch_names").unwrap();
+        let entry_for_new_branch: gtk::Entry = self.builder.object("entry_for_new_branch").unwrap();
+        let apply_button: gtk::Button = self.builder.object("apply_button").unwrap();
+        let branch_viewport: gtk::Viewport = self.builder.object("branch_viewport").unwrap();
+        let branches_list: gtk::ListBox = self.builder.object("branches_list").unwrap();
+
+        branch_window_grid.attach(&new_branch_label, 0, 0, 1, 1);
+
+        entry_grid.add(&entry_for_new_branch);
+        entry_grid.add(&apply_button);
+        branch_window_grid.attach(&entry_grid, 0, 1, 1, 1);
+
+        branch_window_grid.attach(&branch_names, 0, 2, 1, 1);
+
+        branch_viewport.add(&branches_list);
+        scrolled_window.add(&branch_viewport);
+        branch_window_grid.attach(&scrolled_window, 0, 3, 1, 1);
+
+        branch_window.add(&branch_window_grid);
+        branch_window
     }
 
     fn set_right_area(&mut self, commits: &Vec<(CommitObject, Option<String>)>) {
@@ -549,7 +645,7 @@ impl Interface {
         self.principal_window.borrow_mut().show_all();
     }
 
-    fn inicialize(&mut self, path_file: String) {
+    fn initialize_merge(&mut self, path_file: String) {
         let mut new_content = Rc::new(RefCell::new(String::new()));
         let mut current_content = Rc::new(RefCell::new(String::new()));
         let mut incoming_content = Rc::new(RefCell::new(String::new()));
@@ -584,7 +680,7 @@ impl Interface {
         let buttons = ["current", "incoming", "next"];
 
         for button in buttons {
-            self.function_button(
+            self.merge_function_button(
                 button,
                 &new_content,
                 &current_content,
@@ -616,12 +712,15 @@ impl Interface {
         }
 
         let builder = self.builder.clone();
+        let clone_builder = self.builder.clone();
         let window = self.principal_window.clone();
         let staging_changes = self.staging_changes.clone();
         let unstaging_changes = self.unstaging_changes.clone();
         let files_merge_conflict = self.files_merge_conflict.clone();
+        let merge_window_clone = merge_window.clone();
 
         finalize_conflict_button.connect_clicked(move |_| {
+            let mut clone_builder = clone_builder.clone();
             let new_content_clone = new_content_clone.clone();
             let current_content_clone = current_content_clone.clone();
             let incoming_content_clone = incoming_content_clone.clone();
@@ -647,21 +746,30 @@ impl Interface {
             let mut staging_area = repo.staging_area().unwrap();
             staging_area.remove_from_unmerged_files(&path_file);
 
+            let clone_clone_builder = clone_builder.clone();
             let interface = Interface {
-                builder: builder.clone(),
+                builder: clone_clone_builder,
                 repo_git_path: repo_git_path.to_string(),
                 staging_changes: Rc::clone(&staging_changes),
                 unstaging_changes: Rc::clone(&unstaging_changes),
                 files_merge_conflict: Rc::clone(&files_merge_conflict),
                 principal_window: window.clone(),
             };
-            refresh_function(interface);
+            remove_widgets_to_merge_window(&mut clone_builder, merge_window_clone.clone());
+            merge_window_clone.hide();
+            refresh_function(interface);        
+        });
 
-            merge_window.hide();
+        let clone_merge_window = merge_window.clone();
+        clone_merge_window.connect_delete_event(move |_, _| {
+            let merge_window = merge_window.clone();
+            let mut builder = builder.clone();
+            remove_widgets_to_merge_window(&mut builder, merge_window);
+            Inhibit(false)
         });
     }
 
-    fn function_button(
+    fn merge_function_button(
         &mut self,
         button_name: &str,
         new_content: &Rc<RefCell<String>>,
@@ -707,6 +815,86 @@ impl Interface {
             }
         });
     }
+}
+
+fn remove_widgets_to_merge_window(builder: &mut gtk::Builder, merge_window: gtk::Window) {
+    let merge_grid: gtk::Grid = builder.object("merge_grid").unwrap();
+    let merge_conflicts_label: gtk::Label = builder.object("merge_conflicts").unwrap();
+    let grid_buttons: gtk::Grid = builder.object("grid_buttons").unwrap();
+
+    let accept_current_button: gtk::Button = builder.object("accept_current_button").unwrap();
+    let accept_incoming_button: gtk::Button = builder.object("accept_incoming_button").unwrap();
+    let accept_next_button: gtk::Button = builder.object("accept_next_button").unwrap();
+
+    let current_scrolled: gtk::ScrolledWindow = builder.object("current_scrolled").unwrap();
+    let viewport_current: gtk::Viewport = builder.object("viewport_current").unwrap();
+    let current_label: gtk::Label = builder.object("current_content_label").unwrap();
+
+    let old_scrolled: gtk::ScrolledWindow = builder.object("old_scrolled").unwrap();
+    let viewport_old: gtk::Viewport = builder.object("viewport_old").unwrap();
+    let old_label: gtk::Label = builder.object("old_content_label").unwrap();
+
+    let incoming_scrolled: gtk::ScrolledWindow = builder.object("incoming_scrolled").unwrap();
+    let viewport_incoming: gtk::Viewport = builder.object("viewport_incoming").unwrap();
+    let incoming_label: gtk::Label = builder.object("incoming_content_label").unwrap();
+
+    let new_scrolled: gtk::ScrolledWindow = builder.object("new_scrolled").unwrap();
+    let viewport_new: gtk::Viewport = builder.object("viewport_new").unwrap();
+    let new_label: gtk::Label = builder.object("new_content_label").unwrap();
+
+    let finalize_conflict_button: gtk::Button = builder.object("finalize_conflict_button").unwrap();
+
+    grid_buttons.remove(&accept_current_button);
+    grid_buttons.remove(&accept_incoming_button);
+    grid_buttons.remove(&accept_next_button);
+
+    viewport_current.remove(&current_label);
+    current_scrolled.remove(&viewport_current);
+
+    viewport_old.remove(&old_label);
+    old_scrolled.remove(&viewport_old);
+
+    viewport_new.remove(&new_label);
+    new_scrolled.remove(&viewport_new);
+
+    viewport_incoming.remove(&incoming_label);
+    incoming_scrolled.remove(&viewport_incoming);
+
+    merge_grid.remove(&merge_conflicts_label);
+    merge_grid.remove(&new_scrolled);
+    merge_grid.remove(&grid_buttons);
+    merge_grid.remove(&current_scrolled);
+    merge_grid.remove(&incoming_scrolled);
+    merge_grid.remove(&old_scrolled);
+    merge_grid.remove(&finalize_conflict_button);
+
+    merge_window.remove(&merge_grid);
+}
+
+fn remove_widgets_to_branch_window(builder: gtk::Builder, branch_window_clone: Window) {
+    let builder = builder.clone();
+    let branch_window_grid: gtk::Grid = builder.object("branch_window_grid").unwrap();
+    let entry_grid: gtk::Grid = builder.object("entry_grid").unwrap();
+    let scrolled_window: gtk::ScrolledWindow = builder.object("scrolled_window").unwrap();
+    let new_branch_label: gtk::Label = builder.object("new_branch_label").unwrap();
+    let branch_names: gtk::Label = builder.object("branch_names").unwrap();
+    let entry_for_new_branch: gtk::Entry = builder.object("entry_for_new_branch").unwrap();
+    let apply_button: gtk::Button = builder.object("apply_button").unwrap();
+    let branch_viewport: gtk::Viewport = builder.object("branch_viewport").unwrap();
+    let branches_list: gtk::ListBox = builder.object("branches_list").unwrap();
+
+    branch_window_grid.remove(&new_branch_label);
+
+    entry_grid.remove(&entry_for_new_branch);
+    entry_grid.remove(&apply_button);
+
+    branch_viewport.remove(&branches_list);
+    scrolled_window.remove(&branch_viewport);
+
+    branch_window_grid.remove(&scrolled_window);
+    branch_window_grid.remove(&entry_grid);
+    branch_window_grid.remove(&branch_names);
+    branch_window_clone.remove(&branch_window_grid);
 }
 
 fn refresh_function(mut interface: Interface) -> ControlFlow<()> {
