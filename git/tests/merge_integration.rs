@@ -52,7 +52,7 @@ fn test_merge() {
     );
 
     modify_file_and_commit_in_both_repos_overlaping_changes(&path, git_bin);
-    panic!("PAUSA");
+
     let result = Command::new(git_bin)
         .arg("merge")
         .arg("rama3")
@@ -68,7 +68,7 @@ fn test_merge() {
     file.read_to_string(&mut content).unwrap();
     assert_eq!(
         content,
-        "Primera linea modificada en rama3 de nuevo\nSeparador\n<<<<<<< HEAD\nTercera linea modificada en master\n=======\nTercera linea modificada en rama3\n>>>>>>> origin\n"
+        "Primera linea modificada en rama3\nSeparador\n<<<<<<< master\nTercera linea modificada en master de nuevo\n=======\nTercera linea modificada en rama3\n>>>>>>> rama3\n"
     );
 
     let result = Command::new(git_bin)
@@ -83,8 +83,18 @@ fn test_merge() {
         "error: Committing is not possible because you have unmerged files.\nhint: Fix them up in the work tree, and then use 'git add/rm <file>'\nhint: as appropriate to mark resolution and make a commit.\nfatal: Exiting because of an unresolved conflict.\n"
     );
 
-    // Falta chequear commit
-    panic!("PAUSA");
+    let result = Command::new(git_bin)
+        .arg("commit")
+        .arg("-m")
+        .arg("Commit merge rama3")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    assert_eq!(
+        String::from_utf8(result.stderr).unwrap(),
+        "error: Committing is not possible because you have unmerged files.\nhint: Fix them up in the work tree, and then use 'git add/rm <file>'\nhint: as appropriate to mark resolution and make a commit.\nfatal: Exiting because of an unresolved conflict.\n"
+    );
 
     let _result = Command::new(git_bin)
         .arg("add")
@@ -223,12 +233,12 @@ fn modify_file_and_commit_in_both_repos_overlaping_changes(path: &str, git_bin: 
             .current_dir(path)
             .status()
             .is_ok(),
-        "No se pudo cambiar a master"
+        "No se pudo crear la rama"
     );
 
     let mut file = File::create(path.to_owned() + "/testfile").unwrap();
     file.write_all(
-        b"Primera linea modificada en rama2\nSeparador\nTercera linea modificada en master\n",
+        b"Primera linea modificada en rama2\nSeparador\nTercera linea modificada en master de nuevo\n",
     )
     .unwrap();
 

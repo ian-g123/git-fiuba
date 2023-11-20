@@ -1721,13 +1721,13 @@ impl<'a> GitRepository<'a> {
         head_name: &str,
         destin_name: &str,
     ) -> Result<(), CommandError> {
-        self.log("Running merge_commits");
-
         let (mut common, mut commit_head, mut commit_destin) =
             self.get_common_ansestor(&destin_commit, head_commit)?;
 
         let hash = common.get_hash_string()?;
-        self.log(&format!("Common hash: {}", hash));
+
+        self.log(&format!("Merging {} into {}", destin_commit, head_commit));
+        self.log(&format!("Common: {}", hash));
         if common.get_hash()? == commit_head.get_hash()? {
             return self.merge_fast_forward(&destin_commit);
         }
@@ -1747,12 +1747,6 @@ impl<'a> GitRepository<'a> {
         commit_destin_str: &str,
         commit_head_str: &str,
     ) -> Result<(CommitObject, CommitObject, CommitObject), CommandError> {
-        self.log("Get common ansestor inicio");
-        self.log(&format!(
-            "commit_destin_str: {}, commit_head_str: {}",
-            commit_destin_str, commit_head_str
-        ));
-
         let commit_head = self
             .db()?
             .read_object(&commit_head_str, &mut self.logger)?
