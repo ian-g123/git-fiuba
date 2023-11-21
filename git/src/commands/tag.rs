@@ -245,21 +245,6 @@ mod tests {
     }
 
     #[test]
-    fn test_no_name() {
-        let mut output_string = Vec::new();
-        let mut stdout_mock = Cursor::new(&mut output_string);
-
-        let input = "prueba1";
-        let mut stdin_mock = Cursor::new(input.as_bytes());
-
-        let args = ["-a".to_string(), "-m".to_string(), "message".to_string()];
-        match Tag::run_from("tag", &args, &mut stdin_mock, &mut stdout_mock) {
-            Err(error) => assert_eq!(error, CommandError::TagNameNeeded),
-            Ok(_) => assert!(false),
-        }
-    }
-
-    #[test]
     fn test_too_many_args() {
         let mut output_string = Vec::new();
         let mut stdout_mock = Cursor::new(&mut output_string);

@@ -311,4 +311,21 @@ mod test {
         let tag2 = tag2.as_mut_tag().unwrap();
         assert_eq!(&mut tag, tag2);
     }
+
+    #[test]
+    fn test_get_hash() {
+        let mut tag = TagObject::new(
+            "tag1".to_string(),
+            "754f91b7ebd0c7c2d0c962aaac5e96e2548d6e34".to_string(),
+            "commit".to_string(),
+            "tag1".to_string(),
+            Author::new("Sofia-gb", "sofiagomezb@yahoo.com.ar"),
+            1700314430,
+            -180,
+        );
+
+        let expected = "9bba3e612249063ee15b2cf537d303ef33b2032d";
+        let result = tag.get_hash_string().unwrap();
+        assert_eq!(result, expected);
+    }
 }
