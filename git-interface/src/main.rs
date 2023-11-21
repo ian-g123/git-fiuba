@@ -39,7 +39,6 @@ struct Interface {
     unstaging_changes: Rc<RefCell<HashSet<String>>>,
     files_merge_conflict: Rc<RefCell<HashSet<String>>>,
     principal_window: Rc<RefCell<gtk::Window>>,
-    // branch_window: Rc<RefCell<gtk::Window>>,
 }
 
 fn main() {
@@ -124,9 +123,8 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
         staged_area_func(repo_git_path.to_string()).unwrap();
     let window: gtk::Window = builder.borrow_mut().object("window app").unwrap();
 
-    let builder_interface = builder.borrow_mut().clone();
     let mut interface = Interface {
-        builder: builder_interface,
+        builder: builder.borrow_mut().clone(),
         repo_git_path,
         staging_changes: Rc::new(RefCell::new(staging_changes)),
         unstaging_changes: Rc::new(RefCell::new(unstaging_changes)),
@@ -146,9 +144,10 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
         dialog_window(err_activation.unwrap_err().to_string());
         return ControlFlow::Break(());
     }
-    interface.set_right_area(&commits);
+    interface.set_right_area_ui(&commits);
     interface
         .principal_window
+        .clone()
         .borrow_mut()
         .connect_delete_event(|_, _| {
             gtk::main_quit();
@@ -156,6 +155,62 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
         });
     interface.principal_window.borrow_mut().show_all();
     interface.inicialize_apply_button();
+
+    let finalize_conflict_button: gtk::Button = interface
+        .builder
+        .object("finalize_conflict_button")
+        .unwrap();
+
+    finalize_conflict_button.connect_clicked(move |_| {
+        let principal_window = interface.principal_window.clone();
+        let merge_window: gtk::Window = interface.builder.object("merge_window").unwrap();
+        let new_label: gtk::Label = interface.builder.object("new_content_label").unwrap();
+        let old_label: gtk::Label = interface.builder.object("old_content_label").unwrap();
+        let current_label: gtk::Label = interface.builder.object("current_content_label").unwrap();
+        let incoming_label: gtk::Label =
+            interface.builder.object("incoming_content_label").unwrap();
+
+        let mut new_content = new_label.text().to_string();
+        let current_content = current_label.text().to_string();
+        let incoming_content = incoming_label.text().to_string();
+        let old_content = old_label.text().to_string();
+
+        let merge_conflicts_label: gtk::Label =
+            interface.builder.object("merge_conflicts").unwrap();
+        let mut path_file = merge_conflicts_label.text().to_string();
+        path_file = path_file.split(" ").collect::<Vec<&str>>()[3..].join(" ");
+
+        // actualizamos el contenido de new_content con los contenidos restantes de los otros
+        new_content.push_str(&current_content);
+        new_content.push_str(&incoming_content);
+        new_content.push_str(&old_content);
+
+        let repo_git_path = interface.repo_git_path.clone();
+        let mut binding = io::stdout();
+        let mut repo = GitRepository::open(&repo_git_path.to_string(), &mut binding).unwrap();
+        println!("path_file: {}", path_file);
+        repo.write_file(&path_file, &mut new_content).unwrap();
+
+        let mut staging_area = repo.staging_area().unwrap();
+        staging_area.remove_from_unmerged_files(&path_file);
+
+        let (staging_changes, unstaging_changes, files_merge_conflict) =
+            staged_area_func(repo_git_path.to_string()).unwrap();
+
+        let interface2 = Interface {
+            builder: interface.builder.clone(),
+            repo_git_path: repo_git_path.to_string(),
+            staging_changes: Rc::new(RefCell::new(staging_changes)),
+            unstaging_changes: Rc::new(RefCell::new(unstaging_changes)),
+            files_merge_conflict: Rc::new(RefCell::new(files_merge_conflict)),
+            principal_window: principal_window,
+        };
+        merge_window.clone().hide();
+        remove_widgets_to_merge_window(&mut interface.builder.clone(), merge_window.clone());
+        if let ControlFlow::Break(_) = refresh_function(interface2) {
+            return;
+        }
+    });
 
     ControlFlow::Continue(())
 }
@@ -275,9 +330,6 @@ impl Interface {
                         files_merge_conflict: Rc::clone(&files_merge_conflict),
                         principal_window: window,
                     };
-                    // let branch_window: gtk::Window = self.builder.object("branch_window").unwrap();
-                    // let branch_window_grid: gtk::Grid = self.builder.object("branch_window_grid").unwrap();
-                    // branch_window.remove(&branch_window_grid);
                     interface.branch_function();
                 }
                 "commit" => {
@@ -321,6 +373,7 @@ impl Interface {
             self.unstaging_changes.clone(),
             "unstaging".to_string(),
         );
+        //("staging_changes: {:?}", self.unstaging_changes);
         self.stage_and_unstage_ui(
             staging_changes,
             self.staging_changes.clone(),
@@ -387,7 +440,7 @@ impl Interface {
                 }
                 _ => {}
             }
-            let label = Label::new(Some(&format!("{}", file)));
+            let label = Label::new(Some(&format!("{}", file.clone())));
 
             box_outer.pack_start(&label, true, true, 0);
             box_outer.pack_end(&button, false, false, 0);
@@ -597,22 +650,30 @@ impl Interface {
         branch_window
     }
 
-    fn set_right_area(&mut self, commits: &Vec<(CommitObject, Option<String>)>) {
+    fn set_right_area_ui(&mut self, commits: &Vec<(CommitObject, Option<String>)>) {
         let date_list: gtk::ListBox = self.builder.object("date_list").unwrap();
         let author_list: gtk::ListBox = self.builder.object("author_list").unwrap();
-        let drawing_area: gtk::DrawingArea = self.builder.object("drawing_area").unwrap();
+        let drawing_area: gtk::DrawingArea = DrawingArea::new();
+        drawing_area.set_size_request(50, 50);
         let _stagin_changes_list: gtk::ListBox = self.builder.object("staging_list").unwrap();
         let description_list: gtk::ListBox = self.builder.object("description_list").unwrap();
         let commits_hashes_list: gtk::ListBox = self.builder.object("commit_hash_list").unwrap();
+        let grid_drawing_area: gtk::Grid = self.builder.object("grid_drawing_area").unwrap();
 
-        let children = self.principal_window.to_owned().borrow().children();
-        for child in children {
-            if child.is::<gtk::DrawingArea>() {
-                self.principal_window.to_owned().borrow_mut().remove(&child); // VER COMO REMOVER EL DIBUJO
+        let children = grid_drawing_area.children();
+
+        for child in &children {
+            if let Some(drawing_area_old) = child.downcast_ref::<DrawingArea>() {
+                grid_drawing_area.remove(drawing_area_old);
+                println!("ELIMINAAAAAAA");
+                break; // Termina el bucle después de eliminar el DrawingArea
             }
         }
 
-        drawing_area.queue_draw();
+        grid_drawing_area.attach(&drawing_area, 0, 1, 1, 1);
+        drawing_area.set_hexpand(true);
+        drawing_area.set_vexpand(true);
+        // drawing_area.queue_draw();
 
         remove_childs(&description_list);
         remove_childs(&date_list);
@@ -622,7 +683,7 @@ impl Interface {
         let mut hash_sons: HashMap<String, Vec<(f64, f64, String)>> = HashMap::new(); // hash, Vec<(x,y)> de los hijos
         let mut hash_branches: HashMap<String, usize> = HashMap::new();
         let mut identado: usize = 1;
-        let mut y = 11;
+        let mut y = 12;
 
         for commit_and_branches in commits {
             let mut commit = commit_and_branches.0.to_owned();
@@ -646,6 +707,9 @@ impl Interface {
     }
 
     fn initialize_merge(&mut self, path_file: String) {
+        let label_path: gtk::Label = self.builder.object("merge_conflicts").unwrap();
+        label_path.set_text(&format!("Merge Conflicts for: {}", path_file));
+
         let mut new_content = Rc::new(RefCell::new(String::new()));
         let mut current_content = Rc::new(RefCell::new(String::new()));
         let mut incoming_content = Rc::new(RefCell::new(String::new()));
@@ -662,7 +726,6 @@ impl Interface {
                 break;
             }
             old_content.borrow_mut().push_str(&line);
-            old_content.borrow_mut().push('\n');
             line = String::new();
         }
 
@@ -672,6 +735,7 @@ impl Interface {
             &mut current_content,
             &mut incoming_content,
             &mut old_content,
+            true,
         );
 
         let merge_window: gtk::Window = self.builder.object("merge_window").unwrap();
@@ -689,15 +753,6 @@ impl Interface {
             );
         }
 
-        let finalize_conflict_button: gtk::Button =
-            self.builder.object("finalize_conflict_button").unwrap();
-
-        let new_content_clone = new_content.clone();
-        let current_content_clone = current_content.clone();
-        let incoming_content_clone = incoming_content.clone();
-        let old_content_clone = old_content.clone();
-        let repo_git_path = self.repo_git_path.clone();
-
         let label_contents = [
             ("new", new_content),
             ("current", current_content),
@@ -712,53 +767,6 @@ impl Interface {
         }
 
         let builder = self.builder.clone();
-        let clone_builder = self.builder.clone();
-        let window = self.principal_window.clone();
-        let staging_changes = self.staging_changes.clone();
-        let unstaging_changes = self.unstaging_changes.clone();
-        let files_merge_conflict = self.files_merge_conflict.clone();
-        let merge_window_clone = merge_window.clone();
-
-        finalize_conflict_button.connect_clicked(move |_| {
-            let mut clone_builder = clone_builder.clone();
-            let new_content_clone = new_content_clone.clone();
-            let current_content_clone = current_content_clone.clone();
-            let incoming_content_clone = incoming_content_clone.clone();
-            let old_content_clone = old_content_clone.clone();
-            let repo_git_path = repo_git_path.clone();
-
-            // actualizamos el contenido de new_content con los contenidos restantes de los otros
-            new_content_clone
-                .borrow_mut()
-                .push_str(&current_content_clone.borrow_mut());
-            new_content_clone
-                .borrow_mut()
-                .push_str(&incoming_content_clone.borrow_mut());
-            new_content_clone
-                .borrow_mut()
-                .push_str(&old_content_clone.borrow_mut());
-
-            let mut binding = io::stdout();
-            let mut repo = GitRepository::open(&repo_git_path, &mut binding).unwrap();
-            repo.write_file(&path_file, &mut new_content_clone.borrow_mut())
-                .unwrap();
-
-            let mut staging_area = repo.staging_area().unwrap();
-            staging_area.remove_from_unmerged_files(&path_file);
-
-            let clone_clone_builder = clone_builder.clone();
-            let interface = Interface {
-                builder: clone_clone_builder,
-                repo_git_path: repo_git_path.to_string(),
-                staging_changes: Rc::clone(&staging_changes),
-                unstaging_changes: Rc::clone(&unstaging_changes),
-                files_merge_conflict: Rc::clone(&files_merge_conflict),
-                principal_window: window.clone(),
-            };
-            remove_widgets_to_merge_window(&mut clone_builder, merge_window_clone.clone());
-            merge_window_clone.hide();
-            refresh_function(interface);        
-        });
 
         let clone_merge_window = merge_window.clone();
         clone_merge_window.connect_delete_event(move |_, _| {
@@ -800,6 +808,7 @@ impl Interface {
                 &mut current_content_clone,
                 &mut incoming_content_clone,
                 &mut old_content_clone,
+                false,
             );
 
             let label_contents = [
@@ -898,13 +907,15 @@ fn remove_widgets_to_branch_window(builder: gtk::Builder, branch_window_clone: W
 }
 
 fn refresh_function(mut interface: Interface) -> ControlFlow<()> {
-    interface.staged_area_ui();
+    // interface.staged_area_ui(); VER SI DESCOMENTAR
     let commits = match interface.actualizar() {
         Some(commits) => commits,
         None => return ControlFlow::Break(()),
     };
-    interface.set_right_area(&commits);
+    let window = interface.principal_window.clone();
+    interface.set_right_area_ui(&commits);
     interface.staged_area_ui();
+
     ControlFlow::Continue(())
 }
 
@@ -1008,7 +1019,6 @@ fn make_graph(
     y: i32,
 ) -> usize {
     let commit_branch = commit.1.as_ref().unwrap();
-    //let commit_obj = &commit.0;
     if !hash_branches.contains_key(commit_branch) {
         hash_branches.insert(commit_branch.clone(), *identado);
         *identado += 1;
@@ -1087,63 +1097,86 @@ fn actualize_conflicts(
     current_content: &mut Rc<RefCell<String>>,
     incoming_content: &mut Rc<RefCell<String>>,
     old_content: &mut Rc<RefCell<String>>,
+    first_merge: bool,
 ) {
     let mut found_next_conflict = false;
 
+    let mut current_content_lines: Vec<String> = Vec::new();
+    let mut incoming_content_lines: Vec<String> = Vec::new();
+    let mut old_new_content_lines: Vec<String> = Vec::new();
+
+    let new_content_str = new_content.borrow_mut().clone();
+
+    let current_content_str = current_content.borrow_mut().clone();
+    let incoming_content_str = incoming_content.borrow_mut().clone();
+
+    let mut new_content_lines = new_content_str.split('\n').collect::<Vec<&str>>();
+    // println!("{:?}", new_content_lines);
+    let current_old_content_lines = current_content_str.split('\n').collect::<Vec<&str>>();
+    let incoming_old_content_lines = incoming_content_str.split('\n').collect::<Vec<&str>>();
+
     if accept_changes == "current" {
-        new_content
-            .borrow_mut()
-            .push_str(current_content.borrow().as_str());
+        new_content_lines.extend(current_old_content_lines);
     } else if accept_changes == "incoming" {
-        new_content
-            .borrow_mut()
-            .push_str(incoming_content.borrow().as_str());
+        new_content_lines.extend(incoming_old_content_lines);
     } else {
-        new_content
-            .borrow_mut()
-            .push_str(current_content.borrow().as_str());
-        new_content
-            .borrow_mut()
-            .push_str(incoming_content.borrow().as_str());
+        new_content_lines.extend(current_old_content_lines);
+        new_content_lines.extend(incoming_old_content_lines);
+    }
+
+    if first_merge {
+        new_content_lines = Vec::new();
     }
 
     let mut old_new_content = String::new();
-    current_content.borrow_mut().clear();
-    incoming_content.borrow_mut().clear();
 
     let binding = old_content.borrow_mut().clone();
-    let mut lines = binding.lines();
-
-    while let Some(line) = lines.next() {
+    let mut old_content_lines = binding.split('\n').collect::<Vec<&str>>();
+    let mut i = 0;
+    while let Some(line) = old_content_lines.get(i) {
+        i += 1;
         if line.starts_with("<<<<<<<") && !found_next_conflict {
             found_next_conflict = true;
-            while let Some(current_line) = lines.next() {
+            while let Some(current_line) = old_content_lines.get_mut(i) {
+                i += 1;
                 if current_line.starts_with("=======") {
                     break;
                 }
-                current_content.borrow_mut().push_str(current_line);
-                current_content.borrow_mut().push('\n');
+                current_content_lines.push(current_line.to_string());
             }
 
-            while let Some(inner_line) = lines.next() {
+            while let Some(inner_line) = old_content_lines.get_mut(i) {
+                i += 1;
                 if inner_line.starts_with(">>>>>>>") {
                     break;
                 }
-                incoming_content.borrow_mut().push_str(inner_line);
-                incoming_content.borrow_mut().push('\n');
+                incoming_content_lines.push(inner_line.to_string());
             }
             continue;
         }
 
         if !found_next_conflict {
-            new_content.borrow_mut().push_str(line);
-            new_content.borrow_mut().push('\n');
+            new_content_lines.push(line.to_owned());
         } else {
-            old_new_content.push_str(line);
-            old_new_content.push('\n');
+            old_new_content_lines.push(line.to_string());
         }
     }
 
+    new_content.borrow_mut().clear();
+    current_content.borrow_mut().clear();
+    incoming_content.borrow_mut().clear();
     old_content.borrow_mut().clear();
+
+    old_new_content.push_str(&old_new_content_lines.join("\n"));
+    new_content
+        .borrow_mut()
+        .push_str(&new_content_lines.join("\n"));
+    incoming_content
+        .borrow_mut()
+        .push_str(&incoming_content_lines.join("\n"));
+    current_content
+        .borrow_mut()
+        .push_str(&current_content_lines.join("\n"));
+
     old_content.borrow_mut().push_str(old_new_content.as_str());
 }
