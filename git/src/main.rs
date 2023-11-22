@@ -1,7 +1,7 @@
 use git::commands::{
     add::Add, branch::Branch, cat_file::CatFile, checkout::Checkout, clone::Clone,
     command::Command, commit::Commit, fetch::Fetch, hash_object::HashObject, init::Init, log::Log,
-    ls_files::LsFiles, merge::Merge, push::Push, status::Status, tag::Tag,
+    ls_files::LsFiles, merge::Merge, push::Push, show_ref::ShowRef, status::Status, tag::Tag,
 };
 use git_lib::command_errors::CommandError;
 use std::{env, io};
@@ -38,6 +38,7 @@ fn run(command_name: &str, command_args: &[String]) -> Result<(), CommandError> 
         Checkout::run_from,
         LsFiles::run_from,
         Tag::run_from,
+        ShowRef::run_from,
     ];
 
     for command in &commands {

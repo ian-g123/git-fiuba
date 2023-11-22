@@ -139,6 +139,28 @@ impl ShowRef {
     /// Ejecuta el comando Show-ref.
     fn run(&mut self, stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), CommandError> {
         let mut repo = GitRepository::open("", output)?;
+        let mut show_heads = true;
+        let mut show_tags = true;
+        let mut show_remotes = true;
+        if self.heads && !self.tags {
+            show_tags = false;
+            show_remotes = false;
+        } else if !self.heads && self.tags {
+            show_heads = false;
+            show_remotes = false;
+        } else if self.heads && self.tags {
+            show_remotes = false;
+        }
+
+        repo.show_ref(
+            self.head,
+            show_heads,
+            show_remotes,
+            show_tags,
+            self.dereference,
+            self.hash,
+            &self.refs,
+        )?;
         Ok(())
     }
 }
