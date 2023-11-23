@@ -3380,6 +3380,8 @@ impl<'a> GitRepository<'a> {
     }
 
     // ----- Show-ref -----
+
+    /// Ejecuta el comando show-ref
     pub fn show_ref(
         &mut self,
         head: bool,
@@ -3442,6 +3444,7 @@ impl<'a> GitRepository<'a> {
 
 // ----- Show-ref -----
 
+/// Devuelve el mensaje de salida del comando show-ref
 fn get_show_ref_message(
     refs_list: &Vec<(String, String)>,
     show_hash: bool,
@@ -3463,6 +3466,7 @@ fn get_show_ref_message(
     message
 }
 
+/// Devuelve un diccionario con los objetos a los que referencian las tags: <tag_path, hash>
 fn dereference_tags(
     tags: &HashMap<String, String>,
     db: &ObjectsDatabase,
@@ -3482,21 +3486,27 @@ fn dereference_tags(
     Ok(result)
 }
 
+/// Recibe un vector con nombres o paths de referencias y si son válidas devuelve una lista
+/// con las referencias filtradas.
 fn filter_refs(refs: &Vec<String>, list: Vec<(String, String)>) -> Vec<(String, String)> {
     let mut refs_filtered: Vec<(String, String)> = Vec::new();
     for reference in refs {
+        let ref_parts: Vec<&str> = reference.split("/").collect();
         let dereference = reference.to_owned() + "^{}";
-        let filtered: Vec<(String, String)> = list
-            .iter()
-            .filter(|(r, _)| r.ends_with(reference) || r.ends_with(&dereference))
-            .map(|x| x.to_owned())
-            .collect();
-        refs_filtered.extend_from_slice(&filtered);
+        let deref_parts: Vec<&str> = dereference.split("/").collect();
+
+        for (ref_str, hash) in list.iter() {
+            let parts: Vec<&str> = ref_str.split("/").collect();
+            if parts.ends_with(&ref_parts) || parts.ends_with(&deref_parts) {
+                refs_filtered.push((ref_str.to_string(), hash.to_string()));
+            }
+        }
     }
 
     refs_filtered
 }
 
+/// Devuelve un diccionario con <ref, hash> dado el path de referencias pasado (heads, remotes o tags)
 fn get_refs(
     path: &str,
     git_path: &str,
@@ -3519,6 +3529,7 @@ fn get_refs(
     Ok(refs)
 }
 
+/// Agrega a las listas de referencias las que se encuentran en el archivo '.git/packed-refs'
 fn add_packed_refs(
     heads: &mut HashMap<String, String>,
     remotes: &mut HashMap<String, String>,
@@ -3540,6 +3551,7 @@ fn add_packed_refs(
     Ok(())
 }
 
+/// Convierte un hashmap a un vector de tuplas ordenado alfabéticamente.
 fn hashmap_to_vec(refs: HashMap<String, String>) -> Vec<(String, String)> {
     let mut keys: Vec<&String> = refs.keys().collect();
 
@@ -3554,6 +3566,7 @@ fn hashmap_to_vec(refs: HashMap<String, String>) -> Vec<(String, String)> {
     sorted_refs
 }
 
+/// Lee la lista de referencias del archivo '.git/packed-refs'
 fn read_packed_refs_file(git_path: &str) -> Result<HashMap<String, String>, CommandError> {
     let mut refs: HashMap<String, String> = HashMap::new();
     let path = join_paths!(git_path, "packed-refs").ok_or(CommandError::DirectoryCreationError(
@@ -3586,6 +3599,7 @@ fn read_packed_refs_file(git_path: &str) -> Result<HashMap<String, String>, Comm
     Ok(refs)
 }
 
+/// Devuelve la próxima línea del iterador.
 fn next_line(lines: &mut std::str::Lines<'_>) -> (bool, String) {
     let Some(line) = lines.next() else {
         return (true, "".to_string());

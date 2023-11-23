@@ -283,6 +283,67 @@ fn test_show_all_refs() {
     );
 
     assert_eq!(expected, stdout);
+
+    // refs
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("branch")
+        .arg("dir/remote3")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("tag")
+        .arg("remote3")
+        .arg(master_commit1.clone())
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("show-ref")
+        .arg("remote3")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    println!("Stderr: {}", stderr);
+    let stdout = String::from_utf8(result.stdout).unwrap();
+
+    let expected = format!("{} refs/heads/dir/remote3\nadb820486b2b81d06d53eb4c6002963e97f3ba7c refs/remotes/origin/dir/remote3\n{} refs/tags/remote3\n", master_commit2, master_commit1);
+
+    assert_eq!(expected, stdout);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("show-ref")
+        .arg("dir/remote3")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    println!("Stderr: {}", stderr);
+    let stdout = String::from_utf8(result.stdout).unwrap();
+
+    let expected = format!("{} refs/heads/dir/remote3\nadb820486b2b81d06d53eb4c6002963e97f3ba7c refs/remotes/origin/dir/remote3\n", master_commit2);
+
+    assert_eq!(expected, stdout);
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("show-ref")
+        .arg("mote3")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    println!("Stderr: {}", stderr);
+    let stdout = String::from_utf8(result.stdout).unwrap();
+
+    let expected = format!("");
+    assert_eq!(expected, stdout);
+
     _ = std::fs::remove_dir_all(format!("{}", path));
 }
 
