@@ -107,7 +107,7 @@ impl ShowRef {
     /// Configura el flag --hash.
     fn add_hash_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let flag = args[i].clone();
-        if flag != "-d".to_string() && !flag.starts_with("--hash") {
+        if flag != "-s".to_string() && !flag.starts_with("--hash") {
             return Err(CommandError::WrongFlag);
         }
 
@@ -116,7 +116,13 @@ impl ShowRef {
                 return Err(CommandError::FlagHashRequiresValue);
             } else {
                 let num_str = flag[7..].to_string();
-                let digits: usize = num_str.parse().map_err(|_| CommandError::CastingError)?;
+                let mut digits: i32 = num_str.parse().map_err(|_| CommandError::CastingError)?;
+                if digits > 40 || digits == 0 {
+                    digits = 40;
+                } else if digits < 0 || (digits > 0 && digits < 4) {
+                    digits = 4;
+                }
+                let digits: usize = digits as usize;
                 self.hash = (true, Some(digits));
             }
         } else {

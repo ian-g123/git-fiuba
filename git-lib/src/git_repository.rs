@@ -3413,7 +3413,7 @@ impl<'a> GitRepository<'a> {
 
         if head {
             if let Some(hash) = self.get_last_commit_hash()? {
-                refs_list.push((self.get_current_branch_name()?, hash));
+                refs_list.push(("HEAD".to_string(), hash));
             }
         }
         if heads {
@@ -3514,7 +3514,7 @@ fn get_refs(
         Vec::new()
     };
 
-    get_refs_paths_and_hash(logger, &path, &mut refs, "", parts.len())?;
+    get_refs_paths_and_hash(logger, &path, &mut refs, "", 1 + parts.len())?;
 
     Ok(refs)
 }
