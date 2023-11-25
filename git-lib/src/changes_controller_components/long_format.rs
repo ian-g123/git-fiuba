@@ -131,7 +131,7 @@ fn set_unmerged_message(unmerged_paths: &HashMap<String, ChangeType>) -> String 
     message
 }
 
-fn set_diverge_message(ahead: usize, behind: usize, branch: &str) -> String {
+pub fn set_diverge_message(ahead: usize, behind: usize, branch: &str) -> String {
     let mut message = String::new();
     if ahead == 0 && behind == 0 {
         message += &format!("\nYour branch is up to date with 'origin/{}'.\n", branch);
@@ -142,7 +142,7 @@ fn set_diverge_message(ahead: usize, behind: usize, branch: &str) -> String {
         let plural = if ahead == 1 { "" } else { "s" };
         message += &format!("\nYour branch is ahead 'origin/{}' by {} commit{}.\n  (use \"git push\" to publish tour local commits)\n", branch, ahead, plural);
     } else {
-        message += &format!("Your branch and 'origin/{}' have diverged, and have {} and {} different commits each, respectively.\n  (use \"git pull\" to merge the remote branch into yours)\n", branch, ahead, behind);
+        message += &format!("\nYour branch and 'origin/{}' have diverged, and have {} and {} different commits each, respectively.\n  (use \"git pull\" to merge the remote branch into yours)\n", branch, ahead, behind);
     }
     message
 }

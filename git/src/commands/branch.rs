@@ -7,6 +7,8 @@ use crate::commands::command::Command;
 use git_lib::command_errors::CommandError;
 use git_lib::git_repository::GitRepository;
 
+use super::command::check_errors_flags;
+
 pub struct Branch {
     rename: Vec<String>,
     delete_locals: Vec<String>,
@@ -67,7 +69,7 @@ impl Branch {
     /// Configura el flag para mostrar todas las ramas.
     fn add_show_all_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options: Vec<String> = ["--all".to_string(), "-a".to_string()].to_vec();
-        Self::check_errors_flags(i, args, &options)?;
+        check_errors_flags(i, args, &options)?;
         if !self.delete_locals.is_empty() || !self.delete_remotes.is_empty() {
             return Err(CommandError::ShowAllAndDelete);
         }
@@ -87,7 +89,7 @@ impl Branch {
         args: &[String],
     ) -> Result<usize, CommandError> {
         let options: Vec<String> = ["--remotes".to_string(), "-r".to_string()].to_vec();
-        Self::check_errors_flags(i, args, &options)?;
+        check_errors_flags(i, args, &options)?;
 
         if !self.delete_locals.is_empty() {
             self.delete_remotes.append(&mut self.delete_locals);
@@ -104,7 +106,7 @@ impl Branch {
     /// Configura el flag para eliminar ramas.
     fn add_delete_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options: Vec<String> = ["-D".to_string()].to_vec();
-        Self::check_errors_flags(i, args, &options)?;
+        check_errors_flags(i, args, &options)?;
         let mut branches: Vec<String> = Vec::new();
         let mut delete_remotes = false;
         for arg in 0..args.len() {
@@ -133,7 +135,7 @@ impl Branch {
     /// Configura el flag para renombrar ramas.
     fn add_rename_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options: Vec<String> = ["-m".to_string()].to_vec();
-        Self::check_errors_flags(i, args, &options)?;
+        check_errors_flags(i, args, &options)?;
         if args.len() > 3 {
             return Err(CommandError::FatalRenameOperation);
         }
@@ -172,24 +174,12 @@ impl Branch {
             }
         }
 
-        if branches_and_commits.len() > 3 {
+        if branches_and_commits.len() > 2 {
             return Err(CommandError::FatalCreateBranchOperation);
         }
 
         self.create = branches_and_commits;
         Ok(args.len())
-    }
-
-    /// Comprueba si el flag es invalido. En ese caso, devuelve error.
-    fn check_errors_flags(
-        i: usize,
-        args: &[String],
-        options: &[String],
-    ) -> Result<(), CommandError> {
-        if !options.contains(&args[i]) {
-            return Err(CommandError::WrongFlag);
-        }
-        Ok(())
     }
 
     fn run(&self, output: &mut dyn Write) -> Result<(), CommandError> {
@@ -218,4 +208,113 @@ impl Branch {
 mod tests {
     use super::*;
     use std::io::Cursor;
+
+    #[test]
+    fn test_invalid_name() {
+        let mut output_string = Vec::new();
+        let mut stdout_mock = Cursor::new(&mut output_string);
+
+        let input = "prueba1";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+
+        let args = ["".to_string()];
+        match Branch::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
+            Err(error) => assert_eq!(error, CommandError::Name),
+            Ok(_) => assert!(false),
+        }
+    }
+
+    #[test]
+    fn test_invalid_arg() {
+        let mut output_string = Vec::new();
+        let mut stdout_mock = Cursor::new(&mut output_string);
+
+        let input = "prueba1";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+
+        let args = ["-no".to_string()];
+        match Branch::run_from("branch", &args, &mut stdin_mock, &mut stdout_mock) {
+            Err(error) => assert_eq!(error, CommandError::InvalidArguments),
+            Ok(_) => assert!(false),
+        }
+    }
+
+    #[test]
+    fn test_create_and_list() {
+        let mut output_string = Vec::new();
+        let mut stdout_mock = Cursor::new(&mut output_string);
+
+        let input = "prueba1";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+
+        let args = ["--remotes".to_string(), "new_branch".to_string()];
+        match Branch::run_from("branch", &args, &mut stdin_mock, &mut stdout_mock) {
+            Err(error) => assert_eq!(error, CommandError::CreateAndListError),
+            Ok(_) => assert!(false),
+        }
+    }
+
+    #[test]
+    fn test_rename_and_delete() {
+        let mut output_string = Vec::new();
+        let mut stdout_mock = Cursor::new(&mut output_string);
+
+        let input = "prueba1";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+
+        let args = ["-D".to_string(), "-m".to_string(), "new_branch".to_string()];
+        match Branch::run_from("branch", &args, &mut stdin_mock, &mut stdout_mock) {
+            Err(error) => assert_eq!(error, CommandError::RenameAndDelete),
+            Ok(_) => assert!(false),
+        }
+    }
+
+    #[test]
+    fn test_create_too_many_args() {
+        let mut output_string = Vec::new();
+        let mut stdout_mock = Cursor::new(&mut output_string);
+
+        let input = "prueba1";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+
+        let args = [
+            "new_branch".to_string(),
+            "base".to_string(),
+            "third".to_string(),
+        ];
+        match Branch::run_from("branch", &args, &mut stdin_mock, &mut stdout_mock) {
+            Err(error) => assert_eq!(error, CommandError::FatalCreateBranchOperation),
+            Ok(_) => assert!(false),
+        }
+    }
+
+    #[test]
+    fn test_delete_with_no_args() {
+        let mut output_string = Vec::new();
+        let mut stdout_mock = Cursor::new(&mut output_string);
+
+        let input = "prueba1";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+
+        let args = ["-D".to_string()];
+        match Branch::run_from("branch", &args, &mut stdin_mock, &mut stdout_mock) {
+            Err(error) => assert_eq!(error, CommandError::DeleteWithNoArgs),
+            Ok(_) => assert!(false),
+        }
+    }
+
+    #[test]
+    fn test_show_all_and_delete() {
+        let mut output_string = Vec::new();
+        let mut stdout_mock = Cursor::new(&mut output_string);
+
+        let input = "prueba1";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+
+        let args = ["-D".to_string(), "--all".to_string()];
+        match Branch::run_from("branch", &args, &mut stdin_mock, &mut stdout_mock) {
+            Err(error) => assert_eq!(error, CommandError::ShowAllAndDelete),
+            Ok(_) => assert!(false),
+        }
+    }
 }

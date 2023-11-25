@@ -7,6 +7,8 @@ use crate::commands::command::Command;
 use git_lib::command_errors::CommandError;
 use git_lib::git_repository::GitRepository;
 
+use super::command::check_errors_flags;
+
 pub struct Checkout {
     new_branch: Vec<String>,
     checkout_or_update: Vec<String>,
@@ -53,7 +55,7 @@ impl Checkout {
         }
     }
 
-    /// Configura el flag para mostrar todas las ramas.
+    /// Configura los files a actualizar o la rama a cambiar.
     fn add_checkout_or_update_config(
         &mut self,
         i: usize,
@@ -67,10 +69,10 @@ impl Checkout {
         Ok(i + 1)
     }
 
-    /// Configura el flag para mostrar todas las ramas.
+    /// Configura la nueva rama a crear.
     fn add_new_branch_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options: Vec<String> = ["-b".to_string()].to_vec();
-        Self::check_errors_flags(i, args, &options)?;
+        check_errors_flags(i, args, &options)?;
         self.checkout_or_update.push(args[i].clone());
         if args.len() - 1 == i {
             return Err(CommandError::SwitchRequiresValue);
@@ -93,18 +95,7 @@ impl Checkout {
         Ok(args.len())
     }
 
-    /// Comprueba si el flag es invalido. En ese caso, devuelve error.
-    fn check_errors_flags(
-        i: usize,
-        args: &[String],
-        options: &[String],
-    ) -> Result<(), CommandError> {
-        if !options.contains(&args[i]) {
-            return Err(CommandError::WrongFlag);
-        }
-        Ok(())
-    }
-
+    /// Ejecuta el comando Checkout
     fn run(&self, output: &mut dyn Write) -> Result<(), CommandError> {
         let mut repo = GitRepository::open("", output)?;
         if !self.checkout_or_update.is_empty() {
@@ -114,8 +105,59 @@ impl Checkout {
             let name = self.new_branch[0].clone();
             repo.checkout(&name)?;
         } else {
-            // checkout tracking info
+            repo.show_tracking_info()?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_invalid_name() {
+        let mut output_string = Vec::new();
+        let mut stdout_mock = Cursor::new(&mut output_string);
+
+        let input = "prueba1";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+
+        let args = ["".to_string()];
+        match Checkout::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
+            Err(error) => assert_eq!(error, CommandError::Name),
+            Ok(_) => assert!(false),
+        }
+    }
+
+    #[test]
+    fn test_invalid_arg() {
+        let mut output_string = Vec::new();
+        let mut stdout_mock = Cursor::new(&mut output_string);
+
+        let input = "prueba1";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+
+        let args = ["-no".to_string()];
+        match Checkout::run_from("checkout", &args, &mut stdin_mock, &mut stdout_mock) {
+            Err(error) => assert_eq!(error, CommandError::InvalidArguments),
+            Ok(_) => assert!(false),
+        }
+    }
+
+    #[test]
+    fn test_switch_no_value() {
+        let mut output_string = Vec::new();
+        let mut stdout_mock = Cursor::new(&mut output_string);
+
+        let input = "prueba1";
+        let mut stdin_mock = Cursor::new(input.as_bytes());
+
+        let args = ["-b".to_string()];
+        match Checkout::run_from("checkout", &args, &mut stdin_mock, &mut stdout_mock) {
+            Err(error) => assert_eq!(error, CommandError::SwitchRequiresValue),
+            Ok(_) => assert!(false),
+        }
     }
 }

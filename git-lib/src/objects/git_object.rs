@@ -3,7 +3,10 @@ use crate::{
     logger::Logger, objects_database::ObjectsDatabase, utils::super_string::u8_vec_to_hex_string,
 };
 
-use super::{author::Author, blob::Blob, commit_object::CommitObject, mode::Mode, tree::Tree};
+use super::{
+    author::Author, blob::Blob, commit_object::CommitObject, mode::Mode, tag_object::TagObject,
+    tree::Tree,
+};
 use crate::utils::aux::hex_string_to_u8_vec;
 use std::{
     collections::HashMap,
@@ -13,6 +16,10 @@ use std::{
 pub type GitObject = Box<dyn GitObjectTrait>;
 
 pub trait GitObjectTrait {
+    fn as_mut_tag(&mut self) -> Option<&mut TagObject> {
+        None
+    }
+
     fn as_mut_blob(&mut self) -> Option<&mut Blob> {
         None
     }
@@ -146,6 +153,9 @@ pub fn display_from_stream(
     if type_str == "commit" {
         return CommitObject::display_from_stream(stream, len, output);
     };
+    if type_str == "tag" {
+        return TagObject::display_from_stream(stream, len, output);
+    };
     Err(CommandError::ObjectTypeError)
 }
 
@@ -197,6 +207,10 @@ pub fn read_git_object_from(
     };
     if type_str == "commit" {
         return CommitObject::read_from(Some(db), stream, logger, None);
+    };
+
+    if type_str == "tag" {
+        return TagObject::read_from(stream, logger, hash_str.to_owned());
     };
 
     Err(CommandError::ObjectTypeError)

@@ -16,4 +16,5 @@ pub mod commands {
     pub mod push;
     pub mod rm;
     pub mod status;
+    pub mod tag;
 }
