@@ -115,4 +115,17 @@ impl ObjectsDatabase {
         };
         Ok(hash_str)
     }
+
+    pub fn has_object(&self, hash_str: &str) -> Result<bool, CommandError> {
+        //throws error if hash_str is not a valid sha1
+        if hash_str.len() != 40 {
+            return Ok(false);
+        }
+        let file_path = join_paths!(&self.db_path, &hash_str[0..2], &hash_str[2..])
+            .ok_or(CommandError::JoiningPaths)?;
+        if File::open(&file_path).is_err() {
+            return Ok(false);
+        }
+        Ok(true)
+    }
 }

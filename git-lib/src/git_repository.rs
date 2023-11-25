@@ -14,7 +14,7 @@ use crate::{
         changes_types::{self, ChangeType},
         commit_format::CommitFormat,
         format::Format,
-        long_format::{sort_hashmap_and_filter_unmodified, LongFormat},
+        long_format::{set_diverge_message, sort_hashmap_and_filter_unmodified, LongFormat},
         short_format::ShortFormat,
         working_tree::{build_working_tree, get_path_name},
     },
@@ -32,6 +32,7 @@ use crate::{
         git_object::{self, GitObject, GitObjectTrait},
         mode::Mode,
         proto_object::ProtoObject,
+        tag_object::TagObject,
         tree::Tree,
     },
     objects_database::ObjectsDatabase,
@@ -532,6 +533,9 @@ impl<'a> GitRepository<'a> {
         git_object::display_from_hash(&self.db()?, self.output, hash, &mut self.logger)
     }
 
+    // ----- Commit -----
+
+    /// Hace un commit con los files pasados al comando.
     pub fn commit_files(
         &mut self,
         message: String,
@@ -540,7 +544,7 @@ impl<'a> GitRepository<'a> {
         reuse_commit_info: Option<String>,
         quiet: bool,
     ) -> Result<(), CommandError> {
-        let mut staging_area = StagingArea::open(&self.git_path)?;
+        let mut staging_area = self.staging_area()?;
         self.update_staging_area_files(&files, &mut staging_area)?;
 
         self.commit_priv(
@@ -553,6 +557,7 @@ impl<'a> GitRepository<'a> {
         )
     }
 
+    /// Incluye en el commit la versión del working tree de todos los archivos conocidos por git.
     pub fn commit_all(
         &mut self,
         message: String,
@@ -561,7 +566,7 @@ impl<'a> GitRepository<'a> {
         reuse_commit_info: Option<String>,
         quiet: bool,
     ) -> Result<(), CommandError> {
-        let mut staging_area = StagingArea::open(&self.git_path)?;
+        let mut staging_area = self.staging_area()?;
         self.run_all_config(&mut staging_area)?;
 
         self.commit_priv(
@@ -574,6 +579,7 @@ impl<'a> GitRepository<'a> {
         )
     }
 
+    /// Crea un Commit.
     pub fn commit(
         &mut self,
         message: String,
@@ -583,8 +589,7 @@ impl<'a> GitRepository<'a> {
         quiet: bool,
     ) -> Result<(), CommandError> {
         self.log("Running commit");
-        let mut staging_area = StagingArea::open(&self.git_path)?;
-        self.log("StagingArea opened");
+        let mut staging_area = self.staging_area()?;
         self.commit_priv(
             message,
             &mut staging_area,
@@ -604,13 +609,10 @@ impl<'a> GitRepository<'a> {
         staging_area: &mut StagingArea,
     ) -> Result<(), CommandError> {
         self.log("Running pathspec configuration");
-        self.log("staging area files");
 
         for path in files.iter() {
             self.log(&format!("Updating: {}", path));
             if !Path::new(path).exists() {
-                self.log(&format!("Removed from index: {}", path));
-
                 staging_area.remove(path);
             } else if !self.is_untracked(path, &staging_area)? {
                 self.log(&format!("It's untracked: {}", path));
@@ -623,7 +625,6 @@ impl<'a> GitRepository<'a> {
         self.log("Saving staging area changes");
 
         staging_area.save()?;
-        self.log("Finished running pathspec configuration");
 
         Ok(())
     }
@@ -677,11 +678,8 @@ impl<'a> GitRepository<'a> {
 
         let mut staged_tree = {
             if files.is_empty() {
-                self.log("is_empty");
                 staging_area.get_working_tree_staged(&mut self.logger)?
             } else {
-                self.log("files isnt empty");
-
                 staging_area.get_working_tree_staged_bis(
                     &last_commit_tree,
                     &mut self.logger,
@@ -798,6 +796,7 @@ impl<'a> GitRepository<'a> {
         Err(CommandError::CommitLookUp(commit_hash))
     }
 
+    /// Devuelve true si hay un merge en proceso.
     fn is_merge(&self) -> Result<bool, CommandError> {
         let path = join_paths!(self.git_path, "MERGE_HEAD").ok_or(CommandError::FileNameError)?;
         if Path::new(&path).exists() {
@@ -806,6 +805,9 @@ impl<'a> GitRepository<'a> {
         Ok(false)
     }
 
+    // ----- Status -----
+
+    /// Compara los commits entre la rama local y la remota.
     fn get_commits_ahead_and_behind_remote(
         &mut self,
         branch: &str,
@@ -835,6 +837,7 @@ impl<'a> GitRepository<'a> {
         Ok((true, ahead, behind))
     }
 
+    /// Ejecuta el comando Status con Long Format.
     pub fn status_long_format(&mut self, commit_output: bool) -> Result<(), CommandError> {
         let branch = self.get_current_branch_name()?;
         let long_format = LongFormat;
@@ -857,6 +860,7 @@ impl<'a> GitRepository<'a> {
         )
     }
 
+    /// Ejecuta el comando Status con Short Format.
     pub fn status_short_format(&mut self, commit_output: bool) -> Result<(), CommandError> {
         let branch = self.get_current_branch_name()?;
         let short_format = ShortFormat;
@@ -880,6 +884,7 @@ impl<'a> GitRepository<'a> {
         )
     }
 
+    /// Cuenta los commits en que divergen la rama local y la remota.
     fn count_commits_ahead_and_behind(
         &mut self,
         commit_destin_str: Option<&String>,
@@ -942,6 +947,8 @@ impl<'a> GitRepository<'a> {
         *branch_tips = new_branch_tips;
         Ok(())
     }
+
+    // -----
 
     pub fn open_config(&self) -> Result<Config, CommandError> {
         Config::open(&self.git_path)
@@ -2118,8 +2125,10 @@ impl<'a> GitRepository<'a> {
 
         return Ok((changes_to_be_commited, changes_not_staged));
     }
+
     // ----- Branch -----
 
+    /// Cambia la referencia de HEAD.
     fn change_current_branch_name(&mut self, new_name: &str) -> Result<(), CommandError> {
         let path = join_paths!(self.git_path, "HEAD").ok_or(CommandError::FileCreationError(
             " No se pudo obtener .git/HEAD".to_string(),
@@ -2137,6 +2146,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Cambia el nombre de una rama.
     pub fn rename_branch(&mut self, branches: &Vec<String>) -> Result<(), CommandError> {
         let head = self.get_current_branch_name()?;
         if branches.len() == 1 {
@@ -2157,7 +2167,11 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    pub fn create_branch(&mut self, new_branch_info: &Vec<String>) -> Result<(), CommandError> {
+    /// Devuelve el commit a partir del cual se creará la nueva rama.
+    fn get_start_point(
+        &mut self,
+        new_branch_info: &Vec<String>,
+    ) -> Result<(String, bool), CommandError> {
         let commit_hash: String;
         let mut new_is_remote = false;
         if new_branch_info.len() == 2 {
@@ -2181,6 +2195,12 @@ impl<'a> GitRepository<'a> {
                 }
             };
         }
+        Ok((commit_hash, new_is_remote))
+    }
+
+    /// Crea una nueva rama.
+    pub fn create_branch(&mut self, new_branch_info: &Vec<String>) -> Result<(), CommandError> {
+        let (commit_hash, new_is_remote) = self.get_start_point(new_branch_info)?;
         let new_branch = new_branch_info[0].clone();
         let branches_path = join_paths!(self.git_path, "refs/heads/").ok_or(
             CommandError::DirectoryCreationError(
@@ -2202,7 +2222,6 @@ impl<'a> GitRepository<'a> {
                     .map_err(|_| CommandError::FileCreationError(new_branch_path.clone()))?;
             }
         }
-        self.log(&format!("Path: {}", new_branch_path));
 
         let mut file = File::create(new_branch_path.clone())
             .map_err(|_| CommandError::FileCreationError(new_branch_path.clone()))?;
@@ -2224,6 +2243,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Si <branch> es una rama local, lee el commit asociado y lo devuelve.
     fn try_read_commit_local_branch(&self, branch: &str) -> Result<Option<String>, CommandError> {
         let branch_path = join_paths!(self.git_path, "refs/heads/").ok_or(
             CommandError::DirectoryCreationError(
@@ -2240,6 +2260,7 @@ impl<'a> GitRepository<'a> {
         Ok(Some(hash))
     }
 
+    /// Si <branch> es una rama remota, lee el commit asociado y lo devuelve.
     fn try_read_commit_remote_branch(
         &self,
         remote_path: &str,
@@ -2265,13 +2286,18 @@ impl<'a> GitRepository<'a> {
         Ok(Some(hash))
     }
 
+    /// Si <hash> existe en la base de datos y es un commit, lo devuelve.
     fn try_read_commit(&mut self, hash: &str) -> Result<Option<String>, CommandError> {
-        if self.db()?.read_object(hash, &mut self.logger).is_err() {
+        let Ok(mut object) = self.db()?.read_object(hash, &mut self.logger) else {
+            return Ok(None);
+        };
+        if object.as_mut_commit().is_none() {
             return Ok(None);
         }
         Ok(Some(hash.to_string()))
     }
 
+    /// Cambia el nombre de la rama <old> por <new>
     fn change_branch_name(&self, old: &str, new: &str) -> Result<(), CommandError> {
         let branches_path = join_paths!(self.git_path, "refs/heads/").ok_or(
             CommandError::DirectoryCreationError(
@@ -2319,6 +2345,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Elimina las ramas pasadas. Si alguna no existe, devuelve error y continúa con el resto.
     pub fn delete_branches(
         &mut self,
         branches: &Vec<String>,
@@ -2350,11 +2377,8 @@ impl<'a> GitRepository<'a> {
                 .map_err(|error| CommandError::RemoveFileError(error.to_string()))?;
 
             if let Some(dir) = Path::new(&path).parent() {
-                self.log(&format!("Dir: {:?}", dir));
                 let remote: Vec<&str> = branch.split_terminator("/").collect();
                 if !dir.ends_with("refs/heads") && remote.len() != 2 {
-                    self.log(&format!("Deleting dir: {:?}", dir));
-
                     fs::remove_dir_all(dir)
                         .map_err(|_| CommandError::RemoveDirectoryError(path.clone()))?;
                 }
@@ -2376,6 +2400,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Enlista las ramas locales.
     pub fn show_local_branches(&mut self) -> Result<(), CommandError> {
         self.log("Showing local branches ...");
 
@@ -2385,6 +2410,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Devuelve el mensaje con la lista de ramas locales.
     fn list_local_branches(&mut self) -> Result<String, CommandError> {
         let path = join_paths!(self.git_path, "refs/heads").ok_or(
             CommandError::DirectoryCreationError(
@@ -2393,9 +2419,7 @@ impl<'a> GitRepository<'a> {
         )?;
 
         let mut local_branches: Vec<String> = Vec::new();
-        self.log("Before getting branches paths");
         get_branches_paths(&mut self.logger, &path, &mut local_branches, "", 3)?;
-        self.log("After getting branches paths");
 
         local_branches.sort();
         let mut list = String::new();
@@ -2411,6 +2435,7 @@ impl<'a> GitRepository<'a> {
         Ok(list)
     }
 
+    /// Enlista todas las ramas.
     pub fn show_all_branches(&mut self) -> Result<(), CommandError> {
         self.log("Showing all branches ...");
         let local_list = self.list_local_branches()?;
@@ -2421,6 +2446,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Enlista las ramas remotas.
     pub fn show_remote_branches(&mut self) -> Result<(), CommandError> {
         self.log("Showing remote branches ...");
 
@@ -2430,6 +2456,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Devuelve el mensaje con la lista de ramas remotas.
     fn list_remote_branches(&mut self, i: usize) -> Result<String, CommandError> {
         let path = join_paths!(self.git_path, "refs/remotes").ok_or(
             CommandError::DirectoryCreationError(
@@ -2457,6 +2484,7 @@ impl<'a> GitRepository<'a> {
         Ok(list)
     }
 
+    /// Obtiene el path de refs/remote/HEAD.
     fn get_remote_head_path(&mut self) -> Result<Option<String>, CommandError> {
         let mut branch = String::new();
         let path = join_paths!(&self.git_path, "refs/remote/HEAD").ok_or(
@@ -2484,6 +2512,20 @@ impl<'a> GitRepository<'a> {
 
     // ----- Checkout -----
 
+    /// Muestra información de divergencia entre la rama local y la remota.
+    pub fn show_tracking_info(&mut self) -> Result<(), CommandError> {
+        let branch = self.get_current_branch_name()?;
+        let (diverge, ahead, behind) = self.get_commits_ahead_and_behind_remote(&branch)?;
+        if diverge {
+            let message = set_diverge_message(ahead, behind, &branch);
+            writeln!(self.output, "{}", message.trim())
+                .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        }
+
+        Ok(())
+    }
+
+    /// Devuelve true si la rama pasada existe en el repositorio.
     fn branch_exists(&mut self, branch: &str) -> bool {
         if let Ok(locals) = self.local_branches() {
             if locals.contains_key(branch) {
@@ -2498,6 +2540,7 @@ impl<'a> GitRepository<'a> {
         false
     }
 
+    /// Devuelve true si el archivo pasado está en el index.
     fn file_exists_in_index(&mut self, file: &str, index: &mut StagingArea) -> bool {
         if index.has_file_from_path(file) {
             return true;
@@ -2505,6 +2548,8 @@ impl<'a> GitRepository<'a> {
         false
     }
 
+    /// Dependiendo de los elementos del vector pasado, ejecuta una operación de checkout o actualiza
+    /// los archivos.
     pub fn update_files_or_checkout(
         &mut self,
         files_or_branches: Vec<String>,
@@ -2532,6 +2577,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Ejecuta el cambio de rama.
     pub fn checkout(&mut self, branch: &str) -> Result<(), CommandError> {
         let current_branch = self.get_current_branch_name()?;
         if branch == current_branch {
@@ -2606,6 +2652,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Si hay conflictos locales que impiden el cambio de rama, se muestra el mensaje correspondiente.
     fn set_checkout_local_conflicts(
         &mut self,
         conflicts: Vec<String>,
@@ -2648,6 +2695,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Si hay conflictos de merge que impiden el cambio de rama, se muestra el mensaje correspondiente.
     fn get_checkout_merge_conflicts_output(
         &mut self,
         merge_conflicts: Vec<&String>,
@@ -2663,6 +2711,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Muestra el mensaje de éxito de Checkout.
     fn get_checkout_sucess_output(
         &mut self,
         branch: &str,
@@ -2688,10 +2737,10 @@ impl<'a> GitRepository<'a> {
         message += &format!("Switched to branch '{branch}'\n");
         write!(self.output, "{}", message)
             .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-        // output de status (divergencia)
         Ok(())
     }
 
+    /// Obtiene el hash y tree del commit de la rama pasada.
     fn get_checkout_branch_info(
         &mut self,
         branch: &str,
@@ -2711,6 +2760,8 @@ impl<'a> GitRepository<'a> {
         Ok((hash, tree.to_owned()))
     }
 
+    /// Cambia el estado del working tree por los archivos de la nueva rama. Intenta mantener los
+    /// cambios locales.
     fn checkout_restore(
         &mut self,
         last_tree: &mut Tree,
@@ -2805,6 +2856,7 @@ impl<'a> GitRepository<'a> {
         Ok(false)
     }
 
+    /// Actualiza la referencia a HEAD.
     fn update_ref_head(&self, path: &str) -> Result<(), CommandError> {
         let head_path = join_paths!(&self.git_path, "HEAD")
             .ok_or(CommandError::FileCreationError(".git/HEAD".to_string()))?;
@@ -2817,6 +2869,8 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Compara los archivos de la rama actual con los de la nueva y el ancestro común, buscando
+    /// conflictos entre las ramas.
     fn look_for_checkout_conflicts(
         &mut self,
         new_tree: &mut Tree,
@@ -2827,7 +2881,6 @@ impl<'a> GitRepository<'a> {
         staging_files: &HashMap<String, String>,
     ) -> Result<(), CommandError> {
         for path in files.iter() {
-            self.log(&format!("Buscando conflictos en: {}", path));
             let path = &join_paths!(self.working_dir_path, path).ok_or(
                 CommandError::FileCreationError(
                     "No se pudo obtener el path del objeto".to_string(),
@@ -2840,7 +2893,7 @@ impl<'a> GitRepository<'a> {
             match new_tree.get_object_from_path(path) {
                 None => {
                     if is_in_common_tree {
-                        // Added: conflicto xq el tree de otra rama no lo tiene
+                        // conflicto xq el tree de otra rama no lo tiene
                         conflicts.push(path.to_string());
                     }
                 }
@@ -2875,6 +2928,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Lee el contenido de un archivo.
     fn get_staged_file_content(&mut self, hash: &str) -> Result<Vec<u8>, CommandError> {
         let mut object = self.db()?.read_object(hash, &mut self.logger)?;
 
@@ -2883,6 +2937,7 @@ impl<'a> GitRepository<'a> {
 
     // ----- Ls-files -----
 
+    /// Ejecuta el comando Ls-files
     pub fn ls_files(
         &mut self,
         cached: bool,
@@ -2917,7 +2972,7 @@ impl<'a> GitRepository<'a> {
         let staging_area_files = index.get_files();
 
         let unmerged_modifications_list = changes_controller.get_modified_files_unmerged();
-        self.add_unmerged_files_to_list(&mut staged_list, staging_area_conflicts.clone());
+        add_unmerged_files_to_list(&mut staged_list, staging_area_conflicts.clone());
 
         if cached {
             aux_list.extend_from_slice(&staged_list);
@@ -2963,55 +3018,16 @@ impl<'a> GitRepository<'a> {
         )?;
 
         if stage || unmerged {
-            message = self.get_extended_ls_files_output(others_list.clone(), extended_list);
+            message = get_extended_ls_files_output(others_list.clone(), extended_list);
         } else {
-            message = self.get_normal_ls_files_output(others_list, extended_list);
+            message = get_normal_ls_files_output(others_list, extended_list);
         }
         write!(self.output, "{}", message)
             .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
         Ok(())
     }
 
-    fn add_unmerged_files_to_list(
-        &mut self,
-        staged_list: &mut Vec<String>,
-        staging_area_conflicts: HashMap<String, (Option<String>, Option<String>, Option<String>)>,
-    ) {
-        for (path, _) in staging_area_conflicts.iter() {
-            staged_list.push(path.to_string());
-        }
-    }
-
-    fn get_normal_ls_files_output(
-        &mut self,
-        others: Vec<String>,
-        extended_list: Vec<(Mode, String, usize, String)>,
-    ) -> String {
-        let mut message = String::new();
-        for path in others {
-            message += &format!("{}\n", path);
-        }
-        for (_, _, _, path) in extended_list {
-            message += &format!("{}\n", path);
-        }
-        message
-    }
-
-    fn get_extended_ls_files_output(
-        &mut self,
-        others: Vec<String>,
-        extended_list: Vec<(Mode, String, usize, String)>,
-    ) -> String {
-        let mut message = String::new();
-        for path in others {
-            message += &format!("{}\n", path);
-        }
-        for (mode, hash, stage_number, path) in extended_list {
-            message += &format!("{} {} {}\t{}\n", mode, hash, stage_number, path);
-        }
-        message
-    }
-
+    /// Obtiene información adicional de los archivos a enlistar: modo, hash, staged number y path.
     fn get_extended_ls_files_info(
         &mut self,
         list: Vec<String>,
@@ -3124,16 +3140,261 @@ impl<'a> GitRepository<'a> {
         }
         Ok(result)
     }
+
+    // ----- Tag -----
+
+    /// Crea un tag con la información pasada. Si se usó el flag -a, lo escribe a la base de datos.
+    pub fn create_tag(
+        &mut self,
+        name: &str,
+        message: &str,
+        object: Option<String>,
+        write: bool,
+        force: bool,
+    ) -> Result<(), CommandError> {
+        self.log(&format!(
+            "Creating tag --> name: {}, message: {}, points to: {:?}, force: {}, write to database: {}",
+            name, message, object, force, write
+        ));
+        let path = join_paths!(self.git_path, "refs/tags/", name).ok_or(
+            CommandError::FileCreationError("Error creando path de tags".to_string()),
+        )?;
+        let output_message = Self::get_create_tag_message(&path, force, name)?;
+        let mut db = self.db()?;
+        let (mut tag, tag_ref) = self.create_tag_object(name, message, object, &db)?;
+        let file_content = {
+            if write {
+                tag.get_hash_string()?
+            } else {
+                tag_ref
+            }
+        };
+        let Ok(mut file) = File::create(&path) else {
+            return Err(CommandError::FileOpenError(path));
+        };
+        file.write_all(file_content.as_bytes()).map_err(|error| {
+            CommandError::FileWriteError(
+                "Error guardando objeto en la nueva tag:".to_string() + &error.to_string(),
+            )
+        })?;
+        if write {
+            let mut git_object: GitObject = Box::new(tag);
+            let _ = db.write(&mut git_object, false, &mut self.logger)?;
+        }
+        write!(self.output, "{}", output_message)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        Ok(())
+    }
+
+    /// Crea un TagObject.
+    fn create_tag_object(
+        &mut self,
+        name: &str,
+        message: &str,
+        object: Option<String>,
+        db: &ObjectsDatabase,
+    ) -> Result<(TagObject, String), CommandError> {
+        let tag_ref = {
+            if let Some(obj) = object {
+                obj
+            } else {
+                if let Some(hash) = self.get_last_commit_hash()? {
+                    hash
+                } else {
+                    return Err(CommandError::InvalidRef("HEAD".to_string()));
+                }
+            }
+        };
+
+        if !db.has_object(&tag_ref)? {
+            return Err(CommandError::InvalidRef(tag_ref));
+        }
+
+        let tag_object = db.read_object(&tag_ref, &mut self.logger)?;
+        let tag_object_type = tag_object.type_str();
+        let (tagger, timestamp, offset) = self.get_tagger_info()?;
+        let tag = TagObject::new(
+            name.to_string(),
+            tag_ref.clone(),
+            tag_object_type,
+            message.to_string(),
+            tagger,
+            timestamp,
+            offset,
+        );
+        Ok((tag, tag_ref))
+    }
+
+    /// Devuelve el mensaje que se mostrará al crear el tag.
+    fn get_create_tag_message(path: &str, force: bool, name: &str) -> Result<String, CommandError> {
+        let exists = Path::new(&path).exists();
+        if exists && !force {
+            return Err(CommandError::TagAlreadyExists(name.to_string()));
+        }
+
+        let output_message = {
+            if exists {
+                let hash = fs::read_to_string(path.clone())
+                    .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+                format!("Updated tag '{}' (was {})\n", name, hash[..6].to_string())
+            } else {
+                "".to_string()
+            }
+        };
+        Ok(output_message)
+    }
+
+    /// Devuelve información sobre un Tagger, incluyendo el timestamp y offset del tag.
+    fn get_tagger_info(&mut self) -> Result<(Author, i64, i32), CommandError> {
+        let config = self.open_config()?;
+        let Some(tagger_email) = config.get("user", "email") else {
+            return Err(CommandError::UserConfigurationError);
+        };
+        let Some(tagger_name) = config.get("user", "name") else {
+            return Err(CommandError::UserConfigurationError);
+        };
+        let tagger = Author::new(tagger_name, tagger_email);
+        let datetime: DateTime<Local> = Local::now();
+        let timestamp = datetime.timestamp();
+        let offset = datetime.offset().local_minus_utc() / 60;
+        Ok((tagger, timestamp, offset))
+    }
+
+    /// Recibe un vector con nombres de tags y las elimina. Si alguna no existe, devuelve error y
+    /// continúa con el resto.
+    pub fn delete_tags(&mut self, tags: &Vec<String>) -> Result<(), CommandError> {
+        self.log(&format!("Deleting tags --> {:?}", tags));
+        let tags_path = join_paths!(self.git_path, "refs/tags/").ok_or(
+            CommandError::DirectoryCreationError(
+                "No se pudo crear el directorio .git/refs/tags".to_string(),
+            ),
+        )?;
+        let mut errors: String = String::new();
+        let mut deletions = String::new();
+
+        for tag in tags {
+            let path = tags_path.clone() + tag;
+            if !Path::new(&path).exists() {
+                errors += &format!("error: tag '{tag}' not found.\n");
+                continue;
+            };
+            let hash = fs::read_to_string(path.clone())
+                .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+
+            fs::remove_file(path.clone())
+                .map_err(|error| CommandError::RemoveFileError(error.to_string()))?;
+
+            deletions += &format!("Deleted tag {tag} (was {}).\n", hash[..7].to_string());
+        }
+        write!(self.output, "{}{}", errors, deletions)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Lista los tags de refs/tags/
+    pub fn list_tags(&mut self) -> Result<(), CommandError> {
+        self.log("Listing tags...");
+        let mut tags = self.get_tags()?;
+
+        tags.sort();
+
+        let mut message = String::new();
+        for tag in tags {
+            message += &format!("{}\n", tag);
+        }
+
+        write!(self.output, "{}", message)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Devuelve un vector con los nombres de tags.
+    fn get_tags(&mut self) -> Result<Vec<String>, CommandError> {
+        self.log("Listing tags...");
+        let mut tags: Vec<String> = Vec::new();
+        let tags_path = join_paths!(self.git_path, "refs/tags/").ok_or(
+            CommandError::DirectoryCreationError(
+                "No se pudo crear el directorio .git/refs/tags".to_string(),
+            ),
+        )?;
+
+        let Ok(paths) = fs::read_dir(tags_path.clone()) else {
+            return Err(CommandError::FileReadError(tags_path));
+        };
+        for path in paths {
+            let path = path.map_err(|error| {
+                CommandError::FileReadError(format!(
+                    "Error leyendo directorio de tags: {}",
+                    error.to_string()
+                ))
+            })?;
+            let file_name = &path.file_name();
+            let Some(tag_name) = file_name.to_str() else {
+                return Err(CommandError::FileReadError(
+                    "Error leyendo directorio de tags".to_string(),
+                ));
+            };
+
+            tags.push(tag_name.to_string());
+        }
+        Ok(tags)
+    }
 }
 
+// ----- Ls-files -----
+
+/// Agrega archivos no mergeados a la lista pasada.
+fn add_unmerged_files_to_list(
+    staged_list: &mut Vec<String>,
+    staging_area_conflicts: HashMap<String, (Option<String>, Option<String>, Option<String>)>,
+) {
+    for (path, _) in staging_area_conflicts.iter() {
+        staged_list.push(path.to_string());
+    }
+}
+
+/// Obtiene el mensaje de salida de ls-files
+fn get_normal_ls_files_output(
+    others: Vec<String>,
+    extended_list: Vec<(Mode, String, usize, String)>,
+) -> String {
+    let mut message = String::new();
+    for path in others {
+        message += &format!("{}\n", path);
+    }
+    for (_, _, _, path) in extended_list {
+        message += &format!("{}\n", path);
+    }
+    message
+}
+
+/// Obtiene el mensaje de salida de ls-files si se usa -s o -u.
+fn get_extended_ls_files_output(
+    others: Vec<String>,
+    extended_list: Vec<(Mode, String, usize, String)>,
+) -> String {
+    let mut message = String::new();
+    for path in others {
+        message += &format!("{}\n", path);
+    }
+    for (mode, hash, stage_number, path) in extended_list {
+        message += &format!("{} {} {}\t{}\n", mode, hash, stage_number, path);
+    }
+    message
+}
+
+// ----- Checkout -----
+
+/// Lee el contenido de un archivo.
 pub fn get_current_file_content(path: &str) -> Result<Vec<u8>, CommandError> {
     let content =
         fs::read_to_string(path).map_err(|error| CommandError::FileReadError(error.to_string()))?;
     Ok(content.as_bytes().to_vec())
 }
 
-// ----- Checkout -----
-
+/// Elimina los archivos de la rama local que fueron commiteados y no están en la nueva rama.
 fn remove_new_files_commited(
     working_tree: &mut Tree,
     head_tree: &mut Tree,
@@ -3144,8 +3405,7 @@ fn remove_new_files_commited(
     let mut new_files = Vec::<String>::new();
     working_tree.get_new_blobs_from_tree(new_tree, &mut new_files, path, logger)?;
     for path in new_files.iter() {
-        if !head_tree.has_blob_from_path(path, logger) {
-            logger.log(&format!("Deleting ... {}", path));
+        if head_tree.has_blob_from_path(path, logger) {
             fs::remove_file(path.clone())
                 .map_err(|error| CommandError::RemoveFileError(error.to_string()))?;
         }
@@ -3154,12 +3414,13 @@ fn remove_new_files_commited(
     Ok(())
 }
 
+/// Compara el cotenido de las 3 versiones de un archivo (rama actual, nueva rama y ancestro) para determinar si hay conflictos.
 fn has_conflicts(
     path: &str,
     content: &Vec<u8>,
     new_content: &Vec<u8>,
     common: &mut Tree,
-    logger: &mut Logger,
+    _logger: &mut Logger,
 ) -> Result<bool, CommandError> {
     let content_str: String = String::from_utf8_lossy(content).to_string();
 
@@ -3182,20 +3443,18 @@ fn has_conflicts(
     Ok(has_conflicts)
 }
 
+/// Elimina archivos nuevos de la rama actual del árbol que se usará para actualizar el index.
 fn remove_local_changes_from_tree(
     untracked_files: &Vec<String>,
     tree: &mut Tree,
     logger: &mut Logger,
 ) {
     for path in untracked_files.iter() {
-        logger.log(&format!(
-            "Removing untracked file {} from new branch tree",
-            path
-        ));
         tree.remove_object_from_path(path, logger);
     }
 }
 
+/// Agrega los archivos nuevos al tree que se usará para actualizar el working tree.
 fn add_local_new_files(
     untracked_files: &Vec<String>,
     tree: &mut Tree,
@@ -3217,6 +3476,7 @@ fn add_local_new_files(
     Ok(added)
 }
 
+/// Obtiene los archivos modificados en el working tree.
 fn get_modified_paths(unstaged_changes: &HashMap<String, ChangeType>) -> Vec<String> {
     let unstaged_changes = sort_hashmap_and_filter_unmodified(unstaged_changes);
     let mut changes: Vec<String> = Vec::new();
@@ -3227,6 +3487,7 @@ fn get_modified_paths(unstaged_changes: &HashMap<String, ChangeType>) -> Vec<Str
     changes
 }
 
+/// Obtiene los archivos del staging area y su contenido.
 fn get_staged_paths_and_content(
     staged_changes: &HashMap<String, ChangeType>,
     staging_area: &StagingArea,
@@ -3246,12 +3507,12 @@ fn get_staged_paths_and_content(
             changes.insert(path.to_string(), content);
         }
     }
-    let log: Vec<&String> = changes.iter().map(|(s, _)| s).collect();
     Ok(changes)
 }
 
 // ----- Branch -----
 
+/// Obtiene el path de cada rama.
 fn get_branches_paths(
     logger: &mut Logger,
     path: &str,
@@ -3262,9 +3523,7 @@ fn get_branches_paths(
     let branches_path = join_paths!(path, dir_path).ok_or(CommandError::DirectoryCreationError(
         "Error creando directorio de branches".to_string(),
     ))?;
-    /* if branches_path.ends_with("/") {
-        _ = branches_path.pop();
-    } */
+
     let paths = fs::read_dir(branches_path.clone()).map_err(|error| {
         CommandError::FileReadError(format!(
             "Error leyendo directorio de branches: {}",
