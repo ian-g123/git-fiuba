@@ -706,6 +706,10 @@ pub fn sort_commits_descending_date(vec_commits: &mut Vec<(CommitObject, Option<
     vec_commits.sort_by(|a, b| b.0.timestamp.cmp(&a.0.timestamp));
 }
 
+pub fn sort_commits_ascending_date(vec_commits: &mut Vec<(CommitObject, Option<String>)>) {
+    vec_commits.sort_by(|a, b| a.0.timestamp.cmp(&b.0.timestamp));
+}
+
 fn timestamp_to_string(timestamp: i64) -> String {
     // let duration = Duration::from_secs(timestamp as u64);
     let Some(datetime) = DateTime::from_timestamp(timestamp, 0) else {
