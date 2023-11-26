@@ -6,18 +6,11 @@ use std::{
 
 use git_lib::{
     command_errors::CommandError,
-    file_compressor::compress,
     git_repository::GitRepository,
     join_paths,
     logger::Logger,
-    logger_sender::{self, LoggerSender},
-    objects::{
-        blob::Blob,
-        commit_object::CommitObject,
-        git_object::{GitObject, GitObjectTrait},
-        tree::Tree,
-    },
-    objects_database::ObjectsDatabase,
+    logger_sender::LoggerSender,
+    objects::{blob::Blob, commit_object::CommitObject, git_object::GitObjectTrait, tree::Tree},
     server_components::{
         history_analyzer::rebuild_commits_tree,
         packfile_functions::{make_packfile, read_objects},
@@ -30,16 +23,19 @@ use git_lib::{
 pub struct ServerWorker {
     path: String,
     socket: TcpStream,
+    process_id: String,
     thread_id: String,
     logger_sender: LoggerSender,
 }
 
 impl ServerWorker {
     pub fn new(path: String, stream: TcpStream, logger_sender: LoggerSender) -> Self {
-        let thread_id = format!("{:?}", std::process::id());
+        let process_id = format!("{:?}", std::process::id());
+        let thread_id = format!("{:?}", std::thread::current().id());
         Self {
             path,
             socket: stream,
+            process_id,
             thread_id,
             logger_sender,
         }
@@ -47,8 +43,10 @@ impl ServerWorker {
 
     fn log(&mut self, message: &str) {
         let time = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
-        self.logger_sender
-            .log(&format!("[{}] {}: {}", self.thread_id, time, message));
+        self.logger_sender.log(&format!(
+            "[{}:{}] {}: {}",
+            self.process_id, self.thread_id, time, message
+        ));
     }
 
     pub fn handle_connection(&mut self) {
@@ -60,13 +58,19 @@ impl ServerWorker {
 
     fn handle_connection_priv(&mut self) -> Result<(), CommandError> {
         let Some(presentation) = self.read_tpk()? else {
-            return Err(CommandError::ErrorReadingPkt);
+            return Err(CommandError::ErrorReadingPktVerbose(format!(
+                "handle_connection_priv leyó flush-pkt"
+            )));
         };
         let presentation_components: Vec<&str> = presentation.split("\0").collect();
         let command_and_repo_path = presentation_components[0];
-        let (command, repo_path) = command_and_repo_path
-            .split_once(" ")
-            .ok_or(CommandError::ErrorReadingPkt)?;
+        let (command, repo_path) =
+            command_and_repo_path
+                .split_once(" ")
+                .ok_or(CommandError::ErrorReadingPktVerbose(format!(
+                    "Error al leer command_and_repo_path: {}",
+                    command_and_repo_path
+                )))?;
 
         match command {
             "git-upload-pack" => self.git_upload_pack(&repo_path[1..]),

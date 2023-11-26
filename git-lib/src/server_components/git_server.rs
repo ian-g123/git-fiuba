@@ -56,18 +56,26 @@ impl GitServer {
         let mut lines = self.send(&line)?;
         let first_line = lines.remove(0);
         if first_line != "version 1\n" {
-            return Err(CommandError::ErrorReadingPkt);
+            return Err(CommandError::ErrorReadingPktVerbose(format!(
+                "Error al leer la versión del protocolo: {}",
+                first_line
+            )));
         }
         let head_branch_line = lines.remove(0);
         let Some((head_branch_commit, _)) = head_branch_line.split_once(' ') else {
-            return Err(CommandError::ErrorReadingPkt);
+            return Err(CommandError::ErrorReadingPktVerbose(format!(
+                "Error al leer la rama de cabecera: {}",
+                head_branch_line
+            )));
         };
         let mut refs = HashMap::<String, String>::new();
         for line in lines {
-            // logger.log(&format!("Line: {}", line));
             let (hash, ref_name) = line
                 .split_once(' ')
-                .ok_or(CommandError::ErrorReadingPkt)
+                .ok_or(CommandError::ErrorReadingPktVerbose(format!(
+                    "Error separando ref y hash: {}",
+                    line
+                )))
                 .map(|(sha1, ref_name)| (sha1.trim().to_string(), ref_name.trim().to_string()))?;
             refs.insert(hash, ref_name);
         }
@@ -107,7 +115,11 @@ impl GitServer {
                 logger.log(&format!("pushing: {:?}", line));
                 lines.push(line);
             }
-            None => return Err(CommandError::ErrorReadingPkt),
+            None => {
+                return Err(CommandError::ErrorReadingPktVerbose(format!(
+                    "fetch_objects leyó un flush-pkt"
+                )))
+            }
         }
         Ok(read_objects(&mut self.socket)?)
     }
@@ -158,13 +170,20 @@ impl GitServer {
         let _version = lines.remove(0);
         let first_line = lines.remove(0);
 
-        let (hash, mut branch_name_and_options) = first_line
-            .split_once(' ')
-            .ok_or(CommandError::ErrorReadingPkt)?;
+        let (hash, mut branch_name_and_options) =
+            first_line
+                .split_once(' ')
+                .ok_or(CommandError::ErrorReadingPktVerbose(format!(
+                    "Error al leer la rama de cabecera: {}",
+                    first_line
+                )))?;
         branch_name_and_options = &branch_name_and_options[11..branch_name_and_options.len() - 1]; // refs/heads/*\n
-        let (branch_name, _options) = branch_name_and_options
-            .split_once('\0')
-            .ok_or(CommandError::ErrorReadingPkt)?;
+        let (branch_name, _options) = branch_name_and_options.split_once('\0').ok_or(
+            CommandError::ErrorReadingPktVerbose(format!(
+                "Error al leer las opciones: {}",
+                branch_name_and_options
+            )),
+        )?;
         refs_hash.insert(branch_name.to_string(), hash.to_string());
 
         for line in &lines {
