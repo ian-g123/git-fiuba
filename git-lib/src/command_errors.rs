@@ -200,6 +200,10 @@ pub enum CommandError {
 
     // Show-ref
     FlagHashRequiresValue,
+    // Not a valid tag
+    TagNotFound(String),
+    // La tag que usaste no apunta a un commit
+    MergeTagNotCommit(String),
 }
 
 impl Error for CommandError {}
@@ -514,6 +518,8 @@ impl fmt::Display for CommandError {
             CommandError::TagAlreadyExists(tag) => write!(f, "fatal: tag '{tag}' already exists"),
             CommandError::InvalidRef(tag_ref) => write!(f, "fatal: Failed to resolve '{tag_ref}' as a valid ref."),
             CommandError::FlagHashRequiresValue => write!(f, "error: option `hash' expects a numerical value"),
+            CommandError::TagNotFound(tag_name) => write!(f, "fatal: tag not found: {tag_name}"),
+            CommandError::MergeTagNotCommit(tag_name) => write!(f, "La tag {} no apunta a un commit", tag_name),
         }
     }
 }

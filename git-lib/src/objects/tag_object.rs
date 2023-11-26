@@ -12,7 +12,7 @@ use super::{
     git_object::{GitObject, GitObjectTrait},
 };
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct TagObject {
     name: String,
     object: String,
@@ -183,6 +183,10 @@ fn read_tag_info_from(
 impl GitObjectTrait for TagObject {
     fn as_mut_tag(&mut self) -> Option<&mut TagObject> {
         Some(self)
+    }
+
+    fn as_tag(&mut self) -> Option<TagObject> {
+        Some(self.to_owned())
     }
 
     fn as_mut_tree(&mut self) -> Option<&mut super::tree::Tree> {
