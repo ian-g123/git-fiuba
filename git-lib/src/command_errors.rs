@@ -197,6 +197,9 @@ pub enum CommandError {
     TagMessageEmpty,
     TagAlreadyExists(String),
     InvalidRef(String),
+
+    // Show-ref
+    FlagHashRequiresValue,
 }
 
 impl Error for CommandError {}
@@ -510,6 +513,7 @@ impl fmt::Display for CommandError {
             CommandError::TagMessageEmpty => write!(f, "fatal: no tag message?"),
             CommandError::TagAlreadyExists(tag) => write!(f, "fatal: tag '{tag}' already exists"),
             CommandError::InvalidRef(tag_ref) => write!(f, "fatal: Failed to resolve '{tag_ref}' as a valid ref."),
+            CommandError::FlagHashRequiresValue => write!(f, "error: option `hash' expects a numerical value"),
         }
     }
 }

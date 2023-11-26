@@ -129,6 +129,10 @@ impl TagObject {
     fn set_hash(&mut self, hash: [u8; 20]) {
         self.hash = Some(hash);
     }
+
+    pub fn get_object_hash(&self) -> String {
+        self.object.clone()
+    }
 }
 
 fn read_tag_info_from(
