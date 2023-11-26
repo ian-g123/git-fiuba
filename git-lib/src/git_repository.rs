@@ -282,6 +282,7 @@ impl<'a> GitRepository<'a> {
             first_commit_todo,
             Some(main_branch),
         )?;
+        println!("blabla");
         self.rebase_continue()?;
         Ok(())
     }
@@ -297,7 +298,7 @@ impl<'a> GitRepository<'a> {
             if i < commits_topic.len() && verify {
                 let Some(tree_main) = commits_main[i].0.get_tree() else {
                     return Err(CommandError::DirectoryCreationError(
-                        "Error creando directorio".to_string(),
+                        "Error creando directorio".to_string(), ///////////////////////////
                     ));
                 };
                 let mut tree_main = tree_main.clone();
@@ -335,7 +336,7 @@ impl<'a> GitRepository<'a> {
             None,
             false,
             &hash_to_look_for,
-            false,
+            true,
             &mut self.logger(),
         )?;
         Ok(commits_map_topic.drain().map(|(_, v)| v).collect())
@@ -407,6 +408,7 @@ impl<'a> GitRepository<'a> {
 
     fn rebase_continue(&mut self) -> Result<(), CommandError> {
         // se fija si hay conflictos
+        println!("rebase continue");
         if self.staging_area()?.has_conflicts() {
             return Err(CommandError::RebaseContinueError);
         }
@@ -427,6 +429,7 @@ impl<'a> GitRepository<'a> {
 
         // si hay commits todo, hace el merge de los dos commits (el usuario tiene que resolverlos)
         let topic_hash = self.get_last_commit_hash()?;
+        print!("{:?}", topic_hash);
         let topic_hash = topic_hash.ok_or(CommandError::RebaseContinueError)?;
         let mut binding = self.db()?.read_object(&topic_hash, &mut self.logger)?;
         let topic_commit = binding
