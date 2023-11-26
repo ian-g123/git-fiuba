@@ -197,6 +197,8 @@ pub enum CommandError {
     TagMessageEmpty,
     TagAlreadyExists(String),
     InvalidRef(String),
+    RebaseContinueError,
+    RebaseMergeConflictsError,
 }
 
 impl Error for CommandError {}
@@ -510,6 +512,8 @@ impl fmt::Display for CommandError {
             CommandError::TagMessageEmpty => write!(f, "fatal: no tag message?"),
             CommandError::TagAlreadyExists(tag) => write!(f, "fatal: tag '{tag}' already exists"),
             CommandError::InvalidRef(tag_ref) => write!(f, "fatal: Failed to resolve '{tag_ref}' as a valid ref."),
+            CommandError::RebaseContinueError => write!(f, "No se puede hacer rebase, hay conflictos de merge"), //PONER BIEN MSJ!!!!!!!!!!!!!!!!!!!!!!!!
+            CommandError::RebaseMergeConflictsError => write!(f, "Resolver Conflictos"), //PONER BIEN MSJ!!!!!!!!!!!!!!!!!!!!!!!!
         }
     }
 }

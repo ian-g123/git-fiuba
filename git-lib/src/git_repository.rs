@@ -4,6 +4,7 @@ use std::{
     fs::{self, DirEntry, File, OpenOptions, ReadDir},
     io::{Read, Write},
     path::{Path, PathBuf},
+    process::Command,
 };
 
 use chrono::{DateTime, Local};
@@ -11,7 +12,7 @@ use chrono::{DateTime, Local};
 use crate::{
     changes_controller_components::{
         changes_controller::ChangesController,
-        changes_types::{self, ChangeType},
+        changes_types::ChangeType,
         commit_format::CommitFormat,
         format::Format,
         long_format::{set_diverge_message, sort_hashmap_and_filter_unmodified, LongFormat},
@@ -22,7 +23,7 @@ use crate::{
     config::Config,
     diff_components::merge::merge_content,
     join_paths,
-    logger::{self, Logger},
+    logger::Logger,
     objects::{
         author::Author,
         blob::Blob,
@@ -38,7 +39,7 @@ use crate::{
     objects_database::ObjectsDatabase,
     server_components::git_server::GitServer,
     server_components::{
-        history_analyzer::{get_analysis, get_parents_hash_map, rebuild_commits_tree},
+        history_analyzer::{get_analysis, rebuild_commits_tree},
         packfile_functions::make_packfile,
         packfile_object_type::PackfileObjectType,
     },
@@ -197,6 +198,175 @@ impl<'a> GitRepository<'a> {
         let _ = writeln!(self.output, "{}", hex_string);
 
         Ok(())
+    }
+
+    pub fn initialize_rebase(
+        &mut self,
+        topic_branch: String,
+        main_branch: String,
+    ) -> Result<(), CommandError> {
+        let last_commit_topic_branch = self.get_last_commit_hash_branch(&topic_branch)?;
+        let last_hash_commit_main = self.get_last_commit_hash_branch(&main_branch)?;
+
+        let (mut common_ancestor, _, _) =
+            self.get_common_ancestor(&last_commit_topic_branch, &last_hash_commit_main)?;
+
+        let db = self.db()?;
+        let common_string_hash = common_ancestor.get_hash_string()?;
+        let mut hash_to_look_for = HashSet::new();
+        hash_to_look_for.insert(common_string_hash);
+        let mut commits_map = HashMap::new(); // HashMap<hash, (commit, branch)>
+        rebuild_commits_tree(
+            &db,
+            &last_hash_commit_main,
+            &mut commits_map,
+            None,
+            false,
+            &hash_to_look_for,
+            false,
+            &mut self.logger(),
+        )?;
+
+        let mut commits_main = commits_map.drain().map(|(_, v)| v).collect();
+        sort_commits_descending_date(&mut commits_main);
+
+        self.checkout(&topic_branch)?;
+        self.make_rebase_merge_directory(commits_main)?;
+        self.rebase_continue()?;
+
+        Ok(())
+    }
+
+    fn make_rebase_merge_directory(
+        &mut self,
+        mut commits_main: Vec<(CommitObject, Option<String>)>,
+    ) -> Result<(), CommandError> {
+        // directorio rebase-merge
+        let rebase_merge_path = join_paths!(self.git_path, "rebase-merge").ok_or(
+            CommandError::DirectoryCreationError("Error creando directorio".to_string()),
+        )?;
+        if !fs::create_dir_all(&rebase_merge_path).is_ok() {
+            return Err(CommandError::DirectoryCreationError(rebase_merge_path));
+        }
+        let git_path = self.git_path.clone();
+
+        // archivo stopped-sha
+        let stopped_sha_content = commits_main[0].0.get_hash_string()?;
+        write_file_with(&git_path, "rebase-merge/stopped-sha", stopped_sha_content)?;
+
+        // archivo message
+        let message = commits_main[0].0.get_message();
+        write_file_with(&git_path, "rebase-merge/message", message)?;
+
+        // archivo head-name
+        let head_name = commits_main[0]
+            .1
+            .clone()
+            .ok_or(CommandError::DirectoryCreationError(
+                "Error creando archivo para head-name".to_string(),
+            ))?;
+        let head_name = format!("refs/heads/{}", head_name);
+        write_file_with(&git_path, "rebase-merge/head-name", head_name)?;
+
+        // archivo git-rebase-todo
+        let mut pick_hash_message = String::new();
+        for commit in commits_main.iter_mut() {
+            let hash = commit.0.get_hash_string()?;
+            let message = commit.0.get_message();
+            pick_hash_message.push_str(&format!("pick {} {}\n", hash, message));
+        }
+        write_file_with(&git_path, "rebase-merge/git-rebase-todo", pick_hash_message)?;
+
+        // archivo done (vacio)
+        write_file_with(&git_path, "rebase-merge/done", "".to_string())?;
+
+        // archivo REBASE_HEAD
+        let commit_hash = self.get_last_commit_hash()?;
+        let commit_hash = commit_hash.ok_or(CommandError::FileCreationError(format!(
+            "{} {}",
+            "Error creando el directorio", "rebase-merge/REBASE_HEAD"
+        )))?;
+        write_file_with(&git_path, "rebase-merge/REBASE_HEAD", commit_hash)?;
+
+        // archivo author-script
+        let author = commits_main[0].0.get_author();
+        let author_str = author.name;
+        let email = author.email;
+        let timestamp = commits_main[0].0.get_timestamp();
+        let author_script = format!(
+            "GIT_AUTHOR_NAME='{}'\nGIT_AUTHOR_EMAIL='{}'\nGIT_AUTHOR_DATE='{}'",
+            author_str, email, timestamp
+        );
+        write_file_with(&git_path, "rebase-merge/author-script", author_script)?;
+        Ok(())
+    }
+
+    fn rebase_continue(&mut self) -> Result<(), CommandError> {
+        // se fija si hay conflictos
+        if self.staging_area()?.has_conflicts() {
+            return Err(CommandError::RebaseContinueError);
+        }
+        // let archivo = abre archivo
+        let commits_todo = self.get_commits_todo()?;
+        let commits_done = self.get_commits_done()?;
+
+        // si no hay commits todo, termina el rebase
+        if commits_todo.len() == 0 {
+            let rebase_merge_path = join_paths!(self.git_path, "rebase-merge").ok_or(
+                CommandError::DirectoryCreationError("Error creando directorio".to_string()),
+            )?;
+            fs::remove_dir_all(&rebase_merge_path).map_err(|_| {
+                CommandError::DirectoryCreationError("Error borrando directorio".to_string())
+            })?;
+            return Ok(());
+        }
+
+        // si hay commits todo, hace el merge de los dos commits (el usuario tiene que resolverlos)
+        let topic_hash = self.get_last_commit_hash()?;
+        let topic_hash = topic_hash.ok_or(CommandError::RebaseContinueError)?;
+        let mut binding = self.db()?.read_object(&topic_hash, &mut self.logger)?;
+        let topic_commit = binding
+            .as_mut_commit()
+            .ok_or(CommandError::DirectoryCreationError(
+                "Error creando directorio".to_string(),
+            ))?;
+        let main_hash = &commits_todo[0];
+        let mut binding = self.db()?.read_object(&main_hash, &mut self.logger)?;
+        let main_commit = binding
+            .as_mut_commit()
+            .ok_or(CommandError::DirectoryCreationError(
+                "Error creando directorio".to_string(),
+            ))?;
+
+        let ancestor_hash = &commits_done[commits_done.len() - 1];
+        let mut binding = self.db()?.read_object(&ancestor_hash, &mut self.logger)?;
+        let ancestor_commit =
+            binding
+                .as_mut_commit()
+                .ok_or(CommandError::DirectoryCreationError(
+                    "Error creando directorio".to_string(),
+                ))?;
+        self.merge_two_commits_rebase(main_commit, topic_commit, ancestor_commit)?;
+
+        //
+
+        // si hay conflictos, el usuario los tiene que resolver
+        if self.staging_area()?.has_conflicts() {
+            return Err(CommandError::RebaseMergeConflictsError);
+        }
+
+        // si no hay conflictos, sigue con el rebase_continue
+        return self.rebase_continue();
+    }
+
+    fn get_commits_todo(&mut self) -> Result<Vec<String>, CommandError> {
+        let commit_todo_path = self.git_path.clone() + "/rebase-merge/git-rebase-todo";
+        Ok(get_commits_rebase_merge(&commit_todo_path)?)
+    }
+
+    fn get_commits_done(&mut self) -> Result<Vec<String>, CommandError> {
+        let commit_done_path = self.git_path.clone() + "/rebase-merge/done";
+        Ok(get_commits_rebase_merge(&commit_done_path)?)
     }
 
     pub fn add(&mut self, pathspecs: Vec<String>) -> Result<(), CommandError> {
@@ -827,7 +997,7 @@ impl<'a> GitRepository<'a> {
         let commit_remote = remote_branches.get(branch);
         let common_hash = match (commit_head.clone(), commit_remote) {
             (Some(head), Some(remote)) => {
-                let (mut common, _, _) = self.get_common_ansestor(remote, &head)?;
+                let (mut common, _, _) = self.get_common_ancestor(remote, &head)?;
                 common.get_hash_string()?
             }
             _ => "".to_string(),
@@ -1731,7 +1901,7 @@ impl<'a> GitRepository<'a> {
         self.log("Running merge_commits");
 
         let (mut common, mut commit_head, mut commit_destin) =
-            self.get_common_ansestor(&destin_commit, head_commit)?;
+            self.get_common_ancestor(&destin_commit, head_commit)?;
 
         let hash = common.get_hash_string()?;
         self.log(&format!("Common hash: {}", hash));
@@ -1749,7 +1919,115 @@ impl<'a> GitRepository<'a> {
         )
     }
 
-    fn get_common_ansestor(
+    fn merge_two_commits_rebase(
+        &mut self,
+        topic_commit: &mut CommitObject,
+        main_commit: &mut CommitObject,
+        common: &mut CommitObject,
+    ) -> Result<(), CommandError> {
+        self.log("Running merge_commits");
+
+        let hash = common.get_hash_string()?;
+        self.log(&format!("Common hash: {}", hash));
+
+        self.log("True merge");
+        self.true_merge_rebase(common, topic_commit, main_commit)
+    }
+
+    fn true_merge_rebase(
+        &mut self,
+        common: &mut CommitObject,
+        head: &mut CommitObject,
+        destin: &mut CommitObject,
+    ) -> Result<(), CommandError> {
+        let mut common_tree = common.get_tree_some_or_err()?.to_owned();
+        let mut head_tree = head.get_tree_some_or_err()?.to_owned();
+        let mut destin_tree = destin.get_tree_some_or_err()?.to_owned();
+
+        let mut staging_area = self.staging_area()?;
+
+        let destin_name = format!(
+            "{} {}",
+            &destin.get_hash_string()?[0..7],
+            &destin.get_message()
+        );
+        staging_area.clear();
+        let merged_tree = merge_trees(
+            &mut head_tree,
+            &mut destin_tree,
+            &mut common_tree,
+            "HEAD",
+            &destin_name,
+            &self.working_dir_path,
+            &mut staging_area,
+            &mut self.logger,
+        )?;
+        staging_area.save()?;
+
+        let message = destin.get_message();
+        if staging_area.has_conflicts() {
+            self.log(&format!(
+                "Conflicts {:?}",
+                staging_area.get_unmerged_files()
+            ));
+            let mut boxed_tree: GitObject = Box::new(merged_tree.clone());
+            let _ = self.db()?.write(&mut boxed_tree, true, &mut self.logger)?;
+
+            self.write_to_internal_file("MERGE_MSG", &message)?;
+            self.write_to_internal_file("MERGE_HEAD", &head.get_hash_string()?)?;
+
+            self.restore_merge_conflict(merged_tree)?;
+            Ok(())
+        } else {
+            let mut boxed_tree: GitObject = Box::new(merged_tree.clone());
+            let _merge_tree_hash_str = self.db()?.write(&mut boxed_tree, true, &mut self.logger)?;
+            let merge_commit = self.create_new_commit(
+                message,
+                [head.get_hash_string()?].to_vec(),
+                merged_tree.clone(),
+            )?;
+
+            let mut boxed_commit: GitObject = Box::new(merge_commit.clone());
+            let merge_commit_hash_str =
+                self.db()?
+                    .write(&mut boxed_commit, false, &mut self.logger)?;
+            self.set_head_branch_commit_to(&merge_commit_hash_str)?;
+            self.restore(merged_tree)?;
+            Ok(())
+        }
+    }
+
+    /// Tries to continue from failed merged
+    pub fn merge_continue_rebase(&mut self) -> Result<(), CommandError> {
+        let (message, merge_tree_hash_str) = self.get_failed_merge_info_rebase()?;
+        let staging_area = self.staging_area()?;
+        if staging_area.has_conflicts() {
+            return Err(CommandError::UnmergedFiles);
+        }
+        let get_last_commit_hash = self
+            .get_last_commit_hash()?
+            .ok_or(CommandError::FailedToResumeMerge)?;
+        let parents = [get_last_commit_hash].to_vec();
+        let merge_tree = self
+            .db()?
+            .read_object(&merge_tree_hash_str, &mut self.logger)?
+            .as_mut_tree()
+            .ok_or(CommandError::FailedToResumeMerge)?
+            .to_owned();
+        let merge_commit = self.create_new_commit(message, parents, merge_tree.clone())?;
+        let mut boxed_commit: GitObject = Box::new(merge_commit.clone());
+        let merge_commit_hash_str = self
+            .db()?
+            .write(&mut boxed_commit, false, &mut self.logger)?;
+        self.set_head_branch_commit_to(&merge_commit_hash_str)?;
+        self.restore(merge_tree)?;
+        self.delete_file("MERGE_MSG")?;
+        self.delete_file("MERGE_HEAD")?;
+        self.rebase_continue()?;
+        Ok(())
+    }
+
+    fn get_common_ancestor(
         &mut self,
         commit_destin_str: &str,
         commit_head_str: &str,
@@ -2008,6 +2286,16 @@ impl<'a> GitRepository<'a> {
         };
 
         Ok((message, merge_tree_hash_str, destin))
+    }
+
+    fn get_failed_merge_info_rebase(&mut self) -> Result<(String, String), CommandError> {
+        let (Ok(message), Ok(merge_tree_hash_str)) =
+            (self.read_file("MERGE_MSG"), self.read_file("MERGE_HEAD"))
+        else {
+            return Err(CommandError::NoMergeFound);
+        };
+
+        Ok((message, merge_tree_hash_str))
     }
 
     /// Dado un path, crea el archivo correspondiente y escribe el contenido pasado.
@@ -2633,7 +2921,7 @@ impl<'a> GitRepository<'a> {
         let mut modifications: Vec<String> = Vec::new();
         let mut conflicts: Vec<String> = Vec::new();
 
-        let (ancestor, _, _) = self.get_common_ansestor(&new_hash, &actual_hash)?;
+        let (ancestor, _, _) = self.get_common_ancestor(&new_hash, &actual_hash)?;
         let Some(common_tree) = ancestor.get_tree() else {
             return Err(CommandError::ObjectNotTree);
         };
@@ -3968,4 +4256,46 @@ fn _update_ref(base_path: &str, sha1: &str, ref_name: &str) -> Result<(), Comman
         CommandError::FileWriteError("Error guardando ref:".to_string() + &error.to_string())
     })?;
     Ok(())
+}
+
+fn write_file_with(git_path: &str, file_name: &str, content: String) -> Result<(), CommandError> {
+    let file_path = join_paths!(git_path, file_name).ok_or(
+        CommandError::DirectoryCreationError("Error creando archivo para stopped-sha".to_string()),
+    )?;
+    let mut archivo = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .open(&file_path)
+        .map_err(|_| CommandError::FileCreationError(file_path.to_string()))?;
+    let _: Result<(), CommandError> = match archivo.write_all(content.as_bytes()) {
+        Ok(_) => Ok(()),
+        Err(err) => Err(CommandError::FileWriteError(err.to_string())),
+    };
+    Ok(())
+}
+
+fn get_commits_rebase_merge(commit_type_path: &str) -> Result<Vec<String>, CommandError> {
+    let mut commits = Vec::new();
+    let git_rebase_todo_path = join_paths!(commit_type_path).ok_or(
+        CommandError::DirectoryCreationError("Error abriendo directorio".to_string()),
+    );
+    if let Ok(git_rebase_todo_path) = git_rebase_todo_path {
+        let mut file = File::open(git_rebase_todo_path).map_err(|_| {
+            CommandError::FileOpenError("Error abriendo archivo git_rebase_todo_path".to_string())
+        })?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).map_err(|_| {
+            CommandError::FileOpenError("Error leyendo archivo git_rebase_todo_path".to_string())
+        })?;
+        let lines: Vec<_> = contents.split('\n').collect();
+        for line in lines {
+            let hash = line.chars().nth(1);
+            if hash.is_none() {
+                return Err(CommandError::RebaseContinueError);
+            }
+            let hash = hash.unwrap();
+            commits.push(hash.to_string());
+        }
+    }
+    Ok(commits)
 }

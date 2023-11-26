@@ -11,8 +11,8 @@ use crate::utils::aux::read_string_until;
 /// apellido e email.
 #[derive(Clone, PartialEq, Debug)]
 pub struct Author {
-    name: String,
-    email: String,
+    pub name: String,
+    pub email: String,
 }
 
 impl Author {

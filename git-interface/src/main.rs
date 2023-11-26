@@ -386,7 +386,7 @@ impl Interface {
 
         for (mut commit, branch) in commits {
             add_row_to_list(&commit.get_timestamp_string(), &date_list);
-            add_row_to_list(&commit.get_author(), &author_list);
+            add_row_to_list(&commit.get_author().name, &author_list);
             add_row_to_list(&commit.get_hash_string().unwrap(), &commits_hashes_list);
             add_row_to_list(&commit.get_message(), &description_list);
         }
