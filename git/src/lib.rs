@@ -14,6 +14,7 @@ pub mod commands {
     pub mod merge;
     pub mod pull;
     pub mod push;
+    pub mod rebase;
     pub mod rm;
     pub mod status;
     pub mod tag;

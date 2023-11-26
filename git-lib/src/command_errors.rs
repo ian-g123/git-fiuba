@@ -199,6 +199,7 @@ pub enum CommandError {
     InvalidRef(String),
     RebaseContinueError,
     RebaseMergeConflictsError,
+    RebaseError(String),
 }
 
 impl Error for CommandError {}
@@ -514,6 +515,8 @@ impl fmt::Display for CommandError {
             CommandError::InvalidRef(tag_ref) => write!(f, "fatal: Failed to resolve '{tag_ref}' as a valid ref."),
             CommandError::RebaseContinueError => write!(f, "No se puede hacer rebase, hay conflictos de merge"), //PONER BIEN MSJ!!!!!!!!!!!!!!!!!!!!!!!!
             CommandError::RebaseMergeConflictsError => write!(f, "Resolver Conflictos"), //PONER BIEN MSJ!!!!!!!!!!!!!!!!!!!!!!!!
+            CommandError::RebaseError(msj) => write!(f, "{msj}"),
+
         }
     }
 }

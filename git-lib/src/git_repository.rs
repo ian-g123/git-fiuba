@@ -200,6 +200,23 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    pub fn print_error_merge_conflicts(&mut self) -> Result<String, CommandError> {
+        let staging_area = self.staging_area()?;
+        let merge_conflicts = staging_area.get_unmerged_files();
+        let files_merge_conflict = merge_conflicts.keys().cloned().collect::<HashSet<String>>();
+
+        let mut files_merge_conflicts_message = String::new();
+        for file in files_merge_conflict {
+            files_merge_conflicts_message.push_str(&format!("{} needs merge\n", file));
+        }
+
+        let message = format!(
+            "{}\nYou must edit all merge conflicts and then\nmark them as resolved using git add",
+            files_merge_conflicts_message
+        );
+        Ok(message)
+    }
+
     pub fn rebase_abort(&mut self) -> Result<(), CommandError> {
         let rebase_merge_path = join_paths!(self.git_path, "rebase-merge").ok_or(
             CommandError::DirectoryCreationError("Error creando directorio".to_string()),
@@ -425,7 +442,7 @@ impl<'a> GitRepository<'a> {
                 "Error creando directorio".to_string(),
             ))?;
 
-        let ancestor_hash = &commits_done[0].0;
+        let ancestor_hash = &commits_done[commits_done.len() - 1].0;
         let mut binding = self.db()?.read_object(&ancestor_hash, &mut self.logger)?;
         let ancestor_commit =
             binding
@@ -2083,35 +2100,53 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    // /// Tries to continue from failed merged
-    // pub fn merge_continue_rebase(&mut self) -> Result<(), CommandError> {
-    //     let (message, merge_tree_hash_str) = self.get_failed_merge_info_rebase()?;
-    //     let staging_area = self.staging_area()?;
-    //     if staging_area.has_conflicts() {
-    //         return Err(CommandError::UnmergedFiles);
-    //     }
-    //     let get_last_commit_hash = self
-    //         .get_last_commit_hash()?
-    //         .ok_or(CommandError::FailedToResumeMerge)?;
-    //     let parents = [get_last_commit_hash].to_vec();
-    //     let merge_tree = self
-    //         .db()?
-    //         .read_object(&merge_tree_hash_str, &mut self.logger)?
-    //         .as_mut_tree()
-    //         .ok_or(CommandError::FailedToResumeMerge)?
-    //         .to_owned();
-    //     let merge_commit = self.create_new_commit(message, parents, merge_tree.clone())?;
-    //     let mut boxed_commit: GitObject = Box::new(merge_commit.clone());
-    //     let merge_commit_hash_str = self
-    //         .db()?
-    //         .write(&mut boxed_commit, false, &mut self.logger)?;
-    //     self.set_head_branch_commit_to(&merge_commit_hash_str)?;
-    //     self.restore(merge_tree)?;
-    //     self.delete_file("MERGE_MSG")?;
-    //     self.delete_file("MERGE_HEAD")?;
-    //     self.rebase_continue()?;
-    //     Ok(())
-    // }
+    /// Tries to continue from failed merged
+    pub fn merge_continue_rebase(&mut self) -> Result<(), CommandError> {
+        let (message, merge_tree_hash_str) = self.get_failed_merge_info_rebase()?;
+        let staging_area = self.staging_area()?;
+        if staging_area.has_conflicts() {
+            return Err(CommandError::UnmergedFiles);
+        }
+        let get_last_commit_hash = self
+            .get_last_commit_hash()?
+            .ok_or(CommandError::FailedToResumeMerge)?;
+        let parents = [get_last_commit_hash].to_vec();
+        let merge_tree = self
+            .db()?
+            .read_object(&merge_tree_hash_str, &mut self.logger)?
+            .as_mut_tree()
+            .ok_or(CommandError::FailedToResumeMerge)?
+            .to_owned();
+        let merge_commit = self.create_new_commit(message, parents, merge_tree.clone())?;
+        let mut boxed_commit: GitObject = Box::new(merge_commit.clone());
+        let merge_commit_hash_str = self
+            .db()?
+            .write(&mut boxed_commit, false, &mut self.logger)?;
+        self.set_head_branch_commit_to(&merge_commit_hash_str)?;
+        self.restore(merge_tree)?;
+        self.delete_file("MERGE_MSG")?;
+        self.delete_file("MERGE_HEAD")?;
+
+        //ACTUALIZAR ARCHIVOSS
+        let mut commits_todo = self.get_commits_todo()?;
+        let mut commits_done = self.get_commits_done()?;
+        commits_done.push(commits_todo.remove(0));
+
+        let first_commit_todo = commits_todo
+            .first()
+            .ok_or(CommandError::FailedToResumeMerge)?;
+
+        let mut first_commit_todo = self
+            .db()?
+            .read_object(&first_commit_todo.0, &mut self.logger)?
+            .as_mut_commit()
+            .ok_or(CommandError::FailedToResumeMerge)?
+            .to_owned();
+
+        self.make_rebase_merge_directory(commits_todo, commits_done, &mut first_commit_todo, None)?;
+        self.rebase_continue()?;
+        Ok(())
+    }
 
     fn get_common_ancestor(
         &mut self,
@@ -2374,15 +2409,15 @@ impl<'a> GitRepository<'a> {
         Ok((message, merge_tree_hash_str, destin))
     }
 
-    // fn get_failed_merge_info_rebase(&mut self) -> Result<(String, String), CommandError> {
-    //     let (Ok(message), Ok(merge_tree_hash_str)) =
-    //         (self.read_file("MERGE_MSG"), self.read_file("MERGE_HEAD"))
-    //     else {
-    //         return Err(CommandError::NoMergeFound);
-    //     };
+    fn get_failed_merge_info_rebase(&mut self) -> Result<(String, String), CommandError> {
+        let (Ok(message), Ok(merge_tree_hash_str)) =
+            (self.read_file("MERGE_MSG"), self.read_file("MERGE_HEAD"))
+        else {
+            return Err(CommandError::NoMergeFound);
+        };
 
-    //     Ok((message, merge_tree_hash_str))
-    // }
+        Ok((message, merge_tree_hash_str))
+    }
 
     /// Dado un path, crea el archivo correspondiente y escribe el contenido pasado.
     pub fn write_to_internal_file(
