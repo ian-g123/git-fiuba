@@ -18,6 +18,7 @@ impl Config {
         let mut config = Self::default_config(&config_path_str);
         let Ok(mut file) = std::fs::File::open(&config_path_str) else {
             println!("No hay un archivo config. Utilizando configuración por defecto");
+            config.save()?;
             return Ok(config);
         };
         let mut content = String::new();
