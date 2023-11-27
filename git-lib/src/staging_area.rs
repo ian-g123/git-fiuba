@@ -503,6 +503,10 @@ impl StagingArea {
     pub fn has_conflicts(&self) -> bool {
         !self.unmerged_files.is_empty()
     }
+
+    pub fn is_umgerged(&self, path: &str) -> bool {
+        self.unmerged_files.contains_key(path)
+    }
 }
 
 fn write_hash_str_to(stream: &mut dyn Write, hash: &String) -> Result<(), CommandError> {

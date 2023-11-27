@@ -242,7 +242,7 @@ fn test_unmerged() {
         .output()
         .unwrap();
 
-    change_dir_testfile1_testfile2_unmgerged(path);
+    change_dir_testfile1_testfile2_unmerged(path);
 
     let result = Command::new("../../../../../../target/debug/git")
         .arg("commit")
@@ -283,6 +283,20 @@ fn test_unmerged() {
 
     let master_commit = fs::read_to_string(master_path.clone()).unwrap();
     println!("Master commit {}", master_commit);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("status")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    println!("Stderr: {}", String::from_utf8(result.stderr).unwrap());
+
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    println!("Stdout: {}", stdout);
+
+    let expected = "On branch master\nYou have unmerged paths.\n  (fix conflicts and run \"git commit\")\n  (use \"git merge --abort\" to abort the merge)\n\nUnmerged paths:\n  (use \"git add/rm <file>...\" as appropriate to mark resolution)\n\tboth modified:   dir/testfile1.txt\n\tdeleted by them:   dir/testfile2.txt\n\nUntracked files:\n  (use \"git add <file>...\" to include in what will be committed)\n\tdir/dir1/\n\tdir/testfile3.txt\n\tdir/testfile4.txt\n\ttestfile.txt\n\nno changes added to commit (use \"git add\" and/or \"git commit -a\"\n";
+    assert_eq!(expected, stdout);
 
     let result = Command::new("../../../../../../target/debug/git")
         .arg("ls-files")
@@ -514,7 +528,7 @@ fn get_hash(file: &str, path: &str) -> String {
     String::from_utf8(result.stdout).unwrap().trim().to_string()
 }
 
-fn change_dir_testfile1_testfile2_unmgerged(path: &str) {
+fn change_dir_testfile1_testfile2_unmerged(path: &str) {
     let mut file = File::create(path.to_owned() + "/dir/testfile1.txt").unwrap();
     file.write_all(b"linea 1\nlinea 5\nlinea 3").unwrap();
 

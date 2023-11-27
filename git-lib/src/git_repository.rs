@@ -839,12 +839,13 @@ impl<'a> GitRepository<'a> {
 
     /// Ejecuta el comando Status con Long Format.
     pub fn status_long_format(&mut self, commit_output: bool) -> Result<(), CommandError> {
+        let index = self.staging_area()?;
         let branch = self.get_current_branch_name()?;
         let long_format = LongFormat;
         let last_commit_tree = self.get_last_commit_tree()?;
         let merge = self.is_merge()?;
         let diverge_info = self.get_commits_ahead_and_behind_remote(&branch)?;
-        let index = self.staging_area()?;
+
         long_format.show(
             &self.db()?,
             &self.git_path,
@@ -1676,7 +1677,7 @@ impl<'a> GitRepository<'a> {
             } else {
                 let blob = Blob::new_from_path(entry_name.to_string())?;
                 let path = &entry_name[2..];
-                if !self.is_untracked(path, &staging_area)? {
+                if !self.is_untracked(path, &staging_area)? && !staging_area.is_umgerged(path) {
                     let mut git_object: GitObject = Box::new(blob);
                     self.log(&format!("Adding {} to staging area", path));
                     let hex_str = self.db()?.write(&mut git_object, false, &mut self.logger)?;
@@ -3434,6 +3435,115 @@ impl<'a> GitRepository<'a> {
 
         Ok(())
     }
+
+    // ----- Ls-tree -----
+
+    pub fn ls_tree(
+        &mut self,
+        tree_ish: &str,
+        only_list_trees: bool,
+        recursive: bool,
+        show_tree_entries: bool,
+        show_size: bool,
+        only_name: bool,
+    ) -> Result<(), CommandError> {
+        let db = self.db()?;
+        let mut tree = if let Some(commit_hash) = self.try_read_commit_local_branch(tree_ish)? {
+            get_tree_from_commit(&commit_hash, &db, &mut self.logger, tree_ish.to_string())?
+        } else if let Some(commit_hash) = self.try_read_commit(tree_ish)? {
+            get_tree_from_commit(&commit_hash, &db, &mut self.logger, tree_ish.to_string())?
+        } else if let Some(commit_hash) = self.try_read_commit_remote_branch(tree_ish)? {
+            get_tree_from_commit(&commit_hash, &db, &mut self.logger, tree_ish.to_string())?
+        } else if let Some(tree) = self.try_read_tree(tree_ish)? {
+            tree
+        } else if let Some(tree) = self.try_read_tag(tree_ish)? {
+            tree
+        } else {
+            return Err(CommandError::InvalidObjectName(tree_ish.to_string()));
+        };
+
+        Ok(())
+    }
+
+    /// Si <hash> existe en la base de datos y es un tree, lo devuelve.
+    fn try_read_tree(&mut self, hash: &str) -> Result<Option<Tree>, CommandError> {
+        let Ok(mut object) = self.db()?.read_object(hash, &mut self.logger) else {
+            return Ok(None);
+        };
+        if let Some(tree) = object.as_mut_tree() {
+            return Ok(Some(tree.to_owned()));
+        }
+        return Ok(None);
+    }
+
+    /// Si <tag_name> es una tag del repositorio, devuelve el objeto al que apunta.
+    fn try_read_tag(&mut self, tag_name: &str) -> Result<Option<Tree>, CommandError> {
+        let tags_path = join_paths!(self.git_path, "refs/tags/", tag_name).ok_or(
+            CommandError::DirectoryCreationError(
+                "No se pudo crear el directorio .git/refs/tags/".to_string(),
+            ),
+        )?;
+
+        let tag_path = tags_path.clone() + &tag_name;
+        if !Path::new(&tag_path).exists() {
+            return Ok(None);
+        }
+        let mut hash = fs::read_to_string(tag_path)
+            .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+
+        let db = self.db()?;
+        let tree = get_tree_from_tag(hash, &db, &mut self.logger, tag_name.to_string())?;
+        Ok(Some(tree))
+    }
+}
+
+// ----- Ls-tree -----
+
+fn get_tree_from_tag(
+    hash: String,
+    db: &ObjectsDatabase,
+    logger: &mut Logger,
+    tag_name: String,
+) -> Result<Tree, CommandError> {
+    let mut object = db.read_object(&hash, logger)?;
+
+    if let Some(tag) = object.as_mut_tag() {
+        let hash = tag.get_object_hash();
+        object = db.read_object(&hash, logger)?;
+        if let Some(_) = object.as_mut_tag() {
+            return get_tree_from_tag(hash, db, logger, tag_name);
+        } else if let Some(tree) = object.as_mut_tree() {
+            return Ok(tree.to_owned());
+        } else {
+            let tree = get_tree_from_commit(&hash, &db, logger, tag_name)?;
+            return Ok(tree);
+        }
+    } else if let Some(tree) = object.as_mut_tree() {
+        return Ok(tree.to_owned());
+    } else {
+        let tree = get_tree_from_commit(&hash, &db, logger, tag_name)?;
+        return Ok(tree);
+    }
+}
+fn get_tree_from_commit(
+    commit_hash: &str,
+    db: &ObjectsDatabase,
+    logger: &mut Logger,
+    tree_ish: String,
+) -> Result<Tree, CommandError> {
+    let mut object = db.read_object(commit_hash, logger)?;
+    let tree = if let Some(commit) = object.as_mut_commit() {
+        let tree_hash = commit.get_tree_hash_string()?;
+        let mut tree_object = db.read_object(&tree_hash, logger)?;
+        if let Some(tree) = tree_object.as_mut_tree() {
+            tree.to_owned()
+        } else {
+            return Err(CommandError::InvalidObjectName(tree_ish));
+        }
+    } else {
+        return Err(CommandError::InvalidObjectName(tree_ish));
+    };
+    Ok(tree)
 }
 
 // ----- Show-ref -----

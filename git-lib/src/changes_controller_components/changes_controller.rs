@@ -36,14 +36,8 @@ impl ChangesController {
         commit_tree: Option<Tree>,
         index: &StagingArea,
     ) -> Result<ChangesController, CommandError> {
-        logger.log(&format!(
-            "ChangesController::new\ngit_path: {}\nworking_dir: {}",
-            git_path, working_dir
-        ));
-
         logger.log("stagin area opened");
         let working_tree = build_working_tree(working_dir)?;
-        logger.log("build_working_tree success");
         let index_changes = Self::check_staging_area_status(db, &index, &commit_tree, logger)?;
         let (working_tree_changes, mut untracked, mut untracked_files) =
             Self::check_working_tree_status(
@@ -171,7 +165,10 @@ impl ChangesController {
         logger: &mut Logger,
     ) -> Result<HashMap<String, ChangeType>, CommandError> {
         let staging_files = staging_area.get_files();
-        logger.log(&format!("Staging area files: {:?}", staging_files));
+        logger.log(&format!(
+            "Staging area files (changes controller): {:?}",
+            staging_files
+        ));
         let Some(mut tree) = last_commit_tree.to_owned() else {
             let changes: HashMap<String, ChangeType> = staging_files
                 .iter()
@@ -304,7 +301,7 @@ impl ChangesController {
     ) -> Result<(), CommandError> {
         let mut untracked_number = 0;
         let mut total_files_dir = 0;
-        for (_, (object_hash, object_opt)) in tree.get_objects().iter_mut() {
+        for (_, (object_hash, object_opt)) in tree.sorted_objects().iter_mut() {
             let mut object = object_opt.to_owned().ok_or(CommandError::ShallowTree)?;
             if let Some(mut new_tree) = object.as_tree() {
                 Self::check_working_tree_aux(
@@ -331,7 +328,7 @@ impl ChangesController {
 
                 total_files_dir += 1;
                 if is_untracked {
-                    untracked_files.push(path);
+                    untracked_files.push(path.clone());
                     untracked_number += 1;
                 }
             }
@@ -374,7 +371,7 @@ impl ChangesController {
 
     /// Obtiene el tipo de cambio del archivo respecto al staging area.
     fn check_file_status(
-        working_dir: &str,
+        _working_dir: &str,
         object: &mut GitObject,
         staging_area: &StagingArea,
         last_commit: &Option<Tree>,
@@ -385,10 +382,12 @@ impl ChangesController {
         let Some(path) = object.get_path() else {
             return Err(CommandError::ObjectPathError);
         };
-
+        if staging_area.is_umgerged(&path) {
+            return Ok((false, path));
+        }
         let hash = object.get_hash_string()?;
         let has_path = staging_area.has_file_from_path(&path);
-        let has_path_renamed = staging_area.has_file_renamed(&path, &hash);
+        let _has_path_renamed = staging_area.has_file_renamed(&path, &hash);
         let has_hash = staging_area.has_file_from_hash(&hash);
 
         let isnt_in_last_commit = check_isnt_in_last_commit(last_commit, &path, &hash, logger)?;
