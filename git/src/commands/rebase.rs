@@ -102,7 +102,6 @@ impl Rebase {
         if self.abort_rebase {
             //abort!!
         }
-        // println!("continue_rebase: {}", self.continue_rebase);
         if self.continue_rebase {
             match repo.merge_continue_rebase() {
                 Err(CommandError::RebaseMergeConflictsError) => {

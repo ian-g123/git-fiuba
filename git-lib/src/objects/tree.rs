@@ -500,17 +500,23 @@ impl GitObjectTrait for Tree {
         Ok(hash)
     }
 
-    fn restore(&mut self, path: &str, logger: &mut Logger) -> Result<(), CommandError> {
+    fn restore(
+        &mut self,
+        path: &str,
+        logger: &mut Logger,
+        option_db: Option<ObjectsDatabase>,
+    ) -> Result<(), CommandError> {
         self.objects
             .iter()
             .try_for_each(|(name, (_hash, object_opt))| {
+                let db_copy = option_db.clone();
                 let Some(object) = object_opt else {
                     return Err(CommandError::ShallowTree);
                 };
                 let path = join_paths!(path, name).ok_or(CommandError::FileWriteError(
                     "No se pudo encontrar el path".to_string(),
                 ))?;
-                object.to_owned().restore(&path, logger)?;
+                object.to_owned().restore(&path, logger, db_copy)?;
                 Ok(())
             })?;
         Ok(())

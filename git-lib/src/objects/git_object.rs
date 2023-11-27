@@ -105,7 +105,12 @@ pub trait GitObjectTrait {
         None
     }
 
-    fn restore(&mut self, _path: &str, _logger: &mut Logger) -> Result<(), CommandError> {
+    fn restore(
+        &mut self,
+        _path: &str,
+        _logger: &mut Logger,
+        option_db: Option<ObjectsDatabase>,
+    ) -> Result<(), CommandError> {
         Ok(())
     }
 

@@ -356,7 +356,7 @@ impl GitObjectTrait for CommitObject {
         todo!()
     }
 
-    fn content(&mut self, _db: Option<&mut ObjectsDatabase>) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self, db: Option<&mut ObjectsDatabase>) -> Result<Vec<u8>, CommandError> {
         let mut buf: Vec<u8> = Vec::new();
         let mut stream = Cursor::new(&mut buf);
 
@@ -366,6 +366,14 @@ impl GitObjectTrait for CommitObject {
 
         writeln!(stream, "tree {}", tree.get_hash_string()?)
             .map_err(|err| CommandError::FileWriteError(err.to_string()))?;
+
+        match db {
+            Some(db) => {
+                let mut tree_box: GitObject = Box::new(tree.clone());
+                db.write(&mut tree_box, true, &mut Logger::new_dummy())?;
+            }
+            None => {}
+        };
 
         // if self.tree.is_some() {
         //     writeln!(
