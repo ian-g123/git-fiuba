@@ -2176,7 +2176,7 @@ impl<'a> GitRepository<'a> {
         let commit_hash: String;
         let mut new_is_remote = false;
         if new_branch_info.len() == 2 {
-            if let Some(hash) = self.try_read_commit_local_branch(&new_branch_info[1])? {
+            if let Some(hash) = self.try_read_commit_local_branch(new_branch_info[1].clone())? {
                 commit_hash = hash;
             } else if let Some(hash) = self.try_read_commit(&new_branch_info[1])? {
                 commit_hash = hash;
@@ -2245,14 +2245,20 @@ impl<'a> GitRepository<'a> {
     }
 
     /// Si <branch> es una rama local, lee el commit asociado y lo devuelve.
-    fn try_read_commit_local_branch(&self, branch: &str) -> Result<Option<String>, CommandError> {
+    fn try_read_commit_local_branch(
+        &mut self,
+        mut branch: String,
+    ) -> Result<Option<String>, CommandError> {
         let branch_path = join_paths!(self.git_path, "refs/heads/").ok_or(
             CommandError::DirectoryCreationError(
                 " No se pudo crear el directorio .git/refs/head/".to_string(),
             ),
         )?;
-
+        if branch == "HEAD" {
+            branch = self.get_current_branch_name()?;
+        }
         let branch_path = branch_path.clone() + &branch;
+
         if !Path::new(&branch_path).exists() {
             return Ok(None);
         }
@@ -3448,19 +3454,35 @@ impl<'a> GitRepository<'a> {
         only_name: bool,
     ) -> Result<(), CommandError> {
         let db = self.db()?;
-        let mut tree = if let Some(commit_hash) = self.try_read_commit_local_branch(tree_ish)? {
-            get_tree_from_commit(&commit_hash, &db, &mut self.logger, tree_ish.to_string())?
-        } else if let Some(commit_hash) = self.try_read_commit(tree_ish)? {
-            get_tree_from_commit(&commit_hash, &db, &mut self.logger, tree_ish.to_string())?
-        } else if let Some(commit_hash) = self.try_read_commit_remote_branch(tree_ish)? {
-            get_tree_from_commit(&commit_hash, &db, &mut self.logger, tree_ish.to_string())?
-        } else if let Some(tree) = self.try_read_tree(tree_ish)? {
-            tree
-        } else if let Some(tree) = self.try_read_tag(tree_ish)? {
-            tree
-        } else {
-            return Err(CommandError::InvalidObjectName(tree_ish.to_string()));
-        };
+        let mut tree =
+            if let Some(commit_hash) = self.try_read_commit_local_branch(tree_ish.to_string())? {
+                get_tree_from_commit(&commit_hash, &db, &mut self.logger, tree_ish.to_string())?
+            } else if let Some(commit_hash) = self.try_read_commit(tree_ish)? {
+                get_tree_from_commit(&commit_hash, &db, &mut self.logger, tree_ish.to_string())?
+            } else if let Some(commit_hash) = self.try_read_commit_remote_branch(tree_ish)? {
+                get_tree_from_commit(&commit_hash, &db, &mut self.logger, tree_ish.to_string())?
+            } else if let Some(tree) = self.try_read_tree(tree_ish)? {
+                tree
+            } else if let Some(tree) = self.try_read_tag(tree_ish)? {
+                tree
+            } else {
+                return Err(CommandError::InvalidObjectName(tree_ish.to_string()));
+            };
+
+        let mut info: Vec<(String, Mode, String, String, usize)> = Vec::new();
+
+        add_ls_tree_info(
+            tree,
+            &mut info,
+            only_list_trees,
+            recursive,
+            show_tree_entries,
+        )?;
+
+        let message = get_ls_tree_message(&info, show_size, only_name);
+
+        write!(self.output, "{}", message)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
 
         Ok(())
     }
@@ -3488,16 +3510,76 @@ impl<'a> GitRepository<'a> {
         if !Path::new(&tag_path).exists() {
             return Ok(None);
         }
-        let mut hash = fs::read_to_string(tag_path)
+        let hash = fs::read_to_string(tag_path)
             .map_err(|error| CommandError::FileReadError(error.to_string()))?;
 
         let db = self.db()?;
         let tree = get_tree_from_tag(hash, &db, &mut self.logger, tag_name.to_string())?;
+
         Ok(Some(tree))
     }
 }
 
 // ----- Ls-tree -----
+
+fn get_ls_tree_message(
+    info: &Vec<(String, Mode, String, String, usize)>,
+    show_size: bool,
+    only_name: bool,
+) -> String {
+    let mut message = String::new();
+    for (path, mode, type_str, hash, size) in info.iter() {
+        if only_name {
+            message += &format!("{}\n", path);
+        } else if show_size {
+            message += &format!(
+                "{} {} {}      {}	{}\n",
+                mode.to_string(),
+                type_str,
+                hash,
+                size,
+                path,
+            );
+        } else {
+            message += &format!("{} {} {}	{}\n", mode.to_string(), type_str, hash, path);
+        }
+    }
+    message
+}
+
+fn add_ls_tree_info(
+    tree: Tree,
+    info: &mut Vec<(String, Mode, String, String, usize)>,
+    only_list_trees: bool,
+    recursive: bool,
+    show_tree_entries: bool,
+) -> Result<(), CommandError> {
+    for (path, (hash, opt_object)) in tree.sorted_objects() {
+        let Some(mut object) = opt_object else {
+            continue;
+        };
+        let hash_str = u8_vec_to_hex_string(&hash);
+        let content = object.content(None)?;
+        let type_str = object.type_str();
+        if !((recursive && !show_tree_entries && type_str == "tree")
+            || (only_list_trees && type_str == "blob"))
+        {
+            info.push((path, object.mode(), type_str, hash_str, content.len()));
+        }
+        if let Some(new_tree) = object.as_tree() {
+            if recursive {
+                add_ls_tree_info(
+                    new_tree,
+                    info,
+                    only_list_trees,
+                    recursive,
+                    show_tree_entries,
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
 
 fn get_tree_from_tag(
     hash: String,
