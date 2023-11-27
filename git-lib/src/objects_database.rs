@@ -16,6 +16,7 @@ use super::{
     objects::git_object::{read_git_object_from, GitObject},
 };
 
+#[derive(Clone)]
 pub struct ObjectsDatabase {
     db_path: String,
 }
