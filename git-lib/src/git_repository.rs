@@ -2249,15 +2249,21 @@ impl<'a> GitRepository<'a> {
         &mut self,
         mut branch: String,
     ) -> Result<Option<String>, CommandError> {
-        let branch_path = join_paths!(self.git_path, "refs/heads/").ok_or(
-            CommandError::DirectoryCreationError(
-                " No se pudo crear el directorio .git/refs/head/".to_string(),
-            ),
-        )?;
         if branch == "HEAD" {
             branch = self.get_current_branch_name()?;
         }
-        let branch_path = branch_path.clone() + &branch;
+        let mut rel_path: Vec<&str> = branch.split_terminator('/').collect();
+        if !rel_path.contains(&"heads") && !rel_path.contains(&"refs") {
+            rel_path.insert(0, "heads");
+        }
+        if !rel_path.contains(&"refs") {
+            rel_path.insert(0, "refs");
+        }
+        let branch_path = rel_path.join("/");
+        let branch_path =
+            join_paths!(self.git_path, branch_path).ok_or(CommandError::FileCreationError(
+                format!(" No se pudo crear el archivo: {}", branch_path),
+            ))?;
 
         if !Path::new(&branch_path).exists() {
             return Ok(None);
@@ -2273,7 +2279,7 @@ impl<'a> GitRepository<'a> {
         remote_path: &str,
     ) -> Result<Option<String>, CommandError> {
         let mut rel_path: Vec<&str> = remote_path.split_terminator('/').collect();
-        if !rel_path.contains(&"remotes") {
+        if !rel_path.contains(&"remotes") && !rel_path.contains(&"refs") {
             rel_path.insert(0, "remotes");
         }
         if !rel_path.contains(&"refs") {
@@ -3454,7 +3460,7 @@ impl<'a> GitRepository<'a> {
         only_name: bool,
     ) -> Result<(), CommandError> {
         let db = self.db()?;
-        let mut tree =
+        let tree =
             if let Some(commit_hash) = self.try_read_commit_local_branch(tree_ish.to_string())? {
                 get_tree_from_commit(&commit_hash, &db, &mut self.logger, tree_ish.to_string())?
             } else if let Some(commit_hash) = self.try_read_commit(tree_ish)? {
