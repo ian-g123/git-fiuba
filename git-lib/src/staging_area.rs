@@ -304,8 +304,11 @@ impl StagingArea {
         } else {
             path.to_string()
         };
-        if self.unmerged_files.contains_key(path) {
-            _ = self.unmerged_files.remove(path);
+        // println!("ANTES DE ENTRAAAAAAR con path {}", key);
+        // println!("unmerged_files: {:?}", self.unmerged_files);
+        if self.unmerged_files.contains_key(&key) {
+            // println!("ENTRAAAAAA con path {}", key);
+            _ = self.unmerged_files.remove(&key);
         }
         self.files.insert(key, hash.to_string());
     }

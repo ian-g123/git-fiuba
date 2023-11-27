@@ -86,12 +86,14 @@ impl Rebase {
             //verificar que no haya un rebase en proceso
             match repo.initialize_rebase(self.topic_branch.clone(), self.main_branch.clone()) {
                 Err(CommandError::RebaseMergeConflictsError) => {
-                    //usuario resolver conflictos
+                    let error_message = repo.print_error_merge_conflicts()?;
+                    return Err(CommandError::RebaseError(error_message));
                 }
                 Err(error) => return Err(error),
                 Ok(_) => {
                     let message = "Successfully rebased and updated refs/heads/".to_string()
-                        + &self.main_branch.clone();
+                        + &self.main_branch.clone()
+                        + "\n";
                     _ = output.write(message.as_bytes());
                     return Ok(());
                 }

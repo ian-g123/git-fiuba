@@ -103,7 +103,7 @@ impl Checkout {
         } else if !self.new_branch.is_empty() {
             repo.create_branch(&self.new_branch)?;
             let name = self.new_branch[0].clone();
-            repo.checkout(&name)?;
+            repo.checkout(&name, true)?;
         } else {
             repo.show_tracking_info()?;
         }
