@@ -304,8 +304,8 @@ impl StagingArea {
         } else {
             path.to_string()
         };
-        if self.unmerged_files.contains_key(path) {
-            _ = self.unmerged_files.remove(path);
+        if self.unmerged_files.contains_key(&key) {
+            _ = self.unmerged_files.remove(&key);
         }
         self.files.insert(key, hash.to_string());
     }
@@ -322,8 +322,8 @@ impl StagingArea {
         } else {
             path.to_string()
         };
-        if self.files.contains_key(path) {
-            _ = self.files.remove(path);
+        if self.files.contains_key(&key) {
+            _ = self.files.remove(&key);
         }
         self.unmerged_files
             .insert(key, (common_hash, head_hash, destin_hash));
