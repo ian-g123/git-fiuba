@@ -424,6 +424,70 @@ fn test_local_branch() {
     _ = std::fs::remove_dir_all(format!("{}", path));
 }
 
+#[test]
+fn test_remote_branch() {
+    let path = "./tests/data/commands/ls_tree/repo5";
+    create_test_scene_5(path);
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("dir/testfile1.txt")
+        .arg("dir/testfile2.txt")
+        .arg("dir/testfile3.txt")
+        .arg("dir/testfile4.txt")
+        .arg("dir/dir1/testfile5.txt")
+        .arg("dir/dir1/testfile6.txt")
+        .arg("testfile.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let commit = get_commit(path);
+
+    let Ok(_) = fs::create_dir_all(path.to_owned() + "/.git/refs/remotes/origin/") else {
+        panic!("No se pudo crear el directorio")
+    };
+    let mut file = File::create(path.to_owned() + "/.git/refs/remotes/origin/b1").unwrap();
+    file.write_all(commit.as_bytes()).unwrap();
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("ls-tree")
+        .arg("origin/b1")
+        .arg("-r")
+        .arg("-t")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    println!("Stderr: {}", String::from_utf8(result.stderr).unwrap());
+
+    let stdout = String::from_utf8(result.stdout).unwrap();
+
+    let hash_testfile1 = get_hash("dir/testfile1.txt", path);
+    let hash_testfile2 = get_hash("dir/testfile2.txt", path);
+    let hash_testfile3 = get_hash("dir/testfile3.txt", path);
+    let hash_testfile4 = get_hash("dir/testfile4.txt", path);
+    let hash_testfile5 = get_hash("dir/dir1/testfile5.txt", path);
+    let hash_testfile6 = get_hash("dir/dir1/testfile6.txt", path);
+    let hash_testfile = get_hash("testfile.txt", path);
+    let hash_dir = "d7ed8c1d109986c59f37c1a54cc3b40af916b41f";
+    let hash_dir1 = "c33ddf0cee67a1536f0cad727e73103cb0f15b30";
+
+    let expected = format!("040000 tree {hash_dir}\tdir\n040000 tree {hash_dir1}\tdir/dir1\n100644 blob {hash_testfile5}\tdir/dir1/testfile5.txt\n100644 blob {hash_testfile6}\tdir/dir1/testfile6.txt\n100644 blob {hash_testfile1}\tdir/testfile1.txt\n100644 blob {hash_testfile2}\tdir/testfile2.txt\n100644 blob {hash_testfile3}\tdir/testfile3.txt\n100644 blob {hash_testfile4}\tdir/testfile4.txt\n100644 blob {hash_testfile}\ttestfile.txt\n");
+
+    assert_eq!(expected, stdout);
+
+    _ = std::fs::remove_dir_all(format!("{}", path));
+}
+
 fn get_commit(path: &str) -> String {
     let head = fs::read_to_string(path.to_owned() + "/.git/HEAD").unwrap();
     let (_, branch_ref) = head.split_once(' ').unwrap();
