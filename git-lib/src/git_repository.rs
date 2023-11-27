@@ -3238,6 +3238,7 @@ impl<'a> GitRepository<'a> {
         object: Option<String>,
         db: &ObjectsDatabase,
     ) -> Result<(TagObject, String), CommandError> {
+        self.log("Creating tag object");
         let tag_ref = {
             if let Some(obj) = object {
                 obj
@@ -3250,11 +3251,14 @@ impl<'a> GitRepository<'a> {
             }
         };
 
-        if !db.has_object(&tag_ref)? {
+        if !db.has_object(&tag_ref)? && !self.tag_exists(&tag_ref)? {
             return Err(CommandError::InvalidRef(tag_ref));
         }
 
-        let tag_object = db.read_object(&tag_ref, &mut self.logger)?;
+        let (tag_object, tag_ref) = self.read_tag_object(&tag_ref, db)?;
+
+        self.log("Tag object read");
+
         let tag_object_type = tag_object.type_str();
         let (tagger, timestamp, offset) = self.get_tagger_info()?;
         let tag = TagObject::new(
@@ -3267,6 +3271,33 @@ impl<'a> GitRepository<'a> {
             offset,
         );
         Ok((tag, tag_ref))
+    }
+
+    fn tag_exists(&self, tag_name: &str) -> Result<bool, CommandError> {
+        let path = join_paths!(self.git_path, "refs/tags/", tag_name).ok_or(
+            CommandError::FileCreationError("Error creando path de tags".to_string()),
+        )?;
+        Ok(Path::new(&path).exists())
+    }
+
+    fn read_tag_object(
+        &mut self,
+        tag_ref: &str,
+        db: &ObjectsDatabase,
+    ) -> Result<(GitObject, String), CommandError> {
+        match db.read_object(&tag_ref, &mut self.logger) {
+            Ok(object) => return Ok((object, tag_ref.to_string())),
+            Err(_) => {
+                let path = join_paths!(self.git_path, "refs/tags/", tag_ref).ok_or(
+                    CommandError::FileCreationError("Error creando path de tags".to_string()),
+                )?;
+                self.log(&format!("Tag path (read): {}", path));
+                let tag_ref = fs::read_to_string(path)
+                    .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+                self.log(&format!("Tag ref (read): {}", tag_ref));
+                return self.read_tag_object(&tag_ref, db);
+            }
+        }
     }
 
     /// Devuelve el mensaje que se mostrará al crear el tag.
@@ -3459,6 +3490,10 @@ impl<'a> GitRepository<'a> {
         show_size: bool,
         only_name: bool,
     ) -> Result<(), CommandError> {
+        self.log(&format!(
+            "Ls-tree args --> tree_ish: {}, -d: {}, -r: {}, -t: {}, -s: {}, --name-only: {}",
+            tree_ish, only_list_trees, recursive, show_tree_entries, show_size, only_name
+        ));
         let db = self.db()?;
         let tree =
             if let Some(commit_hash) = self.try_read_commit_local_branch(tree_ish.to_string())? {
@@ -3507,13 +3542,18 @@ impl<'a> GitRepository<'a> {
 
     /// Si <tag_name> es una tag del repositorio, devuelve el objeto al que apunta.
     fn try_read_tag(&mut self, tag_name: &str) -> Result<Option<Tree>, CommandError> {
-        let tags_path = join_paths!(self.git_path, "refs/tags/", tag_name).ok_or(
-            CommandError::DirectoryCreationError(
-                "No se pudo crear el directorio .git/refs/tags/".to_string(),
-            ),
+        let mut rel_path: Vec<&str> = tag_name.split_terminator('/').collect();
+        if !rel_path.contains(&"tags") && !rel_path.contains(&"refs") {
+            rel_path.insert(0, "tags");
+        }
+        if !rel_path.contains(&"refs") {
+            rel_path.insert(0, "refs");
+        }
+        let tag_path = rel_path.join("/");
+        let tag_path = join_paths!(self.git_path, tag_path).ok_or(
+            CommandError::FileCreationError(format!(" No se pudo crear el archivo: {}", tag_path)),
         )?;
-
-        let tag_path = tags_path.clone() + &tag_name;
+        self.log(&format!("Tag path: {}", tag_path));
         if !Path::new(&tag_path).exists() {
             return Ok(None);
         }
