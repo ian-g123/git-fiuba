@@ -383,6 +383,7 @@ impl ChangesController {
             return Err(CommandError::ObjectPathError);
         };
         if staging_area.is_umgerged(&path) {
+            _ = changes.insert(path.clone(), ChangeType::Unmodified);
             return Ok((false, path));
         }
         let hash = object.get_hash_string()?;

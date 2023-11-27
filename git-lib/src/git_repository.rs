@@ -1677,7 +1677,7 @@ impl<'a> GitRepository<'a> {
             } else {
                 let blob = Blob::new_from_path(entry_name.to_string())?;
                 let path = &entry_name[2..];
-                if !self.is_untracked(path, &staging_area)? && !staging_area.is_umgerged(path) {
+                if !self.is_untracked(path, &staging_area)? {
                     let mut git_object: GitObject = Box::new(blob);
                     self.log(&format!("Adding {} to staging area", path));
                     let hex_str = self.db()?.write(&mut git_object, false, &mut self.logger)?;
