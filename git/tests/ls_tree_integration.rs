@@ -608,6 +608,74 @@ fn test_tag() {
     _ = std::fs::remove_dir_all(format!("{}", path));
 }
 
+#[test]
+fn test_error() {
+    let path = "./tests/data/commands/ls_tree/repo7";
+    create_test_scene_5(path);
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("dir/testfile1.txt")
+        .arg("dir/testfile2.txt")
+        .arg("dir/testfile3.txt")
+        .arg("dir/testfile4.txt")
+        .arg("dir/dir1/testfile5.txt")
+        .arg("dir/dir1/testfile6.txt")
+        .arg("testfile.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let hash_testfile1 = get_hash("dir/testfile1.txt", path);
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("tag")
+        .arg("tag1")
+        .arg("-a")
+        .arg("-m")
+        .arg("message")
+        .arg(hash_testfile1)
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("tag")
+        .arg("tag2")
+        .arg("tag1")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("ls-tree")
+        .arg("tag2")
+        .arg("-r")
+        .arg("-t")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+
+    let stdout = String::from_utf8(result.stdout).unwrap();
+
+    let expected = "fatal: not a tree object\n";
+
+    assert_eq!(expected, stderr);
+    assert_eq!("", stdout);
+
+    _ = std::fs::remove_dir_all(format!("{}", path));
+}
+
 fn get_commit(path: &str) -> String {
     let head = fs::read_to_string(path.to_owned() + "/.git/HEAD").unwrap();
     let (_, branch_ref) = head.split_once(' ').unwrap();

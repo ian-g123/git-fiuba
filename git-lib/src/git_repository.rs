@@ -3497,17 +3497,32 @@ impl<'a> GitRepository<'a> {
         let db = self.db()?;
         let tree =
             if let Some(commit_hash) = self.try_read_commit_local_branch(tree_ish.to_string())? {
-                get_tree_from_commit(&commit_hash, &db, &mut self.logger, tree_ish.to_string())?
+                get_tree_from_commit(
+                    &commit_hash,
+                    &db,
+                    &mut self.logger,
+                    CommandError::LsTreeErrorNotATree,
+                )?
             } else if let Some(commit_hash) = self.try_read_commit(tree_ish)? {
-                get_tree_from_commit(&commit_hash, &db, &mut self.logger, tree_ish.to_string())?
+                get_tree_from_commit(
+                    &commit_hash,
+                    &db,
+                    &mut self.logger,
+                    CommandError::LsTreeErrorNotATree,
+                )?
             } else if let Some(commit_hash) = self.try_read_commit_remote_branch(tree_ish)? {
-                get_tree_from_commit(&commit_hash, &db, &mut self.logger, tree_ish.to_string())?
+                get_tree_from_commit(
+                    &commit_hash,
+                    &db,
+                    &mut self.logger,
+                    CommandError::LsTreeErrorNotATree,
+                )?
             } else if let Some(tree) = self.try_read_tree(tree_ish)? {
                 tree
             } else if let Some(tree) = self.try_read_tag(tree_ish)? {
                 tree
             } else {
-                return Err(CommandError::InvalidObjectName(tree_ish.to_string()));
+                return Err(CommandError::LsTreeErrorNotATree);
             };
 
         let mut info: Vec<(String, Mode, String, String, usize)> = Vec::new();
@@ -3661,13 +3676,13 @@ fn get_tree_from_tag(
         } else if let Some(tree) = object.as_mut_tree() {
             return Ok(tree.to_owned());
         } else {
-            let tree = get_tree_from_commit(&hash, &db, logger, tag_name)?;
+            let tree = get_tree_from_commit(&hash, &db, logger, CommandError::LsTreeErrorNotATree)?;
             return Ok(tree);
         }
     } else if let Some(tree) = object.as_mut_tree() {
         return Ok(tree.to_owned());
     } else {
-        let tree = get_tree_from_commit(&hash, &db, logger, tag_name)?;
+        let tree = get_tree_from_commit(&hash, &db, logger, CommandError::LsTreeErrorNotATree)?;
         return Ok(tree);
     }
 }
@@ -3675,7 +3690,7 @@ fn get_tree_from_commit(
     commit_hash: &str,
     db: &ObjectsDatabase,
     logger: &mut Logger,
-    tree_ish: String,
+    error: CommandError,
 ) -> Result<Tree, CommandError> {
     let mut object = db.read_object(commit_hash, logger)?;
     let tree = if let Some(commit) = object.as_mut_commit() {
@@ -3684,10 +3699,10 @@ fn get_tree_from_commit(
         if let Some(tree) = tree_object.as_mut_tree() {
             tree.to_owned()
         } else {
-            return Err(CommandError::InvalidObjectName(tree_ish));
+            return Err(error);
         }
     } else {
-        return Err(CommandError::InvalidObjectName(tree_ish));
+        return Err(error);
     };
     Ok(tree)
 }
