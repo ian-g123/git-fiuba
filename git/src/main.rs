@@ -16,6 +16,10 @@ fn main() {
 }
 
 fn parse_args(args: &[String]) -> (&str, &[String]) {
+    if args.len() < 2 {
+        panic!("Not enough arguments");
+    }
+
     let command = &args[1];
     let command_args = args.split_at(2).1;
     (command, command_args)

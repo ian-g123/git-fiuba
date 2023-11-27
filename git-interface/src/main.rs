@@ -62,15 +62,18 @@ fn main() {
     let rc_correct_path = Rc::new(RefCell::new(correct_path));
     let rc_builder = Rc::new(RefCell::new(builder));
 
-    let clone_rc_repo_dir_text = rc_repo_dir_text.clone();
-
     initial_window(
         inicial_apply,
-        rc_correct_path,
-        clone_rc_repo_dir_text,
+        rc_correct_path.clone(),
+        rc_repo_dir_text.clone(),
         inicial_window,
         repo_dir,
     );
+
+    if rc_correct_path.borrow_mut().to_owned() == false {
+        return;
+    }
+
     git_interface(rc_repo_dir_text.borrow_mut().to_string(), rc_builder);
     gtk::main();
 }
@@ -82,30 +85,29 @@ fn initial_window(
     inicial_window: Window,
     repo_dir: gtk::Entry,
 ) {
-    let clone_rc_correct_path = rc_correct_path.clone();
+    let inicial_window_clone = inicial_window.clone();
     inicial_apply.connect_clicked(move |_| {
-        let clone_correct_path_clone = clone_rc_correct_path.clone();
-        let repo_dir_text_clone = clone_rc_repo_dir_text.clone();
-        let repo_dir = repo_dir.clone();
-
-        let repo_dir = repo_dir.clone();
         let repo_dir_text = repo_dir.text().to_string();
-        println!("repo_dir_text: {:?}", repo_dir_text);
         let mut binding = io::stdout();
         if GitRepository::open(&repo_dir_text, &mut binding).is_err() {
             repo_dir.set_text("");
             dialog_window(
                 format!(
                     "No se pudo conectar satisfactoriamente a un repositorio Git en {}",
-                    repo_dir_text_clone.borrow_mut()
+                    clone_rc_repo_dir_text.borrow_mut()
                 )
                 .to_string(),
             );
         } else {
-            *clone_correct_path_clone.borrow_mut() = true;
-            inicial_window.hide();
+            *rc_correct_path.borrow_mut() = true;
+            *clone_rc_repo_dir_text.borrow_mut() = repo_dir_text;
+            inicial_window_clone.hide();
             gtk::main_quit();
         }
+    });
+    inicial_window.connect_delete_event(|_, _| {
+        gtk::main_quit();
+        Inhibit(false)
     });
     gtk::main();
 }
@@ -188,7 +190,6 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
         let repo_git_path = interface.repo_git_path.clone();
         let mut binding = io::stdout();
         let mut repo = GitRepository::open(&repo_git_path.to_string(), &mut binding).unwrap();
-        println!("path_file: {}", path_file);
         repo.write_file(&path_file, &mut new_content).unwrap();
 
         let mut staging_area = repo.staging_area().unwrap();
@@ -433,22 +434,19 @@ impl Interface {
                             files_merge_conflict: Rc::clone(&files_merge_conflict_clone),
                             principal_window: window.clone(),
                         };
-                        println!("merge");
+                        //println!("merge");
                         interface.add_widgets_to_merge_window();
                         interface.initialize_merge(clone_file);
                     });
                 }
                 _ => {}
             }
-            let label = Label::new(Some(&format!("{}", file.clone())));
 
+            let label = Label::new(Some(&format!("{}", file.clone())));
             box_outer.pack_start(&label, true, true, 0);
             box_outer.pack_end(&button, false, false, 0);
-
             list_box.add(&box_outer);
-
             self.principal_window.borrow_mut().show_all();
-
             let files_merge_conflict = files_merge_conflict.clone();
 
             let clone_file = file.clone();
@@ -461,7 +459,7 @@ impl Interface {
                     "unstaging" => {
                         _ = unstaging_changes2.borrow_mut().take(&clone_file);
                         staging_changes2.borrow_mut().insert(file.clone());
-                        let err = repo.add(vec_files);
+                        let err = repo.add(vec_files, false);
                         if err.is_err() {
                             dialog_window(err.unwrap_err().to_string());
                             return;
@@ -470,7 +468,7 @@ impl Interface {
                     "merge" => {
                         _ = files_merge_conflict.borrow_mut().take(&clone_file);
                         staging_changes2.borrow_mut().insert(file.clone());
-                        let err = repo.add(vec_files);
+                        let err = repo.add(vec_files, false);
                         if err.is_err() {
                             dialog_window(err.unwrap_err().to_string());
                             return;
@@ -665,7 +663,6 @@ impl Interface {
         for child in &children {
             if let Some(drawing_area_old) = child.downcast_ref::<DrawingArea>() {
                 grid_drawing_area.remove(drawing_area_old);
-                println!("ELIMINAAAAAAA");
                 break; // Termina el bucle después de eliminar el DrawingArea
             }
         }
@@ -942,7 +939,6 @@ fn staged_area_func(
     //ELIMINARRRRRRR
     for conflict in &staging_changes {
         files_merge_conflict.remove(conflict);
-        println!("conflict: {}", conflict);
     }
 
     for conflict in &files_merge_conflict {
@@ -1111,7 +1107,6 @@ fn actualize_conflicts(
     let incoming_content_str = incoming_content.borrow_mut().clone();
 
     let mut new_content_lines = new_content_str.split('\n').collect::<Vec<&str>>();
-    // println!("{:?}", new_content_lines);
     let current_old_content_lines = current_content_str.split('\n').collect::<Vec<&str>>();
     let incoming_old_content_lines = incoming_content_str.split('\n').collect::<Vec<&str>>();
 

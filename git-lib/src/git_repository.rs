@@ -2,7 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     env,
     fs::{self, DirEntry, File, OpenOptions, ReadDir},
-    io::{Read, Write, BufReader},
+    io::{BufReader, Read, Write},
     path::{Path, PathBuf},
 };
 
@@ -206,7 +206,11 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    pub fn write_file(&mut self, path_file : &String, new_content : &mut String) -> Result<(), CommandError> {
+    pub fn write_file(
+        &mut self,
+        path_file: &String,
+        new_content: &mut String,
+    ) -> Result<(), CommandError> {
         let Some(path) = join_paths!(self.working_dir_path, path_file) else {
             return Err(CommandError::FileNotFound(path_file.to_string()));
         };
@@ -215,7 +219,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    pub fn add(&mut self, pathspecs: Vec<String>) -> Result<(), CommandError> {
+    pub fn add(&mut self, pathspecs: Vec<String>, join_path: bool) -> Result<(), CommandError> {
         let last_commit = &self.get_last_commit_tree()?;
         let mut staging_area = StagingArea::open(&self.git_path)?;
         let mut pathspecs_clone: Vec<String> = pathspecs.clone();
@@ -234,9 +238,8 @@ impl<'a> GitRepository<'a> {
             }
             position += 1;
         }
-
         for pathspec in pathspecs_clone.iter() {
-            self.add_path(pathspec, &mut staging_area)?
+            self.add_path(pathspec, &mut staging_area, join_path)?
         }
         staging_area.save()?;
         Ok(())
@@ -424,12 +427,21 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    fn add_path(&mut self, path: &str, staging_area: &mut StagingArea) -> Result<(), CommandError> {
+    fn add_path(
+        &mut self,
+        path: &str,
+        staging_area: &mut StagingArea,
+        join_path: bool,
+    ) -> Result<(), CommandError> {
         let path = Path::new(path);
-        let path_str = &Self::get_path_str(path)?;
-        let path_str = join_paths!(self.working_dir_path, path_str).ok_or(
-            CommandError::DirectoryCreationError("Error abriendo directorio".to_string()),
-        )?;
+        let mut path_str = &Self::get_path_str(path)?;
+        let joined_path;
+        if join_path {
+            joined_path = join_paths!(self.working_dir_path, path_str).ok_or(
+                CommandError::DirectoryCreationError("Error abriendo directorio".to_string()),
+            )?;
+            path_str = &joined_path;
+        }
 
         if path.is_file() {
             self.add_file(&path_str, staging_area)?;
@@ -481,7 +493,7 @@ impl<'a> GitRepository<'a> {
             return Ok(());
         }
         self.log(&format!("entry: {:?}", path_str_r));
-        self.add_path(&path_str_r, staging_area)?;
+        self.add_path(&path_str_r, staging_area, true)?;
         Ok(())
     }
 
@@ -2051,12 +2063,11 @@ impl<'a> GitRepository<'a> {
                 &mut self.logger,
             )?;
         }
-        
-        
+
         let mut _parents_hash: HashMap<String, HashSet<String>> = HashMap::new();
         let mut sons_hash: HashMap<String, HashSet<String>> = HashMap::new();
         // get_parents_hash_map(self.get_last_commit_hash(), )
-        
+
         let mut commits = commits_map.drain().map(|(_, v)| v).collect();
 
         sort_commits_descending_date(&mut commits);
