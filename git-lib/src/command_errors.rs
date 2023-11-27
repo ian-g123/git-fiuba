@@ -200,6 +200,9 @@ pub enum CommandError {
     RebaseContinueError,
     RebaseMergeConflictsError,
     RebaseError(String),
+
+    // Show-ref
+    FlagHashRequiresValue,
 }
 
 impl Error for CommandError {}
@@ -517,6 +520,7 @@ impl fmt::Display for CommandError {
             CommandError::RebaseMergeConflictsError => write!(f, "Resolver Conflictos"), //PONER BIEN MSJ!!!!!!!!!!!!!!!!!!!!!!!!
             CommandError::RebaseError(msj) => write!(f, "{msj}"),
 
+            CommandError::FlagHashRequiresValue => write!(f, "error: option `hash' expects a numerical value"),
         }
     }
 }

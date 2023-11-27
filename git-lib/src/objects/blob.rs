@@ -193,16 +193,17 @@ impl GitObjectTrait for Blob {
     }
 
     fn content(&mut self, db: Option<&mut ObjectsDatabase>) -> Result<Vec<u8>, CommandError> {
-        if let Some(db) = db {
-            if let Some(hash) = &self.hash {
-                let (_, content) =
-                    db.read_file(&u8_vec_to_hex_string(hash), &mut Logger::new_dummy())?;
-                return Ok(content);
-            }
-        }
-
         if let Some(content) = &self.content {
             return Ok(content.to_owned());
+        }
+        if let Some(db) = db {
+            if let Some(hash) = self.hash {
+                let mut object =
+                    db.read_object(&u8_vec_to_hex_string(&hash), &mut Logger::new_dummy())?;
+                let content = object.content(None)?;
+                self.content = Some(content.clone());
+                return Ok(content);
+            }
         }
         match &self.path {
             Some(path) => {
@@ -251,7 +252,7 @@ impl GitObjectTrait for Blob {
         &mut self,
         path: &str,
         logger: &mut Logger,
-        mut option_db: Option<ObjectsDatabase>,
+        db: Option<ObjectsDatabase>,
     ) -> Result<(), CommandError> {
         let mut file = File::create(path).map_err(|error| {
             CommandError::FileOpenError(format!(
@@ -260,7 +261,7 @@ impl GitObjectTrait for Blob {
                 error.to_string()
             ))
         })?;
-        let content = match option_db {
+        let content = match db {
             Some(mut db) => self.content(Some(&mut db))?,
             None => self.content(None)?,
         };

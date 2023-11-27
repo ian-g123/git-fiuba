@@ -109,7 +109,7 @@ pub trait GitObjectTrait {
         &mut self,
         _path: &str,
         _logger: &mut Logger,
-        option_db: Option<ObjectsDatabase>,
+        _db: Option<ObjectsDatabase>,
     ) -> Result<(), CommandError> {
         Ok(())
     }

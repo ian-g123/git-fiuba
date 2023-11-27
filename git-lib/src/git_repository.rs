@@ -16,7 +16,7 @@ use crate::{
         format::Format,
         long_format::{set_diverge_message, sort_hashmap_and_filter_unmodified, LongFormat},
         short_format::ShortFormat,
-        working_tree::{self, build_working_tree, get_path_name},
+        working_tree::{build_working_tree, get_path_name},
     },
     command_errors::CommandError,
     config::Config,
@@ -1891,7 +1891,7 @@ impl<'a> GitRepository<'a> {
             ))?;
 
         self.log("updated stagin area for merge fast foward");
-        self.restore(tree, None)?;
+        self.restore(tree, Some(self.db()?))?;
         Ok(())
     }
 
@@ -1914,10 +1914,13 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    fn restore(&mut self, mut source_tree: Tree, option_db: Option<ObjectsDatabase>) -> Result<(), CommandError> {
-        self.display_from_hash(&source_tree.get_hash_string()?)?;
+    fn restore(
+        &mut self,
+        mut source_tree: Tree,
+        db: Option<ObjectsDatabase>,
+    ) -> Result<(), CommandError> {
         self.log("Restoring files");
-        source_tree.restore(&self.working_dir_path, &mut self.logger, option_db)?;
+        source_tree.restore(&self.working_dir_path, &mut self.logger, db)?;
         let mut staging_area = self.staging_area()?;
         staging_area.update_to_tree(&source_tree)?;
         staging_area.save()?;
@@ -1926,8 +1929,12 @@ impl<'a> GitRepository<'a> {
 
     fn restore_merge_conflict(&mut self, mut source_tree: Tree) -> Result<(), CommandError> {
         self.log("Restoring files");
-        let db = self.db()?;
-        source_tree.restore(&self.working_dir_path, &mut self.logger, Some(db))?;
+        let objects_database = self.db()?;
+        source_tree.restore(
+            &self.working_dir_path,
+            &mut self.logger,
+            Some(objects_database),
+        )?;
         Ok(())
     }
 
@@ -2041,13 +2048,13 @@ impl<'a> GitRepository<'a> {
         head_name: &str,
         destin_name: &str,
     ) -> Result<(), CommandError> {
-        self.log("Running merge_commits");
-
         let (mut common, mut commit_head, mut commit_destin) =
             self.get_common_ancestor(&destin_commit, head_commit)?;
 
         let hash = common.get_hash_string()?;
-        self.log(&format!("Common hash: {}", hash));
+
+        self.log(&format!("Merging {} into {}", destin_commit, head_commit));
+        self.log(&format!("Common: {}", hash));
         if common.get_hash()? == commit_head.get_hash()? {
             return self.merge_fast_forward(&destin_commit);
         }
@@ -2245,12 +2252,6 @@ impl<'a> GitRepository<'a> {
         commit_destin_str: &str,
         commit_head_str: &str,
     ) -> Result<(CommitObject, CommitObject, CommitObject), CommandError> {
-        self.log("Get common ansestor inicio");
-        self.log(&format!(
-            "commit_destin_str: {}, commit_head_str: {}",
-            commit_destin_str, commit_head_str
-        ));
-
         let commit_head = self
             .db()?
             .read_object(&commit_head_str, &mut self.logger)?
@@ -2471,6 +2472,7 @@ impl<'a> GitRepository<'a> {
             .get_last_commit_hash()?
             .ok_or(CommandError::FailedToResumeMerge)?;
         let parents = [get_last_commit_hash, destin].to_vec();
+        let merge_tree = staging_area.get_working_tree_staged(&mut Logger::new_dummy())?;
         // let merge_tree = self
         //     .db()?
         //     .read_object(&merge_tree_hash_str, &mut self.logger)?
@@ -2483,9 +2485,7 @@ impl<'a> GitRepository<'a> {
             .db()?
             .write(&mut boxed_commit, true, &mut self.logger)?;
         self.set_head_branch_commit_to(&merge_commit_hash_str)?;
-
-        let db = self.db()?;
-        self.restore(merge_tree, Some(db))?;
+        self.restore(merge_tree, Some(self.db()?))?;
         self.delete_file("MERGE_MSG")?;
         self.delete_file("AUTO_MERGE")?;
         self.delete_file("MERGE_HEAD")?;
@@ -2938,10 +2938,25 @@ impl<'a> GitRepository<'a> {
             ),
         )?;
 
-        let mut local_branches: Vec<String> = Vec::new();
-        get_branches_paths(&mut self.logger, &path, &mut local_branches, "", 3)?;
+        let mut local_branches: HashMap<String, String> = HashMap::new();
+
+        let parts: Vec<&str> = if self.git_path != ".git" {
+            self.git_path.split("/").collect()
+        } else {
+            Vec::new()
+        };
+
+        get_refs_paths_and_hash(
+            &mut self.logger,
+            &path,
+            &mut local_branches,
+            "",
+            3 + parts.len(),
+        )?;
+        let mut local_branches: Vec<&String> = local_branches.keys().collect();
 
         local_branches.sort();
+
         let mut list = String::new();
         let current = self.get_current_branch_name()?;
         for branch in local_branches.iter() {
@@ -2959,6 +2974,7 @@ impl<'a> GitRepository<'a> {
     pub fn show_all_branches(&mut self) -> Result<(), CommandError> {
         self.log("Showing all branches ...");
         let local_list = self.list_local_branches()?;
+
         let remote_list = self.list_remote_branches(2)?;
 
         write!(self.output, "{}{}", local_list, remote_list)
@@ -2983,9 +2999,24 @@ impl<'a> GitRepository<'a> {
                 "Error creando directorio de branches".to_string(),
             ),
         )?;
-        let mut remote_branches: Vec<String> = Vec::new();
-        get_branches_paths(&mut self.logger, &path, &mut remote_branches, "", i)?;
+        let mut remote_branches: HashMap<String, String> = HashMap::new();
+
+        let parts: Vec<&str> = if self.git_path != ".git" {
+            self.git_path.split("/").collect()
+        } else {
+            Vec::new()
+        };
+
+        get_refs_paths_and_hash(
+            &mut self.logger,
+            &path,
+            &mut remote_branches,
+            "",
+            i + parts.len(),
+        )?;
+        let mut remote_branches: Vec<&String> = remote_branches.keys().collect();
         remote_branches.sort();
+
         let mut list = String::new();
         let current = self.get_current_branch_name()?;
         for branch in remote_branches.iter() {
@@ -3870,6 +3901,233 @@ impl<'a> GitRepository<'a> {
         }
         Ok(tags)
     }
+
+    // ----- Show-ref -----
+
+    /// Ejecuta el comando show-ref
+    pub fn show_ref(
+        &mut self,
+        head: bool,
+        heads: bool,
+        remotes: bool,
+        tags: bool,
+        dereference: bool,
+        (hash, digits): (bool, Option<usize>),
+        refs: &Vec<String>,
+    ) -> Result<(), CommandError> {
+        let mut refs_list: Vec<(String, String)> = Vec::new();
+
+        let mut ref_heads = get_refs("refs/heads", &self.git_path, &mut self.logger)?;
+        let mut ref_remotes = get_refs("refs/remotes", &self.git_path, &mut self.logger)?;
+        let mut ref_tags = get_refs("refs/tags", &self.git_path, &mut self.logger)?;
+
+        add_packed_refs(
+            &mut ref_heads,
+            &mut ref_remotes,
+            &mut ref_tags,
+            &self.git_path,
+        )?;
+
+        if dereference {
+            ref_tags = dereference_tags(&ref_tags, &self.db()?, &mut self.logger)?;
+        }
+
+        let ref_heads = hashmap_to_vec(ref_heads);
+        let ref_remotes = hashmap_to_vec(ref_remotes);
+        let ref_tags = hashmap_to_vec(ref_tags);
+
+        if head {
+            if let Some(hash) = self.get_last_commit_hash()? {
+                refs_list.push(("HEAD".to_string(), hash));
+            }
+        }
+        if heads {
+            refs_list.extend_from_slice(&ref_heads);
+        }
+        if remotes {
+            refs_list.extend_from_slice(&ref_remotes);
+        }
+
+        if tags {
+            refs_list.extend_from_slice(&ref_tags);
+        }
+
+        if !refs.is_empty() {
+            refs_list = filter_refs(refs, refs_list);
+        }
+
+        let message = get_show_ref_message(&refs_list, hash, digits);
+
+        write!(self.output, "{}", message)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+
+        Ok(())
+    }
+}
+
+// ----- Show-ref -----
+
+/// Devuelve el mensaje de salida del comando show-ref
+fn get_show_ref_message(
+    refs_list: &Vec<(String, String)>,
+    show_hash: bool,
+    digits_op: Option<usize>,
+) -> String {
+    let mut message = String::new();
+    for (reference, hash) in refs_list {
+        let final_hash = if let Some(digits) = digits_op {
+            hash[..digits].to_string()
+        } else {
+            hash.to_owned()
+        };
+        if show_hash && !reference.ends_with("^{}") {
+            message += &format!("{}\n", final_hash);
+        } else {
+            message += &format!("{} {}\n", final_hash, reference);
+        }
+    }
+    message
+}
+
+/// Devuelve un diccionario con los objetos a los que referencian las tags: <tag_path, hash>
+fn dereference_tags(
+    tags: &HashMap<String, String>,
+    db: &ObjectsDatabase,
+    logger: &mut Logger,
+) -> Result<HashMap<String, String>, CommandError> {
+    let mut result: HashMap<String, String> = tags.clone();
+    for (reference, hash) in tags {
+        let mut git_object = db.read_object(hash, logger)?;
+        let Some(tag) = git_object.as_mut_tag() else {
+            continue;
+        };
+        let object_id = tag.get_object_hash();
+        let name = reference.to_owned() + "^{}";
+        _ = result.insert(name, object_id);
+    }
+
+    Ok(result)
+}
+
+/// Recibe un vector con nombres o paths de referencias y si son válidas devuelve una lista
+/// con las referencias filtradas.
+fn filter_refs(refs: &Vec<String>, list: Vec<(String, String)>) -> Vec<(String, String)> {
+    let mut refs_filtered: Vec<(String, String)> = Vec::new();
+    for reference in refs {
+        let ref_parts: Vec<&str> = reference.split("/").collect();
+        let dereference = reference.to_owned() + "^{}";
+        let deref_parts: Vec<&str> = dereference.split("/").collect();
+
+        for (ref_str, hash) in list.iter() {
+            let parts: Vec<&str> = ref_str.split("/").collect();
+            if parts.ends_with(&ref_parts) || parts.ends_with(&deref_parts) {
+                refs_filtered.push((ref_str.to_string(), hash.to_string()));
+            }
+        }
+    }
+
+    refs_filtered
+}
+
+/// Devuelve un diccionario con <ref, hash> dado el path de referencias pasado (heads, remotes o tags)
+fn get_refs(
+    path: &str,
+    git_path: &str,
+    logger: &mut Logger,
+) -> Result<HashMap<String, String>, CommandError> {
+    let path = join_paths!(git_path, path).ok_or(CommandError::DirectoryCreationError(
+        "Error creando directorio de refs".to_string(),
+    ))?;
+
+    let mut refs: HashMap<String, String> = HashMap::new();
+
+    let parts: Vec<&str> = if git_path != ".git" {
+        git_path.split("/").collect()
+    } else {
+        Vec::new()
+    };
+
+    get_refs_paths_and_hash(logger, &path, &mut refs, "", 1 + parts.len())?;
+
+    Ok(refs)
+}
+
+/// Agrega a las listas de referencias las que se encuentran en el archivo '.git/packed-refs'
+fn add_packed_refs(
+    heads: &mut HashMap<String, String>,
+    remotes: &mut HashMap<String, String>,
+    tags: &mut HashMap<String, String>,
+    git_path: &str,
+) -> Result<(), CommandError> {
+    let packed_refs = read_packed_refs_file(git_path)?;
+    for (reference, hash) in packed_refs.iter() {
+        if reference.contains("refs/heads") && !heads.contains_key(reference) {
+            _ = heads.insert(reference.to_string(), hash.to_string());
+        }
+        if reference.contains("refs/remotes") && !remotes.contains_key(reference) {
+            _ = remotes.insert(reference.to_string(), hash.to_string());
+        }
+        if reference.contains("refs/tags") && !tags.contains_key(reference) {
+            _ = tags.insert(reference.to_string(), hash.to_string());
+        }
+    }
+    Ok(())
+}
+
+/// Convierte un hashmap a un vector de tuplas ordenado alfabéticamente.
+fn hashmap_to_vec(refs: HashMap<String, String>) -> Vec<(String, String)> {
+    let mut keys: Vec<&String> = refs.keys().collect();
+
+    keys.sort();
+
+    let mut sorted_refs: Vec<(String, String)> = Vec::new();
+    for key in keys {
+        if let Some(value) = refs.get(key) {
+            sorted_refs.push((key.clone(), value.clone()));
+        }
+    }
+    sorted_refs
+}
+
+/// Lee la lista de referencias del archivo '.git/packed-refs'
+fn read_packed_refs_file(git_path: &str) -> Result<HashMap<String, String>, CommandError> {
+    let mut refs: HashMap<String, String> = HashMap::new();
+    let path = join_paths!(git_path, "packed-refs").ok_or(CommandError::DirectoryCreationError(
+        "No se pudo crear el directorio .git/packed-refs".to_string(),
+    ))?;
+    if !Path::new(&path).exists() {
+        return Ok(refs);
+    }
+
+    let content =
+        fs::read_to_string(path).map_err(|error| CommandError::FileReadError(error.to_string()))?;
+
+    let mut lines = content.lines();
+
+    loop {
+        let (eof, line) = next_line(&mut lines);
+        if eof {
+            break;
+        }
+
+        let Some((hash, ref_path)) = line.split_once(' ') else {
+            return Err(CommandError::InvalidCommit);
+        };
+        if hash.len() != 40 {
+            continue;
+        }
+        _ = refs.insert(ref_path.to_string(), hash.to_string());
+    }
+
+    Ok(refs)
+}
+
+/// Devuelve la próxima línea del iterador.
+fn next_line(lines: &mut std::str::Lines<'_>) -> (bool, String) {
+    let Some(line) = lines.next() else {
+        return (true, "".to_string());
+    };
+    (false, line.to_string())
 }
 
 // ----- Ls-files -----
@@ -4042,13 +4300,14 @@ fn get_staged_paths_and_content(
 // ----- Branch -----
 
 /// Obtiene el path de cada rama.
-fn get_branches_paths(
+fn get_refs_paths_and_hash(
     logger: &mut Logger,
     path: &str,
-    branches: &mut Vec<String>,
+    branches: &mut HashMap<String, String>,
     dir_path: &str,
     i: usize,
 ) -> Result<(), CommandError> {
+    logger.log(&format!("indice: {}", i));
     let branches_path = join_paths!(path, dir_path).ok_or(CommandError::DirectoryCreationError(
         "Error creando directorio de branches".to_string(),
     ))?;
@@ -4075,10 +4334,16 @@ fn get_branches_paths(
         let name = name.join("/");
 
         if entry_path.is_file() {
-            branches.push(name);
+            let content = fs::read_to_string(path_str.clone()).map_err(|error| {
+                CommandError::FileReadError(format!(
+                    "Error leyendo directorio de branches: {}",
+                    error.to_string()
+                ))
+            })?;
+            branches.insert(name, content.trim().to_string());
         } else {
             if let Some(last) = parts.last() {
-                get_branches_paths(logger, &branches_path, branches, &last, i)?;
+                get_refs_paths_and_hash(logger, &branches_path, branches, &last, i)?;
             }
         }
     }

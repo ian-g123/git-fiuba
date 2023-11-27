@@ -16,6 +16,7 @@ pub mod commands {
     pub mod push;
     pub mod rebase;
     pub mod rm;
+    pub mod show_ref;
     pub mod status;
     pub mod tag;
 }

@@ -268,10 +268,10 @@ fn read_commit_info_from(
 }
 
 pub fn lines_next(lines: &mut std::str::Lines<'_>) -> Result<String, CommandError> {
-    let Some(tree_line) = lines.next() else {
+    let Some(line) = lines.next() else {
         return Err(CommandError::InvalidCommit);
     };
-    Ok(tree_line.to_string())
+    Ok(line.to_string())
 }
 
 pub fn get_author_info(commiter_info: &str) -> Result<(Author, i64, i32), CommandError> {
