@@ -49,9 +49,6 @@ impl Command for LsTree {
 impl LsTree {
     /// This function creates a new instance of the 'LsTree' command based on the provided arguments.
     fn new(args: &[String]) -> Result<Self, CommandError> {
-        if args.len() > 2 {
-            return Err(CommandError::InvalidArguments);
-        }
         let mut instance = Self::new_default();
 
         instance.config(args)?;
@@ -141,7 +138,14 @@ impl LsTree {
     /// Executes the ls-tree command.
     fn run(&mut self, output: &mut dyn Write) -> Result<(), CommandError> {
         let mut repo = GitRepository::open("", output)?;
-
+        repo.ls_tree(
+            &self.tree_ish,
+            self.only_list_trees,
+            self.recursive,
+            self.show_tree_entries,
+            self.show_size,
+            self.only_name,
+        )?;
         Ok(())
     }
 }

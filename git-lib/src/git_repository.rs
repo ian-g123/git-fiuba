@@ -3472,6 +3472,7 @@ impl<'a> GitRepository<'a> {
         let mut info: Vec<(String, Mode, String, String, usize)> = Vec::new();
 
         add_ls_tree_info(
+            &self.working_dir_path,
             tree,
             &mut info,
             only_list_trees,
@@ -3532,14 +3533,24 @@ fn get_ls_tree_message(
         if only_name {
             message += &format!("{}\n", path);
         } else if show_size {
-            message += &format!(
-                "{} {} {}      {}	{}\n",
-                mode.to_string(),
-                type_str,
-                hash,
-                size,
-                path,
-            );
+            if type_str == "blob" {
+                message += &format!(
+                    "{} {} {}{:>8}	{}\n",
+                    mode.to_string(),
+                    type_str,
+                    hash,
+                    size,
+                    path,
+                );
+            } else {
+                message += &format!(
+                    "{} {} {}       -	{}\n",
+                    mode.to_string(),
+                    type_str,
+                    hash,
+                    path,
+                );
+            }
         } else {
             message += &format!("{} {} {}	{}\n", mode.to_string(), type_str, hash, path);
         }
@@ -3548,27 +3559,34 @@ fn get_ls_tree_message(
 }
 
 fn add_ls_tree_info(
+    path: &str,
     tree: Tree,
     info: &mut Vec<(String, Mode, String, String, usize)>,
     only_list_trees: bool,
     recursive: bool,
     show_tree_entries: bool,
 ) -> Result<(), CommandError> {
-    for (path, (hash, opt_object)) in tree.sorted_objects() {
+    for (name, (hash, opt_object)) in tree.sorted_objects() {
         let Some(mut object) = opt_object else {
             continue;
         };
+        let full_path = join_paths!(path, name).ok_or(CommandError::DirectoryCreationError(
+            "No se pudo crear el path del objeto".to_string(),
+        ))?;
+        let name = if !recursive { name } else { full_path.clone() };
         let hash_str = u8_vec_to_hex_string(&hash);
         let content = object.content(None)?;
         let type_str = object.type_str();
+
         if !((recursive && !show_tree_entries && type_str == "tree")
             || (only_list_trees && type_str == "blob"))
         {
-            info.push((path, object.mode(), type_str, hash_str, content.len()));
+            info.push((name, object.mode(), type_str, hash_str, content.len()));
         }
         if let Some(new_tree) = object.as_tree() {
             if recursive {
                 add_ls_tree_info(
+                    &full_path,
                     new_tree,
                     info,
                     only_list_trees,
