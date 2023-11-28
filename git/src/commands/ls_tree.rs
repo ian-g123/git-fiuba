@@ -47,7 +47,7 @@ impl Command for LsTree {
 }
 
 impl LsTree {
-    /// This function creates a new instance of the 'LsTree' command based on the provided arguments.
+    /// Crea una instancia del comando LsTree basándose en los argumentos recibidos.
     fn new(args: &[String]) -> Result<Self, CommandError> {
         let mut instance = Self::new_default();
 
@@ -56,6 +56,7 @@ impl LsTree {
         Ok(instance)
     }
 
+    /// Crea una instancia del comando LsTree con valores por default.
     fn new_default() -> Self {
         Self {
             tree_ish: "".to_string(),
@@ -67,8 +68,7 @@ impl LsTree {
         }
     }
 
-    /// Sets the following argument: 'tree_ish'.
-    /// This is the id of a tree-ish: commit, branch or tree.
+    /// Configura el argumento 'tree_ish'.
     fn add_tree_ish_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         if Self::is_flag(&args[i]) {
             return Err(CommandError::WrongFlag);
@@ -78,8 +78,7 @@ impl LsTree {
         Ok(i + 1)
     }
 
-    /// Sets the following flag: '-d'.
-    /// This flag is used to show only the named tree entry itself, not its children.
+    /// Configura el siguiente flag: '-d'.
     fn add_only_list_trees_config(
         &mut self,
         i: usize,
@@ -91,8 +90,7 @@ impl LsTree {
         Ok(i + 1)
     }
 
-    /// Sets the following flag: '-r'.
-    /// This flag is used to recurse into sub-trees.
+    /// Configura el siguiente flag: '-r'.
     fn add_recursive_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options: Vec<String> = ["-r".to_string()].to_vec();
         check_errors_flags(i, args, &options)?;
@@ -100,9 +98,7 @@ impl LsTree {
         Ok(i + 1)
     }
 
-    /// Sets the following flag: '-t'.
-    /// This flag is used to show tree entries even when going to recurse them. Has no effect if -r was not passed.
-    ///  -d implies -t.
+    /// Configura el siguiente flag: '-t'.
     fn add_show_tree_entries_config(
         &mut self,
         i: usize,
@@ -114,10 +110,7 @@ impl LsTree {
         Ok(i + 1)
     }
 
-    /// Sets the following flags: '-l', '--long'.
-    ///
-    /// The '-l' flag, or '--long', when used with the associated command, enables a long listing format.
-    /// This format provides the following additional information: object size.
+    /// Configura los siguientes flags: '-l' y '--long'.
     fn add_show_size_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options: Vec<String> = ["-l".to_string(), "--long".to_string()].to_vec();
         check_errors_flags(i, args, &options)?;
@@ -125,8 +118,7 @@ impl LsTree {
         Ok(i + 1)
     }
 
-    /// Sets the following flags: '--name-only', '--status-only'.
-    /// These flags are used to list only filenames (instead of the "long" output), one per line.  
+    /// Configura los siguientes flags: '--name-only', '--status-only'.
     fn add_only_name_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let options: Vec<String> =
             ["--name-only".to_string(), "--status-only".to_string()].to_vec();
@@ -135,7 +127,7 @@ impl LsTree {
         Ok(i + 1)
     }
 
-    /// Executes the ls-tree command.
+    /// Ejecuta el comando.
     fn run(&mut self, output: &mut dyn Write) -> Result<(), CommandError> {
         let mut repo = GitRepository::open("", output)?;
         repo.ls_tree(

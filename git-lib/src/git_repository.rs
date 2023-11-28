@@ -3481,6 +3481,7 @@ impl<'a> GitRepository<'a> {
 
     // ----- Ls-tree -----
 
+    /// Ejecuta el comando ls-tree en base a los flags usados.
     pub fn ls_tree(
         &mut self,
         tree_ish: &str,
@@ -3555,7 +3556,8 @@ impl<'a> GitRepository<'a> {
         return Ok(None);
     }
 
-    /// Si <tag_name> es una tag del repositorio, devuelve el objeto al que apunta.
+    /// Si <tag_name> es una tag del repositorio, intenta devolver el Tree al que finalmente apunta.
+    /// Si no es una tag, o la misma no apunta a un Tree o Commit, devuelve None.
     fn try_read_tag(&mut self, tag_name: &str) -> Result<Option<Tree>, CommandError> {
         let mut rel_path: Vec<&str> = tag_name.split_terminator('/').collect();
         if !rel_path.contains(&"tags") && !rel_path.contains(&"refs") {
@@ -3584,6 +3586,7 @@ impl<'a> GitRepository<'a> {
 
 // ----- Ls-tree -----
 
+/// Obtiene el mensaje de salida del comando ls-tree. Depende de los flags: -l, --long, --name-only, --status-only.
 fn get_ls_tree_message(
     info: &Vec<(String, Mode, String, String, usize)>,
     show_size: bool,
@@ -3619,6 +3622,12 @@ fn get_ls_tree_message(
     message
 }
 
+/// Obtiene los objetos de un tree y guarda la información que necesita el comando ls-tree:
+/// nombre o path, tipo, modo y tamaño.
+/// * Si se usó el flag -r y hay otros objetos trees, también se enlistan sus datos, de forma
+/// recursiva.
+/// * Si se usó el flag -d, solo se guarda la información de los trees.
+/// * Se se usó el flag -t, se incluyen los trees, incluso si se usa -r.
 fn add_ls_tree_info(
     path: &str,
     tree: Tree,
@@ -3660,6 +3669,8 @@ fn add_ls_tree_info(
     Ok(())
 }
 
+/// Dado el hash al que apunta un tag, intenta obtener el primer Tree en la cadena de referencias.
+/// Si la tag finalmente apunta a un blob, devuelve error.
 fn get_tree_from_tag(
     hash: String,
     db: &ObjectsDatabase,
@@ -3686,6 +3697,8 @@ fn get_tree_from_tag(
         return Ok(tree);
     }
 }
+
+/// Devuelve el tree del commit cuyo hash es pasado como parámetro.
 fn get_tree_from_commit(
     commit_hash: &str,
     db: &ObjectsDatabase,
