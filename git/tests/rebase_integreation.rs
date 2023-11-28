@@ -204,6 +204,7 @@ fn test_with_conflict_with_1_argument() {
         "[(\"master1\", Some(\"master\")), (\"topic1\", Some(\"topic\")), (\"inicial\", None)]"
     );
     assert_eq!(result_log_str_vec, expected_log);
+    _ = fs::remove_dir_all(format!("{}", path));
 }
 
 fn create_scene_without_conflict(path: &str, git_bin: &str) {
