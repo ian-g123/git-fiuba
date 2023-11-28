@@ -1,4 +1,5 @@
 use std::{
+    f32::consts::E,
     fs::{self, File},
     io::{Read, Write},
     process::Command,
@@ -6,12 +7,34 @@ use std::{
     time::Duration,
 };
 
+fn get_commits_and_branches(output: String) -> String {
+    let mut commits: Vec<(String, Option<&str>)> = Vec::new();
+    let commit_parts: Vec<&str> = output.split("commit ").collect();
+
+    for part in commit_parts.iter().skip(1) {
+        let lines: Vec<&str> = part.lines().collect();
+        let index_msj_line = 4;
+        let message = lines[index_msj_line].trim();
+
+        let mut branch: Option<&str> = None;
+        let branch_vec = lines[0].splitn(2, " ").collect::<Vec<&str>>();
+        if branch_vec.len() > 1 {
+            branch = Some(branch_vec[1]);
+        }
+
+        commits.push((message.to_string(), branch));
+    }
+
+    let result = format!("{:?}", commits);
+    return result;
+}
+
 #[test]
 fn test_without_conflict() {
     let path = "./tests/data/commands/rebase/repo1";
     let git_bin = "../../../../../../target/debug/git";
 
-    create_scene_without_conflict(path.clone(), git_bin);
+    create_scene_without_conflict(path, git_bin);
 
     let result = Command::new(git_bin)
         .arg("rebase")
@@ -40,6 +63,18 @@ fn test_without_conflict() {
     file.read_to_string(&mut contents).unwrap();
 
     assert_eq!(contents, "contenido topic");
+
+    // ejecutamos el comando log
+    let result_log = Command::new(git_bin).arg("log").current_dir(path).output();
+    assert!(result_log.is_ok(), "No se pudo agregar el archivo testfile");
+    let result_log_str = String::from_utf8(result_log.unwrap().stdout).unwrap();
+    let result_log_str_vec = get_commits_and_branches(result_log_str);
+
+    let expected_log = format!(
+        "[(\"master1\", Some(\"master\")), (\"topic1\", Some(\"topic\")), (\"inicial\", None)]"
+    );
+    assert_eq!(result_log_str_vec, expected_log);
+
     _ = fs::remove_dir_all(format!("{}", path));
 }
 
@@ -48,7 +83,7 @@ fn test_with_conflict() {
     let path = "./tests/data/commands/rebase/repo2";
     let git_bin = "../../../../../../target/debug/git";
 
-    create_scene_with_conflict(path.clone(), git_bin);
+    create_scene_with_conflict(path, git_bin);
 
     assert!(
         Command::new(git_bin)
@@ -94,6 +129,19 @@ fn test_with_conflict() {
         result_str,
         "Successfully rebased and updated refs/heads/master\n".to_string()
     );
+
+    // ejecutamos el comando log
+    let result_log = Command::new(git_bin).arg("log").current_dir(path).output();
+    assert!(result_log.is_ok(), "No se pudo agregar el archivo testfile");
+    let result_log_str = String::from_utf8(result_log.unwrap().stdout).unwrap();
+    let result_log_str_vec = get_commits_and_branches(result_log_str);
+
+    let expected_log = format!(
+        "[(\"master1\", Some(\"master\")), (\"topic1\", Some(\"topic\")), (\"inicial\", None)]"
+    );
+    assert_eq!(result_log_str_vec, expected_log);
+
+    _ = fs::remove_dir_all(format!("{}", path));
 }
 
 #[test]
@@ -101,7 +149,7 @@ fn test_with_conflict_with_1_argument() {
     let path = "./tests/data/commands/rebase/repo2";
     let git_bin = "../../../../../../target/debug/git";
 
-    create_scene_with_conflict(path.clone(), git_bin);
+    create_scene_with_conflict(path, git_bin);
 
     assert!(
         Command::new(git_bin)
@@ -145,6 +193,17 @@ fn test_with_conflict_with_1_argument() {
         result_str,
         "Successfully rebased and updated refs/heads/master\n".to_string()
     );
+
+    // ejecutamos el comando log
+    let result_log = Command::new(git_bin).arg("log").current_dir(path).output();
+    assert!(result_log.is_ok(), "No se pudo agregar el archivo testfile");
+    let result_log_str = String::from_utf8(result_log.unwrap().stdout).unwrap();
+    let result_log_str_vec = get_commits_and_branches(result_log_str);
+
+    let expected_log = format!(
+        "[(\"master1\", Some(\"master\")), (\"topic1\", Some(\"topic\")), (\"inicial\", None)]"
+    );
+    assert_eq!(result_log_str_vec, expected_log);
 }
 
 fn create_scene_without_conflict(path: &str, git_bin: &str) {
@@ -415,4 +474,5 @@ fn create_scene_with_conflict(path: &str, git_bin: &str) {
             .is_ok(),
         "No se pudo cambiar a la master"
     );
+    thread::sleep(Duration::from_secs(1));
 }
