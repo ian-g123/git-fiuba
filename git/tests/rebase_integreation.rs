@@ -1,33 +1,10 @@
 use std::{
-    f32::consts::E,
     fs::{self, File},
     io::{Read, Write},
     process::Command,
     thread,
     time::Duration,
 };
-
-fn get_commits_and_branches(output: String) -> String {
-    let mut commits: Vec<(String, Option<&str>)> = Vec::new();
-    let commit_parts: Vec<&str> = output.split("commit ").collect();
-
-    for part in commit_parts.iter().skip(1) {
-        let lines: Vec<&str> = part.lines().collect();
-        let index_msj_line = 4;
-        let message = lines[index_msj_line].trim();
-
-        let mut branch: Option<&str> = None;
-        let branch_vec = lines[0].splitn(2, " ").collect::<Vec<&str>>();
-        if branch_vec.len() > 1 {
-            branch = Some(branch_vec[1]);
-        }
-
-        commits.push((message.to_string(), branch));
-    }
-
-    let result = format!("{:?}", commits);
-    return result;
-}
 
 #[test]
 fn test_without_conflict() {
@@ -146,7 +123,7 @@ fn test_with_conflict() {
 
 #[test]
 fn test_with_conflict_with_1_argument() {
-    let path = "./tests/data/commands/rebase/repo2";
+    let path = "./tests/data/commands/rebase/repo3";
     let git_bin = "../../../../../../target/debug/git";
 
     create_scene_with_conflict(path, git_bin);
@@ -476,4 +453,26 @@ fn create_scene_with_conflict(path: &str, git_bin: &str) {
         "No se pudo cambiar a la master"
     );
     thread::sleep(Duration::from_secs(1));
+}
+
+fn get_commits_and_branches(output: String) -> String {
+    let mut commits: Vec<(String, Option<&str>)> = Vec::new();
+    let commit_parts: Vec<&str> = output.split("commit ").collect();
+
+    for part in commit_parts.iter().skip(1) {
+        let lines: Vec<&str> = part.lines().collect();
+        let index_msj_line = 4;
+        let message = lines[index_msj_line].trim();
+
+        let mut branch: Option<&str> = None;
+        let branch_vec = lines[0].splitn(2, " ").collect::<Vec<&str>>();
+        if branch_vec.len() > 1 {
+            branch = Some(branch_vec[1]);
+        }
+
+        commits.push((message.to_string(), branch));
+    }
+
+    let result = format!("{:?}", commits);
+    return result;
 }
