@@ -4,6 +4,8 @@ use std::{
     fs::{self, DirEntry, File, OpenOptions, ReadDir},
     io::{Read, Write},
     path::{Path, PathBuf},
+    thread,
+    time::Duration,
 };
 
 use chrono::{DateTime, Local};
@@ -275,13 +277,32 @@ impl<'a> GitRepository<'a> {
             common_ancestor.get_message(),
         )];
 
-        self.checkout(&topic_branch, false)?;
+        //self.checkout(&topic_branch, false)?;
         self.make_rebase_merge_directory(
             commits_todo,
             commits_done,
             first_commit_todo,
             Some(main_branch),
         )?;
+
+        let path_to_branch = self.get_branch_path_for_rebase()?;
+        let path_to_branch2 = path_to_branch.clone();
+
+        let branch_name =
+            path_to_branch2
+                .split("/")
+                .last()
+                .ok_or(CommandError::DirectoryCreationError(
+                    "Error creando directorio".to_string(),
+                ))?;
+
+        let topic_hash = self.get_last_commit_hash_branch(&topic_branch)?;
+        //let topic_hash = topic_hash.ok_or(CommandError::RebaseContinueError)?;
+
+        self.set_branch_commit_to(path_to_branch, &topic_hash)?;
+
+        self.checkout(branch_name, false)?;
+
         self.rebase_continue()?;
         Ok(())
     }
@@ -414,6 +435,7 @@ impl<'a> GitRepository<'a> {
         let mut commits_todo = self.get_commits_todo()?;
         let mut commits_done = self.get_commits_done()?;
 
+        println!("{:?}", commits_todo);
         // si no hay commits todo, termina el rebase
         if commits_todo.len() == 0 {
             let path_to_branch = self.get_branch_path_for_rebase()?;
@@ -424,7 +446,7 @@ impl<'a> GitRepository<'a> {
                     .ok_or(CommandError::DirectoryCreationError(
                         "Error creando directorio".to_string(),
                     ))?;
-            self.checkout(branch_name, false)?;
+            // self.checkout(branch_name, false)?;
             let rebase_merge_path = join_paths!(self.git_path, "rebase-merge").ok_or(
                 CommandError::DirectoryCreationError("Error creando directorio".to_string()),
             )?;
@@ -435,8 +457,12 @@ impl<'a> GitRepository<'a> {
         }
 
         // si hay commits todo, hace el merge de los dos commits (el usuario tiene que resolverlos)
-        let topic_hash = self.get_last_commit_hash()?;
-        let topic_hash = topic_hash.ok_or(CommandError::RebaseContinueError)?;
+        let branch_path_main = self.get_branch_path_for_rebase()?;
+        let branch_name_main = self.get_branch_name(branch_path_main)?;
+        //let topic_hash = self.get_last_commit_hash()?;
+        let topic_hash = self.get_last_commit_hash_branch(&branch_name_main)?;
+
+        //let topic_hash = topic_hash.ok_or(CommandError::RebaseContinueError)?;
         let mut binding = self.db()?.read_object(&topic_hash, &mut self.logger)?;
         let topic_commit = binding
             .as_mut_commit()
@@ -468,6 +494,10 @@ impl<'a> GitRepository<'a> {
 
         // si no hay conflictos, sigue con el rebase_continue
         commits_done.push(commits_todo.remove(0));
+        // println!("commits_done {:?}", commits_done);
+        // println!("commits_todo {:?}", commits_todo);
+        // thread::sleep(Duration::from_secs(5));
+
         // si no hay commits todo, termina el rebase
         if commits_todo.len() == 0 {
             let path_to_branch = self.get_branch_path_for_rebase()?;
@@ -484,7 +514,7 @@ impl<'a> GitRepository<'a> {
             fs::remove_dir_all(&rebase_merge_path).map_err(|_| {
                 CommandError::DirectoryCreationError("Error borrando directorio".to_string())
             })?;
-            self.checkout(branch_name, false)?;
+            // self.checkout(branch_name, false)?;
             return Ok(branch_name.to_string());
         }
 
@@ -1803,6 +1833,17 @@ impl<'a> GitRepository<'a> {
         Ok(head_branch_name.to_owned())
     }
 
+    pub fn get_branch_name(&mut self, branch_path: String) -> Result<String, CommandError> {
+        let head_branch_name =
+            branch_path
+                .split("/")
+                .last()
+                .ok_or(CommandError::FileWriteError(
+                    "No se pudo obtener el nombre de la rama".to_string(),
+                ))?;
+        Ok(head_branch_name.to_owned())
+    }
+
     /// Devuelve el hash del commit que apunta la rama que se hizo fetch dentro de `FETCH_HEAD` (commit del remoto).
     fn get_fetch_head_branch_commit_hash(&self) -> Result<String, CommandError> {
         let fetch_head_path =
@@ -2243,6 +2284,7 @@ impl<'a> GitRepository<'a> {
             .to_owned();
 
         self.make_rebase_merge_directory(commits_todo, commits_done, &mut first_commit_todo, None)?;
+        println!("MELIIII1");
         return self.rebase_continue();
     }
 
@@ -3130,7 +3172,7 @@ impl<'a> GitRepository<'a> {
     /// Ejecuta el cambio de rama.
     pub fn checkout(&mut self, branch: &str, print_output: bool) -> Result<(), CommandError> {
         let current_branch = self.get_current_branch_name()?;
-        if branch == current_branch {
+        if branch == current_branch && print_output {
             writeln!(self.output, "Already on '{}'", current_branch)
                 .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
             return Ok(());
