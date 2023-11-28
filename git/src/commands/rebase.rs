@@ -109,7 +109,13 @@ impl Rebase {
                     return Err(CommandError::RebaseError(error_message));
                 }
                 Err(error) => return Err(error),
-                Ok(_) => {}
+                Ok(main_branch) => {
+                    let message = "Successfully rebased and updated refs/heads/".to_string()
+                        + &main_branch
+                        + "\n";
+                    _ = output.write(message.as_bytes());
+                    return Ok(());
+                }
             };
         }
         Ok(())

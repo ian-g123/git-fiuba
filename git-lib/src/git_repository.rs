@@ -405,7 +405,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    fn rebase_continue(&mut self) -> Result<(), CommandError> {
+    fn rebase_continue(&mut self) -> Result<String, CommandError> {
         // se fija si hay conflictos
         if self.staging_area()?.has_conflicts() {
             return Err(CommandError::RebaseContinueError);
@@ -431,7 +431,7 @@ impl<'a> GitRepository<'a> {
             fs::remove_dir_all(&rebase_merge_path).map_err(|_| {
                 CommandError::DirectoryCreationError("Error borrando directorio".to_string())
             })?;
-            return Ok(());
+            return Ok(branch_name.to_string());
         }
 
         // si hay commits todo, hace el merge de los dos commits (el usuario tiene que resolverlos)
@@ -485,7 +485,7 @@ impl<'a> GitRepository<'a> {
                 CommandError::DirectoryCreationError("Error borrando directorio".to_string())
             })?;
             self.checkout(branch_name, false)?;
-            return Ok(());
+            return Ok(branch_name.to_string());
         }
 
         self.make_rebase_merge_directory(commits_todo, commits_done, topic_commit, None)?;
@@ -2169,7 +2169,7 @@ impl<'a> GitRepository<'a> {
     }
 
     /// Tries to continue from failed merged
-    pub fn merge_continue_rebase(&mut self) -> Result<(), CommandError> {
+    pub fn merge_continue_rebase(&mut self) -> Result<String, CommandError> {
         let (message, _, _) = self.get_failed_merge_info_rebase()?;
         let mut staging_area = self.staging_area()?;
         if staging_area.has_conflicts() {
@@ -2228,7 +2228,7 @@ impl<'a> GitRepository<'a> {
                 CommandError::DirectoryCreationError("Error borrando directorio".to_string())
             })?;
             self.checkout(branch_name, false)?;
-            return Ok(());
+            return Ok(branch_name.to_string());
         }
 
         let first_commit_todo = commits_todo
@@ -2243,8 +2243,7 @@ impl<'a> GitRepository<'a> {
             .to_owned();
 
         self.make_rebase_merge_directory(commits_todo, commits_done, &mut first_commit_todo, None)?;
-        self.rebase_continue()?;
-        Ok(())
+        return self.rebase_continue();
     }
 
     fn get_common_ancestor(

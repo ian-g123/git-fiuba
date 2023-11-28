@@ -203,6 +203,10 @@ pub enum CommandError {
 
     // Show-ref
     FlagHashRequiresValue,
+
+    // Log
+    ReadRefsHeadError,
+
 }
 
 impl Error for CommandError {}
@@ -519,8 +523,8 @@ impl fmt::Display for CommandError {
             CommandError::RebaseContinueError => write!(f, "No se puede hacer rebase, hay conflictos de merge"), //PONER BIEN MSJ!!!!!!!!!!!!!!!!!!!!!!!!
             CommandError::RebaseMergeConflictsError => write!(f, "Resolver Conflictos"), //PONER BIEN MSJ!!!!!!!!!!!!!!!!!!!!!!!!
             CommandError::RebaseError(msj) => write!(f, "{msj}"),
-
             CommandError::FlagHashRequiresValue => write!(f, "error: option `hash' expects a numerical value"),
+            CommandError::ReadRefsHeadError => write!(f, "Error al leer el archivo .git/refs/heads/HEAD"),
         }
     }
 }

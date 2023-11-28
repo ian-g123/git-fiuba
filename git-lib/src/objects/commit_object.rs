@@ -15,7 +15,9 @@ use crate::{
 use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet},
+    fs::{self, File},
     io::{Cursor, Read, Write},
+    path::{self, Path},
 };
 
 extern crate chrono;
@@ -608,27 +610,79 @@ pub fn print_for_log(
 ) -> Result<(), CommandError> {
     let mut buf: Vec<u8> = Vec::new();
     let mut writer_stream = Cursor::new(&mut buf);
+    let path_to_refs_heads = Path::new("./.git/refs/heads");
+    let branchs_commits = get_hashes_for_refs_heads(path_to_refs_heads);
+    let mut branchs_commits = match branchs_commits {
+        Ok(branchs_commits) => branchs_commits,
+        Err(_) => return Err(CommandError::ReadRefsHeadError),
+    };
     for commit_with_branch in vec_commits {
         if commit_with_branch.0.is_merge() {
-            print_merge_commit_for_log(&mut writer_stream, &mut commit_with_branch.0)?;
+            print_merge_commit_for_log(
+                &mut writer_stream,
+                &mut commit_with_branch.0,
+                &mut branchs_commits,
+            )?;
         } else {
-            print_normal_commit_for_log(&mut writer_stream, &mut commit_with_branch.0)?;
+            print_normal_commit_for_log(
+                &mut writer_stream,
+                &mut commit_with_branch.0,
+                &mut branchs_commits,
+            )?;
         }
     }
     _ = stream.write_all(&buf);
     Ok(())
 }
 
+fn get_hashes_for_refs_heads(dir: &Path) -> std::io::Result<HashMap<String, Vec<String>>> {
+    let mut hash_branch_hash: HashMap<String, Vec<String>> = HashMap::new();
+    if dir.is_dir() {
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_file() {
+                let mut file = File::open(&path)?;
+                let mut hash = String::new();
+                file.read_to_string(&mut hash)?;
+                let branch = path
+                    .to_str()
+                    .unwrap_or("")
+                    .split('/')
+                    .collect::<Vec<&str>>()
+                    .last()
+                    .unwrap_or(&"")
+                    .to_string();
+                if let Some(vec) = hash_branch_hash.get_mut(&hash) {
+                    vec.push(branch);
+                } else {
+                    hash_branch_hash.insert(hash, vec![branch]);
+                }
+            }
+        }
+    }
+    Ok(hash_branch_hash)
+}
+
 fn print_normal_commit_for_log(
     stream: &mut dyn Write,
     commit: &mut CommitObject,
+    branchs_commits: &mut HashMap<String, Vec<String>>,
 ) -> Result<(), CommandError> {
     let mut buf: Vec<u8> = Vec::new();
     let mut writer_stream = Cursor::new(&mut buf);
-    _ = writeln!(writer_stream, "commit {}", commit.get_hash_string()?);
+    let commit_hash_str = commit.get_hash_string()?;
+    _ = write!(writer_stream, "commit {}", commit_hash_str);
+
+    if let Some(branch_vec) = branchs_commits.get(&commit_hash_str) {
+        let branch_str = branch_vec.join(", ");
+        _ = write!(writer_stream, " {}", branch_str);
+    }
+
+    _ = write!(writer_stream, "\n");
     _ = writeln!(writer_stream, "Author: {}", commit.author);
-    _ = writeln!(writer_stream, "Date: {}", commit.timestamp);
-    _ = writeln!(writer_stream, "\n\t{}", commit.message);
+    _ = writeln!(writer_stream, "Date: {}", commit.get_timestamp_string());
+    _ = writeln!(writer_stream, "\n    {}\n", commit.message);
     _ = stream.write_all(&buf);
     Ok(())
 }
@@ -636,6 +690,7 @@ fn print_normal_commit_for_log(
 fn print_merge_commit_for_log(
     stream: &mut dyn Write,
     commit: &mut CommitObject,
+    branchs_commits: &mut HashMap<String, Vec<String>>,
 ) -> Result<(), CommandError> {
     let mut buf: Vec<u8> = Vec::new();
     let mut writer_stream = Cursor::new(&mut buf);
@@ -647,38 +702,21 @@ fn print_merge_commit_for_log(
             return Err(CommandError::InvalidCommit);
         }
     }
-    _ = writeln!(writer_stream, "commit {}", commit.get_hash_string()?);
+    let commit_hash_str = commit.get_hash_string()?;
+    _ = write!(writer_stream, "commit {}", commit_hash_str);
+
+    if let Some(branch_vec) = branchs_commits.get(&commit_hash_str) {
+        let branch_str = branch_vec.join(" ");
+        _ = write!(writer_stream, " {}", branch_str);
+    }
+    _ = write!(writer_stream, "\n");
     _ = writeln!(writer_stream, "{}", merges);
     _ = writeln!(writer_stream, "Author: {}", commit.author);
-    _ = writeln!(writer_stream, "Date: {}", commit.timestamp);
-    _ = writeln!(writer_stream, "\n\t{}", commit.message);
+    _ = writeln!(writer_stream, "Date: {}", commit.get_timestamp_string());
+    _ = writeln!(writer_stream, "\n    {}", commit.message);
     _ = stream.write_all(&buf);
     Ok(())
 }
-
-// pub fn read_from_for_log(
-//     db: &ObjectsDatabase,
-//     stream: &mut dyn Read,
-//     logger: &mut Logger,
-//     hash_commit: &String,
-// ) -> Result<CommitObject, CommandError> {
-//     //let mut tree = db.read_object(&hash_commit)?;
-//     get_type_and_len(stream)?;
-
-//     let (_, parents, author, author_timestamp, author_offset, committer, _, _, message) =
-//         read_commit_info_from(stream)?;
-
-//     Ok(CommitObject {
-//         tree: None,
-//         parents,
-//         author,
-//         committer,
-//         message,
-//         timestamp: author_timestamp,
-//         offset: author_offset,
-//         hash: Some(hex_string_to_u8_vec(hash_commit)),
-//     })
-// }
 
 pub fn sort_commits_descending_date2(
     vec_commits: &mut Vec<(CommitObject, Option<String>)>,
