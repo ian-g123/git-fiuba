@@ -43,7 +43,7 @@ pub enum CommandError {
     /// El flag -m de Commit no se puede combinar con -C.
     MessageAndReuseError,
     CommitMessageEmptyValue,
-    CommitMessageNoValue,
+    MessageNoValue,
     InvalidAuthor,
     ReuseMessageNoValue,
     CommitLookUp(String),
@@ -124,6 +124,7 @@ pub enum CommandError {
     UnmergedFiles,
     /// There cannot be a file and a folder with the same name
     CannotHaveFileAndFolderWithSameName(String),
+
     PushBranchBehind(String),
 
     // InterfaceError(String),
@@ -181,6 +182,31 @@ pub enum CommandError {
     CheckoutConflictsError,
     /// El tree guarda solo hashes y no sus objetos
     ShallowTree,
+
+    MergeConflictsCommit,
+    /// Errror in object decompression
+    ErrorDecompressingObject(String),
+    /// No se pudo obtener el sender del logger
+    NotValidLogger,
+
+    // Tags
+    TagNameDuplicated(String),
+    TagNameNeeded,
+    TagTooManyArgs,
+    TagCreateAndDelete,
+    TagMessageEmpty,
+    TagAlreadyExists(String),
+    InvalidRef(String),
+    RebaseContinueError,
+    RebaseMergeConflictsError,
+    RebaseError(String),
+
+    // Show-ref
+    FlagHashRequiresValue,
+
+    // Log
+    ReadRefsHeadError,
+
 }
 
 impl Error for CommandError {}
@@ -223,7 +249,7 @@ impl fmt::Display for CommandError {
             CommandError::MessageAndReuseError => {
                 write!(f, "fatal: Option -m cannot be combined with -C")
             }
-            CommandError::CommitMessageNoValue => write!(f, "error: switch `m' requires a value"),
+            CommandError::MessageNoValue => write!(f, "error: switch `m' requires a value"),
             CommandError::CommitMessageEmptyValue => {
                 write!(f, "Aborting commit due to empty commit message.")
             }
@@ -480,6 +506,25 @@ impl fmt::Display for CommandError {
             CommandError::ShallowTree => {
                 write!(f, "El tree guarda solo hashes y no sus objetos")
             }
+            CommandError::MergeConflictsCommit => write!(f, "error: Committing is not possible because you have unmerged files.\nhint: Fix them up in the work tree, and then use 'git add/rm <file>'\nhint: as appropriate to mark resolution and make a commit.\nfatal: Exiting because of an unresolved conflict."),
+            CommandError::ErrorDecompressingObject(msg) => {
+                write!(f, "Errror in object decompression: {}", msg)
+            }
+            CommandError::NotValidLogger => {
+                write!(f, "No se pudo obtener el sender del logger")
+            }
+            CommandError::TagNameDuplicated(name) => write!(f, "fatal: tag '{name}' already exists"),
+            CommandError::TagNameNeeded => write!(f, "No se puede crear un tag sin un nombre"),
+            CommandError::TagTooManyArgs => write!(f, "fatal: too many arguments"),
+            CommandError::TagCreateAndDelete => write!(f, "No se puede crear y eliminar tags al mismo tiempo"),
+            CommandError::TagMessageEmpty => write!(f, "fatal: no tag message?"),
+            CommandError::TagAlreadyExists(tag) => write!(f, "fatal: tag '{tag}' already exists"),
+            CommandError::InvalidRef(tag_ref) => write!(f, "fatal: Failed to resolve '{tag_ref}' as a valid ref."),
+            CommandError::RebaseContinueError => write!(f, "No se puede hacer rebase, hay conflictos de merge"), //PONER BIEN MSJ!!!!!!!!!!!!!!!!!!!!!!!!
+            CommandError::RebaseMergeConflictsError => write!(f, "Resolver Conflictos"), //PONER BIEN MSJ!!!!!!!!!!!!!!!!!!!!!!!!
+            CommandError::RebaseError(msj) => write!(f, "{msj}"),
+            CommandError::FlagHashRequiresValue => write!(f, "error: option `hash' expects a numerical value"),
+            CommandError::ReadRefsHeadError => write!(f, "Error al leer el archivo .git/refs/heads/HEAD"),
         }
     }
 }

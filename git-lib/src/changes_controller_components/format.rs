@@ -1,5 +1,6 @@
 use crate::logger::Logger;
 use crate::objects_database::ObjectsDatabase;
+use crate::staging_area::StagingArea;
 use crate::{command_errors::CommandError, objects::tree::Tree};
 use std::{collections::HashMap, io::Write};
 
@@ -17,6 +18,7 @@ pub trait Format {
         commit_output: bool,
         merge: bool,
         branches_diverge_info: (bool, usize, usize),
+        index: &StagingArea,
     ) -> Result<(), CommandError> {
         let initial_commit = {
             if commit_tree.is_none() {
@@ -26,7 +28,7 @@ pub trait Format {
             }
         };
         let changes_controller =
-            ChangesController::new(db, git_path, working_dir, logger, commit_tree)?;
+            ChangesController::new(db, git_path, working_dir, logger, commit_tree, index)?;
         let changes_to_be_commited = changes_controller.get_changes_to_be_commited();
         let changes_not_staged = changes_controller.get_changes_not_staged();
         let untracked_files = changes_controller.get_untracked_files();

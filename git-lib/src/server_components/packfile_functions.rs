@@ -13,7 +13,7 @@ use crate::{
         tree::Tree,
     },
     server_components::packfile_object_type::PackfileObjectType,
-    utils::aux::get_sha1,
+    utils::{aux::get_sha1, super_string::u8_vec_to_hex_string},
 };
 
 use super::reader::TcpStreamBuffedReader;
@@ -22,12 +22,13 @@ pub fn get_objects_from_tree(
     hash_objects: &mut HashMap<String, GitObject>,
     tree: &Tree,
 ) -> Result<(), CommandError> {
-    for (hash_object, (_git_object_hash, git_object_opt)) in tree.get_objects() {
+    for (_object_name, (object_hash, git_object_opt)) in tree.get_objects() {
         let mut git_object = git_object_opt.ok_or(CommandError::ShallowTree)?;
         if let Some(son_tree) = git_object.as_tree() {
             get_objects_from_tree(hash_objects, &son_tree)?;
         }
-        hash_objects.insert(hash_object, git_object);
+        let object_hash_str = u8_vec_to_hex_string(&object_hash);
+        hash_objects.insert(object_hash_str, git_object);
     }
     Ok(())
 }
@@ -49,11 +50,7 @@ pub fn write_object_to_packfile(
     // git_object.write_to(&mut cursor)?;
 
     let type_str = git_object.type_str();
-    println!("type_str: {:?}", type_str);
-    println!(
-        "object_content: {:?}",
-        String::from_utf8_lossy(&object_content)
-    );
+
     let object_len = object_content.len();
 
     let compressed_object = compress(&object_content)?;
@@ -78,10 +75,7 @@ pub fn write_object_to_packfile(
 
     let type_and_len_byte =
         (pf_type.to_u8()) << 4 | first_four | if len_bytes.is_empty() { 0 } else { 0b10000000 };
-    println!("writing: {:?}", &type_and_len_byte);
-    println!("object_len: {:?}", object_len);
-    println!("writing: {:?}", &len_bytes);
-    println!("writing: {:?}", String::from_utf8_lossy(&compressed_object));
+
     packfile.push(type_and_len_byte);
     packfile.extend(len_bytes);
     packfile.extend(compressed_object);
@@ -105,13 +99,8 @@ pub fn make_packfile(
             Box::new(tree_owned.to_owned()),
         );
     }
-
     let mut packfile: Vec<u8> = Vec::new();
     let packfile_header = packfile_header(hash_objects.len() as u32);
-    println!(
-        "packfile_header: {:?}",
-        String::from_utf8_lossy(&packfile_header)
-    );
     packfile.write(&packfile_header).map_err(|error| {
         CommandError::FileWriteError(format!("Error escribiendo en packfile: {}", error))
     })?;
@@ -181,19 +170,30 @@ fn read_objects_in_packfile(
     for _ in 0..object_number {
         let mut buffed_reader: &mut TcpStreamBuffedReader<'_> = &mut buffed_reader;
         let (object_type, len) = read_object_header_from_packfile(buffed_reader)?;
-
+        if object_type == PackfileObjectType::RefDelta
+            || object_type == PackfileObjectType::OfsDelta
+        {
+            todo!("❌ Delta objects not implemented");
+        }
         buffed_reader.clean_up_to_pos();
         let mut decoder = flate2::read::ZlibDecoder::new(&mut buffed_reader);
-        let mut deflated_data = Vec::new();
+        let mut object_content = Vec::new();
 
         decoder
-            .read_to_end(&mut deflated_data)
+            .read_to_end(&mut object_content)
             .map_err(|_| CommandError::ErrorExtractingPackfile)?;
         let bytes_used = decoder.total_in() as usize;
         buffed_reader.set_pos(bytes_used);
 
-        let object = deflated_data;
-        objects_data.push((object_type, len, object));
+        if object_content.len() != len {
+            return Err(CommandError::ErrorDecompressingObject(format!(
+                "Expected length: {}, Decompressed data length: {}",
+                len,
+                object_content.len()
+            )));
+        }
+
+        objects_data.push((object_type, len, object_content));
     }
     Ok(objects_data)
 }
@@ -205,7 +205,6 @@ pub fn read_object_header_from_packfile(
     buffed_reader
         .read_exact(&mut first_byte_buf)
         .map_err(|_| CommandError::ErrorExtractingPackfile)?;
-
     let object_type_u8 = first_byte_buf[0] >> 4 & 0b00000111;
     let object_type = PackfileObjectType::from_u8(object_type_u8)?;
 

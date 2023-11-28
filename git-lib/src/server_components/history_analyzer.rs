@@ -54,11 +54,6 @@ pub fn get_analysis(
             logger,
         )?;
 
-        logger.log(&format!(
-            "local_branch: {}, local_hash: {}\n",
-            &local_branch, &local_hash
-        ));
-
         if let Some((_, Some(remote_branch))) = commits_map.get(&remote_hash) {
             if remote_branch == &local_branch {
                 hash_branch_status

@@ -52,4 +52,29 @@ pub trait Command {
 
     /// Devuelve un vector de funciones que parsean flags
     fn config_adders(&self) -> ConfigAdderFunction<Self>;
+
+    /// Devuelve true si el siguiente argumento es un flag.
+    fn check_next_arg(
+        &mut self,
+        i: usize,
+        args: &[String],
+        error: CommandError,
+    ) -> Result<(), CommandError> {
+        if i >= args.len() - 1 || Self::is_flag(&args[i + 1]) {
+            return Err(error);
+        }
+        Ok(())
+    }
+}
+
+/// Comprueba si el flag es invalido. En ese caso, devuelve error.
+pub fn check_errors_flags(
+    i: usize,
+    args: &[String],
+    options: &[String],
+) -> Result<(), CommandError> {
+    if !options.contains(&args[i]) {
+        return Err(CommandError::WrongFlag);
+    }
+    Ok(())
 }

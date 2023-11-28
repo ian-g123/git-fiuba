@@ -199,7 +199,7 @@ fn test_ckeckout() {
     let stdout = String::from_utf8(result.stdout).unwrap();
     println!("Status: {}", stdout);
 
-    _ = Command::new("../../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("commit")
         .arg("-m")
         .arg("message")
@@ -207,6 +207,14 @@ fn test_ckeckout() {
         .current_dir(path)
         .output()
         .unwrap();
+    println!(
+        "Commit error: {}",
+        String::from_utf8(result.stderr).unwrap()
+    );
+    println!(
+        "Commit stdout: {}",
+        String::from_utf8(result.stdout).unwrap()
+    );
     check_commit(path);
 
     let result = Command::new("../../../../../../target/debug/git")
@@ -352,6 +360,68 @@ fn test_create_and_checkout() {
 
     assert!(!Path::new(&testfile2_path).exists());
     assert_eq!(testfile3_content, "file 3!".to_string());
+
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
+#[test]
+fn test_new_file_commited() {
+    let path = "./tests/data/commands/checkout/repo4";
+
+    create_test_scene_2(path);
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("dir/testfile1.txt")
+        .arg("dir/testfile2.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("checkout")
+        .arg("-b")
+        .arg("branch1")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let mut file = File::create(path.to_owned() + "/dir/testfile3.txt").unwrap();
+    file.write_all(b"file 3!").unwrap();
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("dir/testfile3.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("checkout")
+        .arg("master")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    println!("Stderr: {}", String::from_utf8(result.stderr).unwrap());
+    let path_3 = path.to_owned() + "/dir/testfile3.txt";
+    assert!(!Path::new(&path_3).exists());
 
     _ = fs::remove_dir_all(format!("{}", path));
 }

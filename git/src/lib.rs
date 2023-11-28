@@ -10,9 +10,13 @@ pub mod commands {
     pub mod hash_object;
     pub mod init;
     pub mod log;
+    pub mod ls_files;
     pub mod merge;
     pub mod pull;
     pub mod push;
+    pub mod rebase;
     pub mod rm;
+    pub mod show_ref;
     pub mod status;
+    pub mod tag;
 }

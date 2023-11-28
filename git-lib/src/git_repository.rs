@@ -11,10 +11,10 @@ use chrono::{DateTime, Local};
 use crate::{
     changes_controller_components::{
         changes_controller::ChangesController,
-        changes_types::{self, ChangeType},
+        changes_types::ChangeType,
         commit_format::CommitFormat,
         format::Format,
-        long_format::{sort_hashmap_and_filter_unmodified, LongFormat},
+        long_format::{set_diverge_message, sort_hashmap_and_filter_unmodified, LongFormat},
         short_format::ShortFormat,
         working_tree::{build_working_tree, get_path_name},
     },
@@ -27,16 +27,19 @@ use crate::{
         author::Author,
         blob::Blob,
         commit_object::{
-            sort_commits_descending_date, write_commit_tree_to_database, CommitObject,
+            sort_commits_ascending_date, sort_commits_descending_date,
+            write_commit_tree_to_database, CommitObject,
         },
         git_object::{self, GitObject, GitObjectTrait},
+        mode::Mode,
         proto_object::ProtoObject,
+        tag_object::TagObject,
         tree::Tree,
     },
     objects_database::ObjectsDatabase,
     server_components::git_server::GitServer,
     server_components::{
-        history_analyzer::{get_analysis, get_parents_hash_map, rebuild_commits_tree},
+        history_analyzer::{get_analysis, rebuild_commits_tree},
         packfile_functions::make_packfile,
         packfile_object_type::PackfileObjectType,
     },
@@ -204,6 +207,308 @@ impl<'a> GitRepository<'a> {
         let _ = writeln!(self.output, "{}", hex_string);
 
         Ok(())
+    }
+
+    pub fn print_error_merge_conflicts(&mut self) -> Result<String, CommandError> {
+        let staging_area = self.staging_area()?;
+        let merge_conflicts = staging_area.get_unmerged_files();
+        let files_merge_conflict = merge_conflicts.keys().cloned().collect::<HashSet<String>>();
+
+        let mut files_merge_conflicts_message = String::new();
+        for file in files_merge_conflict {
+            files_merge_conflicts_message.push_str(&format!("{} needs merge\n", file));
+        }
+
+        let message = format!(
+            "{}\nYou must edit all merge conflicts and then\nmark them as resolved using git add",
+            files_merge_conflicts_message
+        );
+        Ok(message)
+    }
+
+    pub fn rebase_abort(&mut self) -> Result<(), CommandError> {
+        let rebase_merge_path = join_paths!(self.git_path, "rebase-merge").ok_or(
+            CommandError::DirectoryCreationError("Error creando directorio".to_string()),
+        )?;
+
+        // obtenemos los commits done
+        let commits_done = self.get_commits_done()?;
+
+        // // eliminamos los commits hechos
+        // for (hash, _) in commits_done {
+        //     self.delete_commit(&hash)?;
+        // }
+
+        fs::remove_dir_all(&rebase_merge_path).map_err(|_| {
+            CommandError::DirectoryCreationError("Error borrando directorio".to_string())
+        })?;
+        Ok(())
+    }
+
+    pub fn initialize_rebase(
+        &mut self,
+        topic_branch: String,
+        main_branch: String,
+    ) -> Result<(), CommandError> {
+        let last_hash_topic_branch = self.get_last_commit_hash_branch(&topic_branch)?;
+        let last_hash_main_branch = self.get_last_commit_hash_branch(&main_branch)?;
+
+        let (mut common_ancestor, _, _) =
+            self.get_common_ancestor(&last_hash_topic_branch, &last_hash_main_branch)?;
+
+        let common_string_hash = common_ancestor.get_hash_string()?;
+        let mut ancestor_hash_to_look_for = HashSet::new();
+        ancestor_hash_to_look_for.insert(common_string_hash);
+
+        let mut commits_main = self
+            .get_commits_until_ancestor(last_hash_main_branch, ancestor_hash_to_look_for.clone())?;
+        let mut commits_topic =
+            self.get_commits_until_ancestor(last_hash_topic_branch, ancestor_hash_to_look_for)?;
+
+        sort_commits_ascending_date(&mut commits_main);
+        sort_commits_ascending_date(&mut commits_topic);
+
+        let commits_todo = self.initialize_commits_todo(commits_main, commits_topic)?;
+        let first_hash_commit_todo = &commits_todo[0].0;
+        let mut first_commit_todo = self
+            .db()?
+            .read_object(&first_hash_commit_todo, &mut self.logger)?;
+        let first_commit_todo =
+            first_commit_todo
+                .as_mut_commit()
+                .ok_or(CommandError::DirectoryCreationError(
+                    "Error creando directorio".to_string(),
+                ))?;
+        let commits_done = vec![(
+            common_ancestor.get_hash_string()?,
+            common_ancestor.get_message(),
+        )];
+
+        self.checkout(&topic_branch, false)?;
+        self.make_rebase_merge_directory(
+            commits_todo,
+            commits_done,
+            first_commit_todo,
+            Some(main_branch),
+        )?;
+        self.rebase_continue()?;
+        Ok(())
+    }
+
+    fn initialize_commits_todo(
+        &mut self,
+        mut commits_main: Vec<(CommitObject, Option<String>)>,
+        commits_topic: Vec<(CommitObject, Option<String>)>,
+    ) -> Result<Vec<(String, String)>, CommandError> {
+        let mut verify = true;
+        let mut commits_todo = Vec::new();
+        for i in 0..commits_main.len() {
+            if i < commits_topic.len() && verify {
+                let Some(tree_main) = commits_main[i].0.get_tree() else {
+                    return Err(CommandError::DirectoryCreationError(
+                        "Error creando directorio".to_string(),
+                    ));
+                };
+                let mut tree_main = tree_main.clone();
+                let Some(tree_topic) = commits_topic[i].0.get_tree() else {
+                    return Err(CommandError::DirectoryCreationError(
+                        "Error creando directorio".to_string(),
+                    ));
+                };
+                let mut tree_topic = tree_topic.clone();
+                if tree_main.get_hash() == tree_topic.get_hash() {
+                    continue;
+                } else {
+                    verify = false;
+                }
+            }
+            commits_todo.push((
+                commits_main[i].0.get_hash_string()?,
+                commits_main[i].0.get_message(),
+            ));
+        }
+        Ok(commits_todo)
+    }
+
+    fn get_commits_until_ancestor(
+        &mut self,
+        last_hash_commit: String,
+        hash_to_look_for: HashSet<String>,
+    ) -> Result<Vec<(CommitObject, Option<String>)>, CommandError> {
+        let db = self.db()?;
+        let mut commits_map_topic = HashMap::new();
+        rebuild_commits_tree(
+            &db,
+            &last_hash_commit,
+            &mut commits_map_topic,
+            None,
+            false,
+            &hash_to_look_for,
+            true,
+            &mut self.logger(),
+        )?;
+        Ok(commits_map_topic.drain().map(|(_, v)| v).collect())
+    }
+
+    fn make_rebase_merge_directory(
+        &mut self,
+        commits_todo: Vec<(String, String)>, // Vec<(hash, message)> del commit
+        commits_done: Vec<(String, String)>, // Vec<(hash, message)> del commit
+        first_commit_todo: &mut CommitObject,
+        branch_name_op: Option<String>,
+    ) -> Result<(), CommandError> {
+        // directorio rebase-merge
+        let rebase_merge_path = join_paths!(self.git_path, "rebase-merge").ok_or(
+            CommandError::DirectoryCreationError("Error creando directorio".to_string()),
+        )?;
+        if !fs::create_dir_all(&rebase_merge_path).is_ok() {
+            return Err(CommandError::DirectoryCreationError(rebase_merge_path));
+        }
+        let git_path = self.git_path.clone();
+
+        // archivo message
+        write_file_with(
+            &git_path,
+            "rebase-merge/message",
+            first_commit_todo.get_message(),
+        )?;
+
+        // archivo head-name
+        if branch_name_op.is_some() {
+            let branch_name = match branch_name_op {
+                Some(branch_name) => branch_name,
+                None => "".to_string(),
+            };
+            let head_name = format!("refs/heads/{}", branch_name);
+            write_file_with(&git_path, "rebase-merge/head-name", head_name)?;
+        }
+
+        // archivo git-rebase-todo
+        let mut pick_hash_message = String::new();
+        for (hash, message) in &commits_todo {
+            pick_hash_message.push_str(&format!("pick {} {}\n", hash, message));
+        }
+        write_file_with(&git_path, "rebase-merge/git-rebase-todo", pick_hash_message)?;
+
+        // archivo done
+        let mut pick_hash_message = String::new();
+        for (hash, message) in commits_done {
+            pick_hash_message.push_str(&format!("pick {} {}\n", hash, message));
+        }
+        write_file_with(&git_path, "rebase-merge/done", pick_hash_message)?;
+
+        // archivo REBASE_HEAD
+        let commit_hash = commits_todo[0].0.clone();
+        write_file_with(&git_path, "rebase-merge/REBASE_HEAD", commit_hash)?;
+
+        // archivo author-script
+        let author = first_commit_todo.get_author();
+        let author_str = author.name;
+        let email = author.email;
+        let timestamp = first_commit_todo.get_timestamp();
+        let author_script = format!(
+            "GIT_AUTHOR_NAME='{}'\nGIT_AUTHOR_EMAIL='{}'\nGIT_AUTHOR_DATE='{}'",
+            author_str, email, timestamp
+        );
+        write_file_with(&git_path, "rebase-merge/author-script", author_script)?;
+        Ok(())
+    }
+
+    fn rebase_continue(&mut self) -> Result<String, CommandError> {
+        // se fija si hay conflictos
+        if self.staging_area()?.has_conflicts() {
+            return Err(CommandError::RebaseContinueError);
+        }
+        // obtenemos los commits todo y los commits done
+        let mut commits_todo = self.get_commits_todo()?;
+        let mut commits_done = self.get_commits_done()?;
+
+        // si no hay commits todo, termina el rebase
+        if commits_todo.len() == 0 {
+            let path_to_branch = self.get_branch_path_for_rebase()?;
+            let branch_name =
+                path_to_branch
+                    .split("/")
+                    .last()
+                    .ok_or(CommandError::DirectoryCreationError(
+                        "Error creando directorio".to_string(),
+                    ))?;
+            self.checkout(branch_name, false)?;
+            let rebase_merge_path = join_paths!(self.git_path, "rebase-merge").ok_or(
+                CommandError::DirectoryCreationError("Error creando directorio".to_string()),
+            )?;
+            fs::remove_dir_all(&rebase_merge_path).map_err(|_| {
+                CommandError::DirectoryCreationError("Error borrando directorio".to_string())
+            })?;
+            return Ok(branch_name.to_string());
+        }
+
+        // si hay commits todo, hace el merge de los dos commits (el usuario tiene que resolverlos)
+        let topic_hash = self.get_last_commit_hash()?;
+        let topic_hash = topic_hash.ok_or(CommandError::RebaseContinueError)?;
+        let mut binding = self.db()?.read_object(&topic_hash, &mut self.logger)?;
+        let topic_commit = binding
+            .as_mut_commit()
+            .ok_or(CommandError::DirectoryCreationError(
+                "Error creando directorio".to_string(),
+            ))?;
+        let main_hash = &commits_todo[0].0;
+        let mut binding = self.db()?.read_object(&main_hash, &mut self.logger)?;
+        let main_commit = binding
+            .as_mut_commit()
+            .ok_or(CommandError::DirectoryCreationError(
+                "Error creando directorio".to_string(),
+            ))?;
+
+        let ancestor_hash = &commits_done[commits_done.len() - 1].0;
+        let mut binding = self.db()?.read_object(&ancestor_hash, &mut self.logger)?;
+        let ancestor_commit =
+            binding
+                .as_mut_commit()
+                .ok_or(CommandError::DirectoryCreationError(
+                    "Error creando directorio".to_string(),
+                ))?;
+        self.merge_two_commits_rebase(topic_commit, main_commit, ancestor_commit)?;
+
+        // si hay conflictos, el usuario los tiene que resolver
+        if self.staging_area()?.has_conflicts() {
+            return Err(CommandError::RebaseMergeConflictsError);
+        }
+
+        // si no hay conflictos, sigue con el rebase_continue
+        commits_done.push(commits_todo.remove(0));
+        // si no hay commits todo, termina el rebase
+        if commits_todo.len() == 0 {
+            let path_to_branch = self.get_branch_path_for_rebase()?;
+            let branch_name =
+                path_to_branch
+                    .split("/")
+                    .last()
+                    .ok_or(CommandError::DirectoryCreationError(
+                        "Error creando directorio".to_string(),
+                    ))?;
+            let rebase_merge_path = join_paths!(self.git_path, "rebase-merge").ok_or(
+                CommandError::DirectoryCreationError("Error creando directorio".to_string()),
+            )?;
+            fs::remove_dir_all(&rebase_merge_path).map_err(|_| {
+                CommandError::DirectoryCreationError("Error borrando directorio".to_string())
+            })?;
+            self.checkout(branch_name, false)?;
+            return Ok(branch_name.to_string());
+        }
+
+        self.make_rebase_merge_directory(commits_todo, commits_done, topic_commit, None)?;
+        return self.rebase_continue();
+    }
+
+    fn get_commits_todo(&mut self) -> Result<Vec<(String, String)>, CommandError> {
+        let commit_todo_path = self.git_path.clone() + "/rebase-merge/git-rebase-todo";
+        Ok(get_commits_rebase_merge(&commit_todo_path)?)
+    }
+
+    fn get_commits_done(&mut self) -> Result<Vec<(String, String)>, CommandError> {
+        let commit_done_path = self.git_path.clone() + "/rebase-merge/done";
+        Ok(get_commits_rebase_merge(&commit_done_path)?)
     }
 
     pub fn write_file(
@@ -527,6 +832,7 @@ impl<'a> GitRepository<'a> {
         let blob = Blob::new_from_path(path.to_string())?;
         let mut git_object: GitObject = Box::new(blob);
         let hex_str = self.db()?.write(&mut git_object, false, &mut self.logger)?;
+        self.log(&format!("File {} (hash: {}) added to index", path, hex_str));
         staging_area.add(path, &hex_str);
         Ok(())
     }
@@ -560,6 +866,9 @@ impl<'a> GitRepository<'a> {
         git_object::display_from_hash(&self.db()?, self.output, hash, &mut self.logger)
     }
 
+    // ----- Commit -----
+
+    /// Hace un commit con los files pasados al comando.
     pub fn commit_files(
         &mut self,
         message: String,
@@ -568,7 +877,7 @@ impl<'a> GitRepository<'a> {
         reuse_commit_info: Option<String>,
         quiet: bool,
     ) -> Result<(), CommandError> {
-        let mut staging_area = StagingArea::open(&self.git_path)?;
+        let mut staging_area = self.staging_area()?;
         self.update_staging_area_files(&files, &mut staging_area)?;
 
         self.commit_priv(
@@ -581,6 +890,7 @@ impl<'a> GitRepository<'a> {
         )
     }
 
+    /// Incluye en el commit la versión del working tree de todos los archivos conocidos por git.
     pub fn commit_all(
         &mut self,
         message: String,
@@ -589,7 +899,7 @@ impl<'a> GitRepository<'a> {
         reuse_commit_info: Option<String>,
         quiet: bool,
     ) -> Result<(), CommandError> {
-        let mut staging_area = StagingArea::open(&self.git_path)?;
+        let mut staging_area = self.staging_area()?;
         self.run_all_config(&mut staging_area)?;
 
         self.commit_priv(
@@ -602,6 +912,7 @@ impl<'a> GitRepository<'a> {
         )
     }
 
+    /// Crea un Commit.
     pub fn commit(
         &mut self,
         message: String,
@@ -611,8 +922,7 @@ impl<'a> GitRepository<'a> {
         quiet: bool,
     ) -> Result<(), CommandError> {
         self.log("Running commit");
-        let mut staging_area = StagingArea::open(&self.git_path)?;
-        self.log("StagingArea opened");
+        let mut staging_area = self.staging_area()?;
         self.commit_priv(
             message,
             &mut staging_area,
@@ -632,16 +942,12 @@ impl<'a> GitRepository<'a> {
         staging_area: &mut StagingArea,
     ) -> Result<(), CommandError> {
         self.log("Running pathspec configuration");
-        let staging_area_files = staging_area.get_files();
-        self.log("staging area files");
 
         for path in files.iter() {
             self.log(&format!("Updating: {}", path));
             if !Path::new(path).exists() {
-                self.log(&format!("Removed from index: {}", path));
-
                 staging_area.remove(path);
-            } else if !self.is_untracked(path, &staging_area_files)? {
+            } else if !self.is_untracked(path, &staging_area)? {
                 self.log(&format!("It's untracked: {}", path));
 
                 self.add_file(path, staging_area)?;
@@ -652,7 +958,6 @@ impl<'a> GitRepository<'a> {
         self.log("Saving staging area changes");
 
         staging_area.save()?;
-        self.log("Finished running pathspec configuration");
 
         Ok(())
     }
@@ -667,9 +972,9 @@ impl<'a> GitRepository<'a> {
                 staging_area.remove(&path);
             }
         }
-        let last_commit_tree = self.get_last_commit_tree()?;
 
-        staging_area.remove_changes(&last_commit_tree, &mut self.logger)?;
+        self.log("Saving entries\n");
+
         self.save_entries("./", staging_area, files)?;
         staging_area.save()?;
         Ok(())
@@ -685,7 +990,10 @@ impl<'a> GitRepository<'a> {
         reuse_commit_info: Option<String>,
         quiet: bool,
     ) -> Result<(), CommandError> {
-        self.log("commit_priv");
+        if self.is_merge()? && staging_area.has_conflicts() {
+            return Err(CommandError::MergeConflictsCommit);
+        }
+
         let last_commit_tree = self.get_last_commit_tree()?;
         self.log("Checking if index is empty");
         if !staging_area.has_changes(&self.db()?, &last_commit_tree, &mut self.logger)? {
@@ -703,11 +1011,8 @@ impl<'a> GitRepository<'a> {
 
         let mut staged_tree = {
             if files.is_empty() {
-                self.log("is_empty");
                 staging_area.get_working_tree_staged(&mut self.logger)?
             } else {
-                self.log("files isnt empty");
-
                 staging_area.get_working_tree_staged_bis(
                     &last_commit_tree,
                     &mut self.logger,
@@ -715,8 +1020,6 @@ impl<'a> GitRepository<'a> {
                 )?
             }
         };
-        self.log("BBBBBB");
-
         let commit: CommitObject =
             self.get_commit(&message, parents, staged_tree.to_owned(), reuse_commit_info)?;
 
@@ -730,7 +1033,7 @@ impl<'a> GitRepository<'a> {
             self.logger.log("Last commit updated");
             if !quiet {
                 CommitFormat::show(
-                    staging_area.get_files(),
+                    &staging_area,
                     &self.db()?,
                     &mut self.logger,
                     last_commit_tree,
@@ -826,6 +1129,7 @@ impl<'a> GitRepository<'a> {
         Err(CommandError::CommitLookUp(commit_hash))
     }
 
+    /// Devuelve true si hay un merge en proceso.
     fn is_merge(&self) -> Result<bool, CommandError> {
         let path = join_paths!(self.git_path, "MERGE_HEAD").ok_or(CommandError::FileNameError)?;
         if Path::new(&path).exists() {
@@ -834,12 +1138,20 @@ impl<'a> GitRepository<'a> {
         Ok(false)
     }
 
+    // ----- Status -----
+
+    /// Compara los commits entre la rama local y la remota.
     fn get_commits_ahead_and_behind_remote(
         &mut self,
         branch: &str,
     ) -> Result<(bool, usize, usize), CommandError> {
         let remote_branches = match self.remote_branches() {
-            Ok(remote_branches) => remote_branches,
+            Ok(remote_branches) => {
+                if remote_branches.is_empty() {
+                    return Ok((false, 0, 0));
+                }
+                remote_branches
+            }
             Err(_) => {
                 return Ok((false, 0, 0));
             }
@@ -848,7 +1160,7 @@ impl<'a> GitRepository<'a> {
         let commit_remote = remote_branches.get(branch);
         let common_hash = match (commit_head.clone(), commit_remote) {
             (Some(head), Some(remote)) => {
-                let (mut common, _, _) = self.get_common_ansestor(remote, &head)?;
+                let (mut common, _, _) = self.get_common_ancestor(remote, &head)?;
                 common.get_hash_string()?
             }
             _ => "".to_string(),
@@ -858,13 +1170,14 @@ impl<'a> GitRepository<'a> {
         Ok((true, ahead, behind))
     }
 
+    /// Ejecuta el comando Status con Long Format.
     pub fn status_long_format(&mut self, commit_output: bool) -> Result<(), CommandError> {
         let branch = self.get_current_branch_name()?;
         let long_format = LongFormat;
         let last_commit_tree = self.get_last_commit_tree()?;
         let merge = self.is_merge()?;
         let diverge_info = self.get_commits_ahead_and_behind_remote(&branch)?;
-
+        let index = self.staging_area()?;
         long_format.show(
             &self.db()?,
             &self.git_path,
@@ -876,15 +1189,18 @@ impl<'a> GitRepository<'a> {
             commit_output,
             merge,
             diverge_info,
+            &index,
         )
     }
 
+    /// Ejecuta el comando Status con Short Format.
     pub fn status_short_format(&mut self, commit_output: bool) -> Result<(), CommandError> {
         let branch = self.get_current_branch_name()?;
         let short_format = ShortFormat;
         let last_commit_tree = self.get_last_commit_tree()?;
         let merge = self.is_merge()?;
         let diverge_info = self.get_commits_ahead_and_behind_remote(&branch)?;
+        let index = self.staging_area()?;
 
         short_format.show(
             &self.db()?,
@@ -897,9 +1213,11 @@ impl<'a> GitRepository<'a> {
             commit_output,
             merge,
             diverge_info,
+            &index,
         )
     }
 
+    /// Cuenta los commits en que divergen la rama local y la remota.
     fn count_commits_ahead_and_behind(
         &mut self,
         commit_destin_str: Option<&String>,
@@ -963,6 +1281,8 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    // -----
+
     pub fn open_config(&self) -> Result<Config, CommandError> {
         Config::open(&self.git_path)
     }
@@ -986,7 +1306,7 @@ impl<'a> GitRepository<'a> {
             "Address: {}, repository_path: {}, repository_url: {}",
             address, repository_path, repository_url
         ));
-        let mut server = GitServer::connect_to(&address)?;
+        let mut server = GitServer::connect_to(&address, &mut self.logger)?;
 
         let _remote_branches =
             self.update_remote_branches(&mut server, &repository_path, &repository_url)?;
@@ -1082,7 +1402,7 @@ impl<'a> GitRepository<'a> {
             address, repository_path, repository_url
         ));
 
-        let mut server = GitServer::connect_to(&address)?;
+        let mut server = GitServer::connect_to(&address, &mut self.logger)?;
         let refs_hash = self.receive_pack(&mut server, &repository_path, &repository_url)?; // ref_hash: HashMap<branch, hash>
 
         // verificamos que todas las branches locales esten actualizadas
@@ -1106,24 +1426,12 @@ impl<'a> GitRepository<'a> {
             return Ok(());
         }
 
-        self.log(&format!("hash_branch_status: {:?}", hash_branch_status));
-
         server.negociate_recieve_pack(hash_branch_status)?;
 
-        self.log("Sending packfile");
         let pack_file: Vec<u8> = make_packfile(commits_map)?;
-        self.log(&format!(
-            "pack_file: {:?}",
-            String::from_utf8_lossy(&pack_file)
-        ));
+        server.send_packfile(&pack_file)?;
 
-        server.write_to_socket(&pack_file)?;
-        self.log("sent! Reading response");
-        println!("sent! Reading response");
-
-        let response = server.get_response()?;
-        // let response = server.just_read()?;
-        self.log(&format!("response: {:?}", response));
+        _ = server.get_response()?;
 
         Ok(())
     }
@@ -1144,12 +1452,13 @@ impl<'a> GitRepository<'a> {
     }
 
     pub fn merge(&mut self, commits: &Vec<String>) -> Result<(), CommandError> {
+        self.log(&format!("Merge args: {:?}", commits));
         let mut head_name = "HEAD".to_string();
         let mut destin_name = "origin".to_string();
         if commits.len() > 1 {
             return Err(CommandError::MergeMultipleCommits);
         }
-        let (destin_commit, is_remote) = match commits.first() {
+        let (mut destin_commit, is_remote) = match commits.first() {
             Some(commit) if commit != "FETCH_HEAD" => (commit.to_owned(), false),
             _ => (self.get_fetch_head_branch_commit_hash()?, true),
         };
@@ -1159,20 +1468,39 @@ impl<'a> GitRepository<'a> {
                 let mut destin_branch_name = "".to_string();
                 let mut head_branch_name = "".to_string();
                 for (branch_name, branch_hash) in self.remote_branches()? {
-                    println!("branch_name: {}, branch_hash: {}", branch_name, branch_hash);
+                    self.log(&format!(
+                        "Remote branch_name: {}, branch_hash: {}",
+                        branch_name, branch_hash
+                    ));
+                    if branch_name == destin_commit {
+                        destin_commit = branch_hash.clone();
+                    }
                     if branch_hash == destin_commit {
-                        println!("hhhh");
                         destin_branch_name = branch_name;
-                        return Ok(());
+                        //return Ok(());
                     }
                 }
                 for (branch_name, branch_hash) in self.local_branches()? {
+                    self.log(&format!(
+                        "Local branch_name: {}, branch_hash: {}",
+                        branch_name, branch_hash
+                    ));
+                    if branch_name == destin_commit {
+                        destin_commit = branch_hash.clone();
+                    }
+                    if branch_hash == destin_commit {
+                        destin_branch_name = branch_name.clone();
+                        //return Ok(());
+                    }
                     if branch_hash == last_commit {
                         head_branch_name = branch_name;
-                        return Ok(());
+                        //return Ok(());
                     }
                 }
-
+                self.log(&format!(
+                    "Local branch_name: {}, branch_hash: {}, Remote branch_name: {}, branch hash: {}",
+                    head_branch_name, last_commit, destin_branch_name, destin_commit
+                ));
                 if destin_branch_name != head_branch_name
                     || destin_branch_name.is_empty()
                     || destin_branch_name.is_empty()
@@ -1196,6 +1524,7 @@ impl<'a> GitRepository<'a> {
                         };
                     }
                 }
+                self.log(&format!("Merging two commits ...",));
                 self.merge_two_commits(&last_commit, &destin_commit, &head_name, &destin_name)
             }
             None => self.merge_fast_forward(&destin_commit),
@@ -1306,12 +1635,9 @@ impl<'a> GitRepository<'a> {
                 "Error creando directorio de branches".to_string(),
             ),
         )?;
-        let paths = fs::read_dir(branches_path).map_err(|error| {
-            CommandError::FileReadError(format!(
-                "Error leyendo directorio de branches: {}",
-                error.to_string()
-            ))
-        })?;
+        let Ok(paths) = fs::read_dir(branches_path) else {
+            return Ok(branches);
+        };
         for path in paths {
             let path = path.map_err(|error| {
                 CommandError::FileReadError(format!(
@@ -1595,21 +1921,36 @@ impl<'a> GitRepository<'a> {
             ))?;
 
         self.log("updated stagin area for merge fast foward");
-        self.restore(tree)?;
+        self.restore(tree, Some(self.db()?))?;
         Ok(())
     }
 
     /// Guarda en el archivo de la rama actual el hash del commit que se quiere hacer merge.
-    fn set_head_branch_commit_to(&mut self, commits: &str) -> Result<(), CommandError> {
-        let branch = self.get_head_branch_path()?;
-
-        self.write_to_file(&branch, commits)?;
+    fn set_head_branch_commit_to(
+        &mut self,
+        merge_commit_hash_str: &str,
+    ) -> Result<(), CommandError> {
+        let branch_path = self.get_head_branch_path()?;
+        self.write_to_internal_file(&branch_path, merge_commit_hash_str)?;
         Ok(())
     }
 
-    fn restore(&mut self, mut source_tree: Tree) -> Result<(), CommandError> {
+    fn set_branch_commit_to(
+        &mut self,
+        branch_path: String,
+        merge_commit_hash_str: &str,
+    ) -> Result<(), CommandError> {
+        self.write_to_internal_file(&branch_path, merge_commit_hash_str)?;
+        Ok(())
+    }
+
+    fn restore(
+        &mut self,
+        mut source_tree: Tree,
+        db: Option<ObjectsDatabase>,
+    ) -> Result<(), CommandError> {
         self.log("Restoring files");
-        source_tree.restore(&self.working_dir_path, &mut self.logger)?;
+        source_tree.restore(&self.working_dir_path, &mut self.logger, db)?;
         let mut staging_area = self.staging_area()?;
         staging_area.update_to_tree(&source_tree)?;
         staging_area.save()?;
@@ -1618,7 +1959,12 @@ impl<'a> GitRepository<'a> {
 
     fn restore_merge_conflict(&mut self, mut source_tree: Tree) -> Result<(), CommandError> {
         self.log("Restoring files");
-        source_tree.restore(&self.working_dir_path, &mut self.logger)?;
+        let objects_database = self.db()?;
+        source_tree.restore(
+            &self.working_dir_path,
+            &mut self.logger,
+            Some(objects_database),
+        )?;
         Ok(())
     }
 
@@ -1630,15 +1976,25 @@ impl<'a> GitRepository<'a> {
     fn is_untracked(
         &mut self,
         path: &str,
-        staging_area: &HashMap<String, String>,
+        staging_area: &StagingArea,
     ) -> Result<bool, CommandError> {
-        let mut blob = Blob::new_from_path(path.to_string())?;
-        let hash = &blob.get_hash_string()?;
-        let (is_in_last_commit, name) = self.is_in_last_commit_from_hash(hash.to_owned())?;
+        /* let mut blob = Blob::new_from_path(path.to_string())?;
+        let hash = &blob.get_hash_string()?; */
+        /* let (is_in_last_commit, name) = self.is_in_last_commit_from_hash(hash.to_owned())?;
         if staging_area.contains_key(path) || (is_in_last_commit && name == get_name(&path)?) {
             return Ok(false);
+        } */
+        let last_commit = &self.get_last_commit_tree()?;
+        let is_in_last_commit = self.is_in_last_commit_from_path(path, last_commit)
+            || staging_area.has_file_from_path(path);
+        self.log(&format!(
+            "{} is in last commit? {}",
+            path, is_in_last_commit
+        ));
+        if !is_in_last_commit {
+            return Ok(true);
         }
-        Ok(true)
+        Ok(false)
     }
 
     /// Guarda en el stagin area el estado actual del working tree, sin tener en cuenta los archivos
@@ -1660,17 +2016,19 @@ impl<'a> GitRepository<'a> {
             };
             let entry_path = entry.path();
             let entry_name = get_path_str(entry_path.clone())?;
+            self.log(&format!("Entry: {}", entry_name));
+
             if entry_name.contains(".git") {
                 continue;
             }
             if entry_path.is_dir() {
                 self.save_entries(&entry_name, staging_area, files)?;
-                return Ok(());
             } else {
                 let blob = Blob::new_from_path(entry_name.to_string())?;
                 let path = &entry_name[2..];
-                if !self.is_untracked(path, files)? {
+                if !self.is_untracked(path, &staging_area)? {
                     let mut git_object: GitObject = Box::new(blob);
+                    self.log(&format!("Adding {} to staging area", path));
                     let hex_str = self.db()?.write(&mut git_object, false, &mut self.logger)?;
                     staging_area.add(path, &hex_str);
                 }
@@ -1720,14 +2078,17 @@ impl<'a> GitRepository<'a> {
         head_name: &str,
         destin_name: &str,
     ) -> Result<(), CommandError> {
-        self.log("Running merge_commits");
-
         let (mut common, mut commit_head, mut commit_destin) =
-            self.get_common_ansestor(&destin_commit, head_commit)?;
+            self.get_common_ancestor(&destin_commit, head_commit)?;
 
+        let hash = common.get_hash_string()?;
+
+        self.log(&format!("Merging {} into {}", destin_commit, head_commit));
+        self.log(&format!("Common: {}", hash));
         if common.get_hash()? == commit_head.get_hash()? {
             return self.merge_fast_forward(&destin_commit);
         }
+
         self.log("True merge");
         self.true_merge(
             &mut common,
@@ -1738,17 +2099,188 @@ impl<'a> GitRepository<'a> {
         )
     }
 
-    fn get_common_ansestor(
+    fn merge_two_commits_rebase(
+        &mut self,
+        topic_commit: &mut CommitObject,
+        main_commit: &mut CommitObject,
+        commit_ancestor: &mut CommitObject,
+    ) -> Result<(), CommandError> {
+        self.log("Running merge_commits");
+        self.log("True merge");
+        self.true_merge_rebase(commit_ancestor, topic_commit, main_commit)
+    }
+
+    fn true_merge_rebase(
+        &mut self,
+        commit_ancestor: &mut CommitObject,
+        topic_commit: &mut CommitObject,
+        main_commit: &mut CommitObject,
+    ) -> Result<(), CommandError> {
+        let mut ancestor_tree = commit_ancestor.get_tree_some_or_err()?.to_owned();
+        let mut topic_tree = topic_commit.get_tree_some_or_err()?.to_owned();
+        let mut main_tree = main_commit.get_tree_some_or_err()?.to_owned();
+        let mut staging_area = self.staging_area()?;
+
+        let main_name = format!(
+            "{} {}",
+            &main_commit.get_hash_string()?[0..7],
+            &main_commit.get_message()
+        );
+
+        staging_area.clear();
+        let merged_tree = merge_trees(
+            &mut topic_tree,
+            &mut main_tree,
+            &mut ancestor_tree,
+            "HEAD",
+            &main_name,
+            &self.working_dir_path,
+            &mut staging_area,
+            &mut self.logger,
+        )?;
+        staging_area.save()?;
+
+        let message = main_commit.get_message();
+        if staging_area.has_conflicts() {
+            self.log(&format!(
+                "Conflicts rebase {:?}",
+                staging_area.get_unmerged_files()
+            ));
+            let mut boxed_tree: GitObject = Box::new(merged_tree.clone());
+            let merge_tree_hash_str = self.db()?.write(&mut boxed_tree, true, &mut self.logger)?;
+
+            self.write_to_internal_file("MERGE_MSG", &message)?;
+            self.write_to_internal_file("AUTO_MERGE", &merge_tree_hash_str)?;
+            self.write_to_internal_file("MERGE_HEAD", &topic_commit.get_hash_string()?)?;
+
+            self.restore_merge_conflict(merged_tree)?;
+        } else {
+            let mut boxed_tree: GitObject = Box::new(merged_tree.clone());
+            let _merge_tree_hash_str = self.db()?.write(&mut boxed_tree, true, &mut self.logger)?;
+            let merge_commit = self.create_new_commit(
+                message,
+                [topic_commit.get_hash_string()?].to_vec(),
+                merged_tree.clone(),
+            )?;
+
+            let mut boxed_commit: GitObject = Box::new(merge_commit.clone());
+            let merge_commit_hash_str =
+                self.db()?
+                    .write(&mut boxed_commit, false, &mut self.logger)?;
+
+            let branch_path = self.get_branch_path_for_rebase()?;
+            self.set_branch_commit_to(branch_path, &merge_commit_hash_str)?;
+            self.restore(merged_tree, None)?;
+        }
+        Ok(())
+    }
+
+    fn get_branch_path_for_rebase(&mut self) -> Result<String, CommandError> {
+        let rebase_head_path = join_paths!(self.git_path, "rebase-merge/head-name").ok_or(
+            CommandError::DirectoryCreationError(
+                "Error creando directorio de branches".to_string(),
+            ),
+        )?;
+        let Ok(mut rebase_head_file) = File::open(rebase_head_path) else {
+            return Err(CommandError::FileReadError(
+                "Error leyendo directorio de rebase-merge/head-name".to_string(),
+            ));
+        };
+        let mut branch_name_for_rebase = String::new();
+        rebase_head_file
+            .read_to_string(&mut branch_name_for_rebase)
+            .map_err(|error| {
+                CommandError::FileReadError(format!(
+                    "Error leyendo directorio de branches: {:?}",
+                    error.to_string()
+                ))
+            })?;
+        Ok(branch_name_for_rebase)
+    }
+
+    /// Tries to continue from failed merged
+    pub fn merge_continue_rebase(&mut self) -> Result<String, CommandError> {
+        let (message, _, _) = self.get_failed_merge_info_rebase()?;
+        let mut staging_area = self.staging_area()?;
+        if staging_area.has_conflicts() {
+            return Err(CommandError::UnmergedFiles);
+        }
+        let merge_tree = staging_area.get_working_tree_staged(self.logger())?;
+
+        let mut boxed_tree: GitObject = Box::new(merge_tree.clone());
+        let merge_tree_hash_str = self.db()?.write(&mut boxed_tree, true, &mut self.logger)?;
+
+        let get_last_commit_hash = self
+            .get_last_commit_hash()?
+            .ok_or(CommandError::FailedToResumeMerge)?;
+        let parents = [get_last_commit_hash].to_vec();
+
+        let merge_tree = self
+            .db()?
+            .read_object(&merge_tree_hash_str, &mut self.logger)?
+            .as_mut_tree()
+            .ok_or(CommandError::FailedToResumeMerge)?
+            .to_owned();
+        let merge_commit = self.create_new_commit(message, parents, merge_tree.clone())?;
+        let mut boxed_commit: GitObject = Box::new(merge_commit.clone());
+        let merge_commit_hash_str = self
+            .db()?
+            .write(&mut boxed_commit, false, &mut self.logger)?;
+
+        let branch_path = self.get_branch_path_for_rebase()?;
+        self.set_branch_commit_to(branch_path, &merge_commit_hash_str)?;
+
+        let db = self.db()?;
+        self.restore(merge_tree, Some(db))?;
+        self.delete_file("MERGE_MSG")?;
+        self.delete_file("MERGE_HEAD")?;
+        self.delete_file("AUTO_MERGE")?;
+
+        //ACTUALIZAR ARCHIVOSS
+        let mut commits_todo = self.get_commits_todo()?;
+        let mut commits_done = self.get_commits_done()?;
+        commits_done.push(commits_todo.remove(0));
+
+        // si no hay commits todo, termina el rebase
+        if commits_todo.len() == 0 {
+            let path_to_branch = self.get_branch_path_for_rebase()?;
+            let branch_name =
+                path_to_branch
+                    .split("/")
+                    .last()
+                    .ok_or(CommandError::DirectoryCreationError(
+                        "Error creando directorio".to_string(),
+                    ))?;
+            let rebase_merge_path = join_paths!(self.git_path, "rebase-merge").ok_or(
+                CommandError::DirectoryCreationError("Error creando directorio".to_string()),
+            )?;
+            fs::remove_dir_all(&rebase_merge_path).map_err(|_| {
+                CommandError::DirectoryCreationError("Error borrando directorio".to_string())
+            })?;
+            self.checkout(branch_name, false)?;
+            return Ok(branch_name.to_string());
+        }
+
+        let first_commit_todo = commits_todo
+            .first()
+            .ok_or(CommandError::FailedToResumeMerge)?;
+
+        let mut first_commit_todo = self
+            .db()?
+            .read_object(&first_commit_todo.0, &mut self.logger)?
+            .as_mut_commit()
+            .ok_or(CommandError::FailedToResumeMerge)?
+            .to_owned();
+
+        self.make_rebase_merge_directory(commits_todo, commits_done, &mut first_commit_todo, None)?;
+        return self.rebase_continue();
+    }
+
+    fn get_common_ancestor(
         &mut self,
         commit_destin_str: &str,
         commit_head_str: &str,
     ) -> Result<(CommitObject, CommitObject, CommitObject), CommandError> {
-        self.log("Get common ansestor inicio");
-        self.log(&format!(
-            "commit_destin_str: {}, commit_head_str: {}",
-            commit_destin_str, commit_head_str
-        ));
-
         let commit_head = self
             .db()?
             .read_object(&commit_head_str, &mut self.logger)?
@@ -1915,17 +2447,22 @@ impl<'a> GitRepository<'a> {
             destin_name,
             &self.working_dir_path,
             &mut staging_area,
+            &mut self.logger,
         )?;
         staging_area.save()?;
 
         let message = format!("Merge branch '{}' into {}", destin_name, head_name);
         if staging_area.has_conflicts() {
+            self.log(&format!(
+                "Conflicts {:?}",
+                staging_area.get_unmerged_files()
+            ));
             let mut boxed_tree: GitObject = Box::new(merged_tree.clone());
             let merge_tree_hash_str = self.db()?.write(&mut boxed_tree, true, &mut self.logger)?;
 
-            self.write_to_file("MERGE_MSG", &message)?;
-            self.write_to_file("AUTO_MERGE", &merge_tree_hash_str)?;
-            self.write_to_file("MERGE_HEAD", &destin.get_hash_string()?)?;
+            self.write_to_internal_file("MERGE_MSG", &message)?;
+            self.write_to_internal_file("AUTO_MERGE", &merge_tree_hash_str)?;
+            self.write_to_internal_file("MERGE_HEAD", &destin.get_hash_string()?)?;
 
             self.restore_merge_conflict(merged_tree)?;
             Ok(())
@@ -1943,35 +2480,41 @@ impl<'a> GitRepository<'a> {
                 self.db()?
                     .write(&mut boxed_commit, false, &mut self.logger)?;
             self.set_head_branch_commit_to(&merge_commit_hash_str)?;
-            self.restore(merged_tree)?;
+            self.restore(merged_tree, None)?;
             Ok(())
         }
     }
 
     /// Tries to continue from failed merged
     pub fn merge_continue(&mut self) -> Result<(), CommandError> {
-        let (message, merge_tree_hash_str, destin) = self.get_failed_merge_info()?;
-        let staging_area = self.staging_area()?;
+        let (message, _, destin) = self.get_failed_merge_info()?;
+        let mut staging_area = self.staging_area()?;
         if staging_area.has_conflicts() {
             return Err(CommandError::UnmergedFiles);
         }
+        let merge_tree = staging_area.get_working_tree_staged(self.logger())?;
+
+        // let mut boxed_tree: GitObject = Box::new(merge_tree.clone());
+        // let merge_tree_hash_str = self.db()?.write(&mut boxed_tree, true, &mut self.logger)?;
+
         let get_last_commit_hash = self
             .get_last_commit_hash()?
             .ok_or(CommandError::FailedToResumeMerge)?;
         let parents = [get_last_commit_hash, destin].to_vec();
-        let merge_tree = self
-            .db()?
-            .read_object(&merge_tree_hash_str, &mut self.logger)?
-            .as_mut_tree()
-            .ok_or(CommandError::FailedToResumeMerge)?
-            .to_owned();
+        let merge_tree = staging_area.get_working_tree_staged(&mut Logger::new_dummy())?;
+        // let merge_tree = self
+        //     .db()?
+        //     .read_object(&merge_tree_hash_str, &mut self.logger)?
+        //     .as_mut_tree()
+        //     .ok_or(CommandError::FailedToResumeMerge)?
+        //     .to_owned();
         let merge_commit = self.create_new_commit(message, parents, merge_tree.clone())?;
         let mut boxed_commit: GitObject = Box::new(merge_commit.clone());
         let merge_commit_hash_str = self
             .db()?
-            .write(&mut boxed_commit, false, &mut self.logger)?;
+            .write(&mut boxed_commit, true, &mut self.logger)?;
         self.set_head_branch_commit_to(&merge_commit_hash_str)?;
-        self.restore(merge_tree)?;
+        self.restore(merge_tree, Some(self.db()?))?;
         self.delete_file("MERGE_MSG")?;
         self.delete_file("AUTO_MERGE")?;
         self.delete_file("MERGE_HEAD")?;
@@ -1994,8 +2537,32 @@ impl<'a> GitRepository<'a> {
         Ok((message, merge_tree_hash_str, destin))
     }
 
+    fn get_failed_merge_info_rebase(&mut self) -> Result<(String, String, String), CommandError> {
+        // let (Ok(message), Ok(merge_tree_hash_str)) =
+        //     (self.read_file("MERGE_MSG"), self.read_file("MERGE_HEAD"))
+        // else {
+        //     return Err(CommandError::NoMergeFound);
+        // };
+
+        // Ok((message, merge_tree_hash_str))
+
+        let (Ok(message), Ok(merge_tree_hash_str), Ok(destin)) = (
+            self.read_file("MERGE_MSG"),
+            self.read_file("AUTO_MERGE"),
+            self.read_file("MERGE_HEAD"),
+        ) else {
+            return Err(CommandError::NoMergeFound);
+        };
+
+        Ok((message, merge_tree_hash_str, destin))
+    }
+
     /// Dado un path, crea el archivo correspondiente y escribe el contenido pasado.
-    fn write_to_file(&self, relative_path: &str, content: &str) -> Result<(), CommandError> {
+    pub fn write_to_internal_file(
+        &self,
+        relative_path: &str,
+        content: &str,
+    ) -> Result<(), CommandError> {
         let path_f = join_paths!(self.git_path, relative_path).ok_or(
             CommandError::FileWriteError("Error guardando FETCH_HEAD:".to_string()),
         )?;
@@ -2084,6 +2651,7 @@ impl<'a> GitRepository<'a> {
                 return Err(CommandError::FileWriteError(err.to_string()));
             }
         };
+        let index = self.staging_area()?;
 
         let changes_controller = ChangesController::new(
             &self.db()?,
@@ -2091,6 +2659,7 @@ impl<'a> GitRepository<'a> {
             &self.working_dir_path,
             &mut self.logger,
             last_commit_tree,
+            &index,
         )
         .unwrap();
 
@@ -2106,16 +2675,14 @@ impl<'a> GitRepository<'a> {
         let mut changes_not_staged: HashSet<String> =
             changes_not_staged_vec.into_iter().map(|(s, _)| s).collect();
 
-        let untracked_files_vec = changes_controller.get_untracked_files();
-
-        println!("untracked_files_vec: {:?}", untracked_files_vec);
-
+        let untracked_files_vec = changes_controller.get_untracked_files_bis();
         changes_not_staged.extend(untracked_files_vec.iter().cloned());
-
         return Ok((changes_to_be_commited, changes_not_staged));
     }
+
     // ----- Branch -----
 
+    /// Cambia la referencia de HEAD.
     fn change_current_branch_name(&mut self, new_name: &str) -> Result<(), CommandError> {
         let path = join_paths!(self.git_path, "HEAD").ok_or(CommandError::FileCreationError(
             " No se pudo obtener .git/HEAD".to_string(),
@@ -2133,6 +2700,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Cambia el nombre de una rama.
     pub fn rename_branch(&mut self, branches: &Vec<String>) -> Result<(), CommandError> {
         let head = self.get_current_branch_name()?;
         if branches.len() == 1 {
@@ -2153,7 +2721,11 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    pub fn create_branch(&mut self, new_branch_info: &Vec<String>) -> Result<(), CommandError> {
+    /// Devuelve el commit a partir del cual se creará la nueva rama.
+    fn get_start_point(
+        &mut self,
+        new_branch_info: &Vec<String>,
+    ) -> Result<(String, bool), CommandError> {
         let commit_hash: String;
         let mut new_is_remote = false;
         if new_branch_info.len() == 2 {
@@ -2177,6 +2749,12 @@ impl<'a> GitRepository<'a> {
                 }
             };
         }
+        Ok((commit_hash, new_is_remote))
+    }
+
+    /// Crea una nueva rama.
+    pub fn create_branch(&mut self, new_branch_info: &Vec<String>) -> Result<(), CommandError> {
+        let (commit_hash, new_is_remote) = self.get_start_point(new_branch_info)?;
         let new_branch = new_branch_info[0].clone();
         let branches_path = join_paths!(self.git_path, "refs/heads/").ok_or(
             CommandError::DirectoryCreationError(
@@ -2198,7 +2776,6 @@ impl<'a> GitRepository<'a> {
                     .map_err(|_| CommandError::FileCreationError(new_branch_path.clone()))?;
             }
         }
-        self.log(&format!("Path: {}", new_branch_path));
 
         let mut file = File::create(new_branch_path.clone())
             .map_err(|_| CommandError::FileCreationError(new_branch_path.clone()))?;
@@ -2220,6 +2797,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Si <branch> es una rama local, lee el commit asociado y lo devuelve.
     fn try_read_commit_local_branch(&self, branch: &str) -> Result<Option<String>, CommandError> {
         let branch_path = join_paths!(self.git_path, "refs/heads/").ok_or(
             CommandError::DirectoryCreationError(
@@ -2236,6 +2814,7 @@ impl<'a> GitRepository<'a> {
         Ok(Some(hash))
     }
 
+    /// Si <branch> es una rama remota, lee el commit asociado y lo devuelve.
     fn try_read_commit_remote_branch(
         &self,
         remote_path: &str,
@@ -2261,13 +2840,18 @@ impl<'a> GitRepository<'a> {
         Ok(Some(hash))
     }
 
+    /// Si <hash> existe en la base de datos y es un commit, lo devuelve.
     fn try_read_commit(&mut self, hash: &str) -> Result<Option<String>, CommandError> {
-        if self.db()?.read_object(hash, &mut self.logger).is_err() {
+        let Ok(mut object) = self.db()?.read_object(hash, &mut self.logger) else {
+            return Ok(None);
+        };
+        if object.as_mut_commit().is_none() {
             return Ok(None);
         }
         Ok(Some(hash.to_string()))
     }
 
+    /// Cambia el nombre de la rama <old> por <new>
     fn change_branch_name(&self, old: &str, new: &str) -> Result<(), CommandError> {
         let branches_path = join_paths!(self.git_path, "refs/heads/").ok_or(
             CommandError::DirectoryCreationError(
@@ -2315,6 +2899,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Elimina las ramas pasadas. Si alguna no existe, devuelve error y continúa con el resto.
     pub fn delete_branches(
         &mut self,
         branches: &Vec<String>,
@@ -2346,11 +2931,8 @@ impl<'a> GitRepository<'a> {
                 .map_err(|error| CommandError::RemoveFileError(error.to_string()))?;
 
             if let Some(dir) = Path::new(&path).parent() {
-                self.log(&format!("Dir: {:?}", dir));
                 let remote: Vec<&str> = branch.split_terminator("/").collect();
                 if !dir.ends_with("refs/heads") && remote.len() != 2 {
-                    self.log(&format!("Deleting dir: {:?}", dir));
-
                     fs::remove_dir_all(dir)
                         .map_err(|_| CommandError::RemoveDirectoryError(path.clone()))?;
                 }
@@ -2372,6 +2954,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Enlista las ramas locales.
     pub fn show_local_branches(&mut self) -> Result<(), CommandError> {
         self.log("Showing local branches ...");
 
@@ -2381,6 +2964,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Devuelve el mensaje con la lista de ramas locales.
     fn list_local_branches(&mut self) -> Result<String, CommandError> {
         let path = join_paths!(self.git_path, "refs/heads").ok_or(
             CommandError::DirectoryCreationError(
@@ -2388,12 +2972,25 @@ impl<'a> GitRepository<'a> {
             ),
         )?;
 
-        let mut local_branches: Vec<String> = Vec::new();
-        self.log("Before getting branches paths");
-        get_branches_paths(&mut self.logger, &path, &mut local_branches, "", 3)?;
-        self.log("After getting branches paths");
+        let mut local_branches: HashMap<String, String> = HashMap::new();
+
+        let parts: Vec<&str> = if self.git_path != ".git" {
+            self.git_path.split("/").collect()
+        } else {
+            Vec::new()
+        };
+
+        get_refs_paths_and_hash(
+            &mut self.logger,
+            &path,
+            &mut local_branches,
+            "",
+            3 + parts.len(),
+        )?;
+        let mut local_branches: Vec<&String> = local_branches.keys().collect();
 
         local_branches.sort();
+
         let mut list = String::new();
         let current = self.get_current_branch_name()?;
         for branch in local_branches.iter() {
@@ -2407,9 +3004,11 @@ impl<'a> GitRepository<'a> {
         Ok(list)
     }
 
+    /// Enlista todas las ramas.
     pub fn show_all_branches(&mut self) -> Result<(), CommandError> {
         self.log("Showing all branches ...");
         let local_list = self.list_local_branches()?;
+
         let remote_list = self.list_remote_branches(2)?;
 
         write!(self.output, "{}{}", local_list, remote_list)
@@ -2417,6 +3016,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Enlista las ramas remotas.
     pub fn show_remote_branches(&mut self) -> Result<(), CommandError> {
         self.log("Showing remote branches ...");
 
@@ -2426,15 +3026,31 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Devuelve el mensaje con la lista de ramas remotas.
     fn list_remote_branches(&mut self, i: usize) -> Result<String, CommandError> {
         let path = join_paths!(self.git_path, "refs/remotes").ok_or(
             CommandError::DirectoryCreationError(
                 "Error creando directorio de branches".to_string(),
             ),
         )?;
-        let mut remote_branches: Vec<String> = Vec::new();
-        get_branches_paths(&mut self.logger, &path, &mut remote_branches, "", i)?;
+        let mut remote_branches: HashMap<String, String> = HashMap::new();
+
+        let parts: Vec<&str> = if self.git_path != ".git" {
+            self.git_path.split("/").collect()
+        } else {
+            Vec::new()
+        };
+
+        get_refs_paths_and_hash(
+            &mut self.logger,
+            &path,
+            &mut remote_branches,
+            "",
+            i + parts.len(),
+        )?;
+        let mut remote_branches: Vec<&String> = remote_branches.keys().collect();
         remote_branches.sort();
+
         let mut list = String::new();
         let current = self.get_current_branch_name()?;
         for branch in remote_branches.iter() {
@@ -2453,6 +3069,7 @@ impl<'a> GitRepository<'a> {
         Ok(list)
     }
 
+    /// Obtiene el path de refs/remote/HEAD.
     fn get_remote_head_path(&mut self) -> Result<Option<String>, CommandError> {
         let mut branch = String::new();
         let path = join_paths!(&self.git_path, "refs/remote/HEAD").ok_or(
@@ -2480,6 +3097,20 @@ impl<'a> GitRepository<'a> {
 
     // ----- Checkout -----
 
+    /// Muestra información de divergencia entre la rama local y la remota.
+    pub fn show_tracking_info(&mut self) -> Result<(), CommandError> {
+        let branch = self.get_current_branch_name()?;
+        let (diverge, ahead, behind) = self.get_commits_ahead_and_behind_remote(&branch)?;
+        if diverge {
+            let message = set_diverge_message(ahead, behind, &branch);
+            writeln!(self.output, "{}", message.trim())
+                .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        }
+
+        Ok(())
+    }
+
+    /// Devuelve true si la rama pasada existe en el repositorio.
     fn branch_exists(&mut self, branch: &str) -> bool {
         if let Ok(locals) = self.local_branches() {
             if locals.contains_key(branch) {
@@ -2494,6 +3125,7 @@ impl<'a> GitRepository<'a> {
         false
     }
 
+    /// Devuelve true si el archivo pasado está en el index.
     fn file_exists_in_index(&mut self, file: &str, index: &mut StagingArea) -> bool {
         if index.has_file_from_path(file) {
             return true;
@@ -2501,6 +3133,8 @@ impl<'a> GitRepository<'a> {
         false
     }
 
+    /// Dependiendo de los elementos del vector pasado, ejecuta una operación de checkout o actualiza
+    /// los archivos.
     pub fn update_files_or_checkout(
         &mut self,
         files_or_branches: Vec<String>,
@@ -2509,7 +3143,7 @@ impl<'a> GitRepository<'a> {
 
         if files_or_branches.len() == 1 && self.branch_exists(&files_or_branches[0]) {
             self.log("Switching to new branch");
-            self.checkout(&files_or_branches[0])?;
+            self.checkout(&files_or_branches[0], true)?;
             return Ok(());
         }
         let mut staging_area = self.staging_area()?;
@@ -2522,13 +3156,14 @@ impl<'a> GitRepository<'a> {
         for path in files_or_branches.iter() {
             if let Some(hash) = staging_area.get_files().get(path) {
                 let mut blob = db.read_object(hash, &mut self.logger)?;
-                blob.restore(path, &mut self.logger)?;
+                blob.restore(path, &mut self.logger, None)?;
             }
         }
         Ok(())
     }
 
-    pub fn checkout(&mut self, branch: &str) -> Result<(), CommandError> {
+    /// Ejecuta el cambio de rama.
+    pub fn checkout(&mut self, branch: &str, print_output: bool) -> Result<(), CommandError> {
         let current_branch = self.get_current_branch_name()?;
         if branch == current_branch {
             writeln!(self.output, "Already on '{}'", current_branch)
@@ -2541,6 +3176,7 @@ impl<'a> GitRepository<'a> {
         let Some(mut last_commit) = self.get_last_commit_tree()? else {
             return Err(CommandError::UntrackedError(current_branch));
         };
+        let index = self.staging_area()?;
 
         let current_changes = ChangesController::new(
             &self.db()?,
@@ -2548,8 +3184,9 @@ impl<'a> GitRepository<'a> {
             &self.working_dir_path,
             &mut self.logger,
             Some(last_commit.clone()),
+            &index,
         )?;
-        let untracked_files = current_changes.get_untracked_files();
+        let untracked_files = current_changes.get_untracked_files_bis();
         let changes_not_staged = current_changes.get_changes_not_staged();
         let changes_not_staged = get_modified_paths(changes_not_staged);
         let changes_staged = current_changes.get_changes_to_be_commited();
@@ -2575,7 +3212,7 @@ impl<'a> GitRepository<'a> {
         let mut modifications: Vec<String> = Vec::new();
         let mut conflicts: Vec<String> = Vec::new();
 
-        let (ancestor, _, _) = self.get_common_ansestor(&new_hash, &actual_hash)?;
+        let (ancestor, _, _) = self.get_common_ancestor(&new_hash, &actual_hash)?;
         let Some(common_tree) = ancestor.get_tree() else {
             return Err(CommandError::ObjectNotTree);
         };
@@ -2596,10 +3233,17 @@ impl<'a> GitRepository<'a> {
         if has_conflicts {
             return Ok(());
         }
-        self.get_checkout_sucess_output(branch, local_new_files, deletions, modifications)?;
+        self.get_checkout_sucess_output(
+            branch,
+            local_new_files,
+            deletions,
+            modifications,
+            print_output,
+        )?;
         Ok(())
     }
 
+    /// Si hay conflictos locales que impiden el cambio de rama, se muestra el mensaje correspondiente.
     fn set_checkout_local_conflicts(
         &mut self,
         conflicts: Vec<String>,
@@ -2642,6 +3286,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Si hay conflictos de merge que impiden el cambio de rama, se muestra el mensaje correspondiente.
     fn get_checkout_merge_conflicts_output(
         &mut self,
         merge_conflicts: Vec<&String>,
@@ -2657,12 +3302,14 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Muestra el mensaje de éxito de Checkout.
     fn get_checkout_sucess_output(
         &mut self,
         branch: &str,
         new_files: Vec<String>,
         deletions: Vec<String>,
         modifications: Vec<String>,
+        print_output: bool,
     ) -> Result<(), CommandError> {
         let mut message = String::new();
         let mut changes: Vec<String> = Vec::new();
@@ -2679,13 +3326,15 @@ impl<'a> GitRepository<'a> {
                 message += &format!("M\t{path}\n");
             }
         }
-        message += &format!("Switched to branch '{branch}'\n");
-        write!(self.output, "{}", message)
-            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-        // output de status (divergencia)
+        if print_output {
+            message += &format!("Switched to branch '{branch}'\n");
+            write!(self.output, "{}", message)
+                .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        }
         Ok(())
     }
 
+    /// Obtiene el hash y tree del commit de la rama pasada.
     fn get_checkout_branch_info(
         &mut self,
         branch: &str,
@@ -2705,6 +3354,8 @@ impl<'a> GitRepository<'a> {
         Ok((hash, tree.to_owned()))
     }
 
+    /// Cambia el estado del working tree por los archivos de la nueva rama. Intenta mantener los
+    /// cambios locales.
     fn checkout_restore(
         &mut self,
         last_tree: &mut Tree,
@@ -2799,6 +3450,7 @@ impl<'a> GitRepository<'a> {
         Ok(false)
     }
 
+    /// Actualiza la referencia a HEAD.
     fn update_ref_head(&self, path: &str) -> Result<(), CommandError> {
         let head_path = join_paths!(&self.git_path, "HEAD")
             .ok_or(CommandError::FileCreationError(".git/HEAD".to_string()))?;
@@ -2811,6 +3463,8 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Compara los archivos de la rama actual con los de la nueva y el ancestro común, buscando
+    /// conflictos entre las ramas.
     fn look_for_checkout_conflicts(
         &mut self,
         new_tree: &mut Tree,
@@ -2821,7 +3475,6 @@ impl<'a> GitRepository<'a> {
         staging_files: &HashMap<String, String>,
     ) -> Result<(), CommandError> {
         for path in files.iter() {
-            self.log(&format!("Buscando conflictos en: {}", path));
             let path = &join_paths!(self.working_dir_path, path).ok_or(
                 CommandError::FileCreationError(
                     "No se pudo obtener el path del objeto".to_string(),
@@ -2834,7 +3487,7 @@ impl<'a> GitRepository<'a> {
             match new_tree.get_object_from_path(path) {
                 None => {
                     if is_in_common_tree {
-                        // Added: conflicto xq el tree de otra rama no lo tiene
+                        // conflicto xq el tree de otra rama no lo tiene
                         conflicts.push(path.to_string());
                     }
                 }
@@ -2869,21 +3522,700 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Lee el contenido de un archivo.
     fn get_staged_file_content(&mut self, hash: &str) -> Result<Vec<u8>, CommandError> {
         let mut object = self.db()?.read_object(hash, &mut self.logger)?;
 
         Ok(object.content(None)?)
     }
+
+    // ----- Ls-files -----
+
+    /// Ejecuta el comando Ls-files
+    pub fn ls_files(
+        &mut self,
+        cached: bool,
+        deleted: bool,
+        modified: bool,
+        others: bool,
+        stage: bool,
+        unmerged: bool,
+        files: Vec<String>,
+    ) -> Result<(), CommandError> {
+        let last_commit = self.get_last_commit_tree()?;
+        let index = self.staging_area()?;
+        self.log(&format!("ls-files args: cached: {}, deleted: {}, modified: {}, others: {}, stage: {}, unmerged: {}, files: {:?}", cached, deleted, modified, others, stage, unmerged, files));
+        let changes_controller = ChangesController::new(
+            &self.db()?,
+            &self.git_path,
+            &self.working_dir_path,
+            &mut self.logger,
+            last_commit,
+            &index,
+        )?;
+        let mut others_list = Vec::<String>::new();
+        let mut aux_list = Vec::<String>::new();
+
+        if others {
+            others_list.extend_from_slice(&changes_controller.get_untracked_files_bis());
+        }
+
+        let mut staged_list = changes_controller.get_staged_files();
+        let modifications_list = changes_controller.get_modified_files_working_tree();
+        let staging_area_conflicts = index.get_unmerged_files();
+        let staging_area_files = index.get_files();
+
+        let unmerged_modifications_list = changes_controller.get_modified_files_unmerged();
+        add_unmerged_files_to_list(&mut staged_list, staging_area_conflicts.clone());
+
+        if cached {
+            aux_list.extend_from_slice(&staged_list);
+        }
+        if unmerged && !cached && !stage {
+            let aux_str_list: Vec<&String> = aux_list
+                .iter()
+                .filter(|p| staging_area_conflicts.contains_key(p.to_owned()))
+                .collect();
+            aux_list = aux_str_list.iter().map(|p| p.to_string()).collect();
+        }
+
+        if modified {
+            aux_list.extend_from_slice(&modifications_list);
+        }
+
+        if deleted {
+            let deleted_list = changes_controller.get_deleted_files();
+            aux_list.extend_from_slice(&deleted_list);
+        }
+
+        if !files.is_empty() {
+            others_list = others_list
+                .iter()
+                .filter(|p| files.contains(p.to_owned()))
+                .map(|p| p.to_string())
+                .collect();
+
+            aux_list = aux_list
+                .iter()
+                .filter(|p| files.contains(p.to_owned()))
+                .map(|p| p.to_string())
+                .collect();
+        }
+
+        aux_list.sort();
+        let message: String;
+        let extended_list = self.get_extended_ls_files_info(
+            aux_list.clone(),
+            staging_area_conflicts,
+            staging_area_files,
+            unmerged_modifications_list,
+        )?;
+
+        if stage || unmerged {
+            message = get_extended_ls_files_output(others_list.clone(), extended_list);
+        } else {
+            message = get_normal_ls_files_output(others_list, extended_list);
+        }
+        write!(self.output, "{}", message)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        Ok(())
+    }
+
+    /// Obtiene información adicional de los archivos a enlistar: modo, hash, staged number y path.
+    fn get_extended_ls_files_info(
+        &mut self,
+        list: Vec<String>,
+        staging_area_conflicts: HashMap<String, (Option<String>, Option<String>, Option<String>)>,
+        staging_area_files: HashMap<String, String>,
+        unmerged_modifications_list: Vec<String>,
+    ) -> Result<Vec<(Mode, String, usize, String)>, CommandError> {
+        let mut result = Vec::<(Mode, String, usize, String)>::new();
+        let db = self.db()?;
+        for path in list.iter() {
+            let is_modified = if unmerged_modifications_list.contains(path) {
+                true
+            } else {
+                false
+            };
+
+            if let Some(hash) = staging_area_files.get(path) {
+                let object = db.read_object(hash, &mut self.logger)?;
+                let mode = object.mode();
+                result.push((mode, hash.to_string(), 0, path.to_string()));
+            };
+
+            if let Some((common, head, remote)) = staging_area_conflicts.get(path) {
+                match (common, head, remote) {
+                    (Some(common_hash), Some(head_hash), Some(remote_hash)) => {
+                        let object = db.read_object(common_hash, &mut self.logger)?;
+                        let mode = object.mode();
+                        result.push((mode.clone(), common_hash.to_string(), 1, path.to_string()));
+                        if is_modified {
+                            result.push((
+                                mode.clone(),
+                                common_hash.to_string(),
+                                1,
+                                path.to_string(),
+                            ));
+                        }
+                        result.push((mode.clone(), head_hash.to_string(), 2, path.to_string()));
+                        if is_modified {
+                            result.push((mode.clone(), head_hash.to_string(), 2, path.to_string()));
+                        }
+                        result.push((mode.clone(), remote_hash.to_string(), 3, path.to_string()));
+                        if is_modified {
+                            result.push((
+                                mode.clone(),
+                                remote_hash.to_string(),
+                                3,
+                                path.to_string(),
+                            ));
+                        }
+                    }
+                    (Some(common_hash), Some(head_hash), None) => {
+                        let object = db.read_object(common_hash, &mut self.logger)?;
+                        let mode = object.mode();
+                        result.push((mode.clone(), common_hash.to_string(), 1, path.to_string()));
+                        if is_modified {
+                            result.push((
+                                mode.clone(),
+                                common_hash.to_string(),
+                                1,
+                                path.to_string(),
+                            ));
+                        }
+                        result.push((mode.clone(), head_hash.to_string(), 2, path.to_string()));
+                        if is_modified {
+                            result.push((mode.clone(), head_hash.to_string(), 2, path.to_string()));
+                        }
+                    }
+                    (Some(common_hash), None, Some(remote_hash)) => {
+                        let object = db.read_object(common_hash, &mut self.logger)?;
+                        let mode = object.mode();
+                        result.push((mode.clone(), common_hash.to_string(), 1, path.to_string()));
+                        if is_modified {
+                            result.push((
+                                mode.clone(),
+                                common_hash.to_string(),
+                                1,
+                                path.to_string(),
+                            ));
+                        }
+                        result.push((mode.clone(), remote_hash.to_string(), 3, path.to_string()));
+                        if is_modified {
+                            result.push((
+                                mode.clone(),
+                                remote_hash.to_string(),
+                                3,
+                                path.to_string(),
+                            ));
+                        }
+                    }
+                    (None, Some(head_hash), Some(remote_hash)) => {
+                        let object = db.read_object(head_hash, &mut self.logger)?;
+                        let mode = object.mode();
+                        result.push((mode.clone(), head_hash.to_string(), 2, path.to_string()));
+                        if is_modified {
+                            result.push((mode.clone(), head_hash.to_string(), 2, path.to_string()));
+                        }
+                        result.push((mode.clone(), remote_hash.to_string(), 3, path.to_string()));
+                        if is_modified {
+                            result.push((
+                                mode.clone(),
+                                remote_hash.to_string(),
+                                3,
+                                path.to_string(),
+                            ));
+                        }
+                    }
+                    _ => {}
+                }
+            };
+        }
+        Ok(result)
+    }
+
+    // ----- Tag -----
+
+    /// Crea un tag con la información pasada. Si se usó el flag -a, lo escribe a la base de datos.
+    pub fn create_tag(
+        &mut self,
+        name: &str,
+        message: &str,
+        object: Option<String>,
+        write: bool,
+        force: bool,
+    ) -> Result<(), CommandError> {
+        self.log(&format!(
+            "Creating tag --> name: {}, message: {}, points to: {:?}, force: {}, write to database: {}",
+            name, message, object, force, write
+        ));
+        let path = join_paths!(self.git_path, "refs/tags/", name).ok_or(
+            CommandError::FileCreationError("Error creando path de tags".to_string()),
+        )?;
+        let output_message = Self::get_create_tag_message(&path, force, name)?;
+        let mut db = self.db()?;
+        let (mut tag, tag_ref) = self.create_tag_object(name, message, object, &db)?;
+        let file_content = {
+            if write {
+                tag.get_hash_string()?
+            } else {
+                tag_ref
+            }
+        };
+        let Ok(mut file) = File::create(&path) else {
+            return Err(CommandError::FileOpenError(path));
+        };
+        file.write_all(file_content.as_bytes()).map_err(|error| {
+            CommandError::FileWriteError(
+                "Error guardando objeto en la nueva tag:".to_string() + &error.to_string(),
+            )
+        })?;
+        if write {
+            let mut git_object: GitObject = Box::new(tag);
+            let _ = db.write(&mut git_object, false, &mut self.logger)?;
+        }
+        write!(self.output, "{}", output_message)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        Ok(())
+    }
+
+    /// Crea un TagObject.
+    fn create_tag_object(
+        &mut self,
+        name: &str,
+        message: &str,
+        object: Option<String>,
+        db: &ObjectsDatabase,
+    ) -> Result<(TagObject, String), CommandError> {
+        let tag_ref = {
+            if let Some(obj) = object {
+                obj
+            } else {
+                if let Some(hash) = self.get_last_commit_hash()? {
+                    hash
+                } else {
+                    return Err(CommandError::InvalidRef("HEAD".to_string()));
+                }
+            }
+        };
+
+        if !db.has_object(&tag_ref)? {
+            return Err(CommandError::InvalidRef(tag_ref));
+        }
+
+        let tag_object = db.read_object(&tag_ref, &mut self.logger)?;
+        let tag_object_type = tag_object.type_str();
+        let (tagger, timestamp, offset) = self.get_tagger_info()?;
+        let tag = TagObject::new(
+            name.to_string(),
+            tag_ref.clone(),
+            tag_object_type,
+            message.to_string(),
+            tagger,
+            timestamp,
+            offset,
+        );
+        Ok((tag, tag_ref))
+    }
+
+    /// Devuelve el mensaje que se mostrará al crear el tag.
+    fn get_create_tag_message(path: &str, force: bool, name: &str) -> Result<String, CommandError> {
+        let exists = Path::new(&path).exists();
+        if exists && !force {
+            return Err(CommandError::TagAlreadyExists(name.to_string()));
+        }
+
+        let output_message = {
+            if exists {
+                let hash = fs::read_to_string(path.clone())
+                    .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+                format!("Updated tag '{}' (was {})\n", name, hash[..6].to_string())
+            } else {
+                "".to_string()
+            }
+        };
+        Ok(output_message)
+    }
+
+    /// Devuelve información sobre un Tagger, incluyendo el timestamp y offset del tag.
+    fn get_tagger_info(&mut self) -> Result<(Author, i64, i32), CommandError> {
+        let config = self.open_config()?;
+        let Some(tagger_email) = config.get("user", "email") else {
+            return Err(CommandError::UserConfigurationError);
+        };
+        let Some(tagger_name) = config.get("user", "name") else {
+            return Err(CommandError::UserConfigurationError);
+        };
+        let tagger = Author::new(tagger_name, tagger_email);
+        let datetime: DateTime<Local> = Local::now();
+        let timestamp = datetime.timestamp();
+        let offset = datetime.offset().local_minus_utc() / 60;
+        Ok((tagger, timestamp, offset))
+    }
+
+    /// Recibe un vector con nombres de tags y las elimina. Si alguna no existe, devuelve error y
+    /// continúa con el resto.
+    pub fn delete_tags(&mut self, tags: &Vec<String>) -> Result<(), CommandError> {
+        self.log(&format!("Deleting tags --> {:?}", tags));
+        let tags_path = join_paths!(self.git_path, "refs/tags/").ok_or(
+            CommandError::DirectoryCreationError(
+                "No se pudo crear el directorio .git/refs/tags".to_string(),
+            ),
+        )?;
+        let mut errors: String = String::new();
+        let mut deletions = String::new();
+
+        for tag in tags {
+            let path = tags_path.clone() + tag;
+            if !Path::new(&path).exists() {
+                errors += &format!("error: tag '{tag}' not found.\n");
+                continue;
+            };
+            let hash = fs::read_to_string(path.clone())
+                .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+
+            fs::remove_file(path.clone())
+                .map_err(|error| CommandError::RemoveFileError(error.to_string()))?;
+
+            deletions += &format!("Deleted tag {tag} (was {}).\n", hash[..7].to_string());
+        }
+        write!(self.output, "{}{}", errors, deletions)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Lista los tags de refs/tags/
+    pub fn list_tags(&mut self) -> Result<(), CommandError> {
+        self.log("Listing tags...");
+        let mut tags = self.get_tags()?;
+
+        tags.sort();
+
+        let mut message = String::new();
+        for tag in tags {
+            message += &format!("{}\n", tag);
+        }
+
+        write!(self.output, "{}", message)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Devuelve un vector con los nombres de tags.
+    fn get_tags(&mut self) -> Result<Vec<String>, CommandError> {
+        self.log("Listing tags...");
+        let mut tags: Vec<String> = Vec::new();
+        let tags_path = join_paths!(self.git_path, "refs/tags/").ok_or(
+            CommandError::DirectoryCreationError(
+                "No se pudo crear el directorio .git/refs/tags".to_string(),
+            ),
+        )?;
+
+        let Ok(paths) = fs::read_dir(tags_path.clone()) else {
+            return Err(CommandError::FileReadError(tags_path));
+        };
+        for path in paths {
+            let path = path.map_err(|error| {
+                CommandError::FileReadError(format!(
+                    "Error leyendo directorio de tags: {}",
+                    error.to_string()
+                ))
+            })?;
+            let file_name = &path.file_name();
+            let Some(tag_name) = file_name.to_str() else {
+                return Err(CommandError::FileReadError(
+                    "Error leyendo directorio de tags".to_string(),
+                ));
+            };
+
+            tags.push(tag_name.to_string());
+        }
+        Ok(tags)
+    }
+
+    // ----- Show-ref -----
+
+    /// Ejecuta el comando show-ref
+    pub fn show_ref(
+        &mut self,
+        head: bool,
+        heads: bool,
+        remotes: bool,
+        tags: bool,
+        dereference: bool,
+        (hash, digits): (bool, Option<usize>),
+        refs: &Vec<String>,
+    ) -> Result<(), CommandError> {
+        let mut refs_list: Vec<(String, String)> = Vec::new();
+
+        let mut ref_heads = get_refs("refs/heads", &self.git_path, &mut self.logger)?;
+        let mut ref_remotes = get_refs("refs/remotes", &self.git_path, &mut self.logger)?;
+        let mut ref_tags = get_refs("refs/tags", &self.git_path, &mut self.logger)?;
+
+        add_packed_refs(
+            &mut ref_heads,
+            &mut ref_remotes,
+            &mut ref_tags,
+            &self.git_path,
+        )?;
+
+        if dereference {
+            ref_tags = dereference_tags(&ref_tags, &self.db()?, &mut self.logger)?;
+        }
+
+        let ref_heads = hashmap_to_vec(ref_heads);
+        let ref_remotes = hashmap_to_vec(ref_remotes);
+        let ref_tags = hashmap_to_vec(ref_tags);
+
+        if head {
+            if let Some(hash) = self.get_last_commit_hash()? {
+                refs_list.push(("HEAD".to_string(), hash));
+            }
+        }
+        if heads {
+            refs_list.extend_from_slice(&ref_heads);
+        }
+        if remotes {
+            refs_list.extend_from_slice(&ref_remotes);
+        }
+
+        if tags {
+            refs_list.extend_from_slice(&ref_tags);
+        }
+
+        if !refs.is_empty() {
+            refs_list = filter_refs(refs, refs_list);
+        }
+
+        let message = get_show_ref_message(&refs_list, hash, digits);
+
+        write!(self.output, "{}", message)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+
+        Ok(())
+    }
 }
 
+// ----- Show-ref -----
+
+/// Devuelve el mensaje de salida del comando show-ref
+fn get_show_ref_message(
+    refs_list: &Vec<(String, String)>,
+    show_hash: bool,
+    digits_op: Option<usize>,
+) -> String {
+    let mut message = String::new();
+    for (reference, hash) in refs_list {
+        let final_hash = if let Some(digits) = digits_op {
+            hash[..digits].to_string()
+        } else {
+            hash.to_owned()
+        };
+        if show_hash && !reference.ends_with("^{}") {
+            message += &format!("{}\n", final_hash);
+        } else {
+            message += &format!("{} {}\n", final_hash, reference);
+        }
+    }
+    message
+}
+
+/// Devuelve un diccionario con los objetos a los que referencian las tags: <tag_path, hash>
+fn dereference_tags(
+    tags: &HashMap<String, String>,
+    db: &ObjectsDatabase,
+    logger: &mut Logger,
+) -> Result<HashMap<String, String>, CommandError> {
+    let mut result: HashMap<String, String> = tags.clone();
+    for (reference, hash) in tags {
+        let mut git_object = db.read_object(hash, logger)?;
+        let Some(tag) = git_object.as_mut_tag() else {
+            continue;
+        };
+        let object_id = tag.get_object_hash();
+        let name = reference.to_owned() + "^{}";
+        _ = result.insert(name, object_id);
+    }
+
+    Ok(result)
+}
+
+/// Recibe un vector con nombres o paths de referencias y si son válidas devuelve una lista
+/// con las referencias filtradas.
+fn filter_refs(refs: &Vec<String>, list: Vec<(String, String)>) -> Vec<(String, String)> {
+    let mut refs_filtered: Vec<(String, String)> = Vec::new();
+    for reference in refs {
+        let ref_parts: Vec<&str> = reference.split("/").collect();
+        let dereference = reference.to_owned() + "^{}";
+        let deref_parts: Vec<&str> = dereference.split("/").collect();
+
+        for (ref_str, hash) in list.iter() {
+            let parts: Vec<&str> = ref_str.split("/").collect();
+            if parts.ends_with(&ref_parts) || parts.ends_with(&deref_parts) {
+                refs_filtered.push((ref_str.to_string(), hash.to_string()));
+            }
+        }
+    }
+
+    refs_filtered
+}
+
+/// Devuelve un diccionario con <ref, hash> dado el path de referencias pasado (heads, remotes o tags)
+fn get_refs(
+    path: &str,
+    git_path: &str,
+    logger: &mut Logger,
+) -> Result<HashMap<String, String>, CommandError> {
+    let path = join_paths!(git_path, path).ok_or(CommandError::DirectoryCreationError(
+        "Error creando directorio de refs".to_string(),
+    ))?;
+
+    let mut refs: HashMap<String, String> = HashMap::new();
+
+    let parts: Vec<&str> = if git_path != ".git" {
+        git_path.split("/").collect()
+    } else {
+        Vec::new()
+    };
+
+    get_refs_paths_and_hash(logger, &path, &mut refs, "", 1 + parts.len())?;
+
+    Ok(refs)
+}
+
+/// Agrega a las listas de referencias las que se encuentran en el archivo '.git/packed-refs'
+fn add_packed_refs(
+    heads: &mut HashMap<String, String>,
+    remotes: &mut HashMap<String, String>,
+    tags: &mut HashMap<String, String>,
+    git_path: &str,
+) -> Result<(), CommandError> {
+    let packed_refs = read_packed_refs_file(git_path)?;
+    for (reference, hash) in packed_refs.iter() {
+        if reference.contains("refs/heads") && !heads.contains_key(reference) {
+            _ = heads.insert(reference.to_string(), hash.to_string());
+        }
+        if reference.contains("refs/remotes") && !remotes.contains_key(reference) {
+            _ = remotes.insert(reference.to_string(), hash.to_string());
+        }
+        if reference.contains("refs/tags") && !tags.contains_key(reference) {
+            _ = tags.insert(reference.to_string(), hash.to_string());
+        }
+    }
+    Ok(())
+}
+
+/// Convierte un hashmap a un vector de tuplas ordenado alfabéticamente.
+fn hashmap_to_vec(refs: HashMap<String, String>) -> Vec<(String, String)> {
+    let mut keys: Vec<&String> = refs.keys().collect();
+
+    keys.sort();
+
+    let mut sorted_refs: Vec<(String, String)> = Vec::new();
+    for key in keys {
+        if let Some(value) = refs.get(key) {
+            sorted_refs.push((key.clone(), value.clone()));
+        }
+    }
+    sorted_refs
+}
+
+/// Lee la lista de referencias del archivo '.git/packed-refs'
+fn read_packed_refs_file(git_path: &str) -> Result<HashMap<String, String>, CommandError> {
+    let mut refs: HashMap<String, String> = HashMap::new();
+    let path = join_paths!(git_path, "packed-refs").ok_or(CommandError::DirectoryCreationError(
+        "No se pudo crear el directorio .git/packed-refs".to_string(),
+    ))?;
+    if !Path::new(&path).exists() {
+        return Ok(refs);
+    }
+
+    let content =
+        fs::read_to_string(path).map_err(|error| CommandError::FileReadError(error.to_string()))?;
+
+    let mut lines = content.lines();
+
+    loop {
+        let (eof, line) = next_line(&mut lines);
+        if eof {
+            break;
+        }
+
+        let Some((hash, ref_path)) = line.split_once(' ') else {
+            return Err(CommandError::InvalidCommit);
+        };
+        if hash.len() != 40 {
+            continue;
+        }
+        _ = refs.insert(ref_path.to_string(), hash.to_string());
+    }
+
+    Ok(refs)
+}
+
+/// Devuelve la próxima línea del iterador.
+fn next_line(lines: &mut std::str::Lines<'_>) -> (bool, String) {
+    let Some(line) = lines.next() else {
+        return (true, "".to_string());
+    };
+    (false, line.to_string())
+}
+
+// ----- Ls-files -----
+
+/// Agrega archivos no mergeados a la lista pasada.
+fn add_unmerged_files_to_list(
+    staged_list: &mut Vec<String>,
+    staging_area_conflicts: HashMap<String, (Option<String>, Option<String>, Option<String>)>,
+) {
+    for (path, _) in staging_area_conflicts.iter() {
+        staged_list.push(path.to_string());
+    }
+}
+
+/// Obtiene el mensaje de salida de ls-files
+fn get_normal_ls_files_output(
+    others: Vec<String>,
+    extended_list: Vec<(Mode, String, usize, String)>,
+) -> String {
+    let mut message = String::new();
+    for path in others {
+        message += &format!("{}\n", path);
+    }
+    for (_, _, _, path) in extended_list {
+        message += &format!("{}\n", path);
+    }
+    message
+}
+
+/// Obtiene el mensaje de salida de ls-files si se usa -s o -u.
+fn get_extended_ls_files_output(
+    others: Vec<String>,
+    extended_list: Vec<(Mode, String, usize, String)>,
+) -> String {
+    let mut message = String::new();
+    for path in others {
+        message += &format!("{}\n", path);
+    }
+    for (mode, hash, stage_number, path) in extended_list {
+        message += &format!("{} {} {}\t{}\n", mode, hash, stage_number, path);
+    }
+    message
+}
+
+// ----- Checkout -----
+
+/// Lee el contenido de un archivo.
 pub fn get_current_file_content(path: &str) -> Result<Vec<u8>, CommandError> {
     let content =
         fs::read_to_string(path).map_err(|error| CommandError::FileReadError(error.to_string()))?;
     Ok(content.as_bytes().to_vec())
 }
 
-// ----- Checkout -----
-
+/// Elimina los archivos de la rama local que fueron commiteados y no están en la nueva rama.
 fn remove_new_files_commited(
     working_tree: &mut Tree,
     head_tree: &mut Tree,
@@ -2894,8 +4226,7 @@ fn remove_new_files_commited(
     let mut new_files = Vec::<String>::new();
     working_tree.get_new_blobs_from_tree(new_tree, &mut new_files, path, logger)?;
     for path in new_files.iter() {
-        if !head_tree.has_blob_from_path(path, logger) {
-            logger.log(&format!("Deleting ... {}", path));
+        if head_tree.has_blob_from_path(path, logger) {
             fs::remove_file(path.clone())
                 .map_err(|error| CommandError::RemoveFileError(error.to_string()))?;
         }
@@ -2904,12 +4235,13 @@ fn remove_new_files_commited(
     Ok(())
 }
 
+/// Compara el cotenido de las 3 versiones de un archivo (rama actual, nueva rama y ancestro) para determinar si hay conflictos.
 fn has_conflicts(
     path: &str,
     content: &Vec<u8>,
     new_content: &Vec<u8>,
     common: &mut Tree,
-    logger: &mut Logger,
+    _logger: &mut Logger,
 ) -> Result<bool, CommandError> {
     let content_str: String = String::from_utf8_lossy(content).to_string();
 
@@ -2932,20 +4264,18 @@ fn has_conflicts(
     Ok(has_conflicts)
 }
 
+/// Elimina archivos nuevos de la rama actual del árbol que se usará para actualizar el index.
 fn remove_local_changes_from_tree(
     untracked_files: &Vec<String>,
     tree: &mut Tree,
     logger: &mut Logger,
 ) {
     for path in untracked_files.iter() {
-        logger.log(&format!(
-            "Removing untracked file {} from new branch tree",
-            path
-        ));
         tree.remove_object_from_path(path, logger);
     }
 }
 
+/// Agrega los archivos nuevos al tree que se usará para actualizar el working tree.
 fn add_local_new_files(
     untracked_files: &Vec<String>,
     tree: &mut Tree,
@@ -2967,6 +4297,7 @@ fn add_local_new_files(
     Ok(added)
 }
 
+/// Obtiene los archivos modificados en el working tree.
 fn get_modified_paths(unstaged_changes: &HashMap<String, ChangeType>) -> Vec<String> {
     let unstaged_changes = sort_hashmap_and_filter_unmodified(unstaged_changes);
     let mut changes: Vec<String> = Vec::new();
@@ -2977,6 +4308,7 @@ fn get_modified_paths(unstaged_changes: &HashMap<String, ChangeType>) -> Vec<Str
     changes
 }
 
+/// Obtiene los archivos del staging area y su contenido.
 fn get_staged_paths_and_content(
     staged_changes: &HashMap<String, ChangeType>,
     staging_area: &StagingArea,
@@ -2996,25 +4328,24 @@ fn get_staged_paths_and_content(
             changes.insert(path.to_string(), content);
         }
     }
-    let log: Vec<&String> = changes.iter().map(|(s, _)| s).collect();
     Ok(changes)
 }
 
 // ----- Branch -----
 
-fn get_branches_paths(
+/// Obtiene el path de cada rama.
+fn get_refs_paths_and_hash(
     logger: &mut Logger,
     path: &str,
-    branches: &mut Vec<String>,
+    branches: &mut HashMap<String, String>,
     dir_path: &str,
     i: usize,
 ) -> Result<(), CommandError> {
+    logger.log(&format!("indice: {}", i));
     let branches_path = join_paths!(path, dir_path).ok_or(CommandError::DirectoryCreationError(
         "Error creando directorio de branches".to_string(),
     ))?;
-    /* if branches_path.ends_with("/") {
-        _ = branches_path.pop();
-    } */
+
     let paths = fs::read_dir(branches_path.clone()).map_err(|error| {
         CommandError::FileReadError(format!(
             "Error leyendo directorio de branches: {}",
@@ -3037,10 +4368,16 @@ fn get_branches_paths(
         let name = name.join("/");
 
         if entry_path.is_file() {
-            branches.push(name);
+            let content = fs::read_to_string(path_str.clone()).map_err(|error| {
+                CommandError::FileReadError(format!(
+                    "Error leyendo directorio de branches: {}",
+                    error.to_string()
+                ))
+            })?;
+            branches.insert(name, content.trim().to_string());
         } else {
             if let Some(last) = parts.last() {
-                get_branches_paths(logger, &branches_path, branches, &last, i)?;
+                get_refs_paths_and_hash(logger, &branches_path, branches, &last, i)?;
             }
         }
     }
@@ -3058,6 +4395,7 @@ fn merge_trees(
     destin_name: &str,
     parent_path: &str,
     staging_area: &mut StagingArea,
+    logger: &mut Logger,
 ) -> Result<Tree, CommandError> {
     let mut merged_tree = Tree::new("".to_string());
     let mut head_entries = head_tree.get_objects();
@@ -3088,6 +4426,7 @@ fn merge_trees(
         let common_entry = common_entries.get_mut(&key);
 
         let joint_path = join_paths!(parent_path, key).ok_or(CommandError::JoiningPaths)?;
+
         match common_entry {
             Some((_common_entry_hash, common_entry_opt)) => {
                 let common_entry = common_entry_opt
@@ -3101,6 +4440,7 @@ fn merge_trees(
                     destin_name,
                     &joint_path,
                     staging_area,
+                    logger,
                 )? {
                     Some(merged_object) => merged_tree.add_object(key, merged_object)?,
                     _ => {}
@@ -3114,6 +4454,7 @@ fn merge_trees(
                     destin_name,
                     &joint_path,
                     staging_area,
+                    logger,
                 )?;
                 merged_tree.add_object(key, object)?
             }
@@ -3130,6 +4471,7 @@ fn is_in_common(
     destin_name: &str,
     parent_path: &str,
     staging_area: &mut StagingArea,
+    logger: &mut Logger,
 ) -> Result<Option<GitObject>, CommandError> {
     match (head_entry, destin_entry) {
         (Some(mut head_entry), Some(mut destin_entry)) => {
@@ -3147,6 +4489,7 @@ fn is_in_common(
                         destin_name,
                         parent_path,
                         staging_area,
+                        logger,
                     )?;
                     let boxed_subtree = Box::new(merged_subtree);
                     return Ok(Some(boxed_subtree));
@@ -3166,6 +4509,7 @@ fn is_in_common(
                                 &mut common_blob,
                                 head_name,
                                 destin_name,
+                                logger,
                             )?;
                             if merge_conflicts {
                                 staging_area.add_unmerged_file(
@@ -3216,6 +4560,7 @@ fn is_not_in_common(
     destin_name: &str,
     entry_path: &str,
     staging_area: &mut StagingArea,
+    logger: &mut Logger,
 ) -> Result<GitObject, CommandError> {
     match (head_entry, destin_entry) {
         (Some(mut head_entry), Some(mut destin_entry)) => {
@@ -3230,6 +4575,7 @@ fn is_not_in_common(
                         destin_name,
                         entry_path,
                         staging_area,
+                        logger,
                     )?;
                     let boxed_subtree = Box::new(merged_subtree);
                     return Ok(boxed_subtree);
@@ -3246,6 +4592,7 @@ fn is_not_in_common(
                                 &mut common_blob,
                                 head_name,
                                 destin_name,
+                                logger,
                             )?;
                             if merge_conflicts {
                                 staging_area.add_unmerged_file(
@@ -3285,6 +4632,7 @@ fn merge_blobs(
     common_blob: &mut Blob,
     head_name: &str,
     destin_name: &str,
+    logger: &mut Logger,
 ) -> Result<(Blob, bool), CommandError> {
     let head_content = head_blob.content(None)?;
     let destin_content = destin_blob.content(None)?;
@@ -3295,7 +4643,10 @@ fn merge_blobs(
         String::from_utf8(destin_content).map_err(|_| CommandError::CastingError)?;
     let common_content_str =
         String::from_utf8(common_content).map_err(|_| CommandError::CastingError)?;
-
+    logger.log(&format!(
+        "Common content: {}, Head content: {}, Remote content: {}",
+        common_content_str, head_content_str, destin_content_str
+    ));
     let (merged_content_str, merge_conflicts) = merge_content(
         head_content_str,
         destin_content_str,
@@ -3303,6 +4654,7 @@ fn merge_blobs(
         head_name,
         destin_name,
     )?;
+    logger.log(&format!("Hay merge conflict?: {}", merge_conflicts));
     let merged_content = merged_content_str.as_bytes().to_owned();
     let merged_blob = Blob::new_from_content(merged_content)?;
     Ok((merged_blob, merge_conflicts))
@@ -3438,4 +4790,47 @@ fn _update_ref(base_path: &str, sha1: &str, ref_name: &str) -> Result<(), Comman
         CommandError::FileWriteError("Error guardando ref:".to_string() + &error.to_string())
     })?;
     Ok(())
+}
+
+fn write_file_with(git_path: &str, file_name: &str, content: String) -> Result<(), CommandError> {
+    let file_path = join_paths!(git_path, file_name).ok_or(
+        CommandError::DirectoryCreationError("Error creando archivo para stopped-sha".to_string()),
+    )?;
+    let mut archivo = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .open(&file_path)
+        .map_err(|_| CommandError::FileCreationError(file_path.to_string()))?;
+    let _: Result<(), CommandError> = match archivo.write_all(content.as_bytes()) {
+        Ok(_) => Ok(()),
+        Err(err) => Err(CommandError::FileWriteError(err.to_string())),
+    };
+    Ok(())
+}
+
+fn get_commits_rebase_merge(commit_type_path: &str) -> Result<Vec<(String, String)>, CommandError> {
+    let mut commits = Vec::new();
+    let git_rebase_todo_path = join_paths!(commit_type_path).ok_or(
+        CommandError::DirectoryCreationError("Error abriendo directorio".to_string()),
+    );
+    if let Ok(git_rebase_todo_path) = git_rebase_todo_path {
+        let mut file = File::open(git_rebase_todo_path).map_err(|_| {
+            CommandError::FileOpenError("Error abriendo archivo git_rebase_todo_path".to_string())
+        })?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).map_err(|_| {
+            CommandError::FileOpenError("Error leyendo archivo git_rebase_todo_path".to_string())
+        })?;
+        let lines: Vec<_> = contents.split('\n').collect();
+        for line in lines {
+            let line_vector: Vec<&str> = line.split(" ").collect();
+            if line_vector.len() < 2 {
+                break;
+            }
+            let hash = line_vector[1];
+            let message = line_vector[2..].join(" ");
+            commits.push((hash.to_string(), message.to_string()));
+        }
+    }
+    Ok(commits)
 }

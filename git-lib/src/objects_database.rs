@@ -16,6 +16,7 @@ use super::{
     objects::git_object::{read_git_object_from, GitObject},
 };
 
+#[derive(Clone)]
 pub struct ObjectsDatabase {
     db_path: String,
 }
@@ -25,16 +26,16 @@ impl ObjectsDatabase {
         &mut self,
         git_object: &mut GitObject,
         recursive: bool,
-        _logger: &mut Logger,
+        logger: &mut Logger,
     ) -> Result<String, CommandError> {
         let mut data = Vec::new();
         if recursive {
             git_object.write_to(&mut data, Some(self))?;
         } else {
-            
             git_object.write_to(&mut data, None)?;
         };
         let hash_str = get_sha1_str(&data);
+        logger.log(&format!("Writing {} to database", hash_str));
         self.save_to(hash_str, data)
     }
 
@@ -114,5 +115,18 @@ impl ObjectsDatabase {
             return Err(CommandError::FileWriteError(error.to_string()));
         };
         Ok(hash_str)
+    }
+
+    pub fn has_object(&self, hash_str: &str) -> Result<bool, CommandError> {
+        //throws error if hash_str is not a valid sha1
+        if hash_str.len() != 40 {
+            return Ok(false);
+        }
+        let file_path = join_paths!(&self.db_path, &hash_str[0..2], &hash_str[2..])
+            .ok_or(CommandError::JoiningPaths)?;
+        if File::open(&file_path).is_err() {
+            return Ok(false);
+        }
+        Ok(true)
     }
 }

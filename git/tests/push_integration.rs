@@ -78,8 +78,10 @@ fn test_push() {
     readme.read_to_string(&mut contents).unwrap();
     assert_eq!(contents, "Commit inicial\n");
 
-    // panic!("STOP");
-    // _ = fs::remove_dir_all(path);
+    _ = fs::remove_dir_all(format!("{}/server-files/repo", path));
+    _ = fs::remove_dir_all(format!("{}/server-files/repo_backup_push", path));
+    _ = fs::remove_dir_all(format!("{}/repo", path));
+    _ = fs::remove_dir_all(format!("{}/other_user", path));
 }
 
 fn create_base_scene(path: &str) {

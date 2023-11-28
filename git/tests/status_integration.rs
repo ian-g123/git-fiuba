@@ -312,7 +312,7 @@ fn test_status_remote_info() {
         .unwrap();
     let result = String::from_utf8(result.stderr).unwrap();
     println!("{}", result);
-    //_ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(format!("{}", path));
 }
 
 /* #[test]

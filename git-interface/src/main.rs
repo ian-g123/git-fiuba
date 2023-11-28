@@ -686,7 +686,7 @@ impl Interface {
             let mut commit = commit_and_branches.0.to_owned();
             add_row_to_list(&commit.get_message(), &description_list);
             add_row_to_list(&commit.get_timestamp_string(), &date_list);
-            add_row_to_list(&commit.get_author(), &author_list);
+            add_row_to_list(&commit.get_author().name, &author_list);
             add_row_to_list(&commit.get_hash_string().unwrap(), &commits_hashes_list);
 
             identado = make_graph(
