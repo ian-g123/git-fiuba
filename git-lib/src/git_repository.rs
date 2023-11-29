@@ -432,10 +432,11 @@ impl<'a> GitRepository<'a> {
             return Err(CommandError::RebaseContinueError);
         }
         // obtenemos los commits todo y los commits done
+
         let mut commits_todo = self.get_commits_todo()?;
+
         let mut commits_done = self.get_commits_done()?;
 
-        println!("{:?}", commits_todo);
         // si no hay commits todo, termina el rebase
         if commits_todo.len() == 0 {
             let path_to_branch = self.get_branch_path_for_rebase()?;
@@ -494,9 +495,6 @@ impl<'a> GitRepository<'a> {
 
         // si no hay conflictos, sigue con el rebase_continue
         commits_done.push(commits_todo.remove(0));
-        // println!("commits_done {:?}", commits_done);
-        // println!("commits_todo {:?}", commits_todo);
-        // thread::sleep(Duration::from_secs(5));
 
         // si no hay commits todo, termina el rebase
         if commits_todo.len() == 0 {
@@ -2248,6 +2246,7 @@ impl<'a> GitRepository<'a> {
         self.delete_file("AUTO_MERGE")?;
 
         //ACTUALIZAR ARCHIVOSS
+
         let mut commits_todo = self.get_commits_todo()?;
         let mut commits_done = self.get_commits_done()?;
         commits_done.push(commits_todo.remove(0));
@@ -2283,8 +2282,12 @@ impl<'a> GitRepository<'a> {
             .ok_or(CommandError::FailedToResumeMerge)?
             .to_owned();
 
-        self.make_rebase_merge_directory(commits_todo, commits_done, &mut first_commit_todo, None)?;
-        println!("MELIIII1");
+        self.make_rebase_merge_directory(
+            commits_todo.clone(),
+            commits_done.clone(),
+            &mut first_commit_todo,
+            None,
+        )?;
         return self.rebase_continue();
     }
 
@@ -4806,6 +4809,7 @@ fn write_file_with(git_path: &str, file_name: &str, content: String) -> Result<(
     let mut archivo = OpenOptions::new()
         .write(true)
         .create(true)
+        .truncate(true)
         .open(&file_path)
         .map_err(|_| CommandError::FileCreationError(file_path.to_string()))?;
     let _: Result<(), CommandError> = match archivo.write_all(content.as_bytes()) {
@@ -4836,6 +4840,7 @@ fn get_commits_rebase_merge(commit_type_path: &str) -> Result<Vec<(String, Strin
             }
             let hash = line_vector[1];
             let message = line_vector[2..].join(" ");
+
             commits.push((hash.to_string(), message.to_string()));
         }
     }

@@ -184,119 +184,140 @@ fn test_with_conflict_with_1_argument() {
     _ = fs::remove_dir_all(format!("{}", path));
 }
 
+fn read_file(file_path: &str) -> Result<String, std::io::Error> {
+    fs::read_to_string(file_path)
+}
+
 #[test]
 fn test_with_conflict_heavy() {
     let path = "./tests/data/commands/rebase/repo4";
     let git_bin = "../../../../../../target/debug/git";
 
-    let path2 = "./tests/data/commands/rebase/repo2";
-
     create_scene_with_conflict_heavy(path, git_bin);
 
-    // assert!(
-    //     Command::new(git_bin)
-    //         .arg("rebase")
-    //         .arg("topic")
-    //         .arg("master")
-    //         .arg(path)
-    //         .current_dir(path)
-    //         .status()
-    //         .is_ok(),
-    //     "No se pudo agregar el archivo testfile"
-    // );
+    assert!(
+        Command::new(git_bin)
+            .arg("rebase")
+            .arg("topic")
+            .arg("master")
+            .arg(path)
+            .current_dir(path)
+            .status()
+            .is_ok(),
+        "No se pudo agregar el archivo testfile"
+    );
 
-    // // cambiamos el archivo fu y ponemos contenido contenido topic por el conflicto
-    // let mut file = File::create(format!("{}/fu", path)).unwrap();
-    // file.write_all(b"contenido master1 fu").unwrap();
+    // cambiamos el archivo fu y ponemos contenido contenido topic por el conflicto
+    let mut file = File::create(format!("{}/fu", path)).unwrap();
+    file.write_all(b"contenido master1 fu").unwrap();
 
-    // // agregamos el archivo fu
-    // assert!(
-    //     Command::new(git_bin)
-    //         .arg("add")
-    //         .arg(".")
-    //         .current_dir(path)
-    //         .status()
-    //         .is_ok(),
-    //     "No se pudo agregar el archivo fu"
-    // );
+    // agregamos el archivo fu
+    assert!(
+        Command::new(git_bin)
+            .arg("add")
+            .arg(".")
+            .current_dir(path)
+            .status()
+            .is_ok(),
+        "No se pudo agregar el archivo fu"
+    );
+    thread::sleep(Duration::from_secs(1));
 
-    // // hacemos rebase --continue
-    // let result = Command::new(git_bin)
-    //     .arg("rebase")
-    //     .arg("--continue")
-    //     .current_dir(path)
-    //     .output();
+    // hacemos rebase --continue
+    let result = Command::new(git_bin)
+        .arg("rebase")
+        .arg("--continue")
+        .current_dir(path)
+        .output();
 
-    // assert!(
-    //     result.is_ok(),
-    //     "No se realizó correctamente el rebase --continue"
-    // );
+    assert!(
+        result.is_ok(),
+        "No se realizó correctamente el rebase --continue"
+    );
 
-    // // cambiamos el archivo fu y ponemos contenido contenido topic por el conflicto
-    // let mut file = File::create(format!("{}/bar", path)).unwrap();
-    // file.write_all(b"contenido topic2").unwrap();
+    let content = read_file(&format!("{}/fu", path)).expect("Error al leer el archivo");
+    assert_eq!(content, "contenido master1 fu");
 
-    // // agregamos el archivo fu
-    // assert!(
-    //     Command::new(git_bin)
-    //         .arg("add")
-    //         .arg(".")
-    //         .current_dir(path)
-    //         .status()
-    //         .is_ok(),
-    //     "No se pudo agregar el archivo fu"
-    // );
+    // cambiamos el archivo fu y ponemos contenido contenido topic por el conflicto
+    let mut file = File::create(format!("{}/bar", path)).unwrap();
+    file.write_all(b"contenido topic2 1").unwrap();
 
-    // // hacemos rebase --continue
-    // let result = Command::new(git_bin)
-    //     .arg("rebase")
-    //     .arg("--continue")
-    //     .current_dir(path)
-    //     .output();
+    // agregamos el archivo fu
+    assert!(
+        Command::new(git_bin)
+            .arg("add")
+            .arg(".")
+            .current_dir(path)
+            .status()
+            .is_ok(),
+        "No se pudo agregar el archivo fu"
+    );
 
-    // assert!(
-    //     result.is_ok(),
-    //     "No se realizó correctamente el rebase --continue"
-    // );
-    // // cambiamos el archivo fu y ponemos contenido contenido topic por el conflicto
-    // let mut file = File::create(format!("{}/bar", path)).unwrap();
-    // file.write_all(b"contenido topic2 bar").unwrap();
+    thread::sleep(Duration::from_secs(1));
 
-    // // agregamos el archivo fu
-    // assert!(
-    //     Command::new(git_bin)
-    //         .arg("add")
-    //         .arg(".")
-    //         .current_dir(path)
-    //         .status()
-    //         .is_ok(),
-    //     "No se pudo agregar el archivo fu"
-    // );
+    // hacemos rebase --continue
+    let result = Command::new(git_bin)
+        .arg("rebase")
+        .arg("--continue")
+        .current_dir(path)
+        .output();
 
-    // // hacemos rebase --continue
-    // let result = Command::new(git_bin)
-    //     .arg("rebase")
-    //     .arg("--continue")
-    //     .current_dir(path)
-    //     .output();
+    assert!(
+        result.is_ok(),
+        "No se realizó correctamente el rebase --continue"
+    );
 
-    // let result_str = String::from_utf8(result.unwrap().stdout).unwrap();
-    // assert_eq!(
-    //     result_str,
-    //     "Successfully rebased and updated refs/heads/master\n".to_string()
-    // );
-    // // ejecutamos el comando log
-    // let result_log = Command::new(git_bin).arg("log").current_dir(path).output();
-    // assert!(result_log.is_ok(), "No se pudo hacer log");
-    // let result_log_str = String::from_utf8(result_log.unwrap().stdout).unwrap();
-    // let result_log_str_vec = get_commits_and_branches(result_log_str);
+    let content = read_file(&format!("{}/fu", path)).expect("Error al leer el archivo");
+    assert_eq!(content, "contenido master1 fu");
 
-    // let expected_log = format!(
-    //     "[(\"master3\", Some(\"master\")), (\"master2\", None), (\"master1\", None), (\"topic2\", Some(\"topic\")), (\"topic1\", Some(\"topic\")), (\"inicial\", None)]"
-    // );
-    // assert_eq!(result_log_str_vec, expected_log);
+    // cambiamos el archivo fu y ponemos contenido contenido topic por el conflicto
+    let mut file = File::create(format!("{}/bar", path)).unwrap();
+    file.write_all(b"contenido topic2 bar 2").unwrap();
 
-    //_ = fs::remove_dir_all(format!("{}", path));
+    // agregamos el archivo fu
+    assert!(
+        Command::new(git_bin)
+            .arg("add")
+            .arg(".")
+            .current_dir(path)
+            .status()
+            .is_ok(),
+        "No se pudo agregar el archivo bar"
+    );
+
+    thread::sleep(Duration::from_secs(1));
+
+    // hacemos rebase --continue
+    let result = Command::new(git_bin)
+        .arg("rebase")
+        .arg("--continue")
+        .current_dir(path)
+        .output();
+
+    let result_str = String::from_utf8(result.unwrap().stdout).unwrap();
+    assert_eq!(
+        result_str,
+        "Successfully rebased and updated refs/heads/master\n".to_string()
+    );
+
+    let content = read_file(&format!("{}/fu", path)).expect("Error al leer el archivo");
+    assert_eq!(content, "contenido master1 fu");
+
+    let content = read_file(&format!("{}/bar", path)).expect("Error al leer el archivo");
+    assert_eq!(content, "contenido topic2 bar 2");
+
+    // ejecutamos el comando log
+    let result_log = Command::new(git_bin).arg("log").current_dir(path).output();
+    assert!(result_log.is_ok(), "No se pudo hacer log");
+    let result_log_str = String::from_utf8(result_log.unwrap().stdout).unwrap();
+    let result_log_str_vec = get_commits_and_branches(result_log_str);
+
+    let expected_log = format!(
+        "[(\"master3\", Some(\"master\")), (\"master2\", None), (\"master1\", None), (\"topic2\", Some(\"topic\")), (\"topic1\", None), (\"inicial\", None)]"
+    );
+    assert_eq!(result_log_str_vec, expected_log);
+
+    _ = fs::remove_dir_all(format!("{}", path));
 }
 
 fn create_scene_without_conflict(path: &str, git_bin: &str) {
