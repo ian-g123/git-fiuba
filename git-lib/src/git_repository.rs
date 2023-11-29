@@ -2568,10 +2568,18 @@ impl<'a> GitRepository<'a> {
     ) -> Result<(), CommandError> {
         self.log(&format!("Checkout args: {:?}", files_or_branches));
 
-        if files_or_branches.len() == 1 && self.branch_exists(&files_or_branches[0]) {
-            self.log("Switching to new branch");
-            self.checkout(&files_or_branches[0])?;
-            return Ok(());
+        if files_or_branches.len() == 1 {
+            let pseudo_branch = files_or_branches[0].clone();
+            if self.search_tag(&pseudo_branch)?.is_some() {
+                return Err(CommandError::FeatureNotImplemented(
+                    "checkout to ditached HEAD state".to_string(),
+                ));
+            }
+            if self.branch_exists(&pseudo_branch) {
+                self.log("Switching to new branch");
+                self.checkout(&pseudo_branch)?;
+                return Ok(());
+            }
         }
         let mut staging_area = self.staging_area()?;
         for path in files_or_branches.iter() {
@@ -3324,7 +3332,6 @@ impl<'a> GitRepository<'a> {
 
     /// Devuelve un vector con los nombres de tags.
     fn get_tag_names(&mut self) -> Result<Vec<String>, CommandError> {
-        self.log("Listing tags...");
         let mut tags: Vec<String> = Vec::new();
         let tags_path = join_paths!(self.git_path, "refs/tags/").ok_or(
             CommandError::DirectoryCreationError(
@@ -3449,14 +3456,18 @@ impl<'a> GitRepository<'a> {
         Ok(None)
     }
 
+    /// Busca una tag con el nombre tag_name y si lo encuentra devuelve una terna
+    /// con el hash, el nombre y "branch" si apunta al último commit de una branch, o
+    /// "tag" en caso contrario
     fn search_tag(
         &mut self,
-        pseudo_commit: &str,
+        tag_name: &str,
     ) -> Result<Option<(String, String, String)>, CommandError> {
         let tags = self.get_tag_names()?;
+        self.log(&format!("Tags: {:?}", tags));
         let branches = self.local_branches()?;
-        if tags.contains(&pseudo_commit.to_string()) {
-            let tag_object_hash = self.get_tag_object_hash(pseudo_commit)?;
+        if tags.contains(&tag_name.to_string()) {
+            let tag_object_hash = self.get_tag_object_hash(tag_name)?;
 
             for (branch_name, commit_hash) in branches.iter() {
                 if commit_hash == &tag_object_hash {
@@ -3469,11 +3480,11 @@ impl<'a> GitRepository<'a> {
             }
             let mut tag_object = self.db()?.read_object(&tag_object_hash, &mut self.logger)?;
             if !tag_object.as_mut_commit().is_some() {
-                return Err(CommandError::MergeTagNotCommit(pseudo_commit.to_string()));
+                return Err(CommandError::MergeTagNotCommit(tag_name.to_string()));
             };
             return Ok(Some((
                 tag_object_hash,
-                pseudo_commit.to_string(),
+                tag_name.to_string(),
                 "tag".to_string(),
             )));
         }

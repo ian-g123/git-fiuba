@@ -204,6 +204,8 @@ pub enum CommandError {
     TagNotFound(String),
     // La tag que usaste no apunta a un commit
     MergeTagNotCommit(String),
+    // No se implementó está funcionalidad
+    FeatureNotImplemented(String),
 }
 
 impl Error for CommandError {}
@@ -520,6 +522,7 @@ impl fmt::Display for CommandError {
             CommandError::FlagHashRequiresValue => write!(f, "error: option `hash' expects a numerical value"),
             CommandError::TagNotFound(tag_name) => write!(f, "fatal: tag not found: {tag_name}"),
             CommandError::MergeTagNotCommit(tag_name) => write!(f, "La tag {} no apunta a un commit", tag_name),
+            CommandError::FeatureNotImplemented(feature) => write!(f, "Feature not implemented: {}", feature),
         }
     }
 }
