@@ -320,6 +320,26 @@ fn test_with_conflict_heavy() {
     _ = fs::remove_dir_all(format!("{}", path));
 }
 
+#[test]
+fn test_with_conflict_abort() {
+    let path = "./tests/data/commands/rebase/repo5";
+    let git_bin = "../../../../../../target/debug/git";
+
+    create_scene_with_conflict_heavy(path, git_bin);
+
+    // assert!(
+    //     Command::new(git_bin)
+    //         .arg("rebase")
+    //         .arg("topic")
+    //         .arg("master")
+    //         .arg(path)
+    //         .current_dir(path)
+    //         .status()
+    //         .is_ok(),
+    //     "No se pudo agregar el archivo testfile"
+    // );
+}
+
 fn create_scene_without_conflict(path: &str, git_bin: &str) {
     _ = fs::remove_dir_all(format!("{}", path));
 

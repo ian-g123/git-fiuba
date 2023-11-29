@@ -1,6 +1,6 @@
 use super::command::{Command, ConfigAdderFunction};
 use git_lib::{command_errors::CommandError, git_repository::GitRepository};
-use std::io::{Read, Write};
+use std::io::{self, Read, Write};
 
 /// Commando Rebase
 pub struct Rebase {
@@ -26,7 +26,11 @@ impl Command for Rebase {
     }
 
     fn config_adders(&self) -> ConfigAdderFunction<Rebase> {
-        vec![Rebase::continue_config, Rebase::abort_config]
+        vec![
+            Rebase::continue_config,
+            Rebase::abort_config,
+            Rebase::branch_config,
+        ]
     }
 }
 
@@ -38,17 +42,6 @@ impl Rebase {
         let mut rebase = Rebase::new_default()?;
 
         rebase.config(args)?;
-
-        if args.len() > 1 {
-            rebase.topic_branch = args[0].clone();
-            rebase.main_branch = args[1].clone();
-        }
-
-        if args.len() == 1 && !rebase.continue_rebase && !rebase.abort_rebase {
-            rebase.topic_branch = args[0].clone();
-            let mut repo = GitRepository::open("", output)?;
-            rebase.main_branch = repo.get_current_branch_name()?;
-        }
 
         Ok(rebase)
     }
@@ -67,22 +60,47 @@ impl Rebase {
         i: usize,
         args: &[String],
     ) -> Result<usize, CommandError> {
-        if args[i] == "--continue" {
-            rebase.continue_rebase = true;
+        if args[i] != "--continue" {
+            return Err(CommandError::WrongFlag);
         }
+        rebase.continue_rebase = true;
         Ok(i + 1)
     }
 
     fn abort_config(rebase: &mut Rebase, i: usize, args: &[String]) -> Result<usize, CommandError> {
-        if args[i] == "--abort" {
-            rebase.abort_rebase = true;
+        if args[i] != "--abort" {
+            return Err(CommandError::WrongFlag);
         }
+        rebase.abort_rebase = true;
         Ok(i + 1)
+    }
+
+    fn branch_config(
+        rebase: &mut Rebase,
+        i: usize,
+        args: &[String],
+    ) -> Result<usize, CommandError> {
+        if Self::is_flag(&args[i]) {
+            return Err(CommandError::WrongFlag);
+        }
+        if args.len() > 1 {
+            rebase.topic_branch = args[0].clone();
+            rebase.main_branch = args[1].clone();
+            return Ok(i + 2);
+        }
+        if args.len() == 1 && !rebase.continue_rebase && !rebase.abort_rebase {
+            rebase.topic_branch = args[0].clone();
+            let mut binding = io::stdout();
+            let mut repo = GitRepository::open("", &mut binding)?;
+            rebase.main_branch = repo.get_current_branch_name()?;
+            return Ok(i + 1);
+        }
+        return Err(CommandError::WrongFlag);
     }
 
     pub fn run(&self, output: &mut dyn Write) -> Result<(), CommandError> {
         let mut repo = GitRepository::open("", output)?;
-        if !self.abort_rebase & !self.continue_rebase {
+        if !self.abort_rebase && !self.continue_rebase {
             //verificar que no haya un rebase en proceso
             match repo.initialize_rebase(self.topic_branch.clone(), self.main_branch.clone()) {
                 Err(CommandError::RebaseMergeConflictsError) => {
@@ -100,7 +118,7 @@ impl Rebase {
             };
         }
         if self.abort_rebase {
-            //abort!!
+            repo.rebase_abort()?;
         }
         if self.continue_rebase {
             match repo.merge_continue_rebase() {

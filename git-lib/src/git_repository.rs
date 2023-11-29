@@ -225,12 +225,34 @@ impl<'a> GitRepository<'a> {
         )?;
 
         // obtenemos los commits done
-        let commits_done = self.get_commits_done()?;
+        let commits_todo = self.get_commits_todo()?;
+        let last_commit_hash = commits_todo[commits_todo.len() - 1].to_owned().0;
 
-        // // eliminamos los commits hechos
-        // for (hash, _) in commits_done {
-        //     self.delete_commit(&hash)?;
-        // }
+        let branch_path = self.get_branch_path_for_rebase()?;
+
+        self.set_branch_commit_to(branch_path, &last_commit_hash)?;
+
+        let mut binding = self
+            .db()?
+            .read_object(&last_commit_hash, &mut self.logger)?;
+        let main_commit = binding
+            .as_mut_commit()
+            .ok_or(CommandError::DirectoryCreationError(
+                "Error creando directorio".to_string(),
+            ))?;
+
+        let Some(source_tree) = main_commit.get_tree() else {
+            return Err(CommandError::RebaseError(
+                "No hay árbol commit en abort".to_string(),
+            ))?;
+        };
+
+        let biding = self.db()?;
+        self.restore(source_tree.to_owned(), Some(biding))?;
+
+        self.delete_file("MERGE_MSG")?;
+        self.delete_file("MERGE_HEAD")?;
+        self.delete_file("AUTO_MERGE")?;
 
         fs::remove_dir_all(&rebase_merge_path).map_err(|_| {
             CommandError::DirectoryCreationError("Error borrando directorio".to_string())
