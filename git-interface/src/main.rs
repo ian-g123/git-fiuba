@@ -35,7 +35,6 @@ const GRAPH_COLORS: [(f64, f64, f64); 10] = [
 
 struct Interface {
     builder: gtk::Builder,
-    repo_git_path: String,
     staging_changes: Rc<RefCell<HashSet<String>>>,
     unstaging_changes: Rc<RefCell<HashSet<String>>>,
     files_merge_conflict: Rc<RefCell<HashSet<String>>>,
@@ -137,17 +136,22 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
         println!("Directorio cambiado a: {}", &repo_git_path);
     }
 
-    let (staging_changes, unstaging_changes, files_merge_conflict) =
-        staged_area_func("".to_string()).unwrap();
+    let (staging_changes, unstaging_changes, files_merge_conflict) = staged_area_func().unwrap();
     let window: gtk::Window = builder.borrow_mut().object("window app").unwrap();
 
     let mut interface = Interface {
         builder: builder.borrow_mut().clone(),
-        repo_git_path: "".to_string(),
         staging_changes: Rc::new(RefCell::new(staging_changes)),
         unstaging_changes: Rc::new(RefCell::new(unstaging_changes)),
         files_merge_conflict: Rc::new(RefCell::new(files_merge_conflict)),
         principal_window: Rc::new(RefCell::new(window)),
+    };
+    let clone_interface = Interface {
+        builder: interface.builder.clone(),
+        staging_changes: Rc::clone(&interface.staging_changes),
+        unstaging_changes: Rc::clone(&interface.unstaging_changes),
+        files_merge_conflict: Rc::clone(&interface.files_merge_conflict),
+        principal_window: Rc::clone(&interface.principal_window),
     };
     let commits = match repo.get_log(true) {
         Ok(commits) => commits,
@@ -203,7 +207,6 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
         new_content.push_str(&incoming_content);
         new_content.push_str(&old_content);
 
-        let repo_git_path = interface.repo_git_path.clone();
         let mut binding = io::stdout();
         let mut repo = GitRepository::open(&repo_git_path.to_string(), &mut binding).unwrap();
         repo.write_file(&path_file, &mut new_content).unwrap();
@@ -212,11 +215,10 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
         staging_area.remove_from_unmerged_files(&path_file);
 
         let (staging_changes, unstaging_changes, files_merge_conflict) =
-            staged_area_func(repo_git_path.to_string()).unwrap();
+            staged_area_func().unwrap();
 
         let interface2 = Interface {
             builder: interface.builder.clone(),
-            repo_git_path: repo_git_path.to_string(),
             staging_changes: Rc::new(RefCell::new(staging_changes)),
             unstaging_changes: Rc::new(RefCell::new(unstaging_changes)),
             files_merge_conflict: Rc::new(RefCell::new(files_merge_conflict)),
@@ -229,19 +231,32 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
         }
     });
 
+    // Eliminamos todos los widgets de la ventana de branches
+    let branch_window: gtk::Window = clone_interface.builder.object("branch_window").unwrap();
+    let branches_list: gtk::ListBox = clone_interface.builder.object("branches_list").unwrap();
+    let branch_window_clone = branch_window.clone();
+    let builder = clone_interface.builder.clone();
+    branch_window.connect_delete_event(move |_, _| {
+        let branches_list = branches_list.clone();
+        let builder = builder.clone();
+        let branch_window_clone = branch_window_clone.clone();
+        remove_childs(&branches_list);
+        remove_widgets_to_branch_window(builder, branch_window_clone);
+        Inhibit(false)
+    });
+
     ControlFlow::Continue(())
 }
 
 impl Interface {
     fn actualizar(&mut self) -> Option<Vec<(CommitObject, Option<String>)>> {
-        let (staging_changes, unstaging_changes, merge_conflicts) =
-            staged_area_func(self.repo_git_path.to_string()).unwrap();
+        let (staging_changes, unstaging_changes, merge_conflicts) = staged_area_func().unwrap();
         self.staging_changes = Rc::new(RefCell::new(staging_changes));
         self.unstaging_changes = Rc::new(RefCell::new(unstaging_changes));
         self.files_merge_conflict = Rc::new(RefCell::new(merge_conflicts));
 
         let mut binding = io::stdout();
-        let mut repo = match GitRepository::open(&self.repo_git_path, &mut binding) {
+        let mut repo = match GitRepository::open("", &mut binding) {
             Ok(repo) => repo,
             Err(error) => {
                 dialog_window(error.to_string());
@@ -288,7 +303,6 @@ impl Interface {
         button_action: String,
         button: &gtk::Button,
     ) -> Result<(), CommandError> {
-        let repo_git_path = self.repo_git_path.clone();
         let clone_builder = self.builder.clone();
         let unstaging_changes = Rc::clone(&self.unstaging_changes);
         let staging_changes = Rc::clone(&self.staging_changes);
@@ -301,7 +315,7 @@ impl Interface {
             let output = io::stdout();
             let mut binding = &output;
 
-            let mut repo = match GitRepository::open(&repo_git_path, &mut binding) {
+            let mut repo = match GitRepository::open("", &mut binding) {
                 Ok(repo) => repo,
                 Err(_) => {
                     dialog_window(
@@ -341,7 +355,6 @@ impl Interface {
                 "branch" => {
                     let mut interface = Interface {
                         builder: builder.clone(),
-                        repo_git_path: repo_git_path.to_string(),
                         staging_changes: Rc::clone(&staging_changes),
                         unstaging_changes: Rc::clone(&unstaging_changes),
                         files_merge_conflict: Rc::clone(&files_merge_conflict),
@@ -355,7 +368,6 @@ impl Interface {
                 "refresh" => {
                     let interface = Interface {
                         builder: builder.clone(),
-                        repo_git_path: repo_git_path.to_string(),
                         staging_changes: Rc::clone(&staging_changes),
                         unstaging_changes: Rc::clone(&unstaging_changes),
                         files_merge_conflict: Rc::clone(&files_merge_conflict),
@@ -425,7 +437,6 @@ impl Interface {
             let unstaging_changes = Rc::clone(&self.unstaging_changes);
             let unstaging_changes2 = Rc::clone(&self.unstaging_changes);
             let files_merge_conflict = Rc::clone(&self.files_merge_conflict);
-            let repo_git_path = self.repo_git_path.clone();
 
             let box_outer = gtk::Box::new(Orientation::Horizontal, 0);
             let mut button = Button::with_label("stage");
@@ -437,7 +448,6 @@ impl Interface {
                 "merge" => {
                     let add_button = Button::with_label("resolve");
                     box_outer.pack_end(&add_button, false, false, 0);
-                    let repo_git_path_clone = repo_git_path.clone();
 
                     let files_merge_conflict_clone = Rc::clone(&files_merge_conflict);
 
@@ -446,7 +456,6 @@ impl Interface {
                         let clone_file = clone_file.clone();
                         let mut interface = Interface {
                             builder: builder.clone(),
-                            repo_git_path: repo_git_path_clone.to_string(),
                             staging_changes: Rc::clone(&staging_changes),
                             unstaging_changes: Rc::clone(&unstaging_changes),
                             files_merge_conflict: Rc::clone(&files_merge_conflict_clone),
@@ -470,7 +479,7 @@ impl Interface {
             button.connect_clicked(move |_| {
                 let file = &clone_file;
                 let mut binding = io::stdout();
-                let mut repo = GitRepository::open(&repo_git_path, &mut binding).unwrap();
+                let mut repo = GitRepository::open("", &mut binding).unwrap();
                 let vec_files = vec![clone_file.clone()];
 
                 match field2.clone().as_str() {
@@ -504,7 +513,6 @@ impl Interface {
 
                 let interface = Interface {
                     builder: builder2.clone(),
-                    repo_git_path: repo_git_path.to_string(),
                     staging_changes: Rc::clone(&staging_changes2),
                     unstaging_changes: Rc::clone(&unstaging_changes2),
                     files_merge_conflict: Rc::clone(&files_merge_conflict),
@@ -521,11 +529,20 @@ impl Interface {
         let branches_list: gtk::ListBox = self.builder.object("branches_list").unwrap();
 
         let mut binding = io::stdout();
-        let Ok(mut repo) = GitRepository::open(&self.repo_git_path, &mut binding) else {
+        let Ok(mut repo) = GitRepository::open("", &mut binding) else {
             dialog_window(
                 "No se pudo conectar satisfactoriamente a un repositorio Git.".to_string(),
             );
             return;
+        };
+
+        // obtenemos la branch actual
+        let current_branch = match repo.get_current_branch_name() {
+            Ok(current_branch) => current_branch,
+            Err(err) => {
+                dialog_window(err.to_string());
+                return;
+            }
         };
         let local_branches = match repo.local_branches() {
             Ok(local_branches) => local_branches,
@@ -534,32 +551,69 @@ impl Interface {
                 return;
             }
         };
-        for branch in &local_branches {
-            add_row_to_list(&branch.0, &branches_list);
+        for (branch_name, _) in &local_branches {
+            if branch_name == &current_branch {
+                let box_outer = gtk::Box::new(Orientation::Horizontal, 0);
+                let label = Label::new(Some(branch_name));
+                let label_end = Label::new(Some("***"));
+                box_outer.pack_start(&label, true, true, 0);
+                box_outer.pack_end(&label_end, false, false, 0);
+                branches_list.add(&box_outer);
+                continue;
+            }
+
+            let checkout_button = Button::with_label("Checkout");
+            let builder = self.builder.clone();
+            let branch_window_clone = branch_window.clone();
+            let staging_changes = Rc::clone(&self.staging_changes);
+            let unstaging_changes = Rc::clone(&self.unstaging_changes);
+            let files_merge_conflict = Rc::clone(&self.files_merge_conflict);
+            let principal_window = self.principal_window.clone();
+            let clone_branch_name = branch_name.clone();
+
+            let clone_branch_list = branches_list.clone();
+            checkout_button.connect_clicked(move |_| {
+                let staging_changes = Rc::clone(&staging_changes);
+                let unstaging_changes = Rc::clone(&unstaging_changes);
+                let files_merge_conflict = Rc::clone(&files_merge_conflict);
+                let principal_window = principal_window.clone();
+                let mut binding = io::stdout();
+                let mut repo = GitRepository::open("", &mut binding).unwrap();
+                match repo.checkout(&clone_branch_name, false) {
+                    Ok(_) => dialog_window("Checkout realizado con éxito".to_string()),
+                    Err(err) => dialog_window(err.to_string()),
+                };
+                let interface = Interface {
+                    builder: builder.clone(),
+                    staging_changes,
+                    unstaging_changes,
+                    files_merge_conflict,
+                    principal_window,
+                };
+                branch_window_clone.hide();
+                remove_childs(&clone_branch_list);
+                let builder = builder.clone();
+                let branch_window_clone = branch_window_clone.clone();
+                remove_widgets_to_branch_window(builder, branch_window_clone);
+                interface.staged_area_ui();
+            });
+
+            let box_outer = gtk::Box::new(Orientation::Horizontal, 0);
+            let label = Label::new(Some(branch_name));
+            box_outer.pack_start(&label, true, true, 0);
+            box_outer.pack_end(&checkout_button, false, false, 0);
+            branches_list.add(&box_outer);
         }
 
         branch_window.show_all();
-
-        // Eliminamos todos los widgets de la ventana de branches
-        let branch_window_clone = branch_window.clone();
-        let builder = self.builder.clone();
-        branch_window.connect_delete_event(move |_, _| {
-            let branches_list = branches_list.clone();
-            let builder = builder.clone();
-            let branch_window_clone = branch_window_clone.clone();
-            remove_childs(&branches_list);
-            remove_widgets_to_branch_window(builder, branch_window_clone);
-            Inhibit(false)
-        });
     }
 
     fn inicialize_apply_button(&mut self) {
-        let repo_git_path = self.repo_git_path.clone();
         let apply_button: gtk::Button = self.builder.object("apply_button").unwrap();
         let new_name_branch: gtk::Entry = self.builder.object("entry_for_new_branch").unwrap();
         apply_button.connect_clicked(move |_| {
             let mut binding = io::stdout();
-            let Ok(mut repo) = GitRepository::open(&repo_git_path, &mut binding) else {
+            let Ok(mut repo) = GitRepository::open("", &mut binding) else {
                 dialog_window(
                     "No se pudo conectar satisfactoriamente a un repositorio Git.".to_string(),
                 );
@@ -698,7 +752,7 @@ impl Interface {
         let mut hash_sons: HashMap<String, Vec<(f64, f64, String)>> = HashMap::new(); // hash, Vec<(x,y)> de los hijos
         let mut hash_branches: HashMap<String, usize> = HashMap::new();
         let mut identado: usize = 1;
-        let mut y = 12;
+        let mut y = 10.5;
 
         for commit_and_branches in commits {
             let mut commit = commit_and_branches.0.to_owned();
@@ -715,7 +769,7 @@ impl Interface {
                 &commit_and_branches,
                 y,
             );
-            y += 20;
+            y += 21.0;
         }
 
         self.principal_window.borrow_mut().show_all();
@@ -731,7 +785,7 @@ impl Interface {
         let mut old_content = Rc::new(RefCell::new(String::new()));
 
         let mut binding = io::stdout();
-        let repo = GitRepository::open(&self.repo_git_path, &mut binding).unwrap();
+        let repo = GitRepository::open("", &mut binding).unwrap();
         let mut reader = repo.get_file_reader(path_file.to_string()).unwrap();
 
         let mut line = String::new();
@@ -922,12 +976,10 @@ fn remove_widgets_to_branch_window(builder: gtk::Builder, branch_window_clone: W
 }
 
 fn refresh_function(mut interface: Interface) -> ControlFlow<()> {
-    // interface.staged_area_ui(); VER SI DESCOMENTAR
     let commits = match interface.actualizar() {
         Some(commits) => commits,
         None => return ControlFlow::Break(()),
     };
-    let window = interface.principal_window.clone();
     interface.set_right_area_ui(&commits);
     interface.staged_area_ui();
 
@@ -940,36 +992,13 @@ fn actualize_label(builder: &mut gtk::Builder, label_name: &str, content: &Rc<Re
     content_label.set_text(&content.borrow().to_string());
 }
 
-fn staged_area_func(
-    repo_git_path: String,
-) -> Result<(HashSet<String>, HashSet<String>, HashSet<String>), CommandError> {
+fn staged_area_func() -> Result<(HashSet<String>, HashSet<String>, HashSet<String>), CommandError> {
     let mut output = io::stdout();
-    let mut repo = GitRepository::open(&repo_git_path, &mut output).unwrap();
+    let mut repo = GitRepository::open("", &mut output).unwrap();
     let (staging_changes, mut unstaging_changes) = repo.get_stage_and_unstage_changes()?;
     let staging_area = repo.staging_area()?;
     let merge_conflicts = staging_area.get_unmerged_files();
     let mut files_merge_conflict = merge_conflicts.keys().cloned().collect::<HashSet<String>>();
-
-    // for file in staging_changes.clone() {
-    //     let replace_this = format!("{}/", repo_git_path);
-    //     let file_changed = file.replace(&replace_this, "");
-    //     staging_changes.remove(&file);
-    //     staging_changes.insert(file_changed);
-    // }
-
-    // for file in unstaging_changes.clone() {
-    //     let replace_this = format!("{}/", repo_git_path);
-    //     let file_changed = file.replace(&replace_this, "");
-    //     unstaging_changes.remove(&file);
-    //     unstaging_changes.insert(file_changed);
-    // }
-
-    // for file in files_merge_conflict.clone() {
-    //     let replace_this = format!("{}/", repo_git_path);
-    //     let file_changed = file.replace(&replace_this, "");
-    //     files_merge_conflict.remove(&file);
-    //     files_merge_conflict.insert(file_changed);
-    // }
 
     for conflict in &staging_changes {
         files_merge_conflict.remove(conflict);
@@ -1046,7 +1075,7 @@ fn make_graph(
     hash_sons: &mut HashMap<String, Vec<(f64, f64, String)>>,
     identado: &mut usize,
     commit: &(CommitObject, Option<String>),
-    y: i32,
+    y: f32,
 ) -> usize {
     let commit_branch = commit.1.as_ref().unwrap();
     if !hash_branches.contains_key(commit_branch) {
@@ -1057,7 +1086,11 @@ fn make_graph(
     let i = hash_branches.get(commit_branch).unwrap();
     let index_color = i % GRAPH_COLORS.len();
     let (c1, c2, c3): (f64, f64, f64) = GRAPH_COLORS[index_color];
-    let x: f64 = *i as f64 * 30.0;
+    let mut x: f64 = *i as f64 * 15.0;
+    if i == &1 {
+        x = 15.0;
+    }
+
     // Conéctate al evento "draw" del DrawingArea para dibujar
     draw_commit_point(drawing_area, c1, c2, c3, x, y as f64);
 
@@ -1085,9 +1118,6 @@ fn draw_lines_to_sons(
     commit_hash: &String,
     drawing_area: &DrawingArea,
     hash_branches: &mut HashMap<String, usize>,
-    // c1: f64,
-    // c2: f64,
-    // c3: f64,
     x: f64,
     y: f64,
 ) {
@@ -1101,7 +1131,7 @@ fn draw_lines_to_sons(
             drawing_area.connect_draw(move |_, context| {
                 // Dibuja una línea en el DrawingArea
                 context.set_source_rgb(c1, c2, c3);
-                context.set_line_width(5.0);
+                context.set_line_width(2.0);
                 context.move_to(x, y);
                 context.line_to(sons_clone.0.clone(), sons_clone.1.clone());
                 context.stroke().unwrap();
