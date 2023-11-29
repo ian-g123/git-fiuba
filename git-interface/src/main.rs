@@ -2,6 +2,7 @@ extern crate gtk;
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
+    env,
     io::{self, BufRead, Write},
     ops::ControlFlow,
     rc::Rc,
@@ -129,13 +130,20 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
             return ControlFlow::Break(());
         }
     };
+
+    if let Err(err) = env::set_current_dir(&repo_git_path) {
+        eprintln!("Error al cambiar de directorio: {}", err);
+    } else {
+        println!("Directorio cambiado a: {}", &repo_git_path);
+    }
+
     let (staging_changes, unstaging_changes, files_merge_conflict) =
-        staged_area_func(repo_git_path.to_string()).unwrap();
+        staged_area_func("".to_string()).unwrap();
     let window: gtk::Window = builder.borrow_mut().object("window app").unwrap();
 
     let mut interface = Interface {
         builder: builder.borrow_mut().clone(),
-        repo_git_path,
+        repo_git_path: "".to_string(),
         staging_changes: Rc::new(RefCell::new(staging_changes)),
         unstaging_changes: Rc::new(RefCell::new(unstaging_changes)),
         files_merge_conflict: Rc::new(RefCell::new(files_merge_conflict)),
@@ -402,13 +410,11 @@ impl Interface {
         field: String,
     ) {
         let clone_field = field.clone();
-        let git_path = self.repo_git_path.clone() + "/";
         let files = files.borrow().to_owned();
         let mut files: Vec<String> = files.into_iter().collect();
         files.sort();
 
         for file in files {
-            let file_for_view = file.replace(&git_path, "");
             let field2 = clone_field.clone();
             let window = self.principal_window.clone();
             let window2 = self.principal_window.clone();
@@ -453,7 +459,7 @@ impl Interface {
                 _ => {}
             }
 
-            let label = Label::new(Some(&format!("{}", file_for_view)));
+            let label = Label::new(Some(&format!("{}", file.clone())));
             box_outer.pack_start(&label, true, true, 0);
             box_outer.pack_end(&button, false, false, 0);
             list_box.add(&box_outer);
@@ -471,7 +477,7 @@ impl Interface {
                     "unstaging" => {
                         _ = unstaging_changes2.borrow_mut().take(&clone_file);
                         staging_changes2.borrow_mut().insert(file.clone());
-                        let err = repo.add(vec_files, false);
+                        let err = repo.add(vec_files, true);
                         if err.is_err() {
                             dialog_window(err.unwrap_err().to_string());
                             return;
@@ -942,8 +948,28 @@ fn staged_area_func(
     let (staging_changes, mut unstaging_changes) = repo.get_stage_and_unstage_changes()?;
     let staging_area = repo.staging_area()?;
     let merge_conflicts = staging_area.get_unmerged_files();
-    println!("MERGE CONFLICTS : {:?}", merge_conflicts);
     let mut files_merge_conflict = merge_conflicts.keys().cloned().collect::<HashSet<String>>();
+
+    // for file in staging_changes.clone() {
+    //     let replace_this = format!("{}/", repo_git_path);
+    //     let file_changed = file.replace(&replace_this, "");
+    //     staging_changes.remove(&file);
+    //     staging_changes.insert(file_changed);
+    // }
+
+    // for file in unstaging_changes.clone() {
+    //     let replace_this = format!("{}/", repo_git_path);
+    //     let file_changed = file.replace(&replace_this, "");
+    //     unstaging_changes.remove(&file);
+    //     unstaging_changes.insert(file_changed);
+    // }
+
+    // for file in files_merge_conflict.clone() {
+    //     let replace_this = format!("{}/", repo_git_path);
+    //     let file_changed = file.replace(&replace_this, "");
+    //     files_merge_conflict.remove(&file);
+    //     files_merge_conflict.insert(file_changed);
+    // }
 
     for conflict in &staging_changes {
         files_merge_conflict.remove(conflict);
@@ -951,6 +977,7 @@ fn staged_area_func(
     for conflict in &files_merge_conflict {
         unstaging_changes.remove(conflict);
     }
+
     Ok((staging_changes, unstaging_changes, files_merge_conflict))
 }
 
