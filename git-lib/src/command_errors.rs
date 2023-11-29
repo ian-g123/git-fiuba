@@ -206,6 +206,9 @@ pub enum CommandError {
     MergeTagNotCommit(String),
     // No se implementó está funcionalidad
     FeatureNotImplemented(String),
+
+    // Ls-tree
+    LsTreeErrorNotATree,
 }
 
 impl Error for CommandError {}
@@ -523,6 +526,7 @@ impl fmt::Display for CommandError {
             CommandError::TagNotFound(tag_name) => write!(f, "fatal: tag not found: {tag_name}"),
             CommandError::MergeTagNotCommit(tag_name) => write!(f, "La tag {} no apunta a un commit", tag_name),
             CommandError::FeatureNotImplemented(feature) => write!(f, "Feature not implemented: {}", feature),
+            CommandError::LsTreeErrorNotATree => write!(f, "fatal: not a tree object"),
         }
     }
 }

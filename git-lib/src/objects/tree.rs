@@ -500,7 +500,12 @@ impl GitObjectTrait for Tree {
         Ok(hash)
     }
 
-    fn restore(&mut self, path: &str, logger: &mut Logger) -> Result<(), CommandError> {
+    fn restore(
+        &mut self,
+        path: &str,
+        logger: &mut Logger,
+        db: Option<ObjectsDatabase>,
+    ) -> Result<(), CommandError> {
         self.objects
             .iter()
             .try_for_each(|(name, (_hash, object_opt))| {
@@ -510,7 +515,7 @@ impl GitObjectTrait for Tree {
                 let path = join_paths!(path, name).ok_or(CommandError::FileWriteError(
                     "No se pudo encontrar el path".to_string(),
                 ))?;
-                object.to_owned().restore(&path, logger)?;
+                object.to_owned().restore(&path, logger, db.clone())?;
                 Ok(())
             })?;
         Ok(())

@@ -96,6 +96,9 @@ fn test_merge() {
         "error: Committing is not possible because you have unmerged files.\nhint: Fix them up in the work tree, and then use 'git add/rm <file>'\nhint: as appropriate to mark resolution and make a commit.\nfatal: Exiting because of an unresolved conflict.\n"
     );
 
+    let mut file = File::create(path.to_owned() + "/testfile").unwrap();
+    file.write_all(b"Mergeado\n").unwrap();
+
     let _result = Command::new(git_bin)
         .arg("add")
         .arg("testfile")
@@ -110,7 +113,11 @@ fn test_merge() {
         .output()
         .unwrap();
 
-    // panic!("STOP");
+    let mut file = File::open(path.to_owned() + "/testfile").unwrap();
+    let mut content = String::new();
+    file.read_to_string(&mut content).unwrap();
+    assert_eq!(content, "Mergeado\n");
+
     _ = fs::remove_dir_all(format!("{}", path));
 }
 
