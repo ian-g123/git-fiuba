@@ -51,11 +51,11 @@ fn main() {
     let glade_src = include_str!("../git_interface.glade");
     let builder = gtk::Builder::from_string(glade_src);
 
-    let inicial_window: gtk::Window = builder.object("inicial_window").unwrap();
-    inicial_window.show_all();
+    let chooser_window: gtk::FileChooserDialog = builder.object("choose_directory").unwrap();
+    chooser_window.show_all();
 
-    let inicial_apply: gtk::Button = builder.object("apply_button_inicial").unwrap();
-    let repo_dir: gtk::Entry = builder.object("entry_for_inicial").unwrap();
+    let connect_choose_button: gtk::Button = builder.object("connect_choose_button").unwrap();
+    let cancel_choose_button: gtk::Button = builder.object("cancel_choose_button").unwrap();
     let correct_path = false;
 
     let rc_repo_dir_text = Rc::new(RefCell::new(repo_dir_text));
@@ -63,11 +63,11 @@ fn main() {
     let rc_builder = Rc::new(RefCell::new(builder));
 
     initial_window(
-        inicial_apply,
+        connect_choose_button,
+        cancel_choose_button,
         rc_correct_path.clone(),
         rc_repo_dir_text.clone(),
-        inicial_window,
-        repo_dir,
+        chooser_window,
     );
 
     if rc_correct_path.borrow_mut().to_owned() == false {
@@ -80,34 +80,42 @@ fn main() {
 
 fn initial_window(
     inicial_apply: Button,
+    cancel_choose_button: Button,
     rc_correct_path: Rc<RefCell<bool>>,
-    clone_rc_repo_dir_text: Rc<RefCell<String>>,
-    inicial_window: Window,
-    repo_dir: gtk::Entry,
+    rc_repo_dir_text: Rc<RefCell<String>>,
+    chooser_dialog_window: gtk::FileChooserDialog,
 ) {
-    let inicial_window_clone = inicial_window.clone();
+    let chooser_dialog_window_clone = chooser_dialog_window.clone();
     inicial_apply.connect_clicked(move |_| {
-        let repo_dir_text = repo_dir.text().to_string();
-        let mut binding = io::stdout();
-        if GitRepository::open(&repo_dir_text, &mut binding).is_err() {
-            repo_dir.set_text("");
-            dialog_window(
-                format!(
-                    "No se pudo conectar satisfactoriamente a un repositorio Git en {}",
-                    clone_rc_repo_dir_text.borrow_mut()
-                )
-                .to_string(),
-            );
+        if let Some(file) = chooser_dialog_window_clone.current_folder() {
+            let repo_dir_text = file.to_str().unwrap().to_string();
+            let mut binding = io::stdout();
+            if GitRepository::open(&repo_dir_text, &mut binding).is_err() {
+                *rc_repo_dir_text.borrow_mut() = file.to_str().unwrap().to_string();
+                dialog_window(
+                    format!(
+                        "No se pudo conectar satisfactoriamente a un repositorio Git en {}",
+                        rc_repo_dir_text.borrow_mut()
+                    )
+                    .to_string(),
+                );
+            } else {
+                *rc_correct_path.borrow_mut() = true;
+                *rc_repo_dir_text.borrow_mut() = repo_dir_text;
+                chooser_dialog_window_clone.hide();
+                gtk::main_quit();
+            }
         } else {
-            *rc_correct_path.borrow_mut() = true;
-            *clone_rc_repo_dir_text.borrow_mut() = repo_dir_text;
-            inicial_window_clone.hide();
-            gtk::main_quit();
+            dialog_window("No se ha seleccionado un directorio que proporcione git".to_string());
         }
     });
-    inicial_window.connect_delete_event(|_, _| {
+    chooser_dialog_window.connect_delete_event(|_, _| {
         gtk::main_quit();
         Inhibit(false)
+    });
+    cancel_choose_button.connect_clicked(move |_| {
+        chooser_dialog_window.hide();
+        gtk::main_quit();
     });
     gtk::main();
 }
@@ -361,7 +369,7 @@ impl Interface {
     }
 
     fn staged_area_ui(&self) {
-        let staging_changes: gtk::ListBox = self.builder.object("staging_list").unwrap();
+        let staging_changes = self.builder.object("staging_list").unwrap();
         let unstaging_changes: gtk::ListBox = self.builder.object("unstaging_list").unwrap();
         let merge_conflicts: gtk::ListBox = self.builder.object("merge_conflicts_list").unwrap();
 
@@ -394,9 +402,13 @@ impl Interface {
         field: String,
     ) {
         let clone_field = field.clone();
+        let git_path = self.repo_git_path.clone() + "/";
+        let files = files.borrow().to_owned();
+        let mut files: Vec<String> = files.into_iter().collect();
+        files.sort();
 
-        for file in files.borrow_mut().iter() {
-            let file = file.clone();
+        for file in files {
+            let file_for_view = file.replace(&git_path, "");
             let field2 = clone_field.clone();
             let window = self.principal_window.clone();
             let window2 = self.principal_window.clone();
@@ -434,7 +446,6 @@ impl Interface {
                             files_merge_conflict: Rc::clone(&files_merge_conflict_clone),
                             principal_window: window.clone(),
                         };
-                        //println!("merge");
                         interface.add_widgets_to_merge_window();
                         interface.initialize_merge(clone_file);
                     });
@@ -442,7 +453,7 @@ impl Interface {
                 _ => {}
             }
 
-            let label = Label::new(Some(&format!("{}", file.clone())));
+            let label = Label::new(Some(&format!("{}", file_for_view)));
             box_outer.pack_start(&label, true, true, 0);
             box_outer.pack_end(&button, false, false, 0);
             list_box.add(&box_outer);
@@ -451,9 +462,10 @@ impl Interface {
 
             let clone_file = file.clone();
             button.connect_clicked(move |_| {
+                let file = &clone_file;
                 let mut binding = io::stdout();
                 let mut repo = GitRepository::open(&repo_git_path, &mut binding).unwrap();
-                let vec_files = vec![file.clone()];
+                let vec_files = vec![clone_file.clone()];
 
                 match field2.clone().as_str() {
                     "unstaging" => {
@@ -928,19 +940,14 @@ fn staged_area_func(
     let mut output = io::stdout();
     let mut repo = GitRepository::open(&repo_git_path, &mut output).unwrap();
     let (staging_changes, mut unstaging_changes) = repo.get_stage_and_unstage_changes()?;
-    // let staging_area = repo.staging_area()?;
-    //let merge_conflicts = staging_area.get_unmerged_files();
-    //let files_merge_conflict = merge_conflicts.keys().cloned().collect::<HashSet<String>>();
+    let staging_area = repo.staging_area()?;
+    let merge_conflicts = staging_area.get_unmerged_files();
+    println!("MERGE CONFLICTS : {:?}", merge_conflicts);
+    let mut files_merge_conflict = merge_conflicts.keys().cloned().collect::<HashSet<String>>();
 
-    let mut files_merge_conflict = HashSet::new();
-    files_merge_conflict.insert("meli.txt".to_string());
-    files_merge_conflict.insert("ian.txt".to_string());
-
-    //ELIMINARRRRRRR
     for conflict in &staging_changes {
         files_merge_conflict.remove(conflict);
     }
-
     for conflict in &files_merge_conflict {
         unstaging_changes.remove(conflict);
     }
