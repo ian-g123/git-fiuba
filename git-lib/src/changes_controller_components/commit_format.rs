@@ -5,7 +5,7 @@ use crate::{
     logger::Logger,
     objects::{mode::Mode, tree::Tree},
     objects_database::ObjectsDatabase,
-    staging_area::StagingArea,
+    staging_area_components::staging_area::StagingArea,
 };
 
 use super::{
@@ -56,11 +56,8 @@ impl CommitFormat {
             message,
             is_root,
         )?;
-        logger.log("before output commit");
-
         write!(output, "{}", output_message)
             .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-        logger.log("after output commit");
         Ok(())
     }
 }

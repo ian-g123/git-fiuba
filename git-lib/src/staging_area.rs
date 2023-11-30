@@ -78,10 +78,7 @@ impl StagingArea {
         if !self.is_in_staging_area(&path.to_string()) {
             return Err(CommandError::RmFromStagingAreaError(path.to_string()));
         }
-
         self.remove(path);
-
-        logger.log(&format!("staging_area.rm({})", path));
         Ok(())
     }
 
@@ -346,7 +343,6 @@ impl StagingArea {
         let mut working_tree = Tree::new(current_dir_display.to_string());
         let files = self.sort_files();
         for (path, hash) in files.iter() {
-            logger.log(&format!("path: {}", path));
             let vector_path = path.split("/").collect::<Vec<_>>();
             let current_depth: usize = 0;
             working_tree.add_path_tree(logger, vector_path, current_depth, hash)?;

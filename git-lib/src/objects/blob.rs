@@ -285,8 +285,8 @@ impl GitObjectTrait for Blob {
         logger: &mut Logger,
         deletions: &mut Vec<String>,
         modifications: &mut Vec<String>,
-        conflicts: &mut Vec<String>,
-        common: &mut Tree,
+        _conflicts: &mut Vec<String>,
+        _common: &mut Tree,
         unstaged_files: &Vec<String>,
         staged: &HashMap<String, Vec<u8>>,
     ) -> Result<bool, CommandError> {

@@ -209,6 +209,11 @@ pub enum CommandError {
 
     // Ls-tree
     LsTreeErrorNotATree,
+    // Error al añadir un archivo
+    AddStagingAreaError(String, String),
+
+    //index
+    MetadataError(String),
 }
 
 impl Error for CommandError {}
@@ -527,6 +532,8 @@ impl fmt::Display for CommandError {
             CommandError::MergeTagNotCommit(tag_name) => write!(f, "La tag {} no apunta a un commit", tag_name),
             CommandError::FeatureNotImplemented(feature) => write!(f, "Feature not implemented: {}", feature),
             CommandError::LsTreeErrorNotATree => write!(f, "fatal: not a tree object"),
+            CommandError::AddStagingAreaError(path,e) => write!(f, "Error al añadir el archivo {}: {}",path, e),
+            CommandError::MetadataError(e) => write!(f, "Error de metadatos: {}", e),
         }
     }
 }

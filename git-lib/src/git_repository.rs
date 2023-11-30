@@ -42,7 +42,7 @@ use crate::{
         packfile_functions::make_packfile,
         packfile_object_type::PackfileObjectType,
     },
-    staging_area::StagingArea,
+    staging_area_components::staging_area::StagingArea,
     utils::{aux::get_name, super_string::u8_vec_to_hex_string},
 };
 
@@ -350,7 +350,7 @@ impl<'a> GitRepository<'a> {
                             ))
                         }
                     };
-                    staging_area.add(relative_path, &actual_hash_lc);
+                    staging_area.add(&self.working_dir_path, relative_path, &actual_hash_lc)?;
                 } else {
                     staging_area.remove(relative_path);
                 }
@@ -464,7 +464,6 @@ impl<'a> GitRepository<'a> {
         if self.should_ignore(&path_str_r) {
             return Ok(());
         }
-        self.log(&format!("entry: {:?}", path_str_r));
         self.add_path(&path_str_r, staging_area)?;
         Ok(())
     }
@@ -500,7 +499,7 @@ impl<'a> GitRepository<'a> {
         let mut git_object: GitObject = Box::new(blob);
         let hex_str = self.db()?.write(&mut git_object, false, &mut self.logger)?;
         self.log(&format!("File {} (hash: {}) added to index", path, hex_str));
-        staging_area.add(path, &hex_str);
+        staging_area.add(&self.working_dir_path, path, &hex_str)?;
         Ok(())
     }
 
@@ -1564,7 +1563,10 @@ impl<'a> GitRepository<'a> {
             ))?;
 
         self.log("updated stagin area for merge fast foward");
-        self.restore(tree, Some(self.db()?))?;
+
+        let mut staging_area = self.staging_area()?;
+
+        self.restore_merge_fastfoward(tree, &mut staging_area, Some(self.db()?))?;
         Ok(())
     }
 
@@ -1582,24 +1584,42 @@ impl<'a> GitRepository<'a> {
     fn restore(
         &mut self,
         mut source_tree: Tree,
+        staging_area: &mut StagingArea,
         db: Option<ObjectsDatabase>,
     ) -> Result<(), CommandError> {
-        self.log("Restoring files");
         source_tree.restore(&self.working_dir_path, &mut self.logger, db)?;
-        let mut staging_area = self.staging_area()?;
-        staging_area.update_to_tree(&source_tree)?;
+        staging_area.flush_soft_files(&self.working_dir_path)?;
         staging_area.save()?;
         Ok(())
     }
 
-    fn restore_merge_conflict(&mut self, mut source_tree: Tree) -> Result<(), CommandError> {
-        self.log("Restoring files");
+    fn restore_merge_fastfoward(
+        &mut self,
+        mut source_tree: Tree,
+        staging_area: &mut StagingArea,
+        db: Option<ObjectsDatabase>,
+    ) -> Result<(), CommandError> {
+        source_tree.restore(&self.working_dir_path, &mut self.logger, db)?;
+        staging_area.update_to_tree(&self.working_dir_path, &source_tree)?;
+        staging_area.save()?;
+        Ok(())
+    }
+
+    fn restore_merge_conflict(
+        &mut self,
+        mut source_tree: Tree,
+        staging_area: &mut StagingArea,
+    ) -> Result<(), CommandError> {
         let objects_database = self.db()?;
         source_tree.restore(
             &self.working_dir_path,
             &mut self.logger,
             Some(objects_database),
         )?;
+        staging_area.flush_soft_files(&self.working_dir_path)?;
+
+        staging_area.save()?;
+
         Ok(())
     }
 
@@ -1651,7 +1671,6 @@ impl<'a> GitRepository<'a> {
             };
             let entry_path = entry.path();
             let entry_name = get_path_str(entry_path.clone())?;
-            self.log(&format!("Entry: {}", entry_name));
 
             if entry_name.contains(".git") {
                 continue;
@@ -1665,7 +1684,7 @@ impl<'a> GitRepository<'a> {
                     let mut git_object: GitObject = Box::new(blob);
                     self.log(&format!("Adding {} to staging area", path));
                     let hex_str = self.db()?.write(&mut git_object, false, &mut self.logger)?;
-                    staging_area.add(path, &hex_str);
+                    staging_area.add(&self.working_dir_path, path, &hex_str)?;
                 }
             }
         }
@@ -1673,8 +1692,6 @@ impl<'a> GitRepository<'a> {
     }
 
     pub fn get_last_commit_tree(&mut self) -> Result<Option<Tree>, CommandError> {
-        self.log("get_last_commit_tree");
-
         let Some(last_commit) = self.get_last_commit_hash()? else {
             return Ok(None);
         };
@@ -1728,7 +1745,6 @@ impl<'a> GitRepository<'a> {
             return self.merge_fast_forward(&destin_commit);
         }
 
-        self.log("True merge");
         self.true_merge(
             &mut common,
             &mut commit_head,
@@ -1896,11 +1912,13 @@ impl<'a> GitRepository<'a> {
         destin_name: &str,
         destin_type: &str,
     ) -> Result<(), CommandError> {
+        self.log("True merge");
         let mut common_tree = common.get_tree_some_or_err()?.to_owned();
         let mut head_tree = head.get_tree_some_or_err()?.to_owned();
         let mut destin_tree = destin.get_tree_some_or_err()?.to_owned();
 
         let mut staging_area = self.staging_area()?;
+
         // staging_area.update_to_conflictings(merged_files.to_owned(), unmerged_files.to_owned());
         staging_area.clear();
         let merged_tree = merge_trees(
@@ -1912,15 +1930,11 @@ impl<'a> GitRepository<'a> {
             &self.working_dir_path,
             &mut staging_area,
             &mut self.logger,
+            &self.working_dir_path,
         )?;
-        staging_area.save()?;
 
         let message = format!("Merge {} '{}' into {}", destin_type, destin_name, head_name);
         if staging_area.has_conflicts() {
-            self.log(&format!(
-                "Conflicts {:?}",
-                staging_area.get_unmerged_files()
-            ));
             let mut boxed_tree: GitObject = Box::new(merged_tree.clone());
             let merge_tree_hash_str = self.db()?.write(&mut boxed_tree, true, &mut self.logger)?;
 
@@ -1928,9 +1942,10 @@ impl<'a> GitRepository<'a> {
             self.write_to_internal_file("AUTO_MERGE", &merge_tree_hash_str)?;
             self.write_to_internal_file("MERGE_HEAD", &destin.get_hash_string()?)?;
 
-            self.restore_merge_conflict(merged_tree)?;
+            self.restore_merge_conflict(merged_tree, &mut staging_area)?;
             Ok(())
         } else {
+            self.log("Conflicts resolved!");
             let mut boxed_tree: GitObject = Box::new(merged_tree.clone());
             let _merge_tree_hash_str = self.db()?.write(&mut boxed_tree, true, &mut self.logger)?;
             let merge_commit = self.create_new_commit(
@@ -1944,7 +1959,8 @@ impl<'a> GitRepository<'a> {
                 self.db()?
                     .write(&mut boxed_commit, false, &mut self.logger)?;
             self.set_head_branch_commit_to(&merge_commit_hash_str)?;
-            self.restore(merged_tree, None)?;
+
+            self.restore(merged_tree, &mut staging_area, None)?;
             Ok(())
         }
     }
@@ -1961,19 +1977,14 @@ impl<'a> GitRepository<'a> {
             .ok_or(CommandError::FailedToResumeMerge)?;
         let parents = [get_last_commit_hash, destin].to_vec();
         let merge_tree = staging_area.get_working_tree_staged(&mut Logger::new_dummy())?;
-        // let merge_tree = self
-        //     .db()?
-        //     .read_object(&merge_tree_hash_str, &mut self.logger)?
-        //     .as_mut_tree()
-        //     .ok_or(CommandError::FailedToResumeMerge)?
-        //     .to_owned();
+
         let merge_commit = self.create_new_commit(message, parents, merge_tree.clone())?;
         let mut boxed_commit: GitObject = Box::new(merge_commit.clone());
         let merge_commit_hash_str = self
             .db()?
             .write(&mut boxed_commit, false, &mut self.logger)?;
         self.set_head_branch_commit_to(&merge_commit_hash_str)?;
-        self.restore(merge_tree, Some(self.db()?))?;
+        self.restore(merge_tree, &mut staging_area, Some(self.db()?))?;
         self.delete_file("MERGE_MSG")?;
         self.delete_file("AUTO_MERGE")?;
         self.delete_file("MERGE_HEAD")?;
@@ -1981,7 +1992,10 @@ impl<'a> GitRepository<'a> {
     }
 
     fn staging_area(&mut self) -> Result<StagingArea, CommandError> {
-        Ok(StagingArea::open(&self.git_path)?)
+        let staging_area = StagingArea::open(&self.git_path);
+
+        self.log(&format!("Staging area open: {:?}", staging_area));
+        Ok(staging_area?)
     }
 
     fn get_failed_merge_info(&mut self) -> Result<(String, String, String), CommandError> {
@@ -2110,8 +2124,6 @@ impl<'a> GitRepository<'a> {
             changes_not_staged_vec.into_iter().map(|(s, _)| s).collect();
 
         let untracked_files_vec = changes_controller.get_untracked_files_bis();
-
-        println!("untracked_files_vec: {:?}", untracked_files_vec);
 
         changes_not_staged.extend(untracked_files_vec.iter().cloned());
 
@@ -2819,7 +2831,7 @@ impl<'a> GitRepository<'a> {
         unstaged_files: &Vec<String>,
         staged: &HashMap<String, Vec<u8>>,
     ) -> Result<bool, CommandError> {
-        self.log("Restoring files");
+        self.log("Checkout restoring files");
 
         let staging_files = self.staging_area()?.get_files();
 
@@ -2889,10 +2901,12 @@ impl<'a> GitRepository<'a> {
             &mut self.logger,
             &self.working_dir_path,
         )?;
+
         remove_local_changes_from_tree(untracked_files, &mut source_tree, &mut self.logger);
 
         let mut staging_area = self.staging_area()?;
-        staging_area.update_to_tree(&source_tree)?;
+
+        staging_area.update_to_tree(&self.working_dir_path, &source_tree)?;
         staging_area.save()?;
         self.update_ref_head(branch)?;
         update_last_commit(new_hash)?;
@@ -4183,6 +4197,7 @@ fn merge_trees(
     parent_path: &str,
     staging_area: &mut StagingArea,
     logger: &mut Logger,
+    working_dir: &str,
 ) -> Result<Tree, CommandError> {
     let mut merged_tree = Tree::new("".to_string());
     let mut head_entries = head_tree.get_objects();
@@ -4228,6 +4243,7 @@ fn merge_trees(
                     &joint_path,
                     staging_area,
                     logger,
+                    working_dir,
                 )? {
                     Some(merged_object) => merged_tree.add_object(key, merged_object)?,
                     _ => {}
@@ -4242,6 +4258,7 @@ fn merge_trees(
                     &joint_path,
                     staging_area,
                     logger,
+                    working_dir,
                 )?;
                 merged_tree.add_object(key, object)?
             }
@@ -4259,6 +4276,7 @@ fn is_in_common(
     parent_path: &str,
     staging_area: &mut StagingArea,
     logger: &mut Logger,
+    working_dir: &str,
 ) -> Result<Option<GitObject>, CommandError> {
     match (head_entry, destin_entry) {
         (Some(mut head_entry), Some(mut destin_entry)) => {
@@ -4277,6 +4295,7 @@ fn is_in_common(
                         parent_path,
                         staging_area,
                         logger,
+                        working_dir,
                     )?;
                     let boxed_subtree = Box::new(merged_subtree);
                     return Ok(Some(boxed_subtree));
@@ -4299,14 +4318,19 @@ fn is_in_common(
                                 logger,
                             )?;
                             if merge_conflicts {
-                                staging_area.add_unmerged_file(
+                                staging_area.soft_add_unmerged_file(
+                                    working_dir,
                                     parent_path,
                                     Some(common_blob.get_hash_string()?),
                                     Some(head_blob.get_hash_string()?),
                                     Some(destin_blob.get_hash_string()?),
-                                );
+                                )?;
                             } else {
-                                staging_area.add(parent_path, &head_blob.get_hash_string()?);
+                                staging_area.soft_add(
+                                    working_dir,
+                                    parent_path,
+                                    &head_blob.get_hash_string()?,
+                                )?;
                             }
                             return Ok(Some(Box::new(merged_blob.to_owned())));
                         }
@@ -4318,7 +4342,8 @@ fn is_in_common(
             }
         }
         (Some(mut head_entry), None) => {
-            staging_area.add_unmerged_object(
+            staging_area.soft_add_unmerged_object(
+                working_dir,
                 &mut common_entry,
                 &mut head_entry,
                 parent_path,
@@ -4327,7 +4352,8 @@ fn is_in_common(
             return Ok(Some(head_entry.to_owned()));
         }
         (None, Some(mut destin_entry)) => {
-            staging_area.add_unmerged_object(
+            staging_area.soft_add_unmerged_object(
+                working_dir,
                 &mut common_entry,
                 &mut destin_entry,
                 parent_path,
@@ -4348,6 +4374,7 @@ fn is_not_in_common(
     entry_path: &str,
     staging_area: &mut StagingArea,
     logger: &mut Logger,
+    working_dir: &str,
 ) -> Result<GitObject, CommandError> {
     match (head_entry, destin_entry) {
         (Some(mut head_entry), Some(mut destin_entry)) => {
@@ -4363,6 +4390,7 @@ fn is_not_in_common(
                         entry_path,
                         staging_area,
                         logger,
+                        working_dir,
                     )?;
                     let boxed_subtree = Box::new(merged_subtree);
                     return Ok(boxed_subtree);
@@ -4382,15 +4410,16 @@ fn is_not_in_common(
                                 logger,
                             )?;
                             if merge_conflicts {
-                                staging_area.add_unmerged_file(
+                                staging_area.soft_add_unmerged_file(
+                                    working_dir,
                                     entry_path,
                                     Some(common_blob.get_hash_string()?),
                                     Some(head_blob.get_hash_string()?),
                                     Some(destin_blob.get_hash_string()?),
-                                );
+                                )?;
                             } else {
                                 let hash_str = merged_blob.get_hash_string()?;
-                                staging_area.add(entry_path, &hash_str)
+                                staging_area.soft_add(working_dir, entry_path, &hash_str)?
                             }
                             return Ok(Box::new(merged_blob.to_owned()));
                         }
@@ -4402,11 +4431,11 @@ fn is_not_in_common(
             }
         }
         (Some(mut head_entry), None) => {
-            staging_area.add_object(&mut head_entry, entry_path)?;
+            staging_area.soft_add_object(working_dir, &mut head_entry, entry_path)?;
             return Ok(head_entry.to_owned());
         }
         (None, Some(mut destin_entry)) => {
-            staging_area.add_object(&mut destin_entry, entry_path)?;
+            staging_area.soft_add_object(working_dir, &mut destin_entry, entry_path)?;
             return Ok(destin_entry.to_owned());
         }
         (None, None) => return Err(CommandError::MergeConflict("".to_string())),
@@ -4430,10 +4459,7 @@ fn merge_blobs(
         String::from_utf8(destin_content).map_err(|_| CommandError::CastingError)?;
     let common_content_str =
         String::from_utf8(common_content).map_err(|_| CommandError::CastingError)?;
-    logger.log(&format!(
-        "Common content: {}, Head content: {}, Remote content: {}",
-        common_content_str, head_content_str, destin_content_str
-    ));
+
     let (merged_content_str, merge_conflicts) = merge_content(
         head_content_str,
         destin_content_str,
@@ -4441,7 +4467,6 @@ fn merge_blobs(
         head_name,
         destin_name,
     )?;
-    logger.log(&format!("Hay merge conflict?: {}", merge_conflicts));
     let merged_content = merged_content_str.as_bytes().to_owned();
     let merged_blob = Blob::new_from_content(merged_content)?;
     Ok((merged_blob, merge_conflicts))

@@ -648,30 +648,6 @@ fn print_merge_commit_for_log(
     Ok(())
 }
 
-// pub fn read_from_for_log(
-//     db: &ObjectsDatabase,
-//     stream: &mut dyn Read,
-//     logger: &mut Logger,
-//     hash_commit: &String,
-// ) -> Result<CommitObject, CommandError> {
-//     //let mut tree = db.read_object(&hash_commit)?;
-//     get_type_and_len(stream)?;
-
-//     let (_, parents, author, author_timestamp, author_offset, committer, _, _, message) =
-//         read_commit_info_from(stream)?;
-
-//     Ok(CommitObject {
-//         tree: None,
-//         parents,
-//         author,
-//         committer,
-//         message,
-//         timestamp: author_timestamp,
-//         offset: author_offset,
-//         hash: Some(hex_string_to_u8_vec(hash_commit)),
-//     })
-// }
-
 pub fn sort_commits_descending_date2(
     vec_commits: &mut Vec<(CommitObject, Option<String>)>,
     parents_hash: &mut HashMap<String, HashSet<String>>,

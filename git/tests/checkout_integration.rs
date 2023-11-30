@@ -6,15 +6,13 @@ mod common {
 
 use std::{
     fs::{self, File},
-    io::{Read, Write},
+    io::Write,
     path::Path,
     process::Command,
-    result,
 };
 
 use crate::common::aux::{
-    change_dir_testfile1_content_and_remove_dir_testfile2, change_testfile_content,
-    create_test_scene_1, create_test_scene_2,
+    change_dir_testfile1_content_and_remove_dir_testfile2, create_test_scene_2,
 };
 
 #[test]
@@ -114,7 +112,7 @@ fn test_ckeckout() {
         .unwrap();
 
     let master_path = format!("{}/.git/refs/heads/master", path);
-    let master_commit = fs::read_to_string(master_path).unwrap();
+    let _master_commit = fs::read_to_string(master_path).unwrap();
 
     let result = Command::new("../../../../../../target/debug/git")
         .arg("checkout")
