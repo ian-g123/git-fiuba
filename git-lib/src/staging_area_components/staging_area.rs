@@ -21,10 +21,10 @@ use super::{
 #[derive(Debug, Clone, PartialEq)]
 pub struct StagingArea {
     files: HashMap<String, IndexEntry>,
-    soft_files: HashMap<String, String>,
+    pub soft_files: HashMap<String, String>,
 
     unmerged_files: HashMap<String, (Option<IndexEntry>, Option<IndexEntry>, Option<IndexEntry>)>,
-    soft_unmerged_files: HashMap<String, (Option<String>, Option<String>, Option<String>)>,
+    pub soft_unmerged_files: HashMap<String, (Option<String>, Option<String>, Option<String>)>,
 
     index_path: String,
 }
@@ -121,10 +121,7 @@ impl StagingArea {
         if !self.is_in_staging_area(&path.to_string()) {
             return Err(CommandError::RmFromStagingAreaError(path.to_string()));
         }
-
         self.remove(path);
-
-        logger.log(&format!("staging_area.rm({})", path));
         Ok(())
     }
 
@@ -231,8 +228,23 @@ impl StagingArea {
             .keys()
             .chain(self.unmerged_files.keys())
             .collect();
+        let mut len = self.files.len();
+        for unmerged_file_path in self.unmerged_files.keys() {
+            if let Some((head, common, destin)) = self.unmerged_files.get(unmerged_file_path) {
+                if head.is_some() {
+                    len += 1;
+                }
+                if common.is_some() {
+                    len += 1;
+                }
+                if destin.is_some() {
+                    len += 1;
+                }
+            }
+        }
+
         all_keys.sort_unstable();
-        write_header(stream, all_keys.len())?;
+        write_header(stream, len)?;
         for key in all_keys {
             let Some(entry) = self.files.get(key) else {
                 let (common, head, destin) = self.unmerged_files.get(key).unwrap();
@@ -382,7 +394,6 @@ impl StagingArea {
         let mut working_tree = Tree::new(current_dir_display.to_string());
         let files = self.sort_files();
         for (path, hash) in files.iter() {
-            logger.log(&format!("path: {}", path));
             let vector_path = path.split("/").collect::<Vec<_>>();
             let current_depth: usize = 0;
             working_tree.add_path_tree(logger, vector_path, current_depth, hash)?;

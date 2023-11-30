@@ -56,11 +56,8 @@ impl CommitFormat {
             message,
             is_root,
         )?;
-        logger.log("before output commit");
-
         write!(output, "{}", output_message)
             .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-        logger.log("after output commit");
         Ok(())
     }
 }

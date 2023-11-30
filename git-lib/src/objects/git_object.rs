@@ -200,7 +200,6 @@ pub fn read_git_object_from(
 ) -> Result<GitObject, CommandError> {
     let (type_str, len) = get_type_and_len(stream)?;
 
-    logger.log(&format!("Reading object of type : {}", type_str));
     if type_str == "blob" {
         let mut blob = Blob::read_from(stream, len, path, hash_str, logger)?;
         let hash_hex = hex_string_to_u8_vec(hash_str);

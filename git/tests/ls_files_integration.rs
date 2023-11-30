@@ -235,12 +235,14 @@ fn test_unmerged() {
 
     let testfile1_hash_remote = get_hash("dir/testfile1.txt", path);
 
-    _ = Command::new("../../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("checkout")
         .arg("master")
         .current_dir(path)
         .output()
         .unwrap();
+
+    assert_eq!(String::from_utf8(result.stderr).unwrap(), "");
 
     change_dir_testfile1_testfile2_unmerged(path);
 

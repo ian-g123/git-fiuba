@@ -20,12 +20,6 @@ impl Format for ShortFormat {
         _: (bool, usize, usize),
     ) -> Result<(), CommandError> {
         let mut changes: HashMap<String, ChangeObject> = HashMap::new();
-        logger.log(&format!(
-            "Len changes: {}, {}, {}",
-            changes_to_be_commited.len(),
-            changes_not_staged.len(),
-            untracked_files.len()
-        ));
         for (path, index_status) in changes_to_be_commited.iter() {
             let change: ChangeObject;
             if let Some(working_tree_status) = changes_not_staged.get(path) {
