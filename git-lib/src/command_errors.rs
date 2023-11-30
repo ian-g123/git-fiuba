@@ -206,7 +206,6 @@ pub enum CommandError {
 
     // Log
     ReadRefsHeadError,
-
 }
 
 impl Error for CommandError {}

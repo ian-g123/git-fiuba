@@ -8,7 +8,8 @@ use std::{
 };
 
 use gtk::{
-    prelude::*, Button, DrawingArea, Label, ListBox, ListBoxRow, Orientation, Window, WindowType,
+    glib, prelude::*, Button, DrawingArea, Label, ListBox, ListBoxRow, Orientation, Window,
+    WindowType,
 };
 
 use git::commands::push::Push;
@@ -592,18 +593,80 @@ impl Interface {
                 let principal_window_clone = principal_window.clone();
                 let mut binding = io::stdout();
 
-                let accept_merge = show_merge_confirmation_dialog(
-                    &branch_window_clone,
-                    &mut builder_clone,
-                    clone_clone_branch_name,
-                    current_branch_clone,
+                // Crea un nuevo cuadro de diálogo.
+                let dialog = gtk::Dialog::new();
+                let main_window: gtk::Window = builder_clone2.object("window app").unwrap();
+                dialog.set_transient_for(Some(&main_window));
+                dialog.set_title("Confirmación de Merge");
+                let from_branch = clone_clone_branch_name.clone();
+                let to_branch = current_branch_clone.clone();
+                let text_label = format!(
+                    "\n¿Desea realizar el merge de {} a {}?\n",
+                    from_branch, to_branch
                 );
 
-                if accept_merge == true {
-                    let principal_window: gtk::Window =
-                        builder_clone2.object("window app").unwrap();
-                    principal_window.set_sensitive(true);
+                // Obtiene el área de contenido del cuadro de diálogo.
+                let content_area = dialog.content_area();
+
+                // Agrega una etiqueta al cuadro de diálogo.
+                let label = Label::new(None);
+                let dialog_message =
+                    format!("<span size=\"medium\">{}</span>", text_label.to_string());
+                label.set_markup(&dialog_message);
+                content_area.add(&label);
+
+                // Agrega botones al cuadro de diálogo.
+                dialog.add_button("Accept", gtk::ResponseType::Accept.into());
+                dialog.add_button("Cancel", gtk::ResponseType::Cancel.into());
+
+                // Muestra el cuadro de diálogo y espera hasta que se cierre.
+                dialog.show_all();
+                let response = dialog.run();
+
+                // Maneja la respuesta del cuadro de diálogo.
+                match response {
+                    gtk::ResponseType::Accept => {
+                        println!("Presionó Accept");
+                        let mut repo = GitRepository::open("", &mut binding).unwrap();
+                        match repo.merge(&vec![clone_clone_branch_name]) {
+                            Ok(_) => {
+                                if repo.staging_area().unwrap().has_conflicts(){
+                                    dialog_window("Resuelve los merge conlficts y luego presiona en el botón 'commmit'
+                                    cuando hayas finalizado".to_string())
+                                }else {
+                                    dialog_window("Merge realizado con éxito".to_string())
+                                }
+                            },
+                            Err(err) => dialog_window(err.to_string()),
+                        };
+                        let (staging_changes, unstaging_changes, files_merge_conflict) =
+                            staged_area_func().unwrap();
+                        let interface = Interface {
+                            builder: builder_clone.clone(),
+                            staging_changes: Rc::new(RefCell::new(staging_changes)),
+                            unstaging_changes: Rc::new(RefCell::new(unstaging_changes)),
+                            files_merge_conflict: Rc::new(RefCell::new(files_merge_conflict)),
+                            principal_window: principal_window_clone,
+                        };
+                        branch_window_clone.hide();
+                        remove_childs(&clone_branch_list);
+                        let builder = builder_clone.clone();
+                        let branch_window_clone = branch_window_clone.clone();
+                        remove_widgets_to_branch_window(builder, branch_window_clone);
+                        interface.staged_area_ui();
+                    }
+                    gtk::ResponseType::Cancel => {
+                        println!("Presionó Cancel");
+                        // Realiza la acción correspondiente al botón Cancelar.
+                    }
+                    _ => {
+                        // Otros botones o cierre del cuadro de diálogo.
+                    }
                 }
+
+                // Cierra el cuadro de diálogo.
+                main_window.set_sensitive(true);
+                unsafe { dialog.destroy() };
 
                 // let mut repo = GitRepository::open("", &mut binding).unwrap();
                 // match repo.merge(&vec![clone_clone_branch_name]) {
@@ -987,28 +1050,40 @@ impl Interface {
     }
 }
 
-fn show_merge_confirmation_dialog(
-    parent: &Window,
-    builder: &mut gtk::Builder,
-    from_branch: String,
-    to_branch: String,
-) -> bool {
-    let dialog: gtk::Dialog = builder.object("merge_dialog").unwrap();
-    let label: gtk::Label = builder.object("dialog_label").unwrap();
-    dialog.set_transient_for(Some(parent));
-    let text_label = format!(
-        "¿Desea realizar el merge de {} a {}?",
-        from_branch, to_branch
-    );
-    label.set_text(&text_label);
-    let response = dialog.run();
-    let result = match response {
-        gtk::ResponseType::Accept => true,
-        _ => false,
-    };
-    dialog.hide();
-    return result;
-}
+// fn show_merge_confirmation_dialog(
+//     parent: &Window,
+//     builder: &mut gtk::Builder,
+//     from_branch: String,
+//     to_branch: String,
+// ) -> bool {
+//     let dialog: gtk::Dialog = builder.object("merge_dialog").unwrap();
+//     let label: gtk::Label = builder.object("dialog_label").unwrap();
+//     dialog.set_transient_for(Some(parent));
+//     let text_label = format!(
+//         "¿Desea realizar el merge de {} a {}?",
+//         from_branch, to_branch
+//     );
+//     label.set_text(&text_label);
+//     dialog.show_all();
+//     // esperamos a que se presione el botón ok_dialog_button
+//     let ok_dialog_button: gtk::Button = builder.object("ok_dialog_button").unwrap();
+//     let cancel_dialog_button: gtk::Button = builder.object("cancel_dialog_button").unwrap();
+
+//     let (sender, receiver): (glib::Sender<bool>, glib::Receiver<bool>) =
+//         glib::MainContext::channel(glib::PRIORITY_DEFAULT);
+
+//     let sender_clone = sender.clone();
+//     ok_dialog_button.connect_clicked(move |_| {
+//         sender_clone.send(true).unwrap();
+//     });
+//     cancel_dialog_button.connect_clicked(move |_| {
+//         sender.send(false).unwrap();
+//     });
+//     receiver.attach(None, move |data| {
+//         println!("Received: {}", data);
+//         glib::Continue(true)
+//     });
+// }
 
 fn remove_widgets_to_merge_window(builder: &mut gtk::Builder, merge_window: gtk::Window) {
     let merge_grid: gtk::Grid = builder.object("merge_grid").unwrap();
