@@ -114,6 +114,8 @@ fn test_push() {
     assert_eq!(contents, "contenido\n");
 
     _ = fs::remove_dir_all(format!("{}/server_files/repo", path));
+    _ = fs::remove_dir_all(format!("{}/server_files/repo_backup", path));
+    _ = fs::remove_dir_all(format!("{}/server_files/logs", path));
     _ = fs::remove_dir_all(format!("{}/user1", path));
     _ = fs::remove_dir_all(format!("{}/user2", path));
     _ = fs::remove_dir_all(format!("{}/user3", path));
