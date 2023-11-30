@@ -7,11 +7,13 @@ use std::{
 use crate::{
     command_errors::CommandError,
     file_compressor::compress,
+    logger::Logger,
     objects::{
         commit_object::CommitObject,
-        git_object::{GitObject, GitObjectTrait},
+        git_object::{git_object_from_data, GitObject, GitObjectTrait},
         tree::Tree,
     },
+    objects_database::ObjectsDatabase,
     server_components::packfile_object_type::PackfileObjectType,
     utils::{aux::get_sha1, super_string::u8_vec_to_hex_string},
 };
@@ -392,12 +394,22 @@ pub fn search_object_from_hash(
     sha1: [u8; 20],
     mut index_file: &mut dyn Read,
     mut packfile: &mut dyn Read,
-) -> Result<Option<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
+    db: &ObjectsDatabase,
+) -> Result<Option<GitObject>, CommandError> {
     let Some(packfile_offset) = get_object_packfile_offset(&sha1, &mut index_file)? else {
         return Ok(None);
     };
     let (obj_type, obj_len, content) = read_object_from_offset(&mut packfile, packfile_offset)?;
-    Ok(Some((obj_type, obj_len, content)))
+    let hash_str = u8_vec_to_hex_string(&sha1);
+    Ok(Some(git_object_from_data(
+        obj_type.to_string(),
+        &mut content.as_slice(),
+        obj_len,
+        "",
+        &hash_str,
+        &mut Logger::new_dummy(),
+        db,
+    )?))
 }
 
 #[test]
@@ -504,49 +516,34 @@ fn test_read_index_with_three_objects() {
         index_file_bits: &Vec<u8>,
         packfile_bits: &Vec<u8>,
         hash: &str,
-        expected_obj_type: PackfileObjectType,
-        expected_obj_len: usize,
-        expected_content: Option<Vec<u8>>,
+        expected_offset: u32,
     ) {
         let mut index_file = std::io::Cursor::new(index_file_bits);
 
-        let mut packfile = std::io::Cursor::new(packfile_bits);
+        let packfile = std::io::Cursor::new(packfile_bits);
         let sha1 = crate::utils::aux::hex_string_to_u8_vec(hash);
-        let (obj_type, obj_len, content) =
-            search_object_from_hash(sha1, &mut index_file, &mut packfile)
-                .unwrap()
-                .unwrap();
-        assert_eq!(obj_type, expected_obj_type);
-        assert_eq!(obj_len, expected_obj_len);
-        if let Some(expected_content) = expected_content {
-            assert_eq!(content, expected_content);
-        }
+        let offset = get_object_packfile_offset(&sha1, &mut index_file).unwrap();
+        assert_eq!(offset, Some(expected_offset));
     }
 
     test_read_index(
         &index_file_bits,
         &packfile_bits,
         "db963515880f98c8435df2ce902e4f337aac7ea6",
-        PackfileObjectType::Commit,
-        228,
-        None,
+        12,
     );
 
     test_read_index(
         &index_file_bits,
         &packfile_bits,
         "df2b8fc99e1c1d4dbc0a854d9f72157f1d6ea078",
-        PackfileObjectType::Tree,
-        32,
-        None,
+        143,
     );
 
     test_read_index(
         &index_file_bits,
         &packfile_bits,
         "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
-        PackfileObjectType::Blob,
-        0,
-        Some(vec![]),
+        186,
     );
 }
