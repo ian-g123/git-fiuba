@@ -2685,25 +2685,39 @@ impl<'a> GitRepository<'a> {
             let hash_commit = self.get_last_commit_hash_branch(&current_branch_name)?;
             branches_with_their_last_hash.push((current_branch, hash_commit));
         }
-        for branch_with_commit in branches_with_their_last_hash {
-            rebuild_commits_tree(
-                &self.db()?,
-                &branch_with_commit.1,
-                &mut commits_map,
-                Some(branch_with_commit.0),
-                all,
-                &HashSet::<String>::new(),
-                false,
-                &mut self.logger,
-            )?;
+
+        let mut commits_for_last_hash: Vec<(CommitObject, Option<String>)> = Vec::new();
+        for (branch, hash) in branches_with_their_last_hash {
+            let mut commit_object = self.db()?.read_object(&hash, &mut self.logger)?;
+            let first_commit_branch =
+                commit_object
+                    .as_mut_commit()
+                    .ok_or(CommandError::DirectoryCreationError(
+                        "Error creando directorio".to_string(),
+                    ))?;
+            commits_for_last_hash.push((first_commit_branch.to_owned(), Some(branch)));
+        }
+        sort_commits_descending_date(&mut commits_for_last_hash);
+
+        for (mut commit, option_branch_name) in commits_for_last_hash {
+            if let Some(name_branch) = option_branch_name {
+                let hash_commit = commit.get_hash_string()?;
+                rebuild_commits_tree(
+                    &self.db()?,
+                    &hash_commit,
+                    &mut commits_map,
+                    Some(name_branch),
+                    all,
+                    &HashSet::<String>::new(),
+                    false,
+                    &mut self.logger,
+                )?;
+            } else {
+                return Err(CommandError::ReadRefsHeadError);
+            }
         }
 
-        let mut _parents_hash: HashMap<String, HashSet<String>> = HashMap::new();
-        let mut sons_hash: HashMap<String, HashSet<String>> = HashMap::new();
-        // get_parents_hash_map(self.get_last_commit_hash(), )
-
         let mut commits = commits_map.drain().map(|(_, v)| v).collect();
-
         sort_commits_descending_date(&mut commits);
         Ok(commits)
     }

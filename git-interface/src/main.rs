@@ -1,4 +1,3 @@
-extern crate gtk;
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
@@ -544,17 +543,24 @@ impl Interface {
                 return;
             }
         };
-        let local_branches = match repo.local_branches() {
+        let mut local_branches = match repo.local_branches() {
             Ok(local_branches) => local_branches,
             Err(err) => {
                 dialog_window(err.to_string());
                 return;
             }
         };
-        for (branch_name, _) in &local_branches {
-            if branch_name == &current_branch {
+
+        // Ordenamos las branches locales de manera tal que sea legible para el usuario
+        local_branches.remove(&current_branch);
+        let mut vec_local_branches = local_branches.keys().cloned().collect::<Vec<String>>();
+        vec_local_branches.sort();
+        vec_local_branches.insert(0, current_branch.clone());
+
+        for branch_name in vec_local_branches {
+            if branch_name == current_branch {
                 let box_outer = gtk::Box::new(Orientation::Horizontal, 0);
-                let label = Label::new(Some(branch_name));
+                let label = Label::new(Some(&branch_name));
                 let label_end = Label::new(Some("***"));
                 box_outer.pack_start(&label, true, true, 0);
                 box_outer.pack_end(&label_end, false, false, 0);
@@ -599,7 +605,7 @@ impl Interface {
             });
 
             let box_outer = gtk::Box::new(Orientation::Horizontal, 0);
-            let label = Label::new(Some(branch_name));
+            let label = Label::new(Some(&branch_name));
             box_outer.pack_start(&label, true, true, 0);
             box_outer.pack_end(&checkout_button, false, false, 0);
             branches_list.add(&box_outer);
@@ -749,8 +755,8 @@ impl Interface {
         remove_childs(&author_list);
         remove_childs(&commits_hashes_list);
 
-        let mut hash_sons: HashMap<String, Vec<(f64, f64, String)>> = HashMap::new(); // hash, Vec<(x,y)> de los hijos
-        let mut hash_branches: HashMap<String, usize> = HashMap::new();
+        let mut hash_sons = HashMap::new(); // hash, Vec<(x,y)> de los hijos
+        let mut hash_branches = HashMap::new();
         let mut identado: usize = 1;
         let mut y = 10.5;
 
@@ -1075,7 +1081,7 @@ fn make_graph(
     hash_sons: &mut HashMap<String, Vec<(f64, f64, String)>>,
     identado: &mut usize,
     commit: &(CommitObject, Option<String>),
-    y: f32,
+    pos_y: f32,
 ) -> usize {
     let commit_branch = commit.1.as_ref().unwrap();
     if !hash_branches.contains_key(commit_branch) {
@@ -1085,14 +1091,10 @@ fn make_graph(
 
     let i = hash_branches.get(commit_branch).unwrap();
     let index_color = i % GRAPH_COLORS.len();
-    let (c1, c2, c3): (f64, f64, f64) = GRAPH_COLORS[index_color];
-    let mut x: f64 = *i as f64 * 15.0;
-    if i == &1 {
-        x = 15.0;
-    }
+    let (color_1, color_2, color_3) = GRAPH_COLORS[index_color];
+    let x = *i as f64 * 20.0;
 
-    // Conéctate al evento "draw" del DrawingArea para dibujar
-    draw_commit_point(drawing_area, c1, c2, c3, x, y as f64);
+    draw_commit_point(drawing_area, color_1, color_2, color_3, x, pos_y as f64);
 
     let commit_hash = commit.0.to_owned().get_hash_string().unwrap();
 
@@ -1102,12 +1104,12 @@ fn make_graph(
         drawing_area,
         hash_branches,
         x,
-        y as f64,
+        pos_y as f64,
     );
 
     for parent in &commit.0.get_parents() {
         let sons_parent = hash_sons.entry(parent.clone()).or_default();
-        sons_parent.push((x, y as f64, commit_branch.clone()));
+        sons_parent.push((x, pos_y as f64, commit_branch.clone()));
     }
 
     return *identado;
@@ -1126,7 +1128,7 @@ fn draw_lines_to_sons(
             let sons_clone = sons.clone();
             let i = hash_branches.get(&sons.2).unwrap();
             let index_color = i % GRAPH_COLORS.len();
-            let (c1, c2, c3): (f64, f64, f64) = GRAPH_COLORS[index_color];
+            let (c1, c2, c3) = GRAPH_COLORS[index_color];
 
             drawing_area.connect_draw(move |_, context| {
                 // Dibuja una línea en el DrawingArea
