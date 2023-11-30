@@ -203,6 +203,11 @@ pub enum CommandError {
 
     // Ls-tree
     LsTreeErrorNotATree,
+    // Error al añadir un archivo
+    AddStagingAreaError(String, String),
+
+    //index
+    MetadataError(String),
 }
 
 impl Error for CommandError {}
@@ -518,6 +523,8 @@ impl fmt::Display for CommandError {
             CommandError::InvalidRef(tag_ref) => write!(f, "fatal: Failed to resolve '{tag_ref}' as a valid ref."),
             CommandError::FlagHashRequiresValue => write!(f, "error: option `hash' expects a numerical value"),
             CommandError::LsTreeErrorNotATree => write!(f, "fatal: not a tree object"),
+            CommandError::AddStagingAreaError(path,e) => write!(f, "Error al añadir el archivo {}: {}",path, e),
+            CommandError::MetadataError(e) => write!(f, "Error de metadatos: {}", e),
         }
     }
 }

@@ -3,7 +3,7 @@ use crate::{
     logger::Logger,
     objects::{git_object::GitObject, tree::Tree},
     objects_database::ObjectsDatabase,
-    staging_area::StagingArea,
+    staging_area_components::staging_area::StagingArea,
     utils::aux::get_name,
 };
 use std::{collections::HashMap, fs::File, io::Read};

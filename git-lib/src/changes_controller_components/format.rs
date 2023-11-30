@@ -1,6 +1,6 @@
 use crate::logger::Logger;
 use crate::objects_database::ObjectsDatabase;
-use crate::staging_area::StagingArea;
+use crate::staging_area_components::staging_area::StagingArea;
 use crate::{command_errors::CommandError, objects::tree::Tree};
 use std::{collections::HashMap, io::Write};
 

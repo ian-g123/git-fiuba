@@ -5,7 +5,7 @@ use crate::{
     logger::Logger,
     objects::{mode::Mode, tree::Tree},
     objects_database::ObjectsDatabase,
-    staging_area::StagingArea,
+    staging_area_components::staging_area::StagingArea,
 };
 
 use super::{

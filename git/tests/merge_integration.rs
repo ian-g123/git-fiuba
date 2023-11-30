@@ -14,12 +14,15 @@ fn test_merge() {
 
     modify_file_and_commit_in_both_repos_not_overlaping_files(&path, git_bin);
 
-    let _result = Command::new(git_bin)
+    let result = Command::new(git_bin)
         .arg("merge")
         .arg("rama1")
         .current_dir(path)
         .output()
         .unwrap();
+
+    println!("stderr: {}", String::from_utf8(result.stderr).unwrap());
+    println!("stdout: {}", String::from_utf8(result.stdout).unwrap());
 
     let mut file = File::open(path.to_owned() + "/file-remote").unwrap();
     let mut content = String::new();
