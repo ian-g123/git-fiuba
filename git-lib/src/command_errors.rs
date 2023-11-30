@@ -221,6 +221,11 @@ pub enum CommandError {
 
     //index
     MetadataError(String),
+
+    // check-ignore
+    StdinAndPathsError,
+    NoPathSpecified,
+    NonMatchingWithoutVerbose,
 }
 
 impl Error for CommandError {}
@@ -545,6 +550,9 @@ impl fmt::Display for CommandError {
             CommandError::LsTreeErrorNotATree => write!(f, "fatal: not a tree object"),
             CommandError::AddStagingAreaError(path,e) => write!(f, "Error al añadir el archivo {}: {}",path, e),
             CommandError::MetadataError(e) => write!(f, "Error de metadatos: {}", e),
+            CommandError::StdinAndPathsError => write!(f, "fatal: cannot specify pathnames with --stdin"),
+            CommandError::NoPathSpecified => write!(f, "fatal: no path specified"),
+            CommandError::NonMatchingWithoutVerbose => write!(f, "fatal: --non-matching is only valid with --verbose"),
         }
     }
 }
