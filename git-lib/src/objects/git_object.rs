@@ -20,6 +20,10 @@ pub trait GitObjectTrait {
         None
     }
 
+    fn as_tag(&mut self) -> Option<TagObject> {
+        None
+    }
+
     fn as_mut_blob(&mut self) -> Option<&mut Blob> {
         None
     }

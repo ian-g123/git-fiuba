@@ -32,7 +32,7 @@ use crate::{
         git_object::{self, GitObject, GitObjectTrait},
         mode::Mode,
         proto_object::ProtoObject,
-        tag_object::TagObject,
+        tag_object::{self, TagObject},
         tree::Tree,
     },
     objects_database::ObjectsDatabase,
@@ -1119,84 +1119,58 @@ impl<'a> GitRepository<'a> {
         Ok(hash_refs)
     }
 
-    pub fn merge(&mut self, commits: &Vec<String>) -> Result<(), CommandError> {
-        self.log(&format!("Merge args: {:?}", commits));
-        let mut head_name = "HEAD".to_string();
-        let mut destin_name = "origin".to_string();
-        if commits.len() > 1 {
+    pub fn merge(&mut self, args: &Vec<String>) -> Result<(), CommandError> {
+        self.log(&format!("Merge args: {:?}", args));
+        if args.len() > 1 {
             return Err(CommandError::MergeMultipleCommits);
         }
-        let (mut destin_commit, is_remote) = match commits.first() {
-            Some(commit) if commit != "FETCH_HEAD" => (commit.to_owned(), false),
-            _ => (self.get_fetch_head_branch_commit_hash()?, true),
+        let (head_name, destin_commit, destin_name, destin_type_str) = match args.first() {
+            Some(commit) if commit != "FETCH_HEAD" => {
+                let (destin_commit, destin_name, destin_type_str) =
+                    self.get_hash_and_name(commit)?;
+                let head_name = self.get_current_branch_name()?;
+                (head_name, destin_commit, destin_name, destin_type_str)
+            }
+            _ => (
+                "HEAD".to_string(),
+                self.get_fetch_head_branch_commit_hash()?,
+                "origin".to_string(),
+                "".to_string(),
+            ),
         };
 
         match self.get_last_commit_hash()? {
             Some(last_commit) => {
-                let mut destin_branch_name = "".to_string();
-                let mut head_branch_name = "".to_string();
-                for (branch_name, branch_hash) in self.remote_branches()? {
-                    self.log(&format!(
-                        "Remote branch_name: {}, branch_hash: {}",
-                        branch_name, branch_hash
-                    ));
-                    if branch_name == destin_commit {
-                        destin_commit = branch_hash.clone();
-                    }
-                    if branch_hash == destin_commit {
-                        destin_branch_name = branch_name;
-                        //return Ok(());
-                    }
-                }
-                for (branch_name, branch_hash) in self.local_branches()? {
-                    self.log(&format!(
-                        "Local branch_name: {}, branch_hash: {}",
-                        branch_name, branch_hash
-                    ));
-                    if branch_name == destin_commit {
-                        destin_commit = branch_hash.clone();
-                    }
-                    if branch_hash == destin_commit {
-                        destin_branch_name = branch_name.clone();
-                        //return Ok(());
-                    }
-                    if branch_hash == last_commit {
-                        head_branch_name = branch_name;
-                        //return Ok(());
-                    }
-                }
-                self.log(&format!(
-                    "Local branch_name: {}, branch_hash: {}, Remote branch_name: {}, branch hash: {}",
-                    head_branch_name, last_commit, destin_branch_name, destin_commit
-                ));
-                if destin_branch_name != head_branch_name
-                    || destin_branch_name.is_empty()
-                    || destin_branch_name.is_empty()
-                {
-                    if destin_branch_name.is_empty() {
-                        destin_name = destin_commit.to_owned();
-                    } else {
-                        if is_remote {
-                            destin_name = format!("{}/origin", destin_branch_name);
-                        } else {
-                            destin_name = destin_branch_name;
-                        };
-                    }
-                    if head_branch_name.is_empty() {
-                        head_name = last_commit.to_owned();
-                    } else {
-                        if is_remote {
-                            head_name = format!("{}/HEAD", head_branch_name);
-                        } else {
-                            head_name = head_branch_name;
-                        };
-                    }
-                }
                 self.log(&format!("Merging two commits ...",));
-                self.merge_two_commits(&last_commit, &destin_commit, &head_name, &destin_name)
+                self.merge_two_commits(
+                    &last_commit,
+                    &destin_commit,
+                    &head_name,
+                    &destin_name,
+                    &destin_type_str,
+                )
             }
             None => self.merge_fast_forward(&destin_commit),
         }
+    }
+
+    fn get_hash_and_name(
+        &mut self,
+        pseudo_commit: &String,
+    ) -> Result<(String, String, String), CommandError> {
+        if let Some((destin_commit, branch_name, type_str)) = self.search_branch(pseudo_commit)? {
+            return Ok((destin_commit, branch_name, type_str));
+        }
+        if let Some((destin_commit, tag_or_branch_name, type_str)) =
+            self.search_tag(pseudo_commit)?
+        {
+            return Ok((destin_commit, tag_or_branch_name, type_str));
+        }
+        Ok((
+            pseudo_commit.to_owned(),
+            pseudo_commit[..7].to_string(),
+            "commit".to_string(),
+        ))
     }
 
     /// Obtiene la ruta de la rama actual.\
@@ -1250,6 +1224,7 @@ impl<'a> GitRepository<'a> {
     }
 
     pub fn local_branches(&mut self) -> Result<HashMap<String, String>, CommandError> {
+        // BranchName, CommitHash
         let mut branches = HashMap::<String, String>::new();
         let branches_path = join_paths!(&self.git_path, "refs/heads/").ok_or(
             CommandError::DirectoryCreationError(
@@ -1737,13 +1712,17 @@ impl<'a> GitRepository<'a> {
         destin_commit: &str,
         head_name: &str,
         destin_name: &str,
+        destin_type: &str,
     ) -> Result<(), CommandError> {
         let (mut common, mut commit_head, mut commit_destin) =
             self.get_common_ansestor(&destin_commit, head_commit)?;
 
         let hash = common.get_hash_string()?;
 
-        self.log(&format!("Merging {} into {}", destin_commit, head_commit));
+        self.log(&format!(
+            "Merging {} '{}' into {}",
+            destin_type, destin_commit, head_commit
+        ));
         self.log(&format!("Common: {}", hash));
         if common.get_hash()? == commit_head.get_hash()? {
             return self.merge_fast_forward(&destin_commit);
@@ -1756,6 +1735,7 @@ impl<'a> GitRepository<'a> {
             &mut commit_destin,
             &head_name,
             &destin_name,
+            &destin_type,
         )
     }
 
@@ -1914,6 +1894,7 @@ impl<'a> GitRepository<'a> {
         destin: &mut CommitObject,
         head_name: &str,
         destin_name: &str,
+        destin_type: &str,
     ) -> Result<(), CommandError> {
         let mut common_tree = common.get_tree_some_or_err()?.to_owned();
         let mut head_tree = head.get_tree_some_or_err()?.to_owned();
@@ -1934,7 +1915,7 @@ impl<'a> GitRepository<'a> {
         )?;
         staging_area.save()?;
 
-        let message = format!("Merge branch '{}' into {}", destin_name, head_name);
+        let message = format!("Merge {} '{}' into {}", destin_type, destin_name, head_name);
         if staging_area.has_conflicts() {
             self.log(&format!(
                 "Conflicts {:?}",
@@ -2610,10 +2591,18 @@ impl<'a> GitRepository<'a> {
     ) -> Result<(), CommandError> {
         self.log(&format!("Checkout args: {:?}", files_or_branches));
 
-        if files_or_branches.len() == 1 && self.branch_exists(&files_or_branches[0]) {
-            self.log("Switching to new branch");
-            self.checkout(&files_or_branches[0])?;
-            return Ok(());
+        if files_or_branches.len() == 1 {
+            let pseudo_branch = files_or_branches[0].clone();
+            if self.search_tag(&pseudo_branch)?.is_some() {
+                return Err(CommandError::FeatureNotImplemented(
+                    "checkout to ditached HEAD state".to_string(),
+                ));
+            }
+            if self.branch_exists(&pseudo_branch) {
+                self.log("Switching to new branch");
+                self.checkout(&pseudo_branch)?;
+                return Ok(());
+            }
         }
         let mut staging_area = self.staging_area()?;
         for path in files_or_branches.iter() {
@@ -3380,7 +3369,7 @@ impl<'a> GitRepository<'a> {
     /// Lista los tags de refs/tags/
     pub fn list_tags(&mut self) -> Result<(), CommandError> {
         self.log("Listing tags...");
-        let mut tags = self.get_tags()?;
+        let mut tags = self.get_tag_names()?;
 
         tags.sort();
 
@@ -3396,8 +3385,7 @@ impl<'a> GitRepository<'a> {
     }
 
     /// Devuelve un vector con los nombres de tags.
-    fn get_tags(&mut self) -> Result<Vec<String>, CommandError> {
-        self.log("Listing tags...");
+    fn get_tag_names(&mut self) -> Result<Vec<String>, CommandError> {
         let mut tags: Vec<String> = Vec::new();
         let tags_path = join_paths!(self.git_path, "refs/tags/").ok_or(
             CommandError::DirectoryCreationError(
@@ -3425,6 +3413,22 @@ impl<'a> GitRepository<'a> {
             tags.push(tag_name.to_string());
         }
         Ok(tags)
+    }
+
+    /// Devuelve una tag guardada en la base de datos.
+    fn get_tag_object_hash(&mut self, tag_name: &str) -> Result<String, CommandError> {
+        let path = join_paths!(self.git_path, "refs/tags/", tag_name).ok_or(
+            CommandError::DirectoryCreationError(
+                "No se pudo crear el directorio .git/refs/tags".to_string(),
+            ),
+        )?;
+        let tag_hash = fs::read_to_string(path.clone())
+            .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+        self.log(&format!("Tag hash: {}", tag_hash));
+        let Some(tag_object) = self.db()?.read_object(&tag_hash, self.logger())?.as_tag() else {
+            return Ok(tag_hash);
+        };
+        Ok(tag_object.get_object_hash())
     }
 
     // ----- Show-ref -----
@@ -3487,6 +3491,58 @@ impl<'a> GitRepository<'a> {
             .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
 
         Ok(())
+    }
+
+    fn search_branch(
+        &mut self,
+        pseudo_commit: &str,
+    ) -> Result<Option<(String, String, String)>, CommandError> {
+        let branches = self.local_branches()?;
+        for (branch, hash) in branches.iter() {
+            if branch == pseudo_commit {
+                return Ok(Some((
+                    hash.to_string(),
+                    branch.to_string(),
+                    "branch".to_string(),
+                )));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Busca una tag con el nombre tag_name y si lo encuentra devuelve una terna
+    /// con el hash, el nombre y "branch" si apunta al último commit de una branch, o
+    /// "tag" en caso contrario
+    fn search_tag(
+        &mut self,
+        tag_name: &str,
+    ) -> Result<Option<(String, String, String)>, CommandError> {
+        let tags = self.get_tag_names()?;
+        self.log(&format!("Tags: {:?}", tags));
+        let branches = self.local_branches()?;
+        if tags.contains(&tag_name.to_string()) {
+            let tag_object_hash = self.get_tag_object_hash(tag_name)?;
+
+            for (branch_name, commit_hash) in branches.iter() {
+                if commit_hash == &tag_object_hash {
+                    return Ok(Some((
+                        commit_hash.to_string(),
+                        branch_name.to_string(),
+                        "branch".to_string(),
+                    )));
+                }
+            }
+            let mut tag_object = self.db()?.read_object(&tag_object_hash, &mut self.logger)?;
+            if !tag_object.as_mut_commit().is_some() {
+                return Err(CommandError::MergeTagNotCommit(tag_name.to_string()));
+            };
+            return Ok(Some((
+                tag_object_hash,
+                tag_name.to_string(),
+                "tag".to_string(),
+            )));
+        }
+        Ok(None)
     }
 
     // ----- Ls-tree -----
