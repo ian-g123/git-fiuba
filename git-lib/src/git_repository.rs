@@ -9,6 +9,7 @@ use std::{
 };
 
 use chrono::{DateTime, Local};
+use sha1::digest::block_buffer::Error;
 
 use crate::{
     changes_controller_components::{
@@ -3282,8 +3283,7 @@ impl<'a> GitRepository<'a> {
         let merge_files = staging_area.get_unmerged_files();
         if !merge_files.is_empty() {
             let merge_conflicts: Vec<&String> = merge_files.keys().collect();
-            self.get_checkout_merge_conflicts_output(merge_conflicts)?;
-            return Ok(());
+            return Err(self.get_checkout_merge_conflicts_output(merge_conflicts));
         }
 
         let (new_hash, mut new_tree) = self.get_checkout_branch_info(branch, &self.db()?)?;
@@ -3371,16 +3371,15 @@ impl<'a> GitRepository<'a> {
     fn get_checkout_merge_conflicts_output(
         &mut self,
         merge_conflicts: Vec<&String>,
-    ) -> Result<(), CommandError> {
+    ) -> CommandError {
         let mut message = String::new();
-
         for path in merge_conflicts.iter() {
-            message += &format!("{path}: needs\n");
+            message += &format!("{path}: Requires conflict resolution\n");
         }
         message += &format!("error: you need to resolve your current index first\n");
-        write!(self.output, "{}", message)
-            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-        Ok(())
+        _ = write!(self.output, "{}", message)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()));
+        CommandError::FileWriteError(message)
     }
 
     /// Muestra el mensaje de éxito de Checkout.
