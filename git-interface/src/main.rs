@@ -229,53 +229,6 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
             return;
         }
     });
-
-    // Eliminamos todos los widgets de la ventana de branches
-    let branch_window: gtk::Window = clone_interface.builder.object("branch_window").unwrap();
-    let branches_list: gtk::ListBox = clone_interface.builder.object("branches_list").unwrap();
-    let branch_window_clone = branch_window.clone();
-    let builder = clone_interface.builder.clone();
-    // branch_window.connect_delete_event(move |_, _| {
-    //     let branches_list = branches_list.clone();
-    //     let builder = builder.clone();
-    //     let branch_window_clone = branch_window_clone.clone();
-    //     println!("Cerrando ventana de branches");
-    //     remove_childs(&branches_list);
-    //     println!("Cerrando ventana de branches ABCFNAFNAFFS");
-    //     remove_widgets_to_branch_window(builder, branch_window_clone);
-    //     let principal_window: gtk::Window = clone_interface.builder.object("window app").unwrap();
-    //     principal_window.set_sensitive(true);
-    //     Inhibit(false)
-    // });
-    branch_window_clone.connect_clicked(move |_| {
-        let staging_changes = Rc::clone(&staging_changes_clone);
-        let unstaging_changes = Rc::clone(&unstaging_changes_clone);
-        let files_merge_conflict = Rc::clone(&files_merge_conflict_clone);
-        let principal_window: gtk::Window = clone_interface.builder.object("window app").unwrap();
-        let mut binding = io::stdout();
-        let mut repo = GitRepository::open("", &mut binding).unwrap();
-        match repo.checkout(&branch_name_clone, false) {
-            Ok(_) => dialog_window("Checkout realizado con éxito".to_string()),
-            Err(err) => dialog_window(err.to_string()),
-        };
-        let principal_window2: gtk::Window = builder_clone.object("window app").unwrap();
-        principal_window2.set_sensitive(true);
-        let interface = Interface {
-            builder: builder_clone.clone(),
-            staging_changes,
-            unstaging_changes,
-            files_merge_conflict,
-            principal_window,
-        };
-
-        branch_window_clone2.hide();
-        remove_childs(&branch_list_clone);
-        let builder = builder_clone.clone();
-        let branch_window_clone2 = branch_window_clone2.clone();
-        remove_widgets_to_branch_window(builder, branch_window_clone2);
-        interface.staged_area_ui();
-    });
-
     ControlFlow::Continue(())
 }
 
@@ -673,23 +626,22 @@ impl Interface {
             });
 
             checkout_button.connect_clicked(move |_| {
-                let staging_changes = Rc::clone(&staging_changes_clone);
-                let unstaging_changes = Rc::clone(&unstaging_changes_clone);
-                let files_merge_conflict = Rc::clone(&files_merge_conflict_clone);
-                let principal_window = principal_window_clone2.clone();
                 let mut binding = io::stdout();
                 let mut repo = GitRepository::open("", &mut binding).unwrap();
                 match repo.checkout(&branch_name_clone, false) {
                     Ok(_) => dialog_window("Checkout realizado con éxito".to_string()),
                     Err(err) => dialog_window(err.to_string()),
                 };
+                let (staging_changes, unstaging_changes, files_merge_conflict) =
+                    staged_area_func().unwrap();
+                let principal_window = principal_window_clone2.clone();
                 let principal_window2: gtk::Window = builder_clone.object("window app").unwrap();
                 principal_window2.set_sensitive(true);
                 let interface = Interface {
                     builder: builder_clone.clone(),
-                    staging_changes,
-                    unstaging_changes,
-                    files_merge_conflict,
+                    staging_changes: Rc::new(RefCell::new(staging_changes)),
+                    unstaging_changes: Rc::new(RefCell::new(unstaging_changes)),
+                    files_merge_conflict: Rc::new(RefCell::new(files_merge_conflict)),
                     principal_window,
                 };
 
@@ -702,6 +654,42 @@ impl Interface {
             });
         }
 
+        // Eliminamos todos los widgets de la ventana de branches
+        let branch_window: gtk::Window = self.builder.object("branch_window").unwrap();
+        let branches_list: gtk::ListBox = self.builder.object("branches_list").unwrap();
+        let branch_window_clone = branch_window.clone();
+        let builder = self.builder.clone();
+        let builder_clone = builder.clone();
+        branch_window.connect_delete_event(move |_, _| {
+            let (staging_changes, unstaging_changes, files_merge_conflict) =
+                staged_area_func().unwrap();
+            let staging_changes_clone = Rc::new(RefCell::new(staging_changes));
+            let unstaging_changes_clone = Rc::new(RefCell::new(unstaging_changes));
+            let files_merge_conflict_clone = Rc::new(RefCell::new(files_merge_conflict));
+            let staging_changes = Rc::clone(&staging_changes_clone);
+            let unstaging_changes = Rc::clone(&unstaging_changes_clone);
+            let files_merge_conflict = Rc::clone(&files_merge_conflict_clone);
+            let principal_window2: gtk::Window = builder_clone.object("window app").unwrap();
+            let window: gtk::Window = builder.object("window app").unwrap();
+
+            let principal_window = Rc::new(RefCell::new(window));
+            principal_window2.set_sensitive(true);
+            let interface2 = Interface {
+                builder: builder_clone.clone(),
+                staging_changes,
+                unstaging_changes,
+                files_merge_conflict,
+                principal_window,
+            };
+
+            branch_window_clone.hide();
+            remove_childs(&branches_list);
+            let builder = builder_clone.clone();
+            let branch_window_clone2 = branch_window_clone.clone();
+            remove_widgets_to_branch_window(builder, branch_window_clone2);
+            interface2.staged_area_ui();
+            Inhibit(false)
+        });
         branch_window.show_all();
     }
 
