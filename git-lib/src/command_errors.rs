@@ -197,9 +197,16 @@ pub enum CommandError {
     TagMessageEmpty,
     TagAlreadyExists(String),
     InvalidRef(String),
+    RebaseContinueError,
+    RebaseMergeConflictsError,
+    RebaseError(String),
 
     // Show-ref
     FlagHashRequiresValue,
+
+    // Log
+    ReadRefsHeadError,
+
     // Not a valid tag
     TagNotFound(String),
     // La tag que usaste no apunta a un commit
@@ -527,7 +534,11 @@ impl fmt::Display for CommandError {
             CommandError::TagMessageEmpty => write!(f, "fatal: no tag message?"),
             CommandError::TagAlreadyExists(tag) => write!(f, "fatal: tag '{tag}' already exists"),
             CommandError::InvalidRef(tag_ref) => write!(f, "fatal: Failed to resolve '{tag_ref}' as a valid ref."),
+            CommandError::RebaseContinueError => write!(f, "No se puede hacer rebase, hay conflictos de merge"), //PONER BIEN MSJ!!!!!!!!!!!!!!!!!!!!!!!!
+            CommandError::RebaseMergeConflictsError => write!(f, "Resolver Conflictos"), //PONER BIEN MSJ!!!!!!!!!!!!!!!!!!!!!!!!
+            CommandError::RebaseError(msj) => write!(f, "{msj}"),
             CommandError::FlagHashRequiresValue => write!(f, "error: option `hash' expects a numerical value"),
+            CommandError::ReadRefsHeadError => write!(f, "Error al leer el archivo .git/refs/heads/HEAD"),
             CommandError::TagNotFound(tag_name) => write!(f, "fatal: tag not found: {tag_name}"),
             CommandError::MergeTagNotCommit(tag_name) => write!(f, "La tag {} no apunta a un commit", tag_name),
             CommandError::FeatureNotImplemented(feature) => write!(f, "Feature not implemented: {}", feature),

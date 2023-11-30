@@ -13,5 +13,6 @@ pub mod ls_files;
 pub mod merge;
 pub mod push;
 pub mod push;
+pub mod rebase;
 pub mod status;
 pub mod tag;

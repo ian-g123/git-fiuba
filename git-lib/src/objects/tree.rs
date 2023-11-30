@@ -509,6 +509,7 @@ impl GitObjectTrait for Tree {
         self.objects
             .iter()
             .try_for_each(|(name, (_hash, object_opt))| {
+                let db_copy = db.clone();
                 let Some(object) = object_opt else {
                     return Err(CommandError::ShallowTree);
                 };
