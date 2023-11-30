@@ -11,6 +11,7 @@ pub mod commands {
     pub mod init;
     pub mod log;
     pub mod ls_files;
+    pub mod ls_tree;
     pub mod merge;
     pub mod pull;
     pub mod push;

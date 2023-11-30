@@ -533,7 +533,7 @@ impl GitObjectTrait for Tree {
         unstaged_files: &Vec<String>,
         staged: &HashMap<String, Vec<u8>>,
     ) -> Result<bool, CommandError> {
-        let mut objects = self.objects.clone();
+        let mut names_to_remove = Vec::new();
         for (name, (_hash, object_opt)) in self.objects.iter_mut() {
             let Some(object) = object_opt else {
                 return Err(CommandError::ShallowTree);
@@ -541,7 +541,7 @@ impl GitObjectTrait for Tree {
             let path = join_paths!(path, name).ok_or(CommandError::FileWriteError(
                 "No se pudo encontrar el path".to_string(),
             ))?;
-            if object.to_owned().checkout_restore(
+            if object.checkout_restore(
                 &path,
                 logger,
                 deletions,
@@ -551,13 +551,16 @@ impl GitObjectTrait for Tree {
                 unstaged_files,
                 staged,
             )? {
-                objects.remove(name);
+                names_to_remove.push(name.to_owned());
             }
         }
-        self.objects = objects;
+        for name in names_to_remove {
+            self.objects.remove(&name);
+        }
         if self.objects.is_empty() {
             return Ok(true);
         }
+
         Ok(false)
     }
 

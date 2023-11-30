@@ -78,10 +78,7 @@ impl StagingArea {
         if !self.is_in_staging_area(&path.to_string()) {
             return Err(CommandError::RmFromStagingAreaError(path.to_string()));
         }
-
         self.remove(path);
-
-        logger.log(&format!("staging_area.rm({})", path));
         Ok(())
     }
 
@@ -304,10 +301,7 @@ impl StagingArea {
         } else {
             path.to_string()
         };
-        // println!("ANTES DE ENTRAAAAAAR con path {}", key);
-        // println!("unmerged_files: {:?}", self.unmerged_files);
         if self.unmerged_files.contains_key(&key) {
-            // println!("ENTRAAAAAA con path {}", key);
             _ = self.unmerged_files.remove(&key);
         }
         self.files.insert(key, hash.to_string());
@@ -325,8 +319,8 @@ impl StagingArea {
         } else {
             path.to_string()
         };
-        if self.files.contains_key(path) {
-            _ = self.files.remove(path);
+        if self.files.contains_key(&key) {
+            _ = self.files.remove(&key);
         }
         self.unmerged_files
             .insert(key, (common_hash, head_hash, destin_hash));
@@ -349,7 +343,6 @@ impl StagingArea {
         let mut working_tree = Tree::new(current_dir_display.to_string());
         let files = self.sort_files();
         for (path, hash) in files.iter() {
-            logger.log(&format!("path: {}", path));
             let vector_path = path.split("/").collect::<Vec<_>>();
             let current_depth: usize = 0;
             working_tree.add_path_tree(logger, vector_path, current_depth, hash)?;
@@ -505,6 +498,10 @@ impl StagingArea {
 
     pub fn has_conflicts(&self) -> bool {
         !self.unmerged_files.is_empty()
+    }
+
+    pub fn is_umgerged(&self, path: &str) -> bool {
+        self.unmerged_files.contains_key(path)
     }
 }
 

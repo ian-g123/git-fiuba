@@ -3,7 +3,7 @@ use crate::{
     logger::Logger,
     objects::{git_object::GitObject, tree::Tree},
     objects_database::ObjectsDatabase,
-    staging_area::StagingArea,
+    staging_area_components::staging_area::StagingArea,
     utils::aux::get_name,
 };
 use std::{collections::HashMap, fs::File, io::Read};
@@ -36,14 +36,7 @@ impl ChangesController {
         commit_tree: Option<Tree>,
         index: &StagingArea,
     ) -> Result<ChangesController, CommandError> {
-        logger.log(&format!(
-            "ChangesController::new\ngit_path: {}\nworking_dir: {}",
-            git_path, working_dir
-        ));
-
-        logger.log("stagin area opened");
         let working_tree = build_working_tree(working_dir)?;
-        logger.log("build_working_tree success");
         let index_changes = Self::check_staging_area_status(db, &index, &commit_tree, logger)?;
         let (working_tree_changes, mut untracked, mut untracked_files) =
             Self::check_working_tree_status(
@@ -171,7 +164,6 @@ impl ChangesController {
         logger: &mut Logger,
     ) -> Result<HashMap<String, ChangeType>, CommandError> {
         let staging_files = staging_area.get_files();
-        logger.log(&format!("Staging area files: {:?}", staging_files));
         let Some(mut tree) = last_commit_tree.to_owned() else {
             let changes: HashMap<String, ChangeType> = staging_files
                 .iter()
@@ -181,17 +173,7 @@ impl ChangesController {
         };
         let mut changes: HashMap<String, ChangeType> =
             Self::check_files_in_staging_area(staging_files, logger, &mut tree)?;
-        logger.log(&format!(
-            "Staging area changes: {:?}",
-            staging_area.get_files().keys()
-        ));
         Self::get_deleted_changes_index(db, last_commit_tree, staging_area, &mut changes, logger)?;
-
-        logger.log(&format!(
-            "Staging area changes + deleted: {:?}",
-            changes.keys()
-        ));
-
         Ok(changes)
     }
 
@@ -204,12 +186,9 @@ impl ChangesController {
         let mut changes: HashMap<String, ChangeType> = HashMap::new();
         for (path, hash) in staging_files.iter() {
             let has_path = tree.has_blob_from_path(path, logger);
-            let (has_hash, name) = tree.has_blob_from_hash(hash, logger)?;
-            logger.log(&format!(
-                "Path: {}, has_name: {}, has_hash: {}",
-                path, has_path, has_hash
-            ));
-            let actual_name = get_name(path)?;
+            let (has_hash, _name) = tree.has_blob_from_hash(hash, logger)?;
+
+            let _actual_name = get_name(path)?;
             if !has_path && !has_hash {
                 logger.log(&format!("{} was added", path));
                 _ = changes.insert(path.to_string(), ChangeType::Added);
@@ -252,9 +231,6 @@ impl ChangesController {
             &mut wt_changes,
             logger,
         );
-        logger.log(&format!("Changes not staged: {:?}", wt_changes.keys()));
-        logger.log(&format!("untracked files: {:?}", untracked));
-
         Ok((wt_changes, untracked, untracked_files))
     }
 
@@ -277,11 +253,11 @@ impl ChangesController {
 
     /// Obtiene los archivos eliminados en el index, pero presentes en el último commit.
     fn get_deleted_changes_index(
-        db: &ObjectsDatabase,
+        _db: &ObjectsDatabase,
         last_commit_tree: &Option<Tree>,
         staging_area: &StagingArea,
         changes: &mut HashMap<String, ChangeType>,
-        logger: &mut Logger,
+        _logger: &mut Logger,
     ) -> Result<(), CommandError> {
         let deleted_changes = staging_area.get_deleted_files(last_commit_tree);
         for deleted_file in deleted_changes.iter() {
@@ -304,7 +280,7 @@ impl ChangesController {
     ) -> Result<(), CommandError> {
         let mut untracked_number = 0;
         let mut total_files_dir = 0;
-        for (_, (object_hash, object_opt)) in tree.get_objects().iter_mut() {
+        for (_, (_object_hash, object_opt)) in tree.sorted_objects().iter_mut() {
             let mut object = object_opt.to_owned().ok_or(CommandError::ShallowTree)?;
             if let Some(mut new_tree) = object.as_tree() {
                 Self::check_working_tree_aux(
@@ -331,7 +307,7 @@ impl ChangesController {
 
                 total_files_dir += 1;
                 if is_untracked {
-                    untracked_files.push(path);
+                    untracked_files.push(path.clone());
                     untracked_number += 1;
                 }
             }
@@ -374,7 +350,7 @@ impl ChangesController {
 
     /// Obtiene el tipo de cambio del archivo respecto al staging area.
     fn check_file_status(
-        working_dir: &str,
+        _working_dir: &str,
         object: &mut GitObject,
         staging_area: &StagingArea,
         last_commit: &Option<Tree>,
@@ -385,10 +361,13 @@ impl ChangesController {
         let Some(path) = object.get_path() else {
             return Err(CommandError::ObjectPathError);
         };
-
+        if staging_area.is_umgerged(&path) {
+            _ = changes.insert(path.clone(), ChangeType::Unmodified);
+            return Ok((false, path));
+        }
         let hash = object.get_hash_string()?;
         let has_path = staging_area.has_file_from_path(&path);
-        let has_path_renamed = staging_area.has_file_renamed(&path, &hash);
+        let _has_path_renamed = staging_area.has_file_renamed(&path, &hash);
         let has_hash = staging_area.has_file_from_hash(&hash);
 
         let isnt_in_last_commit = check_isnt_in_last_commit(last_commit, &path, &hash, logger)?;
@@ -396,13 +375,9 @@ impl ChangesController {
             && (!has_hash || (has_hash && content_differs(&path, object)?))
             && isnt_in_last_commit
         {
-            logger.log(&format!("{} is untracked", path));
-
             untracked.push(path.clone());
             return Ok((true, path));
         } else if has_path && !has_hash {
-            logger.log(&format!("{} was modified", path));
-
             _ = changes.insert(path.clone(), ChangeType::Modified);
         } else {
             _ = changes.insert(path.clone(), ChangeType::Unmodified);

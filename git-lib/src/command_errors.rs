@@ -207,6 +207,20 @@ pub enum CommandError {
     // Log
     ReadRefsHeadError,
 
+    // Not a valid tag
+    TagNotFound(String),
+    // La tag que usaste no apunta a un commit
+    MergeTagNotCommit(String),
+    // No se implementó está funcionalidad
+    FeatureNotImplemented(String),
+
+    // Ls-tree
+    LsTreeErrorNotATree,
+    // Error al añadir un archivo
+    AddStagingAreaError(String, String),
+
+    //index
+    MetadataError(String),
 }
 
 impl Error for CommandError {}
@@ -525,6 +539,12 @@ impl fmt::Display for CommandError {
             CommandError::RebaseError(msj) => write!(f, "{msj}"),
             CommandError::FlagHashRequiresValue => write!(f, "error: option `hash' expects a numerical value"),
             CommandError::ReadRefsHeadError => write!(f, "Error al leer el archivo .git/refs/heads/HEAD"),
+            CommandError::TagNotFound(tag_name) => write!(f, "fatal: tag not found: {tag_name}"),
+            CommandError::MergeTagNotCommit(tag_name) => write!(f, "La tag {} no apunta a un commit", tag_name),
+            CommandError::FeatureNotImplemented(feature) => write!(f, "Feature not implemented: {}", feature),
+            CommandError::LsTreeErrorNotATree => write!(f, "fatal: not a tree object"),
+            CommandError::AddStagingAreaError(path,e) => write!(f, "Error al añadir el archivo {}: {}",path, e),
+            CommandError::MetadataError(e) => write!(f, "Error de metadatos: {}", e),
         }
     }
 }
