@@ -295,6 +295,121 @@ fn test_order_negate() {
     _ = fs::remove_dir_all(format!("{}", path));
 }
 
+#[test]
+fn test_ends_with_border_cases() {
+    let path = "./tests/data/commands/check_ignore/repo7";
+    create_check_ignore_scene(path);
+    write_to_exclude(path, "*a/name/\n", true);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("check-ignore")
+        .arg("abba/name/")
+        .arg("abba/name/otro")
+        .arg("a/abba/name/")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = "abba/name/\nabba/name/otro\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
+#[test]
+fn test_starts_with() {
+    let path = "./tests/data/commands/check_ignore/repo8";
+    create_check_ignore_scene(path);
+    write_to_exclude(path, "name/*\n", true);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("check-ignore")
+        .arg("name/a.txt")
+        .arg("b/name/a.txt")
+        .arg("name/")
+        .arg("name")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = "name/a.txt\nname/\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
+    write_to_exclude(path, "a/name/*\n", false);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("check-ignore")
+        .arg("b/a/name/a.txt")
+        .arg("a/name/a.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = "a/name/a.txt\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
+    write_to_exclude(path, "name*\n", false);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("check-ignore")
+        .arg("name/a.txt")
+        .arg("b/name/a.txt")
+        .arg("name/")
+        .arg("name")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = "name/a.txt\nb/name/a.txt\nname/\nname\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
+#[test]
+#[ignore]
+fn test_non_matching() {
+    let path = "./tests/data/commands/check_ignore/repo6";
+    create_test_scene_5(path);
+    write_to_exclude(path, "dir*\n", true);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("check-ignore")
+        .arg("dir/testfile1.txt")
+        .arg("dir/dir1/testfile5.txt")
+        .arg("dir")
+        .arg("--verbose")
+        .arg("-n")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = ".git/info/exclude:7:dir*\tdir/testfile1.txt\n.git/info/exclude:7:dir*\tdir/dir1/testfile5.txt\n::\tdir\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
 fn create_check_ignore_scene(path: &str) {
     create_base_scene(path);
     let Ok(_) = fs::create_dir_all(path.to_owned() + "/dir/") else {

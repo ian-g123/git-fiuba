@@ -12,8 +12,8 @@ use crate::{
     utils::aux::get_name,
 };
 
-const BACKSLASH: char = '/';
-const SLASH: char = '\\';
+const BACKSLASH: char = '\\';
+const SLASH: char = '/';
 const ASTERISK: char = '*';
 const NEGATE: char = '!';
 
@@ -71,7 +71,13 @@ impl GitignorePatterns {
                     pattern.get_pattern_read()
                 ));
 
-                if matches_pattern(&path, pattern, &dir_level[..dir_level.len() - 10], logger)? {
+                let base_path = if dir_level.ends_with(".gitignore") {
+                    dir_level[..dir_level.len() - 10].to_string()
+                } else {
+                    dir_level[..dir_level.len() - 17].to_string()
+                };
+
+                if matches_pattern(&path, pattern, &base_path, logger)? {
                     /* patterns_matched.push((
                         dir_level.to_string(),
                         line_number.to_owned(),
@@ -130,16 +136,14 @@ fn get_gitignore_files(
             };
             gitignore_base_path = new_base_path;
         }
-        let gitignore_path =
+        let exclude_path =
             join_paths!(git_path, "info/exclude").ok_or(CommandError::FileCreationError(
                 format!(" No se pudo formar la ruta del archivo info/exclude"),
             ))?;
-        if Path::new(&gitignore_path).exists() {
+        if Path::new(&exclude_path).exists() {
             logger.log("Existe exclude");
 
-            gitignore_files.insert(0, gitignore_path);
-        } else {
-            logger.log("No existe exclude");
+            gitignore_files.insert(0, exclude_path);
         }
     }
 
@@ -182,6 +186,7 @@ fn add_gitignore_patterns(
 
         let last_index = line.len() - 1;
         for (i, character) in line.char_indices() {
+            logger.log(&format!("i = {}, char = {}", i, character));
             if ignore_pattern {
                 path += &character.to_string();
                 continue;
@@ -204,6 +209,7 @@ fn add_gitignore_patterns(
                     if i != last_index {
                         is_relative = true;
                     }
+                    logger.log(&format!("i = {}", i));
                     if i != 0 {
                         path += &character.to_string();
                     }
@@ -316,7 +322,7 @@ fn matches_pattern(
     base_path: &str,
     logger: &mut Logger,
 ) -> Result<bool, CommandError> {
-    let path = {
+    /* let path = {
         if pattern.is_relative() {
             logger.log(&format!("es relativo"));
 
@@ -326,21 +332,42 @@ fn matches_pattern(
                 " No se pudo formar la ruta del archivo"
             )))?
         }
-    };
+    }; */
     match pattern {
-        Pattern::StartsWith(_, pattern, _, _) => {
+        Pattern::StartsWith(_, pattern, is_relative, _) => {
             logger.log(&format!(
                 "STARTS WITH --> path: {}, pattern: {}",
                 path, pattern
             ));
 
-            /* if path.len() > pattern.len() {
-                if path[..pattern.len()].contains("/") {
+            if !is_dir(pattern) && path.starts_with(pattern) {
+                return Ok(true);
+            } else if is_dir(pattern) {
+                let mut e = pattern.len() - 1;
+                let mut s = 0;
+                let mut index = 0;
+                if is_relative.to_owned() && !path.starts_with(pattern) {
                     return Ok(false);
                 }
-            } */
-            if path.starts_with(pattern) {
-                return Ok(true);
+                if !is_relative.to_owned() {
+                    for _ in path.chars() {
+                        if path[index..].starts_with(pattern) {
+                            if index > 0 && !path[index - 1..].starts_with("/") {
+                                return Ok(false);
+                            }
+                            s = if index > 0 { index - 1 } else { 0 };
+                            break;
+                        }
+                        index += 1;
+                    }
+                    e += s;
+                }
+
+                if let Some(rest) = path.get(e..) {
+                    if rest.starts_with("/") {
+                        return Ok(true);
+                    }
+                }
             }
         }
         Pattern::EndsWith(_, pattern, _, _) => {
@@ -348,14 +375,26 @@ fn matches_pattern(
                 "ENDS WITH --> path: {}, pattern: {}",
                 path, pattern
             ));
-
-            /* if path.len() > pattern.len() {
-                if path[pattern.len()..].contains("/") {
-                    return Ok(false);
-                }
-            } */
-            if path.ends_with(pattern) {
+            if !is_dir(pattern) && path.ends_with(pattern) {
                 return Ok(true);
+            } else if is_dir(pattern) {
+                let mut s = 0;
+                let mut index = 0;
+
+                if path.contains(pattern) {
+                    for _ in path.chars() {
+                        if !path[index..].contains(pattern) {
+                            s = if index > 0 { index - 1 } else { 0 };
+                            break;
+                        }
+                        index += 1;
+                    }
+                    logger.log(&format!("Es dir. s={}", s));
+                    if !path[..s].contains("/") {
+                        return Ok(true);
+                    }
+                }
+                logger.log(&format!("!path.contains(pattern)"));
             }
         }
         Pattern::MatchesAsterisk(_, start, end, _, _) => {
@@ -436,4 +475,9 @@ fn look_for_gitignore_files(
         }
     }
     Ok(())
+}
+
+fn is_dir(path: &str) -> bool {
+    let obj_path = Path::new(path);
+    obj_path.is_dir() || path.ends_with("/")
 }
