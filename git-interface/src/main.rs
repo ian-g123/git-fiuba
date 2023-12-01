@@ -190,11 +190,6 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
         let current_content = current_label.text().to_string();
         let incoming_content = incoming_label.text().to_string();
         let old_content = old_label.text().to_string();
-        println!("FINALIZEEEEEEEEEEEE");
-        println!("new_content: {:?}", new_content);
-        println!("current_content: {:?}", current_content);
-        println!("incoming_content: {:?}", incoming_content);
-        println!("old_content: {:?}", old_content);
 
         let merge_conflicts_label: gtk::Label =
             interface.builder.object("merge_conflicts").unwrap();
@@ -210,8 +205,6 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
         let mut repo = GitRepository::open(&repo_git_path.to_string(), &mut binding).unwrap();
         repo.write_file(&path_file, &mut new_content).unwrap();
 
-        //let mut staging_area = repo.staging_area().unwrap();
-        //staging_area.remove_from_unmerged_files(&path_file);
         repo.add(vec![path_file], false).unwrap();
 
         let (staging_changes, unstaging_changes, files_merge_conflict) =
@@ -698,7 +691,7 @@ impl Interface {
                         };
                         let (staging_changes, unstaging_changes, files_merge_conflict) =
                             staged_area_func().unwrap();
-                        let interface = Interface {
+                        let mut interface = Interface {
                             builder: builder_clone.clone(),
                             staging_changes: Rc::new(RefCell::new(staging_changes)),
                             unstaging_changes: Rc::new(RefCell::new(unstaging_changes)),
@@ -712,6 +705,7 @@ impl Interface {
                         let builder = builder_clone.clone();
                         let branch_window_clone = branch_window_clone.clone();
                         remove_widgets_to_branch_window(builder, branch_window_clone);
+                        interface.branch_function(false);
                         interface.staged_area_ui();
                     }
                     _ => {}
@@ -740,11 +734,10 @@ impl Interface {
                     files_merge_conflict: Rc::new(RefCell::new(files_merge_conflict)),
                     principal_window,
                 };
-                branch_window_clone2.hide();
                 remove_childs(&branch_list_clone);
                 let builder = builder_clone.clone();
-                let branch_window_clone2 = branch_window_clone2.clone();
-                remove_widgets_to_branch_window(builder, branch_window_clone2);
+                remove_widgets_to_branch_window(builder, branch_window_clone2.clone());
+                branch_window_clone2.hide();
                 interface.branch_function(false);
                 interface.staged_area_ui();
             });
@@ -1031,17 +1024,6 @@ impl Interface {
             );
         }
 
-        println!("new_content actualize_conflicts: {}", new_content.borrow());
-        println!(
-            "current_content actualize_conflicts: {}",
-            current_content.borrow()
-        );
-        println!(
-            "incoming_content actualize_conflicts: {}",
-            incoming_content.borrow()
-        );
-        println!("old_content actualize_conflicts: {}", old_content.borrow());
-
         let label_contents = [
             ("new", new_content),
             ("current", current_content),
@@ -1084,7 +1066,7 @@ impl Interface {
 
         let button_name = button_name.to_string();
         let builder = self.builder.clone();
-
+        
         accept_button.connect_clicked(move |_| {
             let mut new_content_clone = new_content_clone.clone();
             let mut current_content_clone = current_content_clone.clone();
