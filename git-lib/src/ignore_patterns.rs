@@ -8,16 +8,13 @@ const ASTERISK: char = '*';
 const NEGATE: char = '!';
 
 pub struct GitignorePatterns {
-    patterns: HashMap<String, Vec<(usize, Pattern)>>,
+    patterns: Vec<(String, Vec<(usize, Pattern)>)>,
 }
 
 impl GitignorePatterns {
-    pub fn get_ignore_patterns(
-        git_path: &str,
-        working_dir_path: &str,
-    ) -> Result<Self, CommandError> {
+    pub fn new(git_path: &str, working_dir_path: &str) -> Result<Self, CommandError> {
         let gitignore_files = get_gitignore_files(git_path, working_dir_path)?;
-        let mut patterns: HashMap<String, Vec<(usize, Pattern)>> = HashMap::new();
+        let mut patterns: Vec<(String, Vec<(usize, Pattern)>)> = Vec::new();
         for gitignore_path in gitignore_files.iter() {
             add_gitignore_patterns(gitignore_path, &mut patterns)?;
         }
@@ -27,8 +24,6 @@ impl GitignorePatterns {
     pub fn must_be_ignored(
         &self,
         path: &str,
-        working_dir_path: &str,
-        match_dir_level: bool,
     ) -> Result<Option<(String, usize, Pattern)>, CommandError> {
         let Some(path) = get_real_path(path) else {
             return Ok(None);
@@ -36,11 +31,8 @@ impl GitignorePatterns {
         let mut negate_pattern: Option<(String, usize, Pattern)> = None;
         let mut patterns_matched: Vec<(String, usize, Pattern)> = Vec::new();
         for (dir_level, pattern_hashmap) in self.patterns.iter() {
-            if match_dir_level && working_dir_path != dir_level {
-                continue;
-            }
             for (line_number, pattern) in pattern_hashmap {
-                if matches_pattern(&path, pattern, &dir_level)? {
+                if matches_pattern(&path, pattern, &dir_level[..dir_level.len() - 10])? {
                     patterns_matched.push((
                         dir_level.to_string(),
                         line_number.to_owned(),
@@ -88,6 +80,13 @@ fn get_gitignore_files(
             };
             gitignore_base_path = new_base_path;
         }
+        let gitignore_path =
+            join_paths!(git_path, "info/exclude").ok_or(CommandError::FileCreationError(
+                format!(" No se pudo formar la ruta del archivo info/exclude"),
+            ))?;
+        if Path::new(&gitignore_path).exists() {
+            gitignore_files.insert(0, gitignore_path);
+        }
     }
 
     Ok(gitignore_files)
@@ -95,7 +94,7 @@ fn get_gitignore_files(
 
 fn add_gitignore_patterns(
     gitignore_path: &str,
-    patterns: &mut HashMap<String, Vec<(usize, Pattern)>>,
+    patterns: &mut Vec<(String, Vec<(usize, Pattern)>)>,
 ) -> Result<(), CommandError> {
     let mut patterns_hashmap: Vec<(usize, Pattern)> = Vec::new();
     let content = fs::read_to_string(gitignore_path)
@@ -159,61 +158,89 @@ fn add_gitignore_patterns(
         }
 
         if starts_with {
-            pattern = Pattern::StartsWith(path, is_relative, negate_pattern);
+            pattern = Pattern::StartsWith(line, path, is_relative, negate_pattern);
         } else if ends_with {
-            pattern = Pattern::EndsWith(path, is_relative, negate_pattern);
+            pattern = Pattern::EndsWith(line, path, is_relative, negate_pattern);
         } else if matches {
             pattern = Pattern::MatchesAsterisk(
+                line,
                 path[..asterisk_index].to_string(),
                 path[asterisk_index..].to_string(),
                 is_relative,
                 negate_pattern,
             );
         } else if is_relative {
-            pattern = Pattern::RelativeToDirLevel(path, negate_pattern);
+            pattern = Pattern::RelativeToDirLevel(line, path, negate_pattern);
         } else {
-            pattern = Pattern::NotRelativeToDirLevel(path, negate_pattern);
+            pattern = Pattern::NotRelativeToDirLevel(line, path, negate_pattern);
         }
 
         patterns_hashmap.push((line_number, pattern));
         line_number += 1;
     }
-    _ = patterns.insert(
-        gitignore_path[..gitignore_path.len() - 10].to_string(),
-        patterns_hashmap,
-    );
+    _ = patterns.push((gitignore_path.to_string(), patterns_hashmap));
     Ok(())
 }
 
 #[derive(Clone)]
 pub enum Pattern {
-    StartsWith(String, bool, bool),
-    EndsWith(String, bool, bool),
-    RelativeToDirLevel(String, bool),
-    NotRelativeToDirLevel(String, bool),
-    MatchesAsterisk(String, String, bool, bool),
+    StartsWith(String, String, bool, bool),
+    EndsWith(String, String, bool, bool),
+    RelativeToDirLevel(String, String, bool),
+    NotRelativeToDirLevel(String, String, bool),
+    MatchesAsterisk(String, String, String, bool, bool),
     // si queda tiempo, agregar: ? (MatchesOne), [a-z] (MatchesRange), **
 }
 
 impl Pattern {
     fn negate_pattern(&self) -> bool {
         match self {
-            Self::StartsWith(_, _, negate) => negate.to_owned(),
-            Self::EndsWith(_, _, negate) => negate.to_owned(),
-            Self::MatchesAsterisk(_, _, _, negate) => negate.to_owned(),
-            Self::RelativeToDirLevel(_, negate) => negate.to_owned(),
-            Self::NotRelativeToDirLevel(_, negate) => negate.to_owned(),
+            Self::StartsWith(_, _, _, negate) => negate.to_owned(),
+            Self::EndsWith(_, _, _, negate) => negate.to_owned(),
+            Self::MatchesAsterisk(_, _, _, _, negate) => negate.to_owned(),
+            Self::RelativeToDirLevel(_, _, negate) => negate.to_owned(),
+            Self::NotRelativeToDirLevel(_, _, negate) => negate.to_owned(),
         }
     }
 
     fn is_relative(&self) -> bool {
         match self {
-            Self::StartsWith(_, is_relative, _) => is_relative.to_owned(),
-            Self::EndsWith(_, is_relative, _) => is_relative.to_owned(),
-            Self::MatchesAsterisk(_, _, is_relative, _) => is_relative.to_owned(),
-            Self::RelativeToDirLevel(_, _) => true,
-            Self::NotRelativeToDirLevel(_, n_egate) => false,
+            Self::StartsWith(_, _, is_relative, _) => is_relative.to_owned(),
+            Self::EndsWith(_, _, is_relative, _) => is_relative.to_owned(),
+            Self::MatchesAsterisk(_, _, _, is_relative, _) => is_relative.to_owned(),
+            Self::RelativeToDirLevel(_, _, _) => true,
+            Self::NotRelativeToDirLevel(__, _, _) => false,
         }
+    }
+
+    fn get_pattern_read(&self) -> String {
+        match self {
+            Self::StartsWith(pattern_extracted, _, _, _) => pattern_extracted.to_string(),
+
+            Self::EndsWith(pattern_extracted, _, _, _) => pattern_extracted.to_string(),
+            Self::MatchesAsterisk(pattern_extracted, _, _, _, _) => pattern_extracted.to_string(),
+            Self::RelativeToDirLevel(pattern_extracted, _, _) => pattern_extracted.to_string(),
+            Self::NotRelativeToDirLevel(pattern_extracted, _, _) => pattern_extracted.to_string(),
+        }
+    }
+
+    pub fn to_string(
+        &self,
+        path: &str,
+        gitignore_path: &str,
+        line_number: usize,
+        verbose: bool,
+    ) -> String {
+        if verbose {
+            return format!(
+                "{}:{}:{}\t{}\n",
+                gitignore_path,
+                line_number,
+                self.get_pattern_read(),
+                path
+            );
+        }
+        format!("{}\n", path)
     }
 }
 
@@ -237,22 +264,23 @@ fn matches_pattern(path: &str, pattern: &Pattern, base_path: &str) -> Result<boo
         }
     };
     match pattern {
-        Pattern::StartsWith(pattern, _, _) => {
+        Pattern::StartsWith(_, pattern, _, _) => {
             if path.starts_with(pattern) {
                 return Ok(true);
             }
         }
-        Pattern::EndsWith(pattern, _, _) => {
+        Pattern::EndsWith(_, pattern, _, _) => {
             if path.ends_with(pattern) {
                 return Ok(true);
             }
         }
-        Pattern::MatchesAsterisk(start, end, _, _) => {
+        Pattern::MatchesAsterisk(_, start, end, _, _) => {
             if path.starts_with(start) && path.ends_with(end) {
                 return Ok(true);
             }
         }
-        Pattern::RelativeToDirLevel(pattern, _) | Pattern::NotRelativeToDirLevel(pattern, _) => {
+        Pattern::RelativeToDirLevel(_, pattern, _)
+        | Pattern::NotRelativeToDirLevel(_, pattern, _) => {
             let mut path = Path::new(&path);
             while let Some(parent) = path.parent() {
                 if parent.ends_with(pattern) {

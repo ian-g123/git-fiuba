@@ -167,16 +167,23 @@ impl<'a> GitRepository<'a> {
     }
 
     fn create_files(&self, branch_name: &str) -> Result<(), CommandError> {
-        let name = "HEAD".to_string();
-        let branch_name = branch_name;
+        let path = "HEAD";
+        let content = format!("ref: refs/heads/{}", branch_name.to_string());
+        self.create_file_aux(path, &content)?;
+        let path = "objects/info/exclude";
+        let content = "# git ls-files --others --exclude-from=.git/info/exclude\n# Lines that start with '#' are comments.\n# For a project mostly in C, the following would be a good set of\n# exclude patterns (uncomment them if you want to use them):\n# *.[oa]\n# *~";
+        self.create_file_aux(path, content)?;
+        Ok(())
+    }
+
+    fn create_file_aux(&self, file: &str, content: &str) -> Result<(), CommandError> {
         if fs::create_dir_all(&self.git_path).is_ok() {
-            let path_complete = join_paths!(&self.git_path, name).ok_or(
+            let path_complete = join_paths!(&self.git_path, file).ok_or(
                 CommandError::FileCreationError("Error creando un archivo".to_string()),
             )?;
             match File::create(&path_complete) {
                 Ok(mut archivo) => {
-                    let texto = format!("ref: refs/heads/{}", branch_name.to_string());
-                    let _: Result<(), CommandError> = match archivo.write_all(texto.as_bytes()) {
+                    let _: Result<(), CommandError> = match archivo.write_all(content.as_bytes()) {
                         Ok(_) => Ok(()),
                         Err(err) => Err(CommandError::FileWriteError(err.to_string())),
                     };
@@ -3258,8 +3265,18 @@ impl<'a> GitRepository<'a> {
         }
 
         let (new_hash, mut new_tree) = self.get_checkout_branch_info(branch, &self.db()?)?;
-        let local_new_files =
+        let gitignore_patterns = GitignorePatterns::new(&self.git_path, &self.working_dir_path)?;
+
+        let new_files: Vec<String> =
             add_local_new_files(untracked_files, &mut new_tree, &mut self.logger)?;
+
+        let mut local_new_files: Vec<String> = Vec::new();
+        for path in new_files.iter() {
+            if !self.must_be_ignored(path, &gitignore_patterns)? {
+                local_new_files.push(path.to_string());
+            }
+        }
+
         let mut deletions: Vec<String> = Vec::new();
         let mut modifications: Vec<String> = Vec::new();
         let mut conflicts: Vec<String> = Vec::new();
@@ -4262,8 +4279,9 @@ impl<'a> GitRepository<'a> {
         non_matching: bool,
         paths: Vec<String>,
     ) -> Result<(), CommandError> {
+        let mut message = String::new();
         for path in paths.iter() {
-            self.check_ignore_file(verbose, non_matching, &path)?;
+            message += &self.check_ignore_file(verbose, non_matching, &path)?;
         }
         Ok(())
     }
@@ -4273,28 +4291,27 @@ impl<'a> GitRepository<'a> {
         verbose: bool,
         non_matching: bool,
         path: &str,
-    ) -> Result<(), CommandError> {
-        Ok(())
-    }
+    ) -> Result<String, CommandError> {
+        let gitignore_patterns = GitignorePatterns::new(&self.git_path, &self.working_dir_path)?;
+        if let Some((gitignore_path, line_number, pattern)) =
+            gitignore_patterns.must_be_ignored(path)?
+        {
+            return Ok(pattern.to_string(path, &gitignore_path, line_number, verbose));
+        }
+        if non_matching {
+            return Ok(format!("::\t{}\n", path));
+        }
 
-    fn must_be_ignored_bis(
-        &mut self,
-        path: &str,
-        gitignore_patterns: &GitignorePatterns,
-    ) -> Result<bool, CommandError> {
-        let (result) = gitignore_patterns.must_be_ignored(path, &self.working_dir_path, false)?;
-        Ok(result.is_some())
+        Ok("".to_string())
     }
 
     fn must_be_ignored(
         &mut self,
         path: &str,
         gitignore_patterns: &GitignorePatterns,
-        match_dir_level: bool,
-    ) -> Result<Option<(String, usize, Pattern)>, CommandError> {
-        let pattern_info =
-            gitignore_patterns.must_be_ignored(path, &self.working_dir_path, match_dir_level)?;
-        Ok(pattern_info)
+    ) -> Result<bool, CommandError> {
+        let result = gitignore_patterns.must_be_ignored(path)?;
+        Ok(result.is_some())
     }
 }
 
