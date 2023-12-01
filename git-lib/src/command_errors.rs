@@ -1,6 +1,7 @@
 use std::{
     error::Error,
     fmt::{self},
+    path::PathBuf,
 };
 
 /// Enumeración de errores de flags
@@ -226,6 +227,7 @@ pub enum CommandError {
     StdinAndPathsError,
     NoPathSpecified,
     NonMatchingWithoutVerbose,
+    OutsideOfRepository(String, PathBuf),
 }
 
 impl Error for CommandError {}
@@ -553,6 +555,7 @@ impl fmt::Display for CommandError {
             CommandError::StdinAndPathsError => write!(f, "fatal: cannot specify pathnames with --stdin"),
             CommandError::NoPathSpecified => write!(f, "fatal: no path specified"),
             CommandError::NonMatchingWithoutVerbose => write!(f, "fatal: --non-matching is only valid with --verbose"),
+            CommandError::OutsideOfRepository(path, repo) => write!(f, "fatal: {path}: '{path}' is outside repository at '{}'", repo.to_string_lossy()),
         }
     }
 }

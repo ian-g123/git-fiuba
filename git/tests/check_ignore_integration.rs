@@ -20,7 +20,7 @@ fn test_comment() {
     let path = "./tests/data/commands/check_ignore/repo1";
     create_check_ignore_scene(path);
 
-    write_to_gitignore(path, false, "# *.txt\n");
+    write_to_gitignore(path, false, "# *.txt\n", true);
 
     let result = Command::new("../../../../../../target/debug/git")
         .arg("check-ignore")
@@ -60,7 +60,7 @@ fn test_gitignore_root_ends_with() {
     let path = "./tests/data/commands/check_ignore/repo2";
     create_check_ignore_scene(path);
 
-    write_to_gitignore(path, false, "# pattern\n*.txt\n");
+    write_to_gitignore(path, false, "# pattern\n*.txt\n", true);
 
     let result = Command::new("../../../../../../target/debug/git")
         .arg("check-ignore")
@@ -130,7 +130,7 @@ fn test_gitignore_next_level_ends_with() {
     let path = "./tests/data/commands/check_ignore/repo3";
     create_check_ignore_scene(path);
 
-    write_to_gitignore(path, true, "# pattern\n*.txt\n");
+    write_to_gitignore(path, true, "# pattern\n*.txt\n", true);
 
     let result = Command::new("../../../../../../target/debug/git")
         .arg("check-ignore")
@@ -184,7 +184,7 @@ fn test_exclude_ends_with() {
     let path = "./tests/data/commands/check_ignore/repo4";
     create_check_ignore_scene(path);
 
-    write_to_exclude(path, "# pattern\n*.txt\n");
+    write_to_exclude(path, "# pattern\n*.txt\n", true);
 
     let result = Command::new("../../../../../../target/debug/git")
         .arg("check-ignore")
@@ -249,6 +249,52 @@ fn test_exclude_ends_with() {
     _ = fs::remove_dir_all(format!("{}", path));
 }
 
+#[test]
+fn test_order_negate() {
+    let path = "./tests/data/commands/check_ignore/repo5";
+    create_check_ignore_scene(path);
+
+    write_to_exclude(path, "*.txt\n", true);
+    write_to_gitignore(path, false, "!a.txt\n", true);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("check-ignore")
+        .arg("dir/testfile1.txt")
+        .arg("a.txt")
+        .arg("--verbose")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = ".git/info/exclude:7:*.txt\tdir/testfile1.txt\n.gitignore:1:!a.txt\ta.txt\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
+    write_to_exclude(path, " !a.txt\n", false);
+    write_to_gitignore(path, false, "*.txt\n", false);
+    write_to_gitignore(path, true, "*.txt\n", false);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("check-ignore")
+        .arg("a.txt")
+        .arg("-v")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = ".git/info/exclude:7:!a.txt\ta.txt\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
 fn create_check_ignore_scene(path: &str) {
     create_base_scene(path);
     let Ok(_) = fs::create_dir_all(path.to_owned() + "/dir/") else {
@@ -263,7 +309,7 @@ fn create_check_ignore_scene(path: &str) {
     _ = File::create(path.to_owned() + "/dir/.gitignore").unwrap();
 }
 
-fn write_to_gitignore(path: &str, dir: bool, content: &str) {
+fn write_to_gitignore(path: &str, dir: bool, content: &str, append: bool) {
     let path = if dir {
         path.to_owned() + "/dir/.gitignore"
     } else {
@@ -271,18 +317,25 @@ fn write_to_gitignore(path: &str, dir: bool, content: &str) {
     };
     let mut file = OpenOptions::new()
         .write(true)
-        .append(true)
+        .append(append)
         .create(true)
         .open(path)
         .unwrap();
     file.write_all(content.as_bytes()).unwrap();
 }
 
-fn write_to_exclude(path: &str, content: &str) {
+fn write_to_exclude(path: &str, content: &str, append: bool) {
+    let content = {
+        if !append {
+            format!("# git ls-files --others --exclude-from=.git/info/exclude\n# Lines that start with '#' are comments.\n# For a project mostly in C, the following would be a good set of\n# exclude patterns (uncomment them if you want to use them):\n# *.[oa]\n# *~\n{}", content)
+        } else {
+            content.to_string()
+        }
+    };
     let path = path.to_owned() + "/.git/info/exclude";
     let mut file = OpenOptions::new()
         .write(true)
-        .append(true)
+        .append(append)
         .create(true)
         .open(path)
         .unwrap();

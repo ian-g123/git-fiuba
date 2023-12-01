@@ -17,6 +17,7 @@ const SLASH: char = '\\';
 const ASTERISK: char = '*';
 const NEGATE: char = '!';
 
+#[derive(Clone)]
 pub struct GitignorePatterns {
     patterns: Vec<(String, Vec<(usize, Pattern)>)>,
 }
@@ -45,10 +46,21 @@ impl GitignorePatterns {
     ) -> Result<Option<(String, usize, Pattern)>, CommandError> {
         let base_path = env::current_dir()
             .map_err(|_| CommandError::FileNotFound("Directorio actual".to_string()))?;
-        let Some(path) = get_real_path(path, &base_path) else {
-            return Ok(None);
+        let path = if path.starts_with("../") || path.starts_with("./") {
+            let Some(path) = get_real_path(path, &base_path) else {
+                return Err(CommandError::OutsideOfRepository(
+                    path.to_string(),
+                    base_path,
+                ));
+            };
+            path
+        } else {
+            path.to_string()
         };
+
         let mut negate_pattern: Option<(String, usize, Pattern)> = None;
+        let mut last_pattern: Option<(String, usize, Pattern)> = None;
+
         let mut patterns_matched: Vec<(String, usize, Pattern)> = Vec::new();
         for (dir_level, pattern_vec) in self.patterns.iter() {
             logger.log(&format!("Gitignore path: {}", dir_level));
@@ -60,11 +72,12 @@ impl GitignorePatterns {
                 ));
 
                 if matches_pattern(&path, pattern, &dir_level[..dir_level.len() - 10], logger)? {
-                    patterns_matched.push((
+                    /* patterns_matched.push((
                         dir_level.to_string(),
                         line_number.to_owned(),
                         pattern.to_owned(),
-                    ));
+                    ));*/
+                    logger.log("matches pattern");
                     if pattern.negate_pattern() {
                         logger.log(&format!("negate pattern"));
 
@@ -73,8 +86,16 @@ impl GitignorePatterns {
                             line_number.to_owned(),
                             pattern.clone(),
                         ));
-                    } else if negate_pattern.is_some() {
+                    }
+                    /*else if negate_pattern.is_some() {
                         negate_pattern = None;
+                    } */
+                    else {
+                        last_pattern = Some((
+                            dir_level.to_string(),
+                            line_number.to_owned(),
+                            pattern.clone(),
+                        ));
                     }
                 }
             }
@@ -82,7 +103,8 @@ impl GitignorePatterns {
         if negate_pattern.is_some() {
             return Ok(negate_pattern);
         }
-        Ok(patterns_matched.pop())
+        /*Ok(patterns_matched.pop()) */
+        Ok(last_pattern)
     }
 }
 
@@ -357,6 +379,9 @@ fn matches_pattern(
                 "RELATIVE OR NOT --> path: {}, pattern: {}",
                 path, pattern
             ));
+            if path.ends_with(pattern) {
+                return Ok(true);
+            }
 
             let mut path = Path::new(&path);
             while let Some(parent) = path.parent() {

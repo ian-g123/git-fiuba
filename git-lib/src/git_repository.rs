@@ -4281,15 +4281,27 @@ impl<'a> GitRepository<'a> {
         paths: &Vec<String>,
     ) -> Result<(), CommandError> {
         let mut message = String::new();
+        let patterns =
+            GitignorePatterns::new(&self.git_path, &self.working_dir_path, &mut self.logger)?;
         for path in paths.iter() {
             if path == "*" {
                 let mut entries: Vec<String> = Vec::new();
                 read_dir_level_entries("./", &mut entries)?;
                 for entry in entries {
-                    message += &self.check_ignore_file(verbose, non_matching, &entry)?;
+                    message += &self.check_ignore_file(
+                        verbose,
+                        non_matching,
+                        &entry,
+                        Some(patterns.clone()),
+                    )?;
                 }
             } else {
-                message += &self.check_ignore_file(verbose, non_matching, &path)?;
+                message += &self.check_ignore_file(
+                    verbose,
+                    non_matching,
+                    &path,
+                    Some(patterns.clone()),
+                )?;
             }
         }
 
@@ -4303,13 +4315,17 @@ impl<'a> GitRepository<'a> {
         verbose: bool,
         non_matching: bool,
         path: &str,
+        gitignore_patterns: Option<GitignorePatterns>,
     ) -> Result<String, CommandError> {
         self.log(&format!(
             "Check-ignore args --> verbose: {}, non-matching {}, path: {}",
             verbose, non_matching, path
         ));
-        let gitignore_patterns =
-            GitignorePatterns::new(&self.git_path, &self.working_dir_path, &mut self.logger)?;
+        let gitignore_patterns = if let Some(patterns) = gitignore_patterns {
+            patterns
+        } else {
+            GitignorePatterns::new(&self.git_path, &self.working_dir_path, &mut self.logger)?
+        };
         if let Some((gitignore_path, line_number, pattern)) =
             gitignore_patterns.must_be_ignored(path, &mut self.logger)?
         {
