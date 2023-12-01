@@ -1100,23 +1100,6 @@ impl Interface {
                 false,
             );
 
-            println!(
-                "new_content merge_function_button: {}",
-                new_content_clone.borrow()
-            );
-            println!(
-                "current_content merge_function_button: {}",
-                current_content_clone.borrow()
-            );
-            println!(
-                "incoming_content merge_function_button: {}",
-                incoming_content_clone.borrow()
-            );
-            println!(
-                "old_content merge_function_button: {}",
-                old_content_clone.borrow()
-            );
-
             let label_contents = [
                 ("new", new_content_clone),
                 ("current", current_content_clone),
@@ -1438,13 +1421,18 @@ fn actualize_conflicts(
     let mut old_new_content_lines: Vec<String> = Vec::new();
 
     let new_content_str = new_content.borrow_mut().clone();
-
     let current_content_str = current_content.borrow_mut().clone();
     let incoming_content_str = incoming_content.borrow_mut().clone();
+
+    let len_new_content = new_content_str.len();
 
     let mut new_content_lines = new_content_str.split('\n').collect::<Vec<&str>>();
     let current_old_content_lines = current_content_str.split('\n').collect::<Vec<&str>>();
     let incoming_old_content_lines = incoming_content_str.split('\n').collect::<Vec<&str>>();
+
+    if len_new_content == 0 {
+        new_content_lines.clear();
+    }
 
     if accept_changes == "current" {
         new_content_lines.extend(current_old_content_lines);
@@ -1463,8 +1451,15 @@ fn actualize_conflicts(
 
     let binding = old_content.borrow_mut().clone();
     let mut old_content_lines = binding.split('\n').collect::<Vec<&str>>();
+
+    if old_content.borrow_mut().len() == 0 {
+        old_content_lines.clear();
+    }
+
     let mut i = 0;
+    println!("old_content_len: {}", old_content_lines.len());
     while let Some(line) = old_content_lines.get(i) {
+        println!("LINEA: {:?}", line);
         i += 1;
         if line.starts_with("<<<<<<<") && !found_next_conflict {
             found_next_conflict = true;
