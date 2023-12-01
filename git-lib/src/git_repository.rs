@@ -23,6 +23,7 @@ use crate::{
     command_errors::CommandError,
     config::Config,
     diff_components::merge::merge_content,
+    ignore_patterns::{GitignorePatterns, Pattern},
     join_paths,
     logger::Logger,
     objects::{
@@ -4252,6 +4253,49 @@ impl<'a> GitRepository<'a> {
 
         Ok(Some(tree))
     }
+
+    /// Check-ignore
+
+    pub fn check_ignore_paths(
+        &mut self,
+        verbose: bool,
+        non_matching: bool,
+        paths: Vec<String>,
+    ) -> Result<(), CommandError> {
+        for path in paths.iter() {
+            self.check_ignore_file(verbose, non_matching, &path)?;
+        }
+        Ok(())
+    }
+
+    pub fn check_ignore_file(
+        &mut self,
+        verbose: bool,
+        non_matching: bool,
+        path: &str,
+    ) -> Result<(), CommandError> {
+        Ok(())
+    }
+
+    fn must_be_ignored_bis(
+        &mut self,
+        path: &str,
+        gitignore_patterns: &GitignorePatterns,
+    ) -> Result<bool, CommandError> {
+        let (result) = gitignore_patterns.must_be_ignored(path, &self.working_dir_path, false)?;
+        Ok(result.is_some())
+    }
+
+    fn must_be_ignored(
+        &mut self,
+        path: &str,
+        gitignore_patterns: &GitignorePatterns,
+        match_dir_level: bool,
+    ) -> Result<Option<(String, usize, Pattern)>, CommandError> {
+        let pattern_info =
+            gitignore_patterns.must_be_ignored(path, &self.working_dir_path, match_dir_level)?;
+        Ok(pattern_info)
+    }
 }
 
 // ----- Ls-tree -----
@@ -4548,7 +4592,7 @@ fn read_packed_refs_file(git_path: &str) -> Result<HashMap<String, String>, Comm
 }
 
 /// Devuelve la próxima línea del iterador.
-fn next_line(lines: &mut std::str::Lines<'_>) -> (bool, String) {
+pub fn next_line(lines: &mut std::str::Lines<'_>) -> (bool, String) {
     let Some(line) = lines.next() else {
         return (true, "".to_string());
     };
