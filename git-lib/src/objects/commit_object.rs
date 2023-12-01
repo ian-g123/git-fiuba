@@ -99,13 +99,12 @@ impl CommitObject {
 
         let tree_hash_str = u8_vec_to_hex_string(&tree_hash);
 
-        logger.log(&format!(
-            "Reading tree hash from database: {}",
-            tree_hash_str
-        ));
-
         let option_tree = match db {
             Some(db) => {
+                logger.log(&format!(
+                    "Reading tree hash from database: {}",
+                    tree_hash_str
+                ));
                 let mut tree = db.read_object(&tree_hash_str, logger)?;
                 logger.log(&format!(
                     "tree content en read_from : {}",
@@ -362,15 +361,14 @@ impl GitObjectTrait for CommitObject {
         let mut buf: Vec<u8> = Vec::new();
         let mut stream = Cursor::new(&mut buf);
 
-        let Some(tree) = self.tree.as_mut() else {
-            return Err(CommandError::InvalidCommit);
-        };
-
-        writeln!(stream, "tree {}", tree.get_hash_string()?)
+        writeln!(stream, "tree {}", u8_vec_to_hex_string(&self.tree_hash))
             .map_err(|err| CommandError::FileWriteError(err.to_string()))?;
 
         match db {
             Some(db) => {
+                let Some(tree) = self.tree.as_mut() else {
+                    return Err(CommandError::InvalidCommit);
+                };
                 let mut tree_box: GitObject = Box::new(tree.clone());
                 db.write(&mut tree_box, true, &mut Logger::new_dummy())?;
             }

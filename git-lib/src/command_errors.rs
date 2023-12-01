@@ -97,6 +97,8 @@ pub enum CommandError {
     UnknownObjectType,
     /// Error al extraer datos de un un packfile
     ErrorExtractingPackfile,
+    /// Error al extraer datos de un un packfile
+    ErrorExtractingPackfileVerbose(String),
     CastingError,
     MessageIncomplete(String),
     AllAndFilesFlagsCombination(String),
@@ -224,6 +226,8 @@ pub enum CommandError {
     MetadataError(String),
     // No rebase in progress
     NoRebaseInProgress,
+    // Error al intentar leer un valor en un Delta Offset
+    VariableLengthEncodingOfs(String),
 }
 
 impl Error for CommandError {}
@@ -366,6 +370,9 @@ impl fmt::Display for CommandError {
             }
             CommandError::ErrorExtractingPackfile => {
                 write!(f, "Error al extraer datos de un un packfile")
+            }
+            CommandError::ErrorExtractingPackfileVerbose(e) => {
+                write!(f, "Error al extraer datos de un un packfile: {}",e)
             }
 
             CommandError::CastingError => {
@@ -552,6 +559,8 @@ impl fmt::Display for CommandError {
             CommandError::AddStagingAreaError(path,e) => write!(f, "Error al añadir el archivo {}: {}",path, e),
             CommandError::MetadataError(e) => write!(f, "Error de metadatos: {}", e),
             CommandError::NoRebaseInProgress => write!(f, "fatal: No rebase in progress?"),
+            CommandError::VariableLengthEncodingOfs(e) => write!(f, "Error al intentar leer un valor en un Delta Offset: {}", e),
+
         }
     }
 }

@@ -1672,7 +1672,7 @@ impl<'a> GitRepository<'a> {
                     error.to_string()
                 ))
             })?;
-            branches.insert(file_name.to_string(), sha1);
+            branches.insert(file_name.to_string(), sha1.trim().to_string());
         }
         Ok(branches)
     }
@@ -1712,16 +1712,16 @@ impl<'a> GitRepository<'a> {
         Ok(branches_with_their_commits)
     }
 
-    /// Devuelve al vector de branches_with_their_commits todos los nombres de las ramas y el hash del commit al que apuntan
-    pub fn push_all_remote_branch_hashes(&mut self) -> Result<Vec<(String, String)>, CommandError> {
-        let mut branches_with_their_commits: Vec<(String, String)> = Vec::new();
-        let branches_hashes = self.remote_branches()?;
-        for branch_hash in branches_hashes {
-            let branch_hash = (branch_hash.0, branch_hash.1.to_string());
-            branches_with_their_commits.push(branch_hash);
-        }
-        Ok(branches_with_their_commits)
-    }
+    // /// Devuelve al vector de branches_with_their_commits todos los nombres de las ramas y el hash del commit al que apuntan
+    // pub fn push_all_remote_branch_hashes(&mut self) -> Result<Vec<(String, String)>, CommandError> {
+    //     let mut branches_with_their_commits: Vec<(String, String)> = Vec::new();
+    //     let branches_hashes = self.remote_branches()?;
+    //     for branch_hash in branches_hashes {
+    //         let branch_hash = (branch_hash.0, branch_hash.1.to_string());
+    //         branches_with_their_commits.push(branch_hash);
+    //     }
+    //     Ok(branches_with_their_commits)
+    // }
 
     /// Devuelve al vector de branches_with_their_commits todos los nombres de las ramas y el hash del commit al que apuntan
     pub fn push_all_branch_hashes(&mut self) -> Result<Vec<(String, String)>, CommandError> {
@@ -1738,6 +1738,10 @@ impl<'a> GitRepository<'a> {
                 return Ok(branches_with_their_commits);
             }
         };
+        self.log(&format!(
+            "branches_remotes_hashes: {:?}",
+            branches_remotes_hashes
+        ));
         for branch_remote_hash in branches_remotes_hashes {
             let branch_name_remote = format!("origin/{}", branch_remote_hash.0);
             let branch_remote_hash = (branch_name_remote, branch_remote_hash.1.to_string());
@@ -2684,6 +2688,7 @@ impl<'a> GitRepository<'a> {
             let hash_commit = self.get_last_commit_hash_branch(&current_branch_name)?;
             branches_with_their_last_hash.push((current_branch, hash_commit));
         }
+
         for branch_with_commit in branches_with_their_last_hash {
             rebuild_commits_tree(
                 &self.db()?,
