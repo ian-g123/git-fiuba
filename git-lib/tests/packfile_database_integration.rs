@@ -36,4 +36,5 @@ fn test() {
     );
     assert_eq!(&object.get_hash().unwrap(), hash);
     assert_eq!(object.content(None).unwrap(), "".as_bytes());
+    let _ = std::fs::remove_dir_all(repo_path);
 }

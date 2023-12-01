@@ -179,10 +179,10 @@ fn read_objects_in_packfile(
         }
         buffed_reader.clean_up_to_pos();
         let mut decoder = flate2::read::ZlibDecoder::new(&mut buffed_reader);
-        let mut object_content = Vec::new();
+        let mut object_content = vec![0; len];
 
         decoder
-            .read_to_end(&mut object_content)
+            .read_exact(&mut object_content)
             .map_err(|_| CommandError::ErrorExtractingPackfile)?;
         let bytes_used = decoder.total_in() as usize;
         buffed_reader.set_pos(bytes_used);
