@@ -62,12 +62,30 @@ impl Blob {
         })
     }
 
+    pub fn new_from_hash_path_content_and_mode(
+        hash: &str,
+        path: &str,
+        content: Vec<u8>,
+        mode: Mode,
+    ) -> Result<Self, CommandError> {
+        let hash_vec = hex_string_to_u8_vec(hash);
+        let mut hash = [0; 20];
+        hash.copy_from_slice(&hash_vec);
+        Ok(Self {
+            content: Some(content),
+            _mode: mode,
+            path: Some(path.to_string()),
+            hash: Some(hash),
+            name: Some(get_name(&path)?),
+        })
+    }
+
     pub fn new_from_hash_path_and_mode(
         hash: String,
         path: String,
         mode: Mode,
     ) -> Result<Self, CommandError> {
-        let hash_vec = hash.cast_hex_to_u8_vec()?;
+        let hash_vec = hex_string_to_u8_vec(&hash);
         let mut hash = [0; 20];
         hash.copy_from_slice(&hash_vec);
         Ok(Self {
@@ -192,44 +210,30 @@ impl GitObjectTrait for Blob {
         "blob".to_string()
     }
 
-    fn content(&mut self, db: Option<&mut ObjectsDatabase>) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self, db: Option<&ObjectsDatabase>) -> Result<Vec<u8>, CommandError> {
         if let Some(content) = &self.content {
             return Ok(content.to_owned());
         }
-        if let Some(db) = db {
-            if let Some(hash) = self.hash {
+        if let Some(hash) = self.hash {
+            if let Some(db) = db {
                 let mut object =
                     db.read_object(&u8_vec_to_hex_string(&hash), &mut Logger::new_dummy())?;
                 let content = object.content(None)?;
                 self.content = Some(content.clone());
                 return Ok(content);
             }
+            return Err(CommandError::ShallowBlob(
+                "Tiene hash pero no la base de datos ni su contenido".to_string(),
+            ));
         }
-        match &self.path {
-            Some(path) => {
-                let content = read_file_contents(path)?;
-                Ok(content)
-            }
-            None => Err(CommandError::FileReadError(
-                "Archivo blob inexistente".to_string(),
-            )),
-        }
+        Err(CommandError::ShallowBlob(
+            "No conoce el hash ni su contenido".to_string(),
+        ))
     }
 
     // TODO: implementar otros modos para blobs
     fn mode(&self) -> Mode {
         Mode::RegularFile
-    }
-
-    fn to_string_priv(&mut self) -> String {
-        //map content to utf8
-        let Ok(content) = self.content(None) else {
-            return "Error convirtiendo a utf8".to_string();
-        };
-        let Ok(string) = String::from_utf8(content.clone()) else {
-            return "Error convirtiendo a utf8".to_string();
-        };
-        string
     }
 
     /// Devuelve el hash del Blob.
@@ -290,13 +294,15 @@ impl GitObjectTrait for Blob {
         _common: &mut Tree,
         unstaged_files: &Vec<String>,
         staged: &HashMap<String, Vec<u8>>,
+        db: &ObjectsDatabase,
     ) -> Result<bool, CommandError> {
         if !Path::new(path).exists() && unstaged_files.contains(&path.to_string()) {
             logger.log(&format!("This file was deleted: {}", path));
             deletions.push(path.to_string());
             return Ok(true);
         }
-        let mut new_content = self.content(None)?;
+        //self.log("es un None", )
+        let mut new_content = self.content(Some(db))?;
 
         if Path::new(path).exists() {
             let content = get_current_file_content(path)?;
@@ -336,12 +342,4 @@ impl GitObjectTrait for Blob {
 
         Ok(false)
     }
-}
-
-fn read_file_contents(path: &str) -> Result<Vec<u8>, CommandError> {
-    let mut file = File::open(path).map_err(|_| CommandError::FileNotFound(path.to_string()))?;
-    let mut content = Vec::new();
-    file.read_to_end(&mut content)
-        .map_err(|_| CommandError::FileReadError(path.to_string()))?;
-    Ok(content)
 }

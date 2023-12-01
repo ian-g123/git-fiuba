@@ -86,22 +86,18 @@ pub fn rebuild_commits_tree(
         return Ok(());
     }
 
-    logger.log(&format!("Reading file : {}", hash_commit));
-    let (_, decompressed_data) = db.read_file(hash_commit, logger)?;
-    logger.log(&format!(
-        "decompressed_data: {}",
-        String::from_utf8_lossy(&decompressed_data)
-    ));
+    logger.log(&format!("Reading file db.read_file: {}", hash_commit));
+    let (type_str, len, content) = db.read_file(hash_commit, logger)?;
 
-    let mut stream = Cursor::new(decompressed_data);
-
-    let (string, len) = get_type_and_len(&mut stream)?;
-
-    logger.log(&format!("string: {}, len: {}", string, len));
+    logger.log(&format!("type_str: {}, len: {}", type_str, len));
 
     let option_db = if build_tree { Some(db) } else { None };
-    let mut commit_object_box =
-        CommitObject::read_from(option_db, &mut stream, logger, Some(hash_commit.clone()))?;
+    let mut commit_object_box = CommitObject::read_from(
+        option_db,
+        &mut content.as_slice(),
+        logger,
+        Some(hash_commit.clone()),
+    )?;
 
     logger.log(&format!(
         "commit_object_box: {:?}",

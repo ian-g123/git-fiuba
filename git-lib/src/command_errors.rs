@@ -182,6 +182,7 @@ pub enum CommandError {
     CheckoutConflictsError,
     /// El tree guarda solo hashes y no sus objetos
     ShallowTree,
+    ShallowBlob(String),
 
     MergeConflictsCommit,
     /// Errror in object decompression
@@ -221,6 +222,8 @@ pub enum CommandError {
 
     //index
     MetadataError(String),
+    // No rebase in progress
+    NoRebaseInProgress,
 }
 
 impl Error for CommandError {}
@@ -520,6 +523,9 @@ impl fmt::Display for CommandError {
             CommandError::ShallowTree => {
                 write!(f, "El tree guarda solo hashes y no sus objetos")
             }
+            CommandError::ShallowBlob(msg) => {
+                write!(f, "No se pudo obtener el contenido del blob: {}", msg)
+            }
             CommandError::MergeConflictsCommit => write!(f, "error: Committing is not possible because you have unmerged files.\nhint: Fix them up in the work tree, and then use 'git add/rm <file>'\nhint: as appropriate to mark resolution and make a commit.\nfatal: Exiting because of an unresolved conflict."),
             CommandError::ErrorDecompressingObject(msg) => {
                 write!(f, "Errror in object decompression: {}", msg)
@@ -545,6 +551,7 @@ impl fmt::Display for CommandError {
             CommandError::LsTreeErrorNotATree => write!(f, "fatal: not a tree object"),
             CommandError::AddStagingAreaError(path,e) => write!(f, "Error al añadir el archivo {}: {}",path, e),
             CommandError::MetadataError(e) => write!(f, "Error de metadatos: {}", e),
+            CommandError::NoRebaseInProgress => write!(f, "fatal: No rebase in progress?"),
         }
     }
 }

@@ -400,10 +400,7 @@ dependencies = [
 name = "git"
 version = "0.1.0"
 dependencies = [
- "chrono",
- "flate2",
  "git-lib",
- "hex",
  "sha1",
 ]
 
