@@ -130,7 +130,14 @@ impl HashObject {
             };
         }
         for file in &self.files {
-            let object = Blob::new_from_path(file.to_string())?;
+            let content = std::fs::read(file).map_err(|error| {
+                CommandError::FileNotFound(format!(
+                    "Error intentando leer {}: {}",
+                    file,
+                    error.to_string()
+                ))
+            })?;
+            let object = Blob::new_from_content_and_path(content, file)?;
             repo.hash_object(Box::new(object), self.write)?;
         }
         Ok(())

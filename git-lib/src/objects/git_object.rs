@@ -44,7 +44,7 @@ pub trait GitObjectTrait {
     fn write_to(
         &mut self,
         stream: &mut dyn std::io::Write,
-        db: Option<&mut ObjectsDatabase>,
+        db: Option<&ObjectsDatabase>,
     ) -> Result<(), CommandError> {
         let content = self.content(db)?;
         let type_str = self.type_str();
@@ -69,7 +69,7 @@ pub trait GitObjectTrait {
         logger: &mut Logger,
         _vector_path: Vec<&str>,
         _current_depth: usize,
-        _hash: &String,
+        blob: Blob,
     ) -> Result<(), CommandError> {
         logger.log("ERROR: No se puede agregar un path a un objeto que no es un árbol");
         Err(CommandError::ObjectNotTree)
@@ -82,15 +82,13 @@ pub trait GitObjectTrait {
     fn mode(&self) -> Mode;
 
     /// Devuelve el contenido del objeto
-    fn content(&mut self, db: Option<&mut ObjectsDatabase>) -> Result<Vec<u8>, CommandError>;
+    fn content(&mut self, db: Option<&ObjectsDatabase>) -> Result<Vec<u8>, CommandError>;
 
     /// Devuelve el tamaño del objeto en bytes
-    fn size(&mut self, db: Option<&mut ObjectsDatabase>) -> Result<usize, CommandError> {
+    fn size(&mut self, db: Option<&ObjectsDatabase>) -> Result<usize, CommandError> {
         let content = self.content(db)?;
         Ok(content.len())
     }
-
-    fn to_string_priv(&mut self) -> String;
 
     /// Devuelve el hash del objeto
     fn get_hash(&mut self) -> Result<[u8; 20], CommandError>;
@@ -128,6 +126,7 @@ pub trait GitObjectTrait {
         common: &mut Tree,
         unstaged_files: &Vec<String>,
         staged: &HashMap<String, Vec<u8>>,
+        db: &ObjectsDatabase,
     ) -> Result<bool, CommandError> {
         Ok(false)
     }

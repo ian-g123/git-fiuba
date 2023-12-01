@@ -27,7 +27,7 @@ pub struct ObjectsDatabase {
 
 impl ObjectsDatabase {
     pub fn write(
-        &mut self,
+        &self,
         git_object: &mut GitObject,
         recursive: bool,
         logger: &mut Logger,

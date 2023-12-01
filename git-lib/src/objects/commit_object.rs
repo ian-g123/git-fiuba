@@ -358,7 +358,7 @@ impl GitObjectTrait for CommitObject {
         todo!()
     }
 
-    fn content(&mut self, db: Option<&mut ObjectsDatabase>) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self, db: Option<&ObjectsDatabase>) -> Result<Vec<u8>, CommandError> {
         let mut buf: Vec<u8> = Vec::new();
         let mut stream = Cursor::new(&mut buf);
 
@@ -434,10 +434,6 @@ impl GitObjectTrait for CommitObject {
         })?;
 
         Ok(buf)
-    }
-
-    fn to_string_priv(&mut self) -> String {
-        todo!()
     }
 
     fn as_mut_tree(&mut self) -> Option<&mut Tree> {

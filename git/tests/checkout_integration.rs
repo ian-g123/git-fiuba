@@ -181,12 +181,15 @@ fn test_ckeckout() {
 
     // Overlaping changes
 
-    _ = Command::new("../../../../../../target/debug/git")
+    let result = Command::new("../../../../../../target/debug/git")
         .arg("add")
         .arg("dir/testfile3.txt")
         .current_dir(path)
         .output()
         .unwrap();
+
+    println!("Add stdout: {}", String::from_utf8(result.stdout).unwrap());
+    println!("Add stderr: {}", String::from_utf8(result.stderr).unwrap());
 
     let result = Command::new("../../../../../../target/debug/git")
         .arg("status")

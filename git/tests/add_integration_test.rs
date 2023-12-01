@@ -133,6 +133,7 @@ fn test_two_files_sep_arguments() {
         .output()
         .unwrap();
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
+    assert_eq!(String::from_utf8(result.stderr).unwrap(), "");
 
     let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")

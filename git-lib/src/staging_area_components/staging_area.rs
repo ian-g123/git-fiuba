@@ -7,9 +7,16 @@ use std::{
 use crate::{
     join_paths,
     logger::Logger,
-    objects::git_object::{GitObject, GitObjectTrait},
+    objects::{
+        blob::Blob,
+        git_object::{GitObject, GitObjectTrait},
+        mode::Mode,
+    },
     objects_database::ObjectsDatabase,
-    utils::{aux::get_name, super_string::u8_vec_to_hex_string},
+    utils::{
+        aux::{get_name, hex_string_to_u8_vec},
+        super_string::u8_vec_to_hex_string,
+    },
 };
 
 use super::{
@@ -396,7 +403,12 @@ impl StagingArea {
         for (path, hash) in files.iter() {
             let vector_path = path.split("/").collect::<Vec<_>>();
             let current_depth: usize = 0;
-            working_tree.add_path_tree(logger, vector_path, current_depth, hash)?;
+            let blob = Blob::new_from_hash_path_and_mode(
+                hash.to_string(),
+                path.to_string(),
+                Mode::RegularFile,
+            )?;
+            working_tree.add_path_tree(logger, vector_path, current_depth, blob)?;
         }
         logger.log("Working tree staged built");
         Ok(working_tree)
@@ -425,7 +437,12 @@ impl StagingArea {
             if new_files.contains(path) || is_in_last_commit {
                 let vector_path = path.split("/").collect::<Vec<_>>();
                 let current_depth: usize = 0;
-                working_tree.add_path_tree(logger, vector_path, current_depth, hash)?;
+                let blob = Blob::new_from_hash_path_and_mode(
+                    hash.to_string(),
+                    path.to_string(),
+                    Mode::RegularFile,
+                )?;
+                working_tree.add_path_tree(logger, vector_path, current_depth, blob)?;
             }
         }
         Ok(working_tree)
