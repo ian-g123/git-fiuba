@@ -224,6 +224,10 @@ impl<'a> GitRepository<'a> {
             CommandError::DirectoryCreationError("Error creando directorio".to_string()),
         )?;
 
+        if !Path::new(&rebase_merge_path).exists() {
+            return Err(CommandError::NoRebaseInProgress);
+        }
+
         // obtenemos los commits done
         let commits_todo = self.get_commits_todo()?;
         let last_commit_hash = commits_todo[commits_todo.len() - 1].to_owned().0;
@@ -249,6 +253,7 @@ impl<'a> GitRepository<'a> {
         let mut staging_area = self.staging_area()?;
 
         let biding = self.db()?;
+        staging_area.update_to_tree(&self.working_dir_path, source_tree)?;
         self.restore(source_tree.to_owned(), &mut staging_area, Some(biding))?;
 
         self.delete_file("MERGE_MSG")?;
@@ -5261,28 +5266,30 @@ fn write_file_with(git_path: &str, file_name: &str, content: String) -> Result<(
 
 fn get_commits_rebase_merge(commit_type_path: &str) -> Result<Vec<(String, String)>, CommandError> {
     let mut commits = Vec::new();
-    let git_rebase_todo_path = join_paths!(commit_type_path).ok_or(
-        CommandError::DirectoryCreationError("Error abriendo directorio".to_string()),
-    );
-    if let Ok(git_rebase_todo_path) = git_rebase_todo_path {
-        let mut file = File::open(git_rebase_todo_path).map_err(|_| {
-            CommandError::FileOpenError("Error abriendo archivo git_rebase_todo_path".to_string())
-        })?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents).map_err(|_| {
-            CommandError::FileOpenError("Error leyendo archivo git_rebase_todo_path".to_string())
-        })?;
-        let lines: Vec<_> = contents.split('\n').collect();
-        for line in lines {
-            let line_vector: Vec<&str> = line.split(" ").collect();
-            if line_vector.len() < 2 {
-                break;
-            }
-            let hash = line_vector[1];
-            let message = line_vector[2..].join(" ");
-
-            commits.push((hash.to_string(), message.to_string()));
+    let git_rebase_todo_path = commit_type_path.to_string();
+    let mut file = File::open(&git_rebase_todo_path).map_err(|_| {
+        CommandError::FileOpenError(format!(
+            "Error abriendo archivo git_rebase_todo_path: {}",
+            git_rebase_todo_path
+        ))
+    })?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents).map_err(|_| {
+        CommandError::FileOpenError(format!(
+            "Error leyendo archivo git_rebase_todo_path: {}",
+            git_rebase_todo_path
+        ))
+    })?;
+    let lines: Vec<_> = contents.split('\n').collect();
+    for line in lines {
+        let line_vector: Vec<&str> = line.split(" ").collect();
+        if line_vector.len() < 2 {
+            break;
         }
+        let hash = line_vector[1];
+        let message = line_vector[2..].join(" ");
+
+        commits.push((hash.to_string(), message.to_string()));
     }
     Ok(commits)
 }

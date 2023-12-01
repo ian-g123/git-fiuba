@@ -222,6 +222,8 @@ pub enum CommandError {
 
     //index
     MetadataError(String),
+    // No rebase in progress
+    NoRebaseInProgress,
 }
 
 impl Error for CommandError {}
@@ -549,6 +551,7 @@ impl fmt::Display for CommandError {
             CommandError::LsTreeErrorNotATree => write!(f, "fatal: not a tree object"),
             CommandError::AddStagingAreaError(path,e) => write!(f, "Error al añadir el archivo {}: {}",path, e),
             CommandError::MetadataError(e) => write!(f, "Error de metadatos: {}", e),
+            CommandError::NoRebaseInProgress => write!(f, "fatal: No rebase in progress?"),
         }
     }
 }

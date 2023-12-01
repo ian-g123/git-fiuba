@@ -327,17 +327,119 @@ fn test_with_conflict_abort() {
 
     create_scene_with_conflict_heavy(path, git_bin);
 
-    // assert!(
-    //     Command::new(git_bin)
-    //         .arg("rebase")
-    //         .arg("topic")
-    //         .arg("master")
-    //         .arg(path)
-    //         .current_dir(path)
-    //         .status()
-    //         .is_ok(),
-    //     "No se pudo agregar el archivo testfile"
-    // );
+    assert!(
+        Command::new(git_bin)
+            .arg("rebase")
+            .arg("topic")
+            .arg("master")
+            .arg(path)
+            .current_dir(path)
+            .status()
+            .is_ok(),
+        "No se pudo agregar el archivo testfile"
+    );
+
+    // cambiamos el archivo fu y ponemos contenido contenido topic por el conflicto
+    let mut file = File::create(format!("{}/fu", path)).unwrap();
+    file.write_all(b"contenido master1 fu").unwrap();
+
+    // agregamos el archivo fu
+    assert!(
+        Command::new(git_bin)
+            .arg("add")
+            .arg(".")
+            .current_dir(path)
+            .status()
+            .is_ok(),
+        "No se pudo agregar el archivo fu"
+    );
+    thread::sleep(Duration::from_secs(1));
+
+    // hacemos rebase --continue
+    let result = Command::new(git_bin)
+        .arg("rebase")
+        .arg("--continue")
+        .current_dir(path)
+        .output();
+
+    assert!(
+        result.is_ok(),
+        "No se realizó correctamente el rebase --continue"
+    );
+
+    // ejecutamos el comando log
+    let result_log = Command::new(git_bin).arg("log").current_dir(path).output();
+    assert!(result_log.is_ok(), "No se pudo hacer log");
+    let result_log_str = String::from_utf8(result_log.unwrap().stdout).unwrap();
+    let result_log_str_vec = get_commits_and_branches(result_log_str);
+
+    let expected_log = format!(
+        "[(\"master1\", Some(\"master\")), (\"topic2\", Some(\"topic\")), (\"topic1\", None), (\"inicial\", None)]"
+    );
+
+    assert_eq!(result_log_str_vec, expected_log);
+
+    assert!(
+        Command::new(git_bin)
+            .arg("rebase")
+            .arg("--abort")
+            .arg(path)
+            .current_dir(path)
+            .status()
+            .is_ok(),
+        "No se pudo agregar el archivo testfile"
+    );
+
+    // ejecutamos el comando log
+    let result_log = Command::new(git_bin).arg("log").current_dir(path).output();
+    assert!(result_log.is_ok(), "No se pudo hacer log");
+    let result_log_str = String::from_utf8(result_log.unwrap().stdout).unwrap();
+    let result_log_str_vec = get_commits_and_branches(result_log_str);
+
+    let expected_log = format!(
+        "[(\"master3\", Some(\"master\")), (\"master2\", None), (\"master1\", None), (\"inicial\", None)]"
+    );
+    assert_eq!(result_log_str_vec, expected_log);
+
+    // hacemos rebase --continue
+    let result = Command::new(git_bin)
+        .arg("rebase")
+        .arg("--abort")
+        .current_dir(path)
+        .output()
+        .expect("No se deber");
+
+    assert_eq!(
+        String::from_utf8(result.stderr).unwrap(),
+        "fatal: No rebase in progress?\n",
+    );
+    assert_eq!("", String::from_utf8(result.stdout).unwrap());
+
+    // cambiamos la rama
+    let result = Command::new(git_bin)
+        .arg("checkout")
+        .arg("topic")
+        .current_dir(path)
+        .output()
+        .expect("No se pudo cambiar a la topic");
+
+    assert_eq!(String::from_utf8(result.stderr).unwrap(), "");
+    assert_eq!(
+        String::from_utf8(result.stdout).unwrap(),
+        "Switched to branch 'topic'\n"
+    );
+
+    // ejecutamos el comando log
+    let result_log = Command::new(git_bin).arg("log").current_dir(path).output();
+    assert!(result_log.is_ok(), "No se pudo hacer log");
+    let result_log_str = String::from_utf8(result_log.unwrap().stdout).unwrap();
+    let result_log_str_vec = get_commits_and_branches(result_log_str);
+
+    let expected_log =
+        format!("[(\"topic2\", Some(\"topic\")), (\"topic1\", None), (\"inicial\", None)]");
+    assert_eq!(result_log_str_vec, expected_log);
+
+    _ = fs::remove_dir_all(format!("{}", path));
 }
 
 fn create_scene_without_conflict(path: &str, git_bin: &str) {
