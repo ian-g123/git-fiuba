@@ -4,6 +4,7 @@ use std::{
     env,
     io::{self, BufRead, Write},
     ops::ControlFlow,
+    path::Path,
     rc::Rc,
 };
 
@@ -627,7 +628,7 @@ impl Interface {
 
                 if repo.staging_area().unwrap().has_conflicts() {
                     dialog_window(
-                        "Existen conflictos de merge sin resolver. Resuelva los conflictos y luego presione el botón 'commit'"
+                        "Existen conflictos de merge sin resolver.\nResuélvalos y luego presione el botón 'commit'"
                             .to_string(),
                     );
                     return;
@@ -704,7 +705,8 @@ impl Interface {
                             files_merge_conflict: Rc::new(RefCell::new(files_merge_conflict)),
                             principal_window: principal_window_clone,
                         };
-                        principal_window.borrow_mut().set_sensitive(false);
+                        let principal_window = principal_window.borrow_mut().clone();
+                        principal_window.set_sensitive(true);
                         branch_window_clone.hide();
                         remove_childs(&clone_branch_list);
                         let builder = builder_clone.clone();
@@ -712,9 +714,7 @@ impl Interface {
                         remove_widgets_to_branch_window(builder, branch_window_clone);
                         interface.staged_area_ui();
                     }
-                    _ => {
-                        // Otros botones o cierre del cuadro de diálogo.
-                    }
+                    _ => {}
                 }
 
                 // Cierra el cuadro de diálogo.
@@ -770,7 +770,10 @@ impl Interface {
             }
             let vec_branch = vec![name_branch_text.to_string()];
             match repo.create_branch(&vec_branch) {
-                Ok(_) => dialog_window("Rama creada con éxito".to_string()),
+                Ok(_) => {
+                    dialog_window("Rama creada con éxito".to_string());
+                    new_name_branch.set_text("");
+                }
                 Err(err) => dialog_window(err.to_string()),
             };
         });
@@ -1028,6 +1031,17 @@ impl Interface {
             );
         }
 
+        println!("new_content actualize_conflicts: {}", new_content.borrow());
+        println!(
+            "current_content actualize_conflicts: {}",
+            current_content.borrow()
+        );
+        println!(
+            "incoming_content actualize_conflicts: {}",
+            incoming_content.borrow()
+        );
+        println!("old_content actualize_conflicts: {}", old_content.borrow());
+
         let label_contents = [
             ("new", new_content),
             ("current", current_content),
@@ -1086,6 +1100,23 @@ impl Interface {
                 false,
             );
 
+            println!(
+                "new_content merge_function_button: {}",
+                new_content_clone.borrow()
+            );
+            println!(
+                "current_content merge_function_button: {}",
+                current_content_clone.borrow()
+            );
+            println!(
+                "incoming_content merge_function_button: {}",
+                incoming_content_clone.borrow()
+            );
+            println!(
+                "old_content merge_function_button: {}",
+                old_content_clone.borrow()
+            );
+
             let label_contents = [
                 ("new", new_content_clone),
                 ("current", current_content_clone),
@@ -1100,41 +1131,6 @@ impl Interface {
         });
     }
 }
-
-// fn show_merge_confirmation_dialog(
-//     parent: &Window,
-//     builder: &mut gtk::Builder,
-//     from_branch: String,
-//     to_branch: String,
-// ) -> bool {
-//     let dialog: gtk::Dialog = builder.object("merge_dialog").unwrap();
-//     let label: gtk::Label = builder.object("dialog_label").unwrap();
-//     dialog.set_transient_for(Some(parent));
-//     let text_label = format!(
-//         "¿Desea realizar el merge de {} a {}?",
-//         from_branch, to_branch
-//     );
-//     label.set_text(&text_label);
-//     dialog.show_all();
-//     // esperamos a que se presione el botón ok_dialog_button
-//     let ok_dialog_button: gtk::Button = builder.object("ok_dialog_button").unwrap();
-//     let cancel_dialog_button: gtk::Button = builder.object("cancel_dialog_button").unwrap();
-
-//     let (sender, receiver): (glib::Sender<bool>, glib::Receiver<bool>) =
-//         glib::MainContext::channel(glib::PRIORITY_DEFAULT);
-
-//     let sender_clone = sender.clone();
-//     ok_dialog_button.connect_clicked(move |_| {
-//         sender_clone.send(true).unwrap();
-//     });
-//     cancel_dialog_button.connect_clicked(move |_| {
-//         sender.send(false).unwrap();
-//     });
-//     receiver.attach(None, move |data| {
-//         println!("Received: {}", data);
-//         glib::Continue(true)
-//     });
-// }
 
 fn remove_widgets_to_merge_window(builder: &mut gtk::Builder, merge_window: gtk::Window) {
     let merge_grid: gtk::Grid = builder.object("merge_grid").unwrap();
@@ -1259,13 +1255,49 @@ fn commit_function(interface: Interface) {
         .object("entrada_de_mensaje")
         .expect("No se pudo obtener la entrada de mensaje");
     let message: gtk::glib::GString = commit_entry_msg.text();
+
+    commit_entry_msg.set_text("");
+    let mut binding = io::stdout();
+    let mut repo = GitRepository::open("", &mut binding).unwrap();
+
+    match repo.staging_area().unwrap().has_conflicts() {
+        true => {
+            dialog_window(
+                "Existen conflictos de merge sin resolver.\nResuélvalos y luego presione el botón 'commit'"
+                    .to_string(),
+            );
+            return;
+        }
+        false => {}
+    }
+
+    // verificamos si existe .git/MERGE_HEAD para saber si se trata de un merge
+    let merge_head_path = Path::new(".git/MERGE_HEAD");
+    let is_merge = merge_head_path.exists();
+    if is_merge {
+        if repo.staging_area().unwrap().has_conflicts() {
+            dialog_window(
+                "Existen conflictos de merge sin resolver.\nResuélvalos y luego presione el botón 'commit'"
+                    .to_string(),
+            );
+            return;
+        }
+
+        match repo.merge_continue() {
+            Ok(_) => {
+                refresh_function(interface);
+                dialog_window("Merge finalizado con éxito.\nSi escribió un mensaje de commit, no fue utilizado".to_string());
+            }
+            Err(err) => dialog_window(err.to_string()),
+        };
+        return;
+    }
+
     if message.is_empty() {
         dialog_window("No se ha ingresado un mensaje de commit".to_string());
         return;
     }
-    commit_entry_msg.set_text("");
-    let mut binding = io::stdout();
-    let mut repo = GitRepository::open("", &mut binding).unwrap();
+
     match repo.commit(message.to_string(), &vec![], false, None, false) {
         Ok(_) => {
             refresh_function(interface);
