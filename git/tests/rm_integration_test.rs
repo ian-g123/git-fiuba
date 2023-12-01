@@ -1,7 +1,6 @@
 use std::{fs, io::Write, path::Path, process::Command};
 
-use git_lib::staging_area::StagingArea;
-
+use git_lib::staging_area_components::staging_area::StagingArea;
 #[test]
 fn test_single_file() {
     let path = "./tests/data/commands/rm/repo1";

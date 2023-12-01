@@ -182,6 +182,7 @@ pub enum CommandError {
     CheckoutConflictsError,
     /// El tree guarda solo hashes y no sus objetos
     ShallowTree,
+    ShallowBlob(String),
 
     MergeConflictsCommit,
     /// Errror in object decompression
@@ -206,6 +207,23 @@ pub enum CommandError {
 
     // Log
     ReadRefsHeadError,
+
+    // Not a valid tag
+    TagNotFound(String),
+    // La tag que usaste no apunta a un commit
+    MergeTagNotCommit(String),
+    // No se implementó está funcionalidad
+    FeatureNotImplemented(String),
+
+    // Ls-tree
+    LsTreeErrorNotATree,
+    // Error al añadir un archivo
+    AddStagingAreaError(String, String),
+
+    //index
+    MetadataError(String),
+    // No rebase in progress
+    NoRebaseInProgress,
 }
 
 impl Error for CommandError {}
@@ -505,6 +523,9 @@ impl fmt::Display for CommandError {
             CommandError::ShallowTree => {
                 write!(f, "El tree guarda solo hashes y no sus objetos")
             }
+            CommandError::ShallowBlob(msg) => {
+                write!(f, "No se pudo obtener el contenido del blob: {}", msg)
+            }
             CommandError::MergeConflictsCommit => write!(f, "error: Committing is not possible because you have unmerged files.\nhint: Fix them up in the work tree, and then use 'git add/rm <file>'\nhint: as appropriate to mark resolution and make a commit.\nfatal: Exiting because of an unresolved conflict."),
             CommandError::ErrorDecompressingObject(msg) => {
                 write!(f, "Errror in object decompression: {}", msg)
@@ -524,6 +545,13 @@ impl fmt::Display for CommandError {
             CommandError::RebaseError(msj) => write!(f, "{msj}"),
             CommandError::FlagHashRequiresValue => write!(f, "error: option `hash' expects a numerical value"),
             CommandError::ReadRefsHeadError => write!(f, "Error al leer el archivo .git/refs/heads/HEAD"),
+            CommandError::TagNotFound(tag_name) => write!(f, "fatal: tag not found: {tag_name}"),
+            CommandError::MergeTagNotCommit(tag_name) => write!(f, "La tag {} no apunta a un commit", tag_name),
+            CommandError::FeatureNotImplemented(feature) => write!(f, "Feature not implemented: {}", feature),
+            CommandError::LsTreeErrorNotATree => write!(f, "fatal: not a tree object"),
+            CommandError::AddStagingAreaError(path,e) => write!(f, "Error al añadir el archivo {}: {}",path, e),
+            CommandError::MetadataError(e) => write!(f, "Error de metadatos: {}", e),
+            CommandError::NoRebaseInProgress => write!(f, "fatal: No rebase in progress?"),
         }
     }
 }

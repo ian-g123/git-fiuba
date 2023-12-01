@@ -8,11 +8,13 @@ use super::super_string::u8_vec_to_hex_string;
 
 /// Obtiene el nombre de un archivo dada su ruta. Si la ruta no existe, devuelve error.
 pub fn get_name(path_string: &str) -> Result<String, CommandError> {
-    path_string
+    let var = path_string
         .split("/")
         .last()
         .map(|s| s.to_string())
-        .ok_or_else(|| CommandError::FileNotFound(path_string.to_owned()))
+        .ok_or_else(|| CommandError::FileNotFound(path_string.to_owned()))?;
+
+    Ok(var)
 }
 
 /// Dado la data pasado, devuelve el hash expresado en un vector de 20 bytes.

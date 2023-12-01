@@ -205,7 +205,7 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
         let mut repo = GitRepository::open(&repo_git_path.to_string(), &mut binding).unwrap();
         repo.write_file(&path_file, &mut new_content).unwrap();
 
-        repo.add(vec![path_file], false).unwrap();
+        repo.add(vec![path_file]).unwrap();
 
         let (staging_changes, unstaging_changes, files_merge_conflict) =
             staged_area_func().unwrap();
@@ -471,7 +471,7 @@ impl Interface {
                     "unstaging" => {
                         _ = unstaging_changes2.borrow_mut().take(&clone_file);
                         staging_changes2.borrow_mut().insert(file.clone());
-                        let err = repo.add(vec_files, true);
+                        let err = repo.add(vec_files);
                         if err.is_err() {
                             dialog_window(err.unwrap_err().to_string());
                             return;
@@ -480,7 +480,7 @@ impl Interface {
                     "merge" => {
                         _ = files_merge_conflict.borrow_mut().take(&clone_file);
                         staging_changes2.borrow_mut().insert(file.clone());
-                        let err = repo.add(vec_files, false);
+                        let err = repo.add(vec_files);
                         if err.is_err() {
                             dialog_window(err.unwrap_err().to_string());
                             return;
@@ -1105,7 +1105,7 @@ impl Interface {
                 repo.write_file(&path_file, &mut new_content_clone.borrow().clone())
                     .unwrap();
 
-                repo.add(vec![path_file], false).unwrap();
+                repo.add(vec![path_file]).unwrap();
 
                 let (staging_changes, unstaging_changes, files_merge_conflict) =
                     staged_area_func().unwrap();

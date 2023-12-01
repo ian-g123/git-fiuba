@@ -3,10 +3,7 @@ use std::{io::Read, io::Write};
 use crate::commands::command::{Command, ConfigAdderFunction};
 use git_lib::{command_errors::CommandError, git_repository::GitRepository};
 
-use super::{
-    command::check_errors_flags,
-    commit::{read_message_completely, run_enter_message},
-};
+use super::command::check_errors_flags;
 
 /// Hace referencia a un Comando ShowRef.
 pub struct ShowRef {
@@ -143,7 +140,7 @@ impl ShowRef {
     }
 
     /// Ejecuta el comando Show-ref.
-    fn run(&mut self, stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), CommandError> {
+    fn run(&mut self, _stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), CommandError> {
         let mut repo = GitRepository::open("", output)?;
         let mut show_heads = true;
         let mut show_tags = true;

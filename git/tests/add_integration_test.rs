@@ -1,6 +1,6 @@
 use std::{fs, path::Path, process::Command};
 
-use git_lib::staging_area::StagingArea;
+use git_lib::staging_area_components::staging_area::StagingArea;
 
 #[test]
 fn test_single_file() {
@@ -133,6 +133,7 @@ fn test_two_files_sep_arguments() {
         .output()
         .unwrap();
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "");
+    assert_eq!(String::from_utf8(result.stderr).unwrap(), "");
 
     let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")

@@ -3,6 +3,7 @@ use std::io::{Cursor, Read, Write};
 use crate::{
     command_errors::CommandError,
     logger::Logger,
+    objects_database::ObjectsDatabase,
     utils::{aux::get_sha1, super_string::SuperStrings},
 };
 
@@ -12,7 +13,7 @@ use super::{
     git_object::{GitObject, GitObjectTrait},
 };
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct TagObject {
     name: String,
     object: String,
@@ -185,6 +186,10 @@ impl GitObjectTrait for TagObject {
         Some(self)
     }
 
+    fn as_tag(&mut self) -> Option<TagObject> {
+        Some(self.to_owned())
+    }
+
     fn as_mut_tree(&mut self) -> Option<&mut super::tree::Tree> {
         None
     }
@@ -201,10 +206,7 @@ impl GitObjectTrait for TagObject {
         todo!()
     }
 
-    fn content(
-        &mut self,
-        _db: Option<&mut crate::objects_database::ObjectsDatabase>,
-    ) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self, _db: Option<&ObjectsDatabase>) -> Result<Vec<u8>, CommandError> {
         let mut buf: Vec<u8> = Vec::new();
         let mut stream = Cursor::new(&mut buf);
 
@@ -241,16 +243,6 @@ impl GitObjectTrait for TagObject {
         })?;
 
         Ok(buf)
-    }
-
-    fn to_string_priv(&mut self) -> String {
-        let Ok(content) = self.content(None) else {
-            return "Error convirtiendo a utf8".to_string();
-        };
-        let Ok(string) = String::from_utf8(content.clone()) else {
-            return "Error convirtiendo a utf8".to_string();
-        };
-        string
     }
 
     fn get_hash(&mut self) -> Result<[u8; 20], CommandError> {

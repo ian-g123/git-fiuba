@@ -14,7 +14,6 @@ fn test_push() {
     let git_bin = "../../../../../../target/debug/git";
 
     create_base_scene(path.clone());
-    // panic!();
     assert!(
         Command::new(git_bin)
             .arg("clone")
@@ -87,6 +86,7 @@ fn test_push() {
 fn create_base_scene(path: &str) {
     _ = fs::remove_dir_all(format!("{}/repo", path));
     _ = fs::remove_dir_all(format!("{}/other_user", path));
+    _ = fs::remove_dir_all(format!("{}/server-files/repo", path));
 
     let Ok(_) = fs::create_dir_all(path.clone()) else {
         panic!("No se pudo crear el directorio")

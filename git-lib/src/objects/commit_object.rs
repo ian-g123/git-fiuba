@@ -23,7 +23,7 @@ use std::{
 extern crate chrono;
 use chrono::{prelude::*, DateTime};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CommitObject {
     parents: Vec<String>,
     message: String,
@@ -358,7 +358,7 @@ impl GitObjectTrait for CommitObject {
         todo!()
     }
 
-    fn content(&mut self, db: Option<&mut ObjectsDatabase>) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self, db: Option<&ObjectsDatabase>) -> Result<Vec<u8>, CommandError> {
         let mut buf: Vec<u8> = Vec::new();
         let mut stream = Cursor::new(&mut buf);
 
@@ -434,10 +434,6 @@ impl GitObjectTrait for CommitObject {
         })?;
 
         Ok(buf)
-    }
-
-    fn to_string_priv(&mut self) -> String {
-        todo!()
     }
 
     fn as_mut_tree(&mut self) -> Option<&mut Tree> {
@@ -593,7 +589,10 @@ mod test {
         let mut output: Vec<u8> = Vec::new();
         let mut output_writer = Cursor::new(&mut output);
         let mut reader_stream = Cursor::new(&mut buf);
+        let (type_str, len) = git_object::get_type_and_len(&mut reader_stream).unwrap();
         git_object::display_from_stream(
+            type_str,
+            len,
             &mut reader_stream,
             &mut Logger::new_dummy(),
             &mut output_writer,

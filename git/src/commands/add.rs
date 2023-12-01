@@ -50,6 +50,6 @@ impl Add {
 
     fn run(&self, _stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), CommandError> {
         let mut repo = GitRepository::open("", output)?;
-        repo.add(self.pathspecs.clone(), true)
+        repo.add(self.pathspecs.clone())
     }
 }
