@@ -1063,10 +1063,11 @@ impl Interface {
         let current_content_clone = current_content.clone();
         let incoming_content_clone = incoming_content.clone();
         let old_content_clone = old_content.clone();
-
         let button_name = button_name.to_string();
+
         let builder = self.builder.clone();
-        
+        let main_window = self.principal_window.clone();
+        let merge_window: gtk::Window = self.builder.object("merge_window").unwrap();
         accept_button.connect_clicked(move |_| {
             let mut new_content_clone = new_content_clone.clone();
             let mut current_content_clone = current_content_clone.clone();
@@ -1083,11 +1084,50 @@ impl Interface {
             );
 
             let label_contents = [
-                ("new", new_content_clone),
-                ("current", current_content_clone),
-                ("incoming", incoming_content_clone),
-                ("old", old_content_clone),
+                ("new", new_content_clone.clone()),
+                ("current", current_content_clone.clone()),
+                ("incoming", incoming_content_clone.clone()),
+                ("old", old_content_clone.clone()),
             ];
+
+            if old_content_clone.borrow().len() == 0
+                && current_content_clone.borrow().len() == 0
+                && incoming_content_clone.borrow().len() == 0
+            {
+                let merge_conflicts_label: gtk::Label = builder.object("merge_conflicts").unwrap();
+
+                let mut binding = io::stdout();
+                let mut repo = GitRepository::open(&"".to_string(), &mut binding).unwrap();
+
+                let mut path_file = merge_conflicts_label.text().to_string();
+                path_file = path_file.split(" ").collect::<Vec<&str>>()[3..].join(" ");
+
+                repo.write_file(&path_file, &mut new_content_clone.borrow().clone())
+                    .unwrap();
+
+                repo.add(vec![path_file], false).unwrap();
+
+                let (staging_changes, unstaging_changes, files_merge_conflict) =
+                    staged_area_func().unwrap();
+
+                let interface2 = Interface {
+                    builder: builder.clone(),
+                    staging_changes: Rc::new(RefCell::new(staging_changes)),
+                    unstaging_changes: Rc::new(RefCell::new(unstaging_changes)),
+                    files_merge_conflict: Rc::new(RefCell::new(files_merge_conflict)),
+                    principal_window: main_window.clone(),
+                };
+                merge_window.clone().hide();
+                remove_widgets_to_merge_window(
+                    &mut interface2.builder.clone(),
+                    merge_window.clone(),
+                );
+                refresh_function(interface2);
+
+                dialog_window("Merge conflict resolved successfully".to_string());
+
+                return;
+            }
 
             for (label_name, content) in label_contents {
                 let mut builder = builder.clone();
@@ -1439,9 +1479,7 @@ fn actualize_conflicts(
     }
 
     let mut i = 0;
-    println!("old_content_len: {}", old_content_lines.len());
     while let Some(line) = old_content_lines.get(i) {
-        println!("LINEA: {:?}", line);
         i += 1;
         if line.starts_with("<<<<<<<") && !found_next_conflict {
             found_next_conflict = true;
