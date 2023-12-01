@@ -122,12 +122,13 @@ impl CheckIgnore {
 
             for line in reader.lines() {
                 if let Ok(line) = line {
-                    //repo.
+                    repo.check_ignore_file(self.verbose, self.non_matching, &line)?;
                 }
             }
+        } else {
+            repo.check_ignore_paths(self.verbose, self.non_matching, &self.paths)?;
         }
 
-        // repo.
         Ok(())
     }
 }

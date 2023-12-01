@@ -1,6 +1,16 @@
-use std::{collections::HashMap, fs, path::Path};
+use std::{
+    collections::HashMap,
+    env, fs,
+    path::{Path, PathBuf},
+};
 
-use crate::{command_errors::CommandError, git_repository::next_line, join_paths};
+use crate::{
+    command_errors::CommandError,
+    git_repository::{get_path_str, next_line},
+    join_paths,
+    logger::{self, Logger},
+    utils::aux::get_name,
+};
 
 const BACKSLASH: char = '/';
 const SLASH: char = '\\';
@@ -12,11 +22,18 @@ pub struct GitignorePatterns {
 }
 
 impl GitignorePatterns {
-    pub fn new(git_path: &str, working_dir_path: &str) -> Result<Self, CommandError> {
-        let gitignore_files = get_gitignore_files(git_path, working_dir_path)?;
+    pub fn new(
+        git_path: &str,
+        working_dir_path: &str,
+        logger: &mut Logger,
+    ) -> Result<Self, CommandError> {
+        let mut gitignore_files = get_gitignore_files(git_path, working_dir_path, logger)?;
+
+        let working_dir = format!("./{}", working_dir_path);
+        look_for_gitignore_files(&working_dir, &mut gitignore_files, logger, &working_dir)?;
         let mut patterns: Vec<(String, Vec<(usize, Pattern)>)> = Vec::new();
         for gitignore_path in gitignore_files.iter() {
-            add_gitignore_patterns(gitignore_path, &mut patterns)?;
+            add_gitignore_patterns(gitignore_path, &mut patterns, logger)?;
         }
         Ok(Self { patterns })
     }
@@ -24,21 +41,33 @@ impl GitignorePatterns {
     pub fn must_be_ignored(
         &self,
         path: &str,
+        logger: &mut Logger,
     ) -> Result<Option<(String, usize, Pattern)>, CommandError> {
-        let Some(path) = get_real_path(path) else {
+        let base_path = env::current_dir()
+            .map_err(|_| CommandError::FileNotFound("Directorio actual".to_string()))?;
+        let Some(path) = get_real_path(path, &base_path) else {
             return Ok(None);
         };
         let mut negate_pattern: Option<(String, usize, Pattern)> = None;
         let mut patterns_matched: Vec<(String, usize, Pattern)> = Vec::new();
-        for (dir_level, pattern_hashmap) in self.patterns.iter() {
-            for (line_number, pattern) in pattern_hashmap {
-                if matches_pattern(&path, pattern, &dir_level[..dir_level.len() - 10])? {
+        for (dir_level, pattern_vec) in self.patterns.iter() {
+            logger.log(&format!("Gitignore path: {}", dir_level));
+            for (line_number, pattern) in pattern_vec {
+                logger.log(&format!(
+                    "Line: {}, pattern: {}",
+                    line_number,
+                    pattern.get_pattern_read()
+                ));
+
+                if matches_pattern(&path, pattern, &dir_level[..dir_level.len() - 10], logger)? {
                     patterns_matched.push((
                         dir_level.to_string(),
                         line_number.to_owned(),
                         pattern.to_owned(),
                     ));
                     if pattern.negate_pattern() {
+                        logger.log(&format!("negate pattern"));
+
                         negate_pattern = Some((
                             dir_level.to_string(),
                             line_number.to_owned(),
@@ -52,20 +81,19 @@ impl GitignorePatterns {
         }
         if negate_pattern.is_some() {
             return Ok(negate_pattern);
-        } else if !patterns_matched.is_empty() {
-            return Ok(Some(patterns_matched[0].clone()));
         }
-        Ok(None)
+        Ok(patterns_matched.pop())
     }
 }
 
 fn get_gitignore_files(
     git_path: &str,
     working_dir_path: &str,
+    logger: &mut Logger,
 ) -> Result<Vec<String>, CommandError> {
     let mut gitignore_base_path = working_dir_path;
     let mut gitignore_files: Vec<String> = Vec::new();
-    if let Some((working_dir_repo, _)) = git_path.split_once("/") {
+    if let Some(working_dir_repo) = git_path.strip_suffix(".git") {
         while working_dir_repo != gitignore_base_path {
             let gitignore_path = join_paths!(gitignore_base_path, ".gitignore").ok_or(
                 CommandError::FileCreationError(format!(
@@ -85,7 +113,11 @@ fn get_gitignore_files(
                 format!(" No se pudo formar la ruta del archivo info/exclude"),
             ))?;
         if Path::new(&gitignore_path).exists() {
+            logger.log("Existe exclude");
+
             gitignore_files.insert(0, gitignore_path);
+        } else {
+            logger.log("No existe exclude");
         }
     }
 
@@ -95,6 +127,7 @@ fn get_gitignore_files(
 fn add_gitignore_patterns(
     gitignore_path: &str,
     patterns: &mut Vec<(String, Vec<(usize, Pattern)>)>,
+    logger: &mut Logger,
 ) -> Result<(), CommandError> {
     let mut patterns_hashmap: Vec<(usize, Pattern)> = Vec::new();
     let content = fs::read_to_string(gitignore_path)
@@ -175,14 +208,14 @@ fn add_gitignore_patterns(
             pattern = Pattern::NotRelativeToDirLevel(line, path, negate_pattern);
         }
 
-        patterns_hashmap.push((line_number, pattern));
+        patterns_hashmap.push((line_number + 1, pattern));
         line_number += 1;
     }
     _ = patterns.push((gitignore_path.to_string(), patterns_hashmap));
     Ok(())
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Pattern {
     StartsWith(String, String, bool, bool),
     EndsWith(String, String, bool, bool),
@@ -244,18 +277,27 @@ impl Pattern {
     }
 }
 
-fn get_real_path(relative_path: &str) -> Option<String> {
-    if let Ok(real_path) = fs::canonicalize(relative_path) {
-        if let Some(real_path_str) = real_path.to_str() {
-            return Some(real_path_str.to_string());
+fn get_real_path(target_path: &str, base_path: &PathBuf) -> Option<String> {
+    if let Ok(absolute_path) = fs::canonicalize(target_path) {
+        if let Ok(relative_path) = absolute_path.strip_prefix(base_path) {
+            if let Some(real_path_str) = relative_path.to_str() {
+                return Some(real_path_str.to_string());
+            }
         }
     }
     None
 }
 
-fn matches_pattern(path: &str, pattern: &Pattern, base_path: &str) -> Result<bool, CommandError> {
+fn matches_pattern(
+    path: &str,
+    pattern: &Pattern,
+    base_path: &str,
+    logger: &mut Logger,
+) -> Result<bool, CommandError> {
     let path = {
         if pattern.is_relative() {
+            logger.log(&format!("es relativo"));
+
             path.to_string()
         } else {
             join_paths!(base_path, path).ok_or(CommandError::FileCreationError(format!(
@@ -265,22 +307,57 @@ fn matches_pattern(path: &str, pattern: &Pattern, base_path: &str) -> Result<boo
     };
     match pattern {
         Pattern::StartsWith(_, pattern, _, _) => {
+            logger.log(&format!(
+                "STARTS WITH --> path: {}, pattern: {}",
+                path, pattern
+            ));
+
+            /* if path.len() > pattern.len() {
+                if path[..pattern.len()].contains("/") {
+                    return Ok(false);
+                }
+            } */
             if path.starts_with(pattern) {
                 return Ok(true);
             }
         }
         Pattern::EndsWith(_, pattern, _, _) => {
+            logger.log(&format!(
+                "ENDS WITH --> path: {}, pattern: {}",
+                path, pattern
+            ));
+
+            /* if path.len() > pattern.len() {
+                if path[pattern.len()..].contains("/") {
+                    return Ok(false);
+                }
+            } */
             if path.ends_with(pattern) {
                 return Ok(true);
             }
         }
         Pattern::MatchesAsterisk(_, start, end, _, _) => {
+            logger.log(&format!(
+                "MATCHES --> path: {}, starts: {}, ends:{}",
+                path, start, end
+            ));
+
+            /* if path.len() > start.len() + end.len() {
+                if path[start.len()..end.len()].contains("/") {
+                    return Ok(false);
+                }
+            } */
             if path.starts_with(start) && path.ends_with(end) {
                 return Ok(true);
             }
         }
         Pattern::RelativeToDirLevel(_, pattern, _)
         | Pattern::NotRelativeToDirLevel(_, pattern, _) => {
+            logger.log(&format!(
+                "RELATIVE OR NOT --> path: {}, pattern: {}",
+                path, pattern
+            ));
+
             let mut path = Path::new(&path);
             while let Some(parent) = path.parent() {
                 if parent.ends_with(pattern) {
@@ -291,4 +368,47 @@ fn matches_pattern(path: &str, pattern: &Pattern, base_path: &str) -> Result<boo
         }
     }
     Ok(false)
+}
+
+/// Busca desde 'path_name' archivos .gitignore.
+fn look_for_gitignore_files(
+    path_name: &str,
+    gitignore_files: &mut Vec<String>,
+    logger: &mut Logger,
+    base_path: &str,
+) -> Result<(), CommandError> {
+    let path = Path::new(path_name);
+
+    let Ok(entries) = fs::read_dir(path.clone()) else {
+        return Err(CommandError::DirNotFound(path_name.to_owned()));
+    };
+    for entry in entries {
+        let Ok(entry) = entry else {
+            return Err(CommandError::DirNotFound(path_name.to_owned()));
+        };
+        let entry_path = entry.path();
+        let entry_name = get_path_str(entry_path.clone())?;
+
+        if entry_name.contains(".git/") {
+            continue;
+        }
+        if entry_path.is_dir() {
+            look_for_gitignore_files(&entry_name, gitignore_files, logger, base_path)?;
+        } else if entry_name.ends_with(".gitignore") {
+            logger.log(&format!("Buscando .gitignore antes: {}", entry_name));
+
+            if let Some(path) = entry_name.strip_prefix(base_path) {
+                logger.log(&format!("Buscando .gitignore después: {}", path));
+                let path = if path.starts_with("/") {
+                    path[1..].to_string()
+                } else {
+                    path.to_string()
+                };
+                if !gitignore_files.contains(&path) {
+                    gitignore_files.push(path);
+                }
+            }
+        }
+    }
+    Ok(())
 }

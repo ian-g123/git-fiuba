@@ -3265,7 +3265,8 @@ impl<'a> GitRepository<'a> {
         }
 
         let (new_hash, mut new_tree) = self.get_checkout_branch_info(branch, &self.db()?)?;
-        let gitignore_patterns = GitignorePatterns::new(&self.git_path, &self.working_dir_path)?;
+        let gitignore_patterns =
+            GitignorePatterns::new(&self.git_path, &self.working_dir_path, &mut self.logger)?;
 
         let new_files: Vec<String> =
             add_local_new_files(untracked_files, &mut new_tree, &mut self.logger)?;
@@ -4277,12 +4278,23 @@ impl<'a> GitRepository<'a> {
         &mut self,
         verbose: bool,
         non_matching: bool,
-        paths: Vec<String>,
+        paths: &Vec<String>,
     ) -> Result<(), CommandError> {
         let mut message = String::new();
         for path in paths.iter() {
-            message += &self.check_ignore_file(verbose, non_matching, &path)?;
+            if path == "*" {
+                let mut entries: Vec<String> = Vec::new();
+                read_dir_level_entries("./", &mut entries)?;
+                for entry in entries {
+                    message += &self.check_ignore_file(verbose, non_matching, &entry)?;
+                }
+            } else {
+                message += &self.check_ignore_file(verbose, non_matching, &path)?;
+            }
         }
+
+        write!(self.output, "{}", message)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
         Ok(())
     }
 
@@ -4292,9 +4304,14 @@ impl<'a> GitRepository<'a> {
         non_matching: bool,
         path: &str,
     ) -> Result<String, CommandError> {
-        let gitignore_patterns = GitignorePatterns::new(&self.git_path, &self.working_dir_path)?;
+        self.log(&format!(
+            "Check-ignore args --> verbose: {}, non-matching {}, path: {}",
+            verbose, non_matching, path
+        ));
+        let gitignore_patterns =
+            GitignorePatterns::new(&self.git_path, &self.working_dir_path, &mut self.logger)?;
         if let Some((gitignore_path, line_number, pattern)) =
-            gitignore_patterns.must_be_ignored(path)?
+            gitignore_patterns.must_be_ignored(path, &mut self.logger)?
         {
             return Ok(pattern.to_string(path, &gitignore_path, line_number, verbose));
         }
@@ -4310,9 +4327,34 @@ impl<'a> GitRepository<'a> {
         path: &str,
         gitignore_patterns: &GitignorePatterns,
     ) -> Result<bool, CommandError> {
-        let result = gitignore_patterns.must_be_ignored(path)?;
+        let result = gitignore_patterns.must_be_ignored(path, &mut self.logger)?;
         Ok(result.is_some())
     }
+}
+
+// ----- Check-ignore -----
+
+/// Lee las entradas de un directorio y guarda en un vector sus nombres.
+fn read_dir_level_entries(path_name: &str, names: &mut Vec<String>) -> Result<(), CommandError> {
+    let path = Path::new(path_name);
+
+    let Ok(entries) = fs::read_dir(path.clone()) else {
+        return Err(CommandError::DirNotFound(path_name.to_owned()));
+    };
+    for entry in entries {
+        let Ok(entry) = entry else {
+            return Err(CommandError::DirNotFound(path_name.to_owned()));
+        };
+        let entry_path = entry.path();
+        let entry_name = get_path_str(entry_path.clone())?;
+
+        if entry_name.contains(".git") {
+            continue;
+        }
+        let path = &entry_name[2..];
+        names.push(get_name(path)?);
+    }
+    Ok(())
 }
 
 // ----- Ls-tree -----
@@ -5124,7 +5166,7 @@ fn merge_blobs(
 }
 
 /// Devuelve el nombre de un archivo o directorio dado un PathBuf.
-fn get_path_str(path: PathBuf) -> Result<String, CommandError> {
+pub fn get_path_str(path: PathBuf) -> Result<String, CommandError> {
     let Some(path_name) = path.to_str() else {
         return Err(CommandError::DirNotFound("".to_string())); //cambiar
     };
