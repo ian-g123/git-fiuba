@@ -13,10 +13,7 @@ use crate::{
         mode::Mode,
     },
     objects_database::ObjectsDatabase,
-    utils::{
-        aux::{get_name, hex_string_to_u8_vec},
-        super_string::u8_vec_to_hex_string,
-    },
+    utils::{aux::get_name, super_string::u8_vec_to_hex_string},
 };
 
 use super::{

@@ -5,15 +5,12 @@ use std::{
     io::{Cursor, Read, Write},
 };
 
-use chrono::format;
-
 use crate::{
     join_paths,
     logger::Logger,
     objects::git_object::{get_type_and_len, git_object_from_data},
     server_components::{
-        packfile_functions::{search_object_data_from_hash, search_object_from_hash},
-        packfile_object_type::PackfileObjectType,
+        packfile_functions::search_object_data_from_hash, packfile_object_type::PackfileObjectType,
     },
     utils::aux::{get_sha1_str, hex_string_to_u8_vec, join_paths_m},
 };
@@ -21,7 +18,7 @@ use crate::{
 use super::{
     command_errors::CommandError,
     file_compressor::{compress, extract},
-    objects::git_object::{read_git_object_from, GitObject},
+    objects::git_object::GitObject,
 };
 
 #[derive(Clone)]

@@ -530,13 +530,12 @@ fn test_read_index_with_three_objects() {
 
     fn test_read_index(
         index_file_bits: &Vec<u8>,
-        packfile_bits: &Vec<u8>,
+        _packfile_bits: &Vec<u8>,
         hash: &str,
         expected_offset: u32,
     ) {
         let mut index_file = std::io::Cursor::new(index_file_bits);
 
-        let packfile = std::io::Cursor::new(packfile_bits);
         let sha1 = crate::utils::aux::hex_string_to_u8_vec(hash);
         let offset = get_object_packfile_offset(&sha1, &mut index_file).unwrap();
         assert_eq!(offset, Some(expected_offset));

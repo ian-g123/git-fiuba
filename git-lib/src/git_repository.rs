@@ -3848,7 +3848,7 @@ impl<'a> GitRepository<'a> {
             CommandError::FileCreationError("Error creando path de tags".to_string()),
         )?;
         let output_message = Self::get_create_tag_message(&path, force, name)?;
-        let mut db = self.db()?;
+        let db = self.db()?;
         let (mut tag, tag_ref) = self.create_tag_object(name, message, object, &db)?;
         let file_content = {
             if write {
