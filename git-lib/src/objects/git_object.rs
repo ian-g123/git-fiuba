@@ -8,6 +8,7 @@ use super::{
     tree::Tree,
 };
 use crate::utils::aux::hex_string_to_u8_vec;
+use std::fmt::Debug;
 use std::{
     collections::HashMap,
     io::{Read, Write},
@@ -15,7 +16,7 @@ use std::{
 
 pub type GitObject = Box<dyn GitObjectTrait>;
 
-pub trait GitObjectTrait {
+pub trait GitObjectTrait: Debug {
     fn as_mut_tag(&mut self) -> Option<&mut TagObject> {
         None
     }
@@ -140,18 +141,19 @@ pub fn display_from_hash(
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (_, content) = db.read_file(hash, logger)?;
+    let (type_str, len, content) = db.read_file(hash, logger)?;
 
     let mut stream = std::io::Cursor::new(content);
-    display_from_stream(&mut stream, logger, output)
+    display_from_stream(type_str, len, &mut stream, logger, output)
 }
 
 pub fn display_from_stream(
+    type_str: String,
+    len: usize,
     stream: &mut dyn Read,
     logger: &mut Logger,
     output: &mut dyn Write,
 ) -> Result<(), CommandError> {
-    let (type_str, len) = get_type_and_len(stream)?;
     if type_str == "blob" {
         return Blob::display_from_stream(stream, len, output, logger);
     }
@@ -173,9 +175,7 @@ pub fn display_type_from_hash(
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (_, content) = db.read_file(hash, logger)?;
-    let mut stream = std::io::Cursor::new(content);
-    let (type_str, _) = get_type_and_len(&mut stream)?;
+    let (type_str, len, content) = db.read_file(hash, logger)?;
     writeln!(output, "{}", type_str)
         .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
     Ok(())
@@ -187,9 +187,7 @@ pub fn display_size_from_hash(
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (_, content) = db.read_file(hash, logger)?;
-    let mut stream = std::io::Cursor::new(content);
-    let (_, len) = get_type_and_len(&mut stream)?;
+    let (type_str, len, content) = db.read_file(hash, logger)?;
     writeln!(output, "{}", len).map_err(|error| CommandError::FileWriteError(error.to_string()))?;
     Ok(())
 }

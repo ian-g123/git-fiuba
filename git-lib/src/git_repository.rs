@@ -1651,6 +1651,9 @@ impl<'a> GitRepository<'a> {
                     "Error leyendo directorio de branches".to_string(),
                 ));
             };
+            if file_name == "HEAD" {
+                continue;
+            }
             let mut file = fs::File::open(path.path()).map_err(|error| {
                 CommandError::FileReadError(format!(
                     "Error leyendo directorio de branches: {}",

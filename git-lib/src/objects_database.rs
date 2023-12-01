@@ -10,7 +10,11 @@ use chrono::format;
 use crate::{
     join_paths,
     logger::Logger,
-    server_components::packfile_functions::search_object_from_hash,
+    objects::git_object::{get_type_and_len, git_object_from_data},
+    server_components::{
+        packfile_functions::{search_object_data_from_hash, search_object_from_hash},
+        packfile_object_type::PackfileObjectType,
+    },
     utils::aux::{get_sha1_str, hex_string_to_u8_vec, join_paths_m},
 };
 
@@ -51,22 +55,20 @@ impl ObjectsDatabase {
     ) -> Result<GitObject, CommandError> {
         logger.log(&format!("read_object hash_str: {}", hash_str));
 
-        if std::path::Path::new(
-            &join_paths!(&self.db_path, &hash_str[0..2], &hash_str[2..])
-                .ok_or(CommandError::JoiningPaths)?,
-        )
-        .exists()
-        {
-            let (path, decompressed_data) = self.read_file(hash_str, logger)?;
-            logger.log(&format!("read_object Success reading file!"));
-            logger.log(&format!(
-                "decompressed_data: {:?}",
-                String::from_utf8_lossy(decompressed_data.as_slice())
-            ));
-            let mut stream = Cursor::new(decompressed_data);
-            return read_git_object_from(self, &mut stream, &path, &hash_str, logger);
-        }
-        self.read_object_from_packs(hash_str, logger)
+        let (type_str, len, content) = self.read_file(hash_str, logger)?;
+
+        return git_object_from_data(
+            type_str,
+            &mut content.as_slice(),
+            len,
+            "",
+            hash_str,
+            logger,
+            &self,
+        );
+        // return read_git_object_from(self, &mut stream, &path, &hash_str, logger);
+
+        // self.read_object_from_packs(hash_str, logger)
     }
 
     /// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve la ruta del objeto y su data descomprimida.
@@ -74,7 +76,7 @@ impl ObjectsDatabase {
         &self,
         hash_str: &str,
         logger: &mut Logger,
-    ) -> Result<(String, Vec<u8>), CommandError> {
+    ) -> Result<(String, usize, Vec<u8>), CommandError> {
         //throws error if hash_str is not a valid sha1
         if hash_str.len() != 40 {
             return Err(CommandError::FileOpenError(format!(
@@ -84,6 +86,15 @@ impl ObjectsDatabase {
         }
         let file_path = join_paths!(&self.db_path, &hash_str[0..2], &hash_str[2..])
             .ok_or(CommandError::JoiningPaths)?;
+        if !std::path::Path::new(
+            &join_paths!(&self.db_path, &hash_str[0..2], &hash_str[2..])
+                .ok_or(CommandError::JoiningPaths)?,
+        )
+        .exists()
+        {
+            let (pack_type, len, content) = self.read_object_data_from_packs(hash_str, logger)?;
+            return Ok((pack_type.to_string(), len, content));
+        }
         logger.log(&format!("Database reading: {}", file_path));
 
         let mut file = File::open(&file_path).map_err(|error| {
@@ -102,7 +113,17 @@ impl ObjectsDatabase {
             ))
         })?;
         let decompressed_data = extract(&data)?;
-        Ok((file_path, decompressed_data))
+        let mut cursor = Cursor::new(decompressed_data);
+        let (type_str, len) = get_type_and_len(&mut cursor)?;
+        let mut data = Vec::new();
+        cursor.read_to_end(&mut data).map_err(|error| {
+            CommandError::FileReadError(format!(
+                "Error al leer archivo {}: {}",
+                file_path,
+                error.to_string()
+            ))
+        })?;
+        Ok((type_str, len, data))
     }
 
     /// Dado la ruta del repositorio, crea el objeto `ObjectsDatabase` que contiene métodos útiles para
@@ -144,11 +165,11 @@ impl ObjectsDatabase {
         Ok(true)
     }
 
-    fn read_object_from_packs(
+    fn read_object_data_from_packs(
         &self,
         hash_str: &str,
         logger: &mut Logger,
-    ) -> Result<GitObject, CommandError> {
+    ) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
         let packs = self.get_pack_paths()?;
         for (index_path, packfile_path) in packs {
             let mut index_file = File::open(&index_path).map_err(|error| {
@@ -165,7 +186,8 @@ impl ObjectsDatabase {
                     error.to_string()
                 ))
             })?;
-            if let Some(object) = search_object_from_hash(
+
+            if let Some(object) = search_object_data_from_hash(
                 hex_string_to_u8_vec(hash_str),
                 &mut index_file,
                 &mut packfile,

@@ -20,7 +20,7 @@ use super::{
     mode::Mode,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Tree {
     path: String,
     objects: HashMap<String, ([u8; 20], Option<GitObject>)>, // HashMap<name_object, object>
@@ -832,7 +832,10 @@ mod test_write_y_display {
         let mut reader_stream = Cursor::new(&mut content);
         let mut output = Vec::new();
         let mut output_stream = Cursor::new(&mut output);
+        let (type_str, len) = git_object::get_type_and_len(&mut reader_stream).unwrap();
         git_object::display_from_stream(
+            type_str,
+            len,
             &mut reader_stream,
             &mut Logger::new_dummy(),
             &mut output_stream,

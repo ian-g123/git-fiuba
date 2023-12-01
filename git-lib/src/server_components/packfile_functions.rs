@@ -396,10 +396,11 @@ pub fn search_object_from_hash(
     mut packfile: &mut dyn Read,
     db: &ObjectsDatabase,
 ) -> Result<Option<GitObject>, CommandError> {
-    let Some(packfile_offset) = get_object_packfile_offset(&sha1, &mut index_file)? else {
+    let Some((obj_type, obj_len, content)) =
+        search_object_data_from_hash(sha1, &mut index_file, &mut packfile, db)?
+    else {
         return Ok(None);
     };
-    let (obj_type, obj_len, content) = read_object_from_offset(&mut packfile, packfile_offset)?;
     let hash_str = u8_vec_to_hex_string(&sha1);
     Ok(Some(git_object_from_data(
         obj_type.to_string(),
@@ -409,6 +410,21 @@ pub fn search_object_from_hash(
         &hash_str,
         &mut Logger::new_dummy(),
         db,
+    )?))
+}
+
+pub fn search_object_data_from_hash(
+    sha1: [u8; 20],
+    mut index_file: &mut dyn Read,
+    mut packfile: &mut dyn Read,
+    db: &ObjectsDatabase,
+) -> Result<Option<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
+    let Some(packfile_offset) = get_object_packfile_offset(&sha1, &mut index_file)? else {
+        return Ok(None);
+    };
+    Ok(Some(read_object_from_offset(
+        &mut packfile,
+        packfile_offset,
     )?))
 }
 

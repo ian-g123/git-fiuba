@@ -23,7 +23,7 @@ use std::{
 extern crate chrono;
 use chrono::{prelude::*, DateTime};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CommitObject {
     parents: Vec<String>,
     message: String,
@@ -589,7 +589,10 @@ mod test {
         let mut output: Vec<u8> = Vec::new();
         let mut output_writer = Cursor::new(&mut output);
         let mut reader_stream = Cursor::new(&mut buf);
+        let (type_str, len) = git_object::get_type_and_len(&mut reader_stream).unwrap();
         git_object::display_from_stream(
+            type_str,
+            len,
             &mut reader_stream,
             &mut Logger::new_dummy(),
             &mut output_writer,
