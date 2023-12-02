@@ -97,3 +97,16 @@ fn test_really_big_delta_pack() {
     let expected = "";
     assert_eq!(string, expected.to_string());
 }
+
+#[test]
+#[ignore = "git-lib/tests/data/packfile/really_big_delta.zip must be extracted before running the test"]
+fn test_really_linux_delta_pack() {
+    let repo_path = "tests/data/packfile/linux";
+    let output = Vec::new();
+    let mut output_writer = Cursor::new(output);
+    let mut repo = GitRepository::open(repo_path, &mut output_writer).unwrap();
+    let commits = repo.get_log(true).unwrap();
+    let string = format!("{:?}", commits);
+    let expected = "";
+    assert_eq!(string, expected.to_string());
+}

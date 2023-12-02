@@ -160,10 +160,6 @@ impl Blob {
         stream
             .read_exact(&mut content)
             .map_err(|error| CommandError::FileReadError(error.to_string()))?;
-        logger.log(&format!(
-            "content: {}",
-            String::from_utf8(content.clone()).unwrap()
-        ));
 
         let blob = Blob::new_from_content_and_path(content, path)?;
         logger.log("blob created");
@@ -180,8 +176,7 @@ impl Blob {
         stream
             .read_exact(&mut content)
             .map_err(|error| CommandError::FileReadError(error.to_string()))?;
-        let output_str = String::from_utf8(content)
-            .map_err(|error| CommandError::FileReadError(error.to_string()))?;
+        let output_str = String::from_utf8_lossy(&content);
         writeln!(output, "{}", output_str)
             .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
         Ok(())

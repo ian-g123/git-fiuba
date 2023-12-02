@@ -2,13 +2,14 @@ use std::{
     collections::{HashMap, HashSet},
     env,
     fs::{self, DirEntry, File, OpenOptions, ReadDir},
-    io::{Read, Write},
+    io::{BufReader, Read, Write},
     path::{Path, PathBuf},
     thread,
     time::Duration,
 };
 
 use chrono::{DateTime, Local};
+use sha1::digest::block_buffer::Error;
 
 use crate::{
     changes_controller_components::{
@@ -30,7 +31,7 @@ use crate::{
         blob::Blob,
         commit_object::{
             sort_commits_ascending_date, sort_commits_descending_date,
-            write_commit_tree_to_database, CommitObject,
+            sort_commits_descending_date_bis, write_commit_tree_to_database, CommitObject,
         },
         git_object::{self, GitObject, GitObjectTrait},
         mode::Mode,
@@ -188,6 +189,15 @@ impl<'a> GitRepository<'a> {
             ));
         }
         Ok(())
+    }
+
+    pub fn get_file_reader(&self, file_path: String) -> Result<BufReader<File>, CommandError> {
+        let Some(path) = join_paths!(self.working_dir_path, file_path) else {
+            return Err(CommandError::FileNotFound(file_path.to_string()));
+        };
+
+        let file = File::open(path).unwrap();
+        return Ok(BufReader::new(file));
     }
 
     pub fn hash_object(&mut self, mut object: GitObject, write: bool) -> Result<(), CommandError> {
@@ -558,6 +568,19 @@ impl<'a> GitRepository<'a> {
         Ok(get_commits_rebase_merge(&commit_done_path)?)
     }
 
+    pub fn write_file(
+        &mut self,
+        path_file: &String,
+        new_content: &mut String,
+    ) -> Result<(), CommandError> {
+        let Some(path) = join_paths!(self.working_dir_path, path_file) else {
+            return Err(CommandError::FileNotFound(path_file.to_string()));
+        };
+        let mut file = File::create(path).unwrap();
+        file.write_all(new_content.as_bytes()).unwrap();
+        Ok(())
+    }
+
     pub fn add(&mut self, pathspecs: Vec<String>) -> Result<(), CommandError> {
         let last_commit = &self.get_last_commit_tree()?;
         let mut staging_area = StagingArea::open(&self.git_path)?;
@@ -782,6 +805,7 @@ impl<'a> GitRepository<'a> {
         }
         Ok(())
     }
+
     fn add_dir(
         &mut self,
         path_str: &str,
@@ -1656,7 +1680,7 @@ impl<'a> GitRepository<'a> {
                     "Error leyendo directorio de branches".to_string(),
                 ));
             };
-            if file_name == "HEAD" {
+            if file_name == "HEAD" || file_name == "ORIG_HEAD" {
                 continue;
             }
             let mut file = fs::File::open(path.path()).map_err(|error| {
@@ -1672,7 +1696,7 @@ impl<'a> GitRepository<'a> {
                     error.to_string()
                 ))
             })?;
-            branches.insert(file_name.to_string(), sha1.trim().to_string());
+            branches.insert(file_name.trim().to_string(), sha1.trim().to_string());
         }
         Ok(branches)
     }
@@ -2448,7 +2472,7 @@ impl<'a> GitRepository<'a> {
             CommandError::FileReadError(format!("No se pudo leer {path_to_branch} en log"))
         })?;
 
-        Ok(commit_hash[..commit_hash.len()].to_string())
+        Ok(commit_hash.trim().to_string())
     }
 
     pub fn get_last_commit_hash_branch_local_remote(
@@ -2588,11 +2612,8 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    fn staging_area(&mut self) -> Result<StagingArea, CommandError> {
-        let staging_area = StagingArea::open(&self.git_path);
-
-        self.log(&format!("Staging area open: {:?}", staging_area));
-        Ok(staging_area?)
+    pub fn staging_area(&mut self) -> Result<StagingArea, CommandError> {
+        Ok(StagingArea::open(&self.git_path)?)
     }
 
     fn get_failed_merge_info(&mut self) -> Result<(String, String, String), CommandError> {
@@ -2689,21 +2710,46 @@ impl<'a> GitRepository<'a> {
             branches_with_their_last_hash.push((current_branch, hash_commit));
         }
 
-        for branch_with_commit in branches_with_their_last_hash {
-            rebuild_commits_tree(
-                &self.db()?,
-                &branch_with_commit.1,
-                &mut commits_map,
-                Some(branch_with_commit.0),
-                all,
-                &HashSet::<String>::new(),
-                false,
-                &mut self.logger,
-            )?;
+        let mut commits_for_last_hash: Vec<(CommitObject, String, Option<String>)> = Vec::new();
+        for (branch, hash) in branches_with_their_last_hash {
+            self.log(&format!(
+                "Opening database branch: '{}', hash: '{}'",
+                branch, hash
+            ));
+            let mut commit_object = self.db()?.read_object(&hash, &mut self.logger)?;
+
+            self.log("read success");
+            let first_commit_branch =
+                commit_object
+                    .as_mut_commit()
+                    .ok_or(CommandError::DirectoryCreationError(
+                        "Error creando directorio".to_string(),
+                    ))?;
+            commits_for_last_hash.push((first_commit_branch.to_owned(), hash, Some(branch)));
+        }
+        sort_commits_descending_date(&mut commits_for_last_hash);
+
+        for (mut commit, hash, option_branch_name) in commits_for_last_hash {
+            if let Some(name_branch) = option_branch_name {
+                // let hash_commit = commit.get_hash_string()?;
+                rebuild_commits_tree(
+                    &self.db()?,
+                    &hash,
+                    &mut commits_map,
+                    Some(name_branch),
+                    all,
+                    &HashSet::<String>::new(),
+                    false,
+                    &mut self.logger,
+                )?;
+            } else {
+                return Err(CommandError::ReadRefsHeadError);
+            }
         }
 
         let mut commits = commits_map.drain().map(|(_, v)| v).collect();
-        sort_commits_descending_date(&mut commits);
+        sort_commits_descending_date_bis(&mut commits);
+
         Ok(commits)
     }
 
@@ -3289,8 +3335,7 @@ impl<'a> GitRepository<'a> {
         let merge_files = staging_area.get_unmerged_files();
         if !merge_files.is_empty() {
             let merge_conflicts: Vec<&String> = merge_files.keys().collect();
-            self.get_checkout_merge_conflicts_output(merge_conflicts)?;
-            return Ok(());
+            return Err(self.get_checkout_merge_conflicts_output(merge_conflicts));
         }
 
         let (new_hash, mut new_tree) = self.get_checkout_branch_info(branch, &self.db()?)?;
@@ -3379,16 +3424,15 @@ impl<'a> GitRepository<'a> {
     fn get_checkout_merge_conflicts_output(
         &mut self,
         merge_conflicts: Vec<&String>,
-    ) -> Result<(), CommandError> {
+    ) -> CommandError {
         let mut message = String::new();
-
         for path in merge_conflicts.iter() {
-            message += &format!("{path}: needs\n");
+            message += &format!("{path}: Requires conflict resolution\n");
         }
         message += &format!("error: you need to resolve your current index first\n");
-        write!(self.output, "{}", message)
-            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-        Ok(())
+        _ = write!(self.output, "{}", message)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()));
+        CommandError::FileWriteError(message)
     }
 
     /// Muestra el mensaje de éxito de Checkout.

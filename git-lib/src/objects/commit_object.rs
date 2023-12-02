@@ -745,7 +745,11 @@ pub fn sort_commits_descending_date2(
     });
 }
 
-pub fn sort_commits_descending_date(vec_commits: &mut Vec<(CommitObject, Option<String>)>) {
+pub fn sort_commits_descending_date(vec_commits: &mut Vec<(CommitObject, String, Option<String>)>) {
+    vec_commits.sort_by(|a, b| b.0.timestamp.cmp(&a.0.timestamp));
+}
+
+pub fn sort_commits_descending_date_bis(vec_commits: &mut Vec<(CommitObject, Option<String>)>) {
     vec_commits.sort_by(|a, b| b.0.timestamp.cmp(&a.0.timestamp));
 }
 

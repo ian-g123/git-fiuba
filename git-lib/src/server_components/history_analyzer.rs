@@ -81,12 +81,14 @@ pub fn rebuild_commits_tree(
     build_tree: bool,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    logger.log("rebuild_commits_tree");
     if commits_map.contains_key(&hash_commit.to_string()) {
         return Ok(());
     }
 
-    logger.log(&format!("Reading file db.read_file: {}", hash_commit));
+    logger.log(&format!(
+        "BUILD COMMIT TREE Reading file db.read_file: {}",
+        hash_commit
+    ));
     let (type_str, len, content) = db.read_file(hash_commit, logger)?;
 
     logger.log(&format!("type_str: {}, len: {}", type_str, len));
@@ -115,9 +117,16 @@ pub fn rebuild_commits_tree(
     }
 
     let parents_hash = commit_object.get_parents();
-
+    logger.log(&format!(
+        "parents_hash: {:?} of the commit: {}",
+        parents_hash, hash_commit
+    ));
     if parents_hash.len() > 0 {
         let principal_parent = &parents_hash[0];
+        logger.log(&format!(
+            "principal parent hash : {} of the commit: {}",
+            principal_parent, hash_commit
+        ));
         rebuild_commits_tree(
             db,
             &principal_parent,

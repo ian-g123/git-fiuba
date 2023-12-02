@@ -7,10 +7,9 @@ use std::{
 use crate::{
     command_errors::CommandError,
     file_compressor::compress,
-    logger::Logger,
     objects::{
         commit_object::CommitObject,
-        git_object::{git_object_from_data, GitObject, GitObjectTrait},
+        git_object::{GitObject, GitObjectTrait},
         tree::Tree,
     },
     objects_database::ObjectsDatabase,
@@ -209,6 +208,7 @@ fn read_object_from_offset(
     socket: &mut dyn Read,
     offset: u32,
 ) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
+    println!("read_object_from_offset with offset: {}", offset);
     let mut previous_objects = vec![0; offset as usize];
     let mut socket = socket;
 
@@ -223,8 +223,11 @@ fn read_object_from_offset(
     if object_type == PackfileObjectType::OfsDelta {
         let base_obj_neg_offset = read_ofs(socket)?;
         let base_object_offset = offset - base_obj_neg_offset;
+        println!("Reading base object");
+        let mut prev_obj_cursor = Cursor::new(&mut previous_objects);
         let (base_obj_type, base_obj_len, base_obj_content) =
-            read_object_from_offset(&mut previous_objects.as_slice(), base_object_offset)?;
+            read_object_from_offset(&mut prev_obj_cursor, base_object_offset)?;
+        println!("base object read");
         let mut decoder = flate2::read::ZlibDecoder::new(&mut socket);
         let mut delta_content = vec![0; len];
         decoder
@@ -234,18 +237,33 @@ fn read_object_from_offset(
         let mut cursor = Cursor::new(delta_content);
         let base_obj_len_redundant = read_size_encoding(&mut cursor)?;
         if base_obj_len_redundant != base_obj_len {
-            return Err(CommandError::ErrorExtractingPackfile);
+            return Err(CommandError::ErrorExtractingPackfileVerbose(format!(
+                "Base object length ({}) is not equal to the one in the delta object ({})",
+                base_obj_len, base_obj_len_redundant
+            )));
         }
         let object_len = read_size_encoding(&mut cursor)?;
-        let mut object_content = vec![0; object_len];
+        let mut object_content = Vec::new();
+        // let mut object_content = vec![0; object_len];
         let mut writer_cursor = Cursor::new(&mut object_content);
+        // while apply_delta_instruction(&mut cursor, &base_obj_content, &mut writer_cursor).unwrap() {
+        // }
+
         loop {
             let Some(instruction) = read_delta_instruction_from(&mut cursor)? else {
                 break;
             };
+            // println!("instruction: {:?}", instruction);
             instruction.apply(&mut writer_cursor, &base_obj_content)?;
         }
-        return Ok((base_obj_type, base_obj_len, object_content));
+        if object_content.len() != object_len {
+            panic!("len es diferente");
+        }
+        println!(
+            "object hash: {}",
+            u8_vec_to_hex_string(&get_sha1(&object_content))
+        );
+        return Ok((base_obj_type, object_len, object_content));
     }
 
     let mut decoder = flate2::read::ZlibDecoder::new(socket);
@@ -371,7 +389,11 @@ fn get_object_packfile_offset(
         .read_exact(&mut header_bytes)
         .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
     if header_bytes != [255, 116, 79, 99] {
-        return Err(CommandError::ErrorExtractingPackfile);
+        return Err(CommandError::ErrorExtractingPackfileVerbose(format!(
+            "el error ocurre en la funcion get_object_packfile al 
+        querer verificar el header {:?}",
+            header_bytes
+        )));
     }
     // The next four bytes denote the version number
     let mut version_bytes = [0; 4];
@@ -379,7 +401,11 @@ fn get_object_packfile_offset(
         .read_exact(&mut version_bytes)
         .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
     if version_bytes != [0, 0, 0, 2] {
-        return Err(CommandError::ErrorExtractingPackfile);
+        return Err(CommandError::ErrorExtractingPackfileVerbose(format!(
+            "el error ocurre en la funcion get_object_packfile al 
+        querer verificar el header {:?}",
+            version_bytes
+        )));
     }
     // # Fanout table
     // The first level of entries in this table is a series of 256 entries of four bytes
@@ -395,19 +421,34 @@ fn get_object_packfile_offset(
         cumulative_objects_counts[(object_group_index - 1) * 4..object_group_index * 4]
             .to_vec()
             .try_into()
-            .map_err(|_| CommandError::ErrorExtractingPackfile)?,
+            .map_err(|_| {
+                CommandError::ErrorExtractingPackfileVerbose(format!(
+                    "Could not get prev_object_group_count value: {:?}, {}",
+                    cumulative_objects_counts, object_group_index
+                ))
+            })?,
     );
     let object_group_count = u32::from_be_bytes(
         cumulative_objects_counts[object_group_index * 4..(object_group_index + 1) * 4]
             .to_vec()
             .try_into()
-            .map_err(|_| CommandError::ErrorExtractingPackfile)?,
+            .map_err(|_| {
+                CommandError::ErrorExtractingPackfileVerbose(format!(
+                    "Could not get object_group_count value: {:?}, {}",
+                    cumulative_objects_counts, object_group_index
+                ))
+            })?,
     );
     let object_count = u32::from_be_bytes(
         cumulative_objects_counts[cumulative_objects_counts.len() - 4..]
             .to_vec()
             .try_into()
-            .map_err(|_| CommandError::ErrorExtractingPackfile)?,
+            .map_err(|_| {
+                CommandError::ErrorExtractingPackfileVerbose(format!(
+                    "Could not get object_count value: {:?}, {}",
+                    cumulative_objects_counts, object_group_index
+                ))
+            })?,
     );
 
     // The second layer of the fanout table contains the 20-byte object names, in order.
@@ -454,11 +495,12 @@ fn get_object_packfile_offset(
     index_file
         .read_exact(&mut offset_bytes)
         .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
-    let offset = u32::from_be_bytes(
-        offset_bytes
-            .try_into()
-            .map_err(|_| CommandError::ErrorExtractingPackfile)?,
-    );
+    let offset = u32::from_be_bytes(offset_bytes.clone().try_into().map_err(|_| {
+        CommandError::ErrorExtractingPackfileVerbose(format!(
+            "Could not get offset value: {:b} {:b} {:b} {:b}",
+            offset_bytes[0], offset_bytes[1], offset_bytes[2], offset_bytes[3]
+        ))
+    })?);
 
     Ok(Some(offset))
 }
