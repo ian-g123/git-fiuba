@@ -554,7 +554,6 @@ fn test_starts_with() {
 }
 
 #[test]
-#[ignore]
 fn test_non_matching() {
     let path = "./tests/data/commands/check_ignore/repo6";
     create_test_scene_5(path);
@@ -564,7 +563,7 @@ fn test_non_matching() {
         .arg("check-ignore")
         .arg("dir/testfile1.txt")
         .arg("dir/dir1/testfile5.txt")
-        .arg("dir")
+        .arg("sth")
         .arg("--verbose")
         .arg("-n")
         .current_dir(path)
@@ -573,7 +572,27 @@ fn test_non_matching() {
 
     let stderr = String::from_utf8(result.stderr).unwrap();
     let stdout = String::from_utf8(result.stdout).unwrap();
-    let expected = ".git/info/exclude:7:dir*\tdir/testfile1.txt\n.git/info/exclude:7:dir*\tdir/dir1/testfile5.txt\n::\tdir\n";
+    let expected = ".git/info/exclude:7:dir*\tdir/testfile1.txt\n.git/info/exclude:7:dir*\tdir/dir1/testfile5.txt\n::\tsth\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
+    write_to_exclude(path, "test*\n", false);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("check-ignore")
+        .arg("*")
+        .arg("text")
+        .arg("")
+        .arg("--verbose")
+        .arg("-n")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = "::\tdir\n.git/info/exclude:7:test*\ttestfile.txt\n::\ttext\n";
 
     assert_eq!("", stderr);
     assert_eq!(expected, stdout);

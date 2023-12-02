@@ -353,27 +353,31 @@ fn matches_pattern(
                 return Ok(false);
             }
 
-            /* let mut e = pattern.len() - 1;
-            let mut s = 0; */
+            let mut e = pattern.len();
+            //let mut s = 0;
             let mut index = 0;
 
             if !is_relative.to_owned() || !is_dir(pattern) {
                 for _ in path.chars() {
                     if path[index..].starts_with(pattern) {
-                        if index > 0 && !path[index - 1..].starts_with("/") {
-                            logger.log(&format!("! /",));
+                        logger.log(&format!("e+index = {}", e + index));
+                        if (index > 0 && !path[index - 1..].starts_with("/"))
+                            /* || (!pattern.ends_with("/")
+                                && e + index < path.len() - 1
+                                && &path[e + index..] == "/")
+                            || !(e + index < path.len() - 1) */
+                        {
                             return Ok(false);
+
+                            //s = index; //if index > 0 { index - 1 } else { 0 };
+                            //break;
                         }
-                        /* s = index; //if index > 0 { index - 1 } else { 0 };
-                        break; */
                         return Ok(true);
                     }
                     index += 1;
                 }
-                //e += s;
             }
 
-            logger.log(&format!("doesn't match",));
             /* logger.log(&format!("e={}", e));
             if let Some(rest) = path.get(e..) {
                 if is_dir(pattern) && !rest.starts_with("/") {
@@ -432,7 +436,6 @@ fn matches_pattern(
                 }
                 return Ok(true);
             }
-            logger.log(&format!("!path.contains(pattern)"));
         }
         Pattern::MatchesAsterisk(_, start, end, _, _) => {
             logger.log(&format!(
@@ -516,5 +519,5 @@ fn look_for_gitignore_files(
 
 fn is_dir(path: &str) -> bool {
     let obj_path = Path::new(path);
-    obj_path.is_dir() || path.ends_with("/")
+    path.ends_with("/")
 }

@@ -4287,6 +4287,7 @@ impl<'a> GitRepository<'a> {
             if path == "*" {
                 let mut entries: Vec<String> = Vec::new();
                 read_dir_level_entries("./", &mut entries)?;
+                entries.sort();
                 for entry in entries {
                     message += &self.check_ignore_file(
                         verbose,
@@ -4317,6 +4318,9 @@ impl<'a> GitRepository<'a> {
         path: &str,
         gitignore_patterns: Option<GitignorePatterns>,
     ) -> Result<String, CommandError> {
+        if path == "" {
+            return Ok("".to_string());
+        }
         self.log(&format!(
             "Check-ignore args --> verbose: {}, non-matching {}, path: {}",
             verbose, non_matching, path
