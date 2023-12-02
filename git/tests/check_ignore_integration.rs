@@ -296,7 +296,7 @@ fn test_order_negate() {
 }
 
 #[test]
-fn test_ends_with_border_cases() {
+fn test_ends_with_general() {
     let path = "./tests/data/commands/check_ignore/repo7";
     create_check_ignore_scene(path);
     write_to_exclude(path, "*a/name/\n", true);
@@ -313,6 +313,31 @@ fn test_ends_with_border_cases() {
     let stderr = String::from_utf8(result.stderr).unwrap();
     let stdout = String::from_utf8(result.stdout).unwrap();
     let expected = "abba/name/\nabba/name/otro\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
+    write_to_exclude(path, "*a/name\n", false);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("check-ignore")
+        .arg("a/name")
+        .arg("abba/name/")
+        .arg("abba/name/otro")
+        .arg("a/abba/name/")
+        .arg("abc_name")
+        .arg("a/name/")
+        .arg("name")
+        .arg("name_abc")
+        .arg("name/a/b/c")
+        .arg("abc_name/")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = "a/name\nabba/name/\nabba/name/otro\na/name/\n";
 
     assert_eq!("", stderr);
     assert_eq!(expected, stdout);
@@ -335,7 +360,56 @@ fn test_ends_with_border_cases() {
 
     let stderr = String::from_utf8(result.stderr).unwrap();
     let stdout = String::from_utf8(result.stdout).unwrap();
-    let expected = "abba/name/\nabba/name/otro\nabc_name\nname/a/b/c\n";
+    let expected =
+        "abba/name/\nabba/name/otro\na/abba/name/\nabc_name\na/name/\nname\nname/a/b/c\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
+    write_to_exclude(path, "*name/\n", false);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("check-ignore")
+        .arg("abba/name/")
+        .arg("abba/name/otro")
+        .arg("a/abba/name/")
+        .arg("abc_name")
+        .arg("a/name/")
+        .arg("name")
+        .arg("name_abc")
+        .arg("name/a/b/c")
+        .arg("abc_name/")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = "abba/name/\nabba/name/otro\na/abba/name/\na/name/\nname/a/b/c\nabc_name/\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
+    write_to_exclude(path, "*/name\n", false);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("check-ignore")
+        .arg("abba/name/")
+        .arg("abba/name/otro")
+        .arg("a/abba/name/")
+        .arg("abc_name")
+        .arg("a/name/")
+        .arg("name")
+        .arg("name_abc")
+        .arg("name/a/b/c")
+        .arg("abc_name/")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = "abba/name/\nabba/name/otro\na/name/\n";
 
     assert_eq!("", stderr);
     assert_eq!(expected, stdout);

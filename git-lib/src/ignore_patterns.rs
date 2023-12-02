@@ -382,32 +382,57 @@ fn matches_pattern(
             } */
             return Ok(false);
         }
-        Pattern::EndsWith(_, pattern, _, _) => {
+        Pattern::EndsWith(_, pattern, is_relative, _) => {
             logger.log(&format!(
-                "ENDS WITH --> path: {}, pattern: {}",
-                path, pattern
+                "ENDS WITH --> path: {}, pattern: {}, is_dir: {}, is_relative: {}",
+                path,
+                pattern,
+                is_dir(pattern),
+                is_relative.to_owned()
             ));
-            if !is_dir(pattern) && path.ends_with(pattern) {
+            /* if !is_dir(pattern) && path.ends_with(pattern) {
                 return Ok(true);
-            } else if is_dir(pattern) {
-                let mut s = 0;
-                let mut index = 0;
+            } else if is_dir(pattern) { */
+            let mut s = 0;
+            let mut index = 0;
 
-                if path.contains(pattern) {
-                    for _ in path.chars() {
-                        if !path[index..].contains(pattern) {
-                            s = if index > 0 { index - 1 } else { 0 };
-                            break;
-                        }
-                        index += 1;
+            if path.contains(pattern) {
+                for _ in path.chars() {
+                    if path[index..].starts_with(pattern) {
+                        s = index;
+                        break;
                     }
-                    logger.log(&format!("Es dir. s={}", s));
-                    if !path[..s].contains("/") {
-                        return Ok(true);
-                    }
+                    index += 1;
                 }
-                logger.log(&format!("!path.contains(pattern)"));
+                //logger.log(&format!("Es dir. s={}", s));
+                let mut e = s + pattern.len();
+                /* if s > 0 {
+                    e -= 1;
+                } */
+
+                logger.log(&format!("s={},e={}", s, e));
+                logger.log(&format!(
+                    "Conditions: (1) {} (2) {} (3) {}",
+                    e < path.len() - 1 && !path[e..].starts_with("/"),
+                    is_relative.to_owned() && s > 0 && path[..s].contains("/"),
+                    !is_relative.to_owned()
+                        && is_dir(pattern)
+                        && s > 0
+                        && !path[..s].ends_with("/")
+                ));
+
+                if (e < path.len() - 1 && !path[e..].starts_with("/") && !is_dir(pattern))
+                    || (is_relative.to_owned() && s > 0 && path[..s].contains("/"))
+                /* || (!is_relative.to_owned()
+                && is_dir(pattern)
+                && s > 0
+                && !path[..s].ends_with("/")) */
+                {
+                    return Ok(false);
+                }
+                return Ok(true);
             }
+            logger.log(&format!("!path.contains(pattern)"));
         }
         Pattern::MatchesAsterisk(_, start, end, _, _) => {
             logger.log(&format!(
