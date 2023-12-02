@@ -362,10 +362,10 @@ fn matches_pattern(
                     if path[index..].starts_with(pattern) {
                         logger.log(&format!("e+index = {}", e + index));
                         if (index > 0 && !path[index - 1..].starts_with("/"))
-                            /* || (!pattern.ends_with("/")
-                                && e + index < path.len() - 1
-                                && &path[e + index..] == "/")
-                            || !(e + index < path.len() - 1) */
+                        /* || (!pattern.ends_with("/")
+                            && e + index < path.len() - 1
+                            && &path[e + index..] == "/")
+                        || !(e + index < path.len() - 1) */
                         {
                             return Ok(false);
 
@@ -409,7 +409,7 @@ fn matches_pattern(
                     index += 1;
                 }
                 //logger.log(&format!("Es dir. s={}", s));
-                let mut e = s + pattern.len();
+                let e = s + pattern.len();
                 /* if s > 0 {
                     e -= 1;
                 } */
@@ -452,10 +452,27 @@ fn matches_pattern(
                 return Ok(true);
             }
         }
-        Pattern::RelativeToDirLevel(_, pattern, _)
-        | Pattern::NotRelativeToDirLevel(_, pattern, _) => {
+        Pattern::RelativeToDirLevel(_, pattern, _) => {
             logger.log(&format!(
-                "RELATIVE OR NOT --> path: {}, pattern: {}",
+                "RELATIVE --> path: {}, pattern: {}",
+                path, pattern
+            ));
+            if path.starts_with(pattern) {
+                logger.log(&format!("comienza con el patrón",));
+                if let Some(rest) = path.get(pattern.len()..) {
+                    logger.log(&format!("rest: {}", rest));
+                    if rest != "" && !rest.starts_with("/") && !is_dir(pattern) {
+                        logger.log(&format!("no coincide"));
+
+                        return Ok(false);
+                    }
+                }
+                return Ok(true);
+            }
+        }
+        Pattern::NotRelativeToDirLevel(_, pattern, _) => {
+            logger.log(&format!(
+                "NOT RELATIVE--> path: {}, pattern: {}",
                 path, pattern
             ));
             if path.ends_with(pattern) {
