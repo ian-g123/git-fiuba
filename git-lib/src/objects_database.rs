@@ -61,7 +61,31 @@ impl ObjectsDatabase {
             "",
             hash_str,
             logger,
-            &self,
+            Some(&self),
+        );
+        // return read_git_object_from(self, &mut stream, &path, &hash_str, logger);
+
+        // self.read_object_from_packs(hash_str, logger)
+    }
+
+    /// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve el objeto que este representa.
+    pub fn read_object_shallow(
+        &self,
+        hash_str: &str,
+        logger: &mut Logger,
+    ) -> Result<GitObject, CommandError> {
+        logger.log(&format!("read_object hash_str: {}", hash_str));
+
+        let (type_str, len, content) = self.read_file(hash_str, logger)?;
+
+        return git_object_from_data(
+            type_str,
+            &mut content.as_slice(),
+            len,
+            "",
+            hash_str,
+            logger,
+            None,
         );
         // return read_git_object_from(self, &mut stream, &path, &hash_str, logger);
 

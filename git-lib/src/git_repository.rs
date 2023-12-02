@@ -2716,7 +2716,7 @@ impl<'a> GitRepository<'a> {
                 "Opening database branch: '{}', hash: '{}'",
                 branch, hash
             ));
-            let mut commit_object = self.db()?.read_object(&hash, &mut self.logger)?;
+            let mut commit_object = self.db()?.read_object_shallow(&hash, &mut self.logger)?;
 
             self.log("read success");
             let first_commit_branch =
