@@ -4657,7 +4657,7 @@ fn read_packed_refs_file(git_path: &str) -> Result<HashMap<String, String>, Comm
         let Some((hash, ref_path)) = line.split_once(' ') else {
             return Err(CommandError::InvalidCommit);
         };
-        if hash.len() != 40 {
+        if line.starts_with("#") || hash.len() != 40 {
             continue;
         }
         _ = refs.insert(ref_path.to_string(), hash.to_string());
