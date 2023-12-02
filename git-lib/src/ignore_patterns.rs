@@ -207,7 +207,9 @@ fn add_gitignore_patterns(
                 }
                 SLASH => {
                     if i != last_index {
-                        is_relative = true;
+                        if !(i == last_index - 1 && line[last_index..].starts_with(ASTERISK)) {
+                            is_relative = true;
+                        }
                     }
                     logger.log(&format!("i = {}", i));
                     if i != 0 {
@@ -336,39 +338,49 @@ fn matches_pattern(
     match pattern {
         Pattern::StartsWith(_, pattern, is_relative, _) => {
             logger.log(&format!(
-                "STARTS WITH --> path: {}, pattern: {}",
-                path, pattern
+                "STARTS WITH --> path: {}, pattern: {}, is_relative: {}, is_dir: {}",
+                path,
+                pattern,
+                is_relative,
+                is_dir(pattern)
             ));
 
-            if !is_dir(pattern) && path.starts_with(pattern) {
-                return Ok(true);
-            } else if is_dir(pattern) {
-                let mut e = pattern.len() - 1;
-                let mut s = 0;
-                let mut index = 0;
-                if is_relative.to_owned() && !path.starts_with(pattern) {
-                    return Ok(false);
+            if is_relative.to_owned() || is_dir(pattern) {
+                if path.starts_with(pattern) {
+                    logger.log(&format!("is_rel or dir, matches",));
+                    return Ok(true);
                 }
-                if !is_relative.to_owned() {
-                    for _ in path.chars() {
-                        if path[index..].starts_with(pattern) {
-                            if index > 0 && !path[index - 1..].starts_with("/") {
-                                return Ok(false);
-                            }
-                            s = if index > 0 { index - 1 } else { 0 };
-                            break;
-                        }
-                        index += 1;
-                    }
-                    e += s;
-                }
+                return Ok(false);
+            }
 
-                if let Some(rest) = path.get(e..) {
-                    if rest.starts_with("/") {
+            /* let mut e = pattern.len() - 1;
+            let mut s = 0; */
+            let mut index = 0;
+
+            if !is_relative.to_owned() || !is_dir(pattern) {
+                for _ in path.chars() {
+                    if path[index..].starts_with(pattern) {
+                        if index > 0 && !path[index - 1..].starts_with("/") {
+                            logger.log(&format!("! /",));
+                            return Ok(false);
+                        }
+                        /* s = index; //if index > 0 { index - 1 } else { 0 };
+                        break; */
                         return Ok(true);
                     }
+                    index += 1;
                 }
+                //e += s;
             }
+
+            logger.log(&format!("doesn't match",));
+            /* logger.log(&format!("e={}", e));
+            if let Some(rest) = path.get(e..) {
+                if is_dir(pattern) && !rest.starts_with("/") {
+                    return Ok(false);
+                }
+            } */
+            return Ok(false);
         }
         Pattern::EndsWith(_, pattern, _, _) => {
             logger.log(&format!(

@@ -317,6 +317,29 @@ fn test_ends_with_border_cases() {
     assert_eq!("", stderr);
     assert_eq!(expected, stdout);
 
+    write_to_exclude(path, "*name\n", false);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("check-ignore")
+        .arg("abba/name/")
+        .arg("abba/name/otro")
+        .arg("a/abba/name/")
+        .arg("abc_name")
+        .arg("a/name/")
+        .arg("name")
+        .arg("name_abc")
+        .arg("name/a/b/c")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = "abba/name/\nabba/name/otro\nabc_name\nname/a/b/c\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
     _ = fs::remove_dir_all(format!("{}", path));
 }
 
@@ -324,8 +347,8 @@ fn test_ends_with_border_cases() {
 fn test_starts_with() {
     let path = "./tests/data/commands/check_ignore/repo8";
     create_check_ignore_scene(path);
-    write_to_exclude(path, "name/*\n", true);
 
+    write_to_exclude(path, "name/*\n", true);
     let result = Command::new("../../../../../../target/debug/git")
         .arg("check-ignore")
         .arg("name/a.txt")
@@ -366,15 +389,89 @@ fn test_starts_with() {
         .arg("check-ignore")
         .arg("name/a.txt")
         .arg("b/name/a.txt")
+        .arg("a/b/name/a.txt")
         .arg("name/")
         .arg("name")
+        .arg("name_and_sth_more")
+        .arg("name/a/b")
         .current_dir(path)
         .output()
         .unwrap();
 
     let stderr = String::from_utf8(result.stderr).unwrap();
     let stdout = String::from_utf8(result.stdout).unwrap();
-    let expected = "name/a.txt\nb/name/a.txt\nname/\nname\n";
+    let expected =
+        "name/a.txt\nb/name/a.txt\na/b/name/a.txt\nname/\nname\nname_and_sth_more\nname/a/b\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
+    write_to_exclude(path, "/name*\n", false);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("check-ignore")
+        .arg("name/a.txt")
+        .arg("b/name/a.txt")
+        .arg("a/b/name/a.txt")
+        .arg("name/")
+        .arg("name")
+        .arg("name_and_sth_more")
+        .arg("name/a/b")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = "name/a.txt\nname/\nname\nname_and_sth_more\nname/a/b\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
+    write_to_exclude(path, "/name/*\n", false);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("check-ignore")
+        .arg("name/a.txt")
+        .arg("b/name/a.txt")
+        .arg("a/b/name/a.txt")
+        .arg("name/")
+        .arg("name")
+        .arg("name_and_sth_more")
+        .arg("name/a/b")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = "name/a.txt\nname/\nname/a/b\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
+    write_to_exclude(path, "a/name*\n", false);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("check-ignore")
+        .arg("name/a.txt")
+        .arg("b/name/a.txt")
+        .arg("a/b/name/a.txt")
+        .arg("a/name")
+        .arg("a/name_a")
+        .arg("a/name/")
+        .arg("a/name/b")
+        .arg("name/")
+        .arg("name")
+        .arg("name_and_sth_more")
+        .arg("name/a/b")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = "a/name\na/name_a\na/name/\na/name/b\n";
 
     assert_eq!("", stderr);
     assert_eq!(expected, stdout);
@@ -440,17 +537,17 @@ fn write_to_gitignore(path: &str, dir: bool, content: &str, append: bool) {
 }
 
 fn write_to_exclude(path: &str, content: &str, append: bool) {
-    let content = {
-        if !append {
-            format!("# git ls-files --others --exclude-from=.git/info/exclude\n# Lines that start with '#' are comments.\n# For a project mostly in C, the following would be a good set of\n# exclude patterns (uncomment them if you want to use them):\n# *.[oa]\n# *~\n{}", content)
-        } else {
-            content.to_string()
-        }
-    };
     let path = path.to_owned() + "/.git/info/exclude";
+    let base = "# git ls-files --others --exclude-from=.git/info/exclude\n# Lines that start with '#' are comments.\n# For a project mostly in C, the following would be a good set of\n# exclude patterns (uncomment them if you want to use them):\n# *.[oa]\n# *~\n";
+
+    if !append {
+        let mut file = File::create(path.clone()).unwrap();
+        file.write_all(base.as_bytes()).unwrap();
+    }
+
     let mut file = OpenOptions::new()
         .write(true)
-        .append(append)
+        .append(true)
         .create(true)
         .open(path)
         .unwrap();
