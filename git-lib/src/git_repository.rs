@@ -566,6 +566,9 @@ impl<'a> GitRepository<'a> {
         let mut staging_area = StagingArea::open(&self.git_path)?;
         let mut pathspecs_clone: Vec<String> = pathspecs.clone();
         let mut position = 0;
+        let mut ignored_paths = Vec::<String>::new();
+        let patterns =
+            GitignorePatterns::new(&self.git_path, &self.working_dir_path, &mut self.logger)?;
         for pathspec in &pathspecs {
             if !Path::new(pathspec).exists() {
                 if !self.is_in_last_commit_from_path(pathspec, last_commit) {
@@ -582,9 +585,19 @@ impl<'a> GitRepository<'a> {
         }
 
         for pathspec in pathspecs_clone.iter() {
-            self.add_path(pathspec, &mut staging_area)?
+            self.add_path(pathspec, &mut staging_area, &patterns, &mut ignored_paths)?
         }
         staging_area.save()?;
+        ignored_paths.sort();
+        if !ignored_paths.is_empty() {
+            let mut message =
+                "The following paths are ignored by one of your .gitignore files:\n".to_string();
+            for path in ignored_paths.iter_mut() {
+                message += &format!("{}\n", path);
+            }
+            write!(self.output, "{}", message)
+                .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        }
         Ok(())
     }
 
@@ -770,18 +783,27 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    fn add_path(&mut self, path: &str, staging_area: &mut StagingArea) -> Result<(), CommandError> {
+    fn add_path(
+        &mut self,
+        path: &str,
+        staging_area: &mut StagingArea,
+        patterns: &GitignorePatterns,
+        ignored_files: &mut Vec<String>,
+    ) -> Result<(), CommandError> {
         let path = Path::new(path);
         let path_str = &Self::get_path_str(path)?;
         let path_str = join_paths!(self.working_dir_path, path_str).ok_or(
             CommandError::DirectoryCreationError("Error abriendo directorio".to_string()),
         )?;
-
-        if path.is_file() {
-            self.add_file(&path_str, staging_area)?;
-            return Ok(());
+        if self.must_be_ignored(&path_str, patterns)? {
+            ignored_files.push(path_str);
         } else {
-            self.add_dir(&path_str, staging_area)?;
+            if path.is_file() {
+                self.add_file(&path_str, staging_area)?;
+                return Ok(());
+            } else {
+                self.add_dir(&path_str, staging_area, patterns, ignored_files)?;
+            }
         }
         Ok(())
     }
@@ -789,11 +811,13 @@ impl<'a> GitRepository<'a> {
         &mut self,
         path_str: &str,
         staging_area: &mut StagingArea,
+        patterns: &GitignorePatterns,
+        ignored_files: &mut Vec<String>,
     ) -> Result<(), CommandError> {
         let entries = self.read_dir(&path_str.to_string())?;
         for entry in entries {
             match entry {
-                Ok(entry) => self.try_run_for_path(entry, staging_area)?,
+                Ok(entry) => self.try_run_for_path(entry, staging_area, patterns, ignored_files)?,
                 Err(error) => {
                     self.log(&format!("Error in entry: {:?}", error));
                     return Err(CommandError::FileOpenError(error.to_string()));
@@ -811,6 +835,8 @@ impl<'a> GitRepository<'a> {
         &mut self,
         entry: DirEntry,
         staging_area: &mut StagingArea,
+        patterns: &GitignorePatterns,
+        ignored_files: &mut Vec<String>,
     ) -> Result<(), CommandError> {
         let path = entry.path();
         let Some(path_str) = path.to_str() else {
@@ -826,7 +852,7 @@ impl<'a> GitRepository<'a> {
         if self.should_ignore(&path_str_r) {
             return Ok(());
         }
-        self.add_path(&path_str_r, staging_area)?;
+        self.add_path(&path_str_r, staging_area, patterns, ignored_files)?;
         Ok(())
     }
 
@@ -906,7 +932,10 @@ impl<'a> GitRepository<'a> {
         quiet: bool,
     ) -> Result<(), CommandError> {
         let mut staging_area = self.staging_area()?;
-        self.update_staging_area_files(&files, &mut staging_area)?;
+        let patterns =
+            GitignorePatterns::new(&self.git_path, &self.working_dir_path, &mut self.logger)?;
+
+        self.update_staging_area_files(&files, &mut staging_area, &patterns)?;
 
         self.commit_priv(
             message,
@@ -928,7 +957,10 @@ impl<'a> GitRepository<'a> {
         quiet: bool,
     ) -> Result<(), CommandError> {
         let mut staging_area = self.staging_area()?;
-        self.run_all_config(&mut staging_area)?;
+        let patterns =
+            GitignorePatterns::new(&self.git_path, &self.working_dir_path, &mut self.logger)?;
+
+        self.run_all_config(&mut staging_area, &patterns)?;
 
         self.commit_priv(
             message,
@@ -968,6 +1000,7 @@ impl<'a> GitRepository<'a> {
         &mut self,
         files: &Vec<String>,
         staging_area: &mut StagingArea,
+        patterns: &GitignorePatterns,
     ) -> Result<(), CommandError> {
         self.log("Running pathspec configuration");
 
@@ -976,9 +1009,9 @@ impl<'a> GitRepository<'a> {
             if !Path::new(path).exists() {
                 staging_area.remove(path);
             } else if !self.is_untracked(path, &staging_area)? {
-                self.log(&format!("It's untracked: {}", path));
-
-                self.add_file(path, staging_area)?;
+                if !self.must_be_ignored(path, patterns)? {
+                    self.add_file(path, staging_area)?;
+                }
             } else {
                 return Err(CommandError::UntrackedError(path.to_owned()));
             }
@@ -992,7 +1025,11 @@ impl<'a> GitRepository<'a> {
 
     /// Guarda en el staging area todos los archivos modificados y elimina los borrados.\
     /// Los archivos untracked no se guardan.
-    fn run_all_config(&mut self, staging_area: &mut StagingArea) -> Result<(), CommandError> {
+    fn run_all_config(
+        &mut self,
+        staging_area: &mut StagingArea,
+        patterns: &GitignorePatterns,
+    ) -> Result<(), CommandError> {
         self.log("Running 'all' configuration\n");
         let files = &staging_area.get_files();
         for (path, _) in files {
@@ -1003,7 +1040,7 @@ impl<'a> GitRepository<'a> {
 
         self.log("Saving entries\n");
 
-        self.save_entries("./", staging_area, files)?;
+        self.save_entries("./", staging_area, files, patterns)?;
         staging_area.save()?;
         Ok(())
     }
@@ -1206,6 +1243,8 @@ impl<'a> GitRepository<'a> {
         let last_commit_tree = self.get_last_commit_tree()?;
         let merge = self.is_merge()?;
         let diverge_info = self.get_commits_ahead_and_behind_remote(&branch)?;
+        let patterns =
+            GitignorePatterns::new(&self.git_path, &self.working_dir_path, &mut self.logger)?;
 
         long_format.show(
             &self.db()?,
@@ -1219,6 +1258,7 @@ impl<'a> GitRepository<'a> {
             merge,
             diverge_info,
             &index,
+            &patterns,
         )
     }
 
@@ -1230,6 +1270,8 @@ impl<'a> GitRepository<'a> {
         let merge = self.is_merge()?;
         let diverge_info = self.get_commits_ahead_and_behind_remote(&branch)?;
         let index = self.staging_area()?;
+        let patterns =
+            GitignorePatterns::new(&self.git_path, &self.working_dir_path, &mut self.logger)?;
 
         short_format.show(
             &self.db()?,
@@ -1243,6 +1285,7 @@ impl<'a> GitRepository<'a> {
             merge,
             diverge_info,
             &index,
+            &patterns,
         )
     }
 
@@ -2014,12 +2057,6 @@ impl<'a> GitRepository<'a> {
         path: &str,
         staging_area: &StagingArea,
     ) -> Result<bool, CommandError> {
-        /* let mut blob = Blob::new_from_path(path.to_string())?;
-        let hash = &blob.get_hash_string()?; */
-        /* let (is_in_last_commit, name) = self.is_in_last_commit_from_hash(hash.to_owned())?;
-        if staging_area.contains_key(path) || (is_in_last_commit && name == get_name(&path)?) {
-            return Ok(false);
-        } */
         let last_commit = &self.get_last_commit_tree()?;
         let is_in_last_commit = self.is_in_last_commit_from_path(path, last_commit)
             || staging_area.has_file_from_path(path);
@@ -2040,6 +2077,7 @@ impl<'a> GitRepository<'a> {
         path_name: &str,
         staging_area: &mut StagingArea,
         files: &HashMap<String, String>,
+        patterns: &GitignorePatterns,
     ) -> Result<(), CommandError> {
         let path = Path::new(path_name);
 
@@ -2057,11 +2095,13 @@ impl<'a> GitRepository<'a> {
                 continue;
             }
             if entry_path.is_dir() {
-                self.save_entries(&entry_name, staging_area, files)?;
+                self.save_entries(&entry_name, staging_area, files, patterns)?;
             } else {
                 let blob = Blob::new_from_path(entry_name.to_string())?;
                 let path = &entry_name[2..];
-                if !self.is_untracked(path, &staging_area)? {
+                if !self.is_untracked(path, &staging_area)?
+                    && !self.must_be_ignored(path, patterns)?
+                {
                     let mut git_object: GitObject = Box::new(blob);
                     self.log(&format!("Adding {} to staging area", path));
                     let hex_str = self.db()?.write(&mut git_object, false, &mut self.logger)?;
@@ -4274,6 +4314,7 @@ impl<'a> GitRepository<'a> {
 
     /// Check-ignore
 
+    /// Ejecuta el comando check-ignore para cada uno de los paths recibidos.
     pub fn check_ignore_paths(
         &mut self,
         verbose: bool,
@@ -4301,6 +4342,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
+    /// Ejecuta el comando check-ignore para el path recibido. Utiliza la estructura GitignorePatterns.
     pub fn check_ignore_file(
         &mut self,
         verbose: bool,
@@ -4328,6 +4370,7 @@ impl<'a> GitRepository<'a> {
         Ok("".to_string())
     }
 
+    /// Devuelve true si el archivo 'path' debe ser ignorado por git.
     fn must_be_ignored(
         &mut self,
         path: &str,

@@ -826,6 +826,116 @@ fn test_read_from_stdin() {
     _ = fs::remove_dir_all(format!("{}", path));
 }
 
+#[test]
+fn test_other_commands() {
+    let path = "./tests/data/commands/check_ignore/repo13";
+    create_test_scene_5(path);
+    write_to_exclude(path, "dir*\n", true);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("status")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    println!("Stdout: {}\nStderr: {}", stdout, stderr);
+    let expected = "On branch master\n\nNo commits yet\n\nUntracked files:\n  (use \"git add <file>...\" to include in what will be committed)\n\ttestfile.txt\n\nno changes added to commit (use \"git add\" and/or \"git commit -a\"\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("testfile.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .arg("--all")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    println!("Stdout: {}\nStderr: {}", stdout, stderr);
+
+    assert_eq!("", stderr);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("status")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    println!("Stdout: {}\nStderr: {}", stdout, stderr);
+    let expected = "On branch master\nnothing to commit, working tree clean\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
+    let mut file = File::create(path.to_owned() + "/new.txt").unwrap();
+    file.write_all(b"new!").unwrap();
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("checkout")
+        .arg("-b")
+        .arg("b1")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    println!("Stdout: {}\nStderr: {}", stdout, stderr);
+    let expected = "A\tnew.txt\nSwitched to branch 'b1'\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("new.txt")
+        .arg("testfile.txt")
+        .arg("dir/")
+        .arg("dir/testfile1.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    println!("Stdout: {}\nStderr: {}", stdout, stderr);
+    let expected = "The following paths are ignored by one of your .gitignore files:\ndir/\ndir/testfile1.txt\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("status")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    println!("Stdout: {}\nStderr: {}", stdout, stderr);
+    let expected = "On branch b1\nChanges to be committed:\n  (use \"git restore --staged <file>...\" to unstage)\n\tnew file:   new.txt\n\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
 fn create_check_ignore_scene(path: &str) {
     create_base_scene(path);
     let Ok(_) = fs::create_dir_all(path.to_owned() + "/dir/") else {
