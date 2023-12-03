@@ -3963,10 +3963,6 @@ impl<'a> GitRepository<'a> {
             }
         };
 
-        if !db.has_object(&tag_ref)? && !self.tag_exists(&tag_ref)? {
-            return Err(CommandError::InvalidRef(tag_ref));
-        }
-
         let (tag_object, tag_ref) = self.read_tag_object(&tag_ref, db)?;
 
         self.log("Tag object read");
@@ -4000,14 +3996,25 @@ impl<'a> GitRepository<'a> {
         match db.read_object(&tag_ref, &mut self.logger) {
             Ok(object) => return Ok((object, tag_ref.to_string())),
             Err(_) => {
-                let path = join_paths!(self.git_path, "refs/tags/", tag_ref).ok_or(
+                let path_tag = join_paths!(self.git_path, "refs/tags/", tag_ref).ok_or(
                     CommandError::FileCreationError("Error creando path de tags".to_string()),
                 )?;
-                self.log(&format!("Tag path (read): {}", path));
-                let tag_ref = fs::read_to_string(path)
-                    .map_err(|error| CommandError::FileReadError(error.to_string()))?;
-                self.log(&format!("Tag ref (read): {}", tag_ref));
-                return self.read_tag_object(&tag_ref, db);
+
+                self.log(&format!("Tag path (read): {}", path_tag));
+                if let Ok(tag_ref) = fs::read_to_string(path_tag) {
+                    self.log(&format!("Tag ref (read): {}", tag_ref));
+                    return self.read_tag_object(&tag_ref, db);
+                } else if let Some(tag_ref) =
+                    self.try_read_commit_local_branch(tag_ref.to_string())?
+                {
+                    self.log(&format!("Tag ref (read): {}", tag_ref));
+                    return self.read_tag_object(&tag_ref, db);
+                } else if let Some(tag_ref) = self.try_read_commit_remote_branch(tag_ref)? {
+                    self.log(&format!("Tag ref (read): {}", tag_ref));
+                    return self.read_tag_object(&tag_ref, db);
+                } else {
+                    return Err(CommandError::InvalidRef(tag_ref.to_string()));
+                }
             }
         }
     }
