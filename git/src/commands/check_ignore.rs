@@ -107,7 +107,7 @@ impl CheckIgnore {
     }
 
     /// Ejecuta el comando CheckIgnore
-    fn run(&self, output: &mut dyn Write, input: &mut dyn Read) -> Result<(), CommandError> {
+    fn run(&self, output: &mut dyn Write, stdin: &mut dyn Read) -> Result<(), CommandError> {
         if !self.stdin && self.paths.is_empty() {
             return Err(CommandError::NoPathSpecified);
         }
@@ -118,11 +118,51 @@ impl CheckIgnore {
         let mut repo = GitRepository::open("", output)?;
 
         if self.stdin {
-            let reader = io::BufReader::new(input);
+            /* let reader = io::BufReader::new(input);
 
             for line in reader.lines() {
                 if let Ok(line) = line {
                     repo.check_ignore_file(self.verbose, self.non_matching, &line, None)?;
+                }
+            } */
+            let mut end = false;
+            loop {
+                let mut path = String::new();
+                loop {
+                    let mut buf = [0; 1];
+                    if let Err(e) = stdin.read_exact(&mut buf) {
+                        if e.kind() == io::ErrorKind::UnexpectedEof {
+                            end = true;
+                            let input = String::from_utf8_lossy(&buf).to_string();
+                            path += &input;
+
+                            break;
+                        }
+
+                        return Err(CommandError::StdinError);
+                    };
+                    let input = String::from_utf8_lossy(&buf).to_string();
+                    if input == "\n" {
+                        break;
+                    }
+                    path += &input;
+                    //eprintln!("input: {} ===", input);
+                }
+                //eprintln!("path final: {} ===", path);
+                /* let path = if path == "\0" {
+                    path
+                } else {
+                    path[..path.len() - 1].to_string()
+                }; */
+                if path.is_empty() {
+                    return Err(CommandError::EmptyPath);
+                }
+                if path != "\0" {
+                    repo.check_ignore_paths(self.verbose, self.non_matching, &[path].to_vec())?;
+                }
+
+                if end {
+                    break;
                 }
             }
         } else {

@@ -4289,20 +4289,10 @@ impl<'a> GitRepository<'a> {
                 read_dir_level_entries("./", &mut entries)?;
                 entries.sort();
                 for entry in entries {
-                    message += &self.check_ignore_file(
-                        verbose,
-                        non_matching,
-                        &entry,
-                        Some(patterns.clone()),
-                    )?;
+                    message += &self.check_ignore_file(verbose, non_matching, &entry, &patterns)?;
                 }
             } else {
-                message += &self.check_ignore_file(
-                    verbose,
-                    non_matching,
-                    &path,
-                    Some(patterns.clone()),
-                )?;
+                message += &self.check_ignore_file(verbose, non_matching, &path, &patterns)?;
             }
         }
 
@@ -4316,7 +4306,7 @@ impl<'a> GitRepository<'a> {
         verbose: bool,
         non_matching: bool,
         path: &str,
-        gitignore_patterns: Option<GitignorePatterns>,
+        gitignore_patterns: &GitignorePatterns,
     ) -> Result<String, CommandError> {
         if path == "" {
             return Ok("".to_string());
@@ -4325,11 +4315,7 @@ impl<'a> GitRepository<'a> {
             "Check-ignore args --> verbose: {}, non-matching {}, path: {}",
             verbose, non_matching, path
         ));
-        let gitignore_patterns = if let Some(patterns) = gitignore_patterns {
-            patterns
-        } else {
-            GitignorePatterns::new(&self.git_path, &self.working_dir_path, &mut self.logger)?
-        };
+
         if let Some((gitignore_path, line_number, pattern)) =
             gitignore_patterns.must_be_ignored(path, &mut self.logger)?
         {

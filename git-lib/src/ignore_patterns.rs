@@ -16,6 +16,8 @@ const BACKSLASH: char = '\\';
 const SLASH: char = '/';
 const ASTERISK: char = '*';
 const NEGATE: char = '!';
+const RANGE: char = '[';
+const ONE_CHAR: char = '?';
 
 #[derive(Clone)]
 pub struct GitignorePatterns {
@@ -181,7 +183,6 @@ fn add_gitignore_patterns(
         let mut negate_pattern = false;
         let mut starts_with = false;
         let mut ends_with = false;
-        let mut matches = false;
         let mut asterisk_index = 0;
 
         let last_index = line.len() - 1;
@@ -201,8 +202,10 @@ fn add_gitignore_patterns(
                     } else if i == last_index {
                         starts_with = true;
                     } else {
-                        matches = true;
-                        asterisk_index = i;
+                        return Err(CommandError::FeatureNotImplemented(line));
+                    }
+                    if i == last_index - 1 && line[last_index..].starts_with(ASTERISK) {
+                        return Err(CommandError::FeatureNotImplemented("**".to_string()));
                     }
                 }
                 SLASH => {
@@ -216,6 +219,9 @@ fn add_gitignore_patterns(
                         path += &character.to_string();
                     }
                 }
+                RANGE => return Err(CommandError::FeatureNotImplemented(RANGE.to_string())),
+                ONE_CHAR => return Err(CommandError::FeatureNotImplemented(ONE_CHAR.to_string())),
+
                 _ => path += &character.to_string(),
             }
         }
@@ -224,7 +230,8 @@ fn add_gitignore_patterns(
             pattern = Pattern::StartsWith(line, path, is_relative, negate_pattern);
         } else if ends_with {
             pattern = Pattern::EndsWith(line, path, is_relative, negate_pattern);
-        } else if matches {
+        }
+        /* else if matches {
             pattern = Pattern::MatchesAsterisk(
                 line,
                 path[..asterisk_index].to_string(),
@@ -232,7 +239,8 @@ fn add_gitignore_patterns(
                 is_relative,
                 negate_pattern,
             );
-        } else if is_relative {
+        } */
+        else if is_relative {
             pattern = Pattern::RelativeToDirLevel(line, path, negate_pattern);
         } else {
             pattern = Pattern::NotRelativeToDirLevel(line, path, negate_pattern);
@@ -251,7 +259,7 @@ pub enum Pattern {
     EndsWith(String, String, bool, bool),
     RelativeToDirLevel(String, String, bool),
     NotRelativeToDirLevel(String, String, bool),
-    MatchesAsterisk(String, String, String, bool, bool),
+    //MatchesAsterisk(String, String, String, bool, bool),
     // si queda tiempo, agregar: ? (MatchesOne), [a-z] (MatchesRange), **
 }
 
@@ -260,7 +268,7 @@ impl Pattern {
         match self {
             Self::StartsWith(_, _, _, negate) => negate.to_owned(),
             Self::EndsWith(_, _, _, negate) => negate.to_owned(),
-            Self::MatchesAsterisk(_, _, _, _, negate) => negate.to_owned(),
+            //Self::MatchesAsterisk(_, _, _, _, negate) => negate.to_owned(),
             Self::RelativeToDirLevel(_, _, negate) => negate.to_owned(),
             Self::NotRelativeToDirLevel(_, _, negate) => negate.to_owned(),
         }
@@ -270,7 +278,7 @@ impl Pattern {
         match self {
             Self::StartsWith(_, _, is_relative, _) => is_relative.to_owned(),
             Self::EndsWith(_, _, is_relative, _) => is_relative.to_owned(),
-            Self::MatchesAsterisk(_, _, _, is_relative, _) => is_relative.to_owned(),
+            //Self::MatchesAsterisk(_, _, _, is_relative, _) => is_relative.to_owned(),
             Self::RelativeToDirLevel(_, _, _) => true,
             Self::NotRelativeToDirLevel(__, _, _) => false,
         }
@@ -281,7 +289,7 @@ impl Pattern {
             Self::StartsWith(pattern_extracted, _, _, _) => pattern_extracted.to_string(),
 
             Self::EndsWith(pattern_extracted, _, _, _) => pattern_extracted.to_string(),
-            Self::MatchesAsterisk(pattern_extracted, _, _, _, _) => pattern_extracted.to_string(),
+            //   Self::MatchesAsterisk(pattern_extracted, _, _, _, _) => pattern_extracted.to_string(),
             Self::RelativeToDirLevel(pattern_extracted, _, _) => pattern_extracted.to_string(),
             Self::NotRelativeToDirLevel(pattern_extracted, _, _) => pattern_extracted.to_string(),
         }
@@ -437,7 +445,7 @@ fn matches_pattern(
                 return Ok(true);
             }
         }
-        Pattern::MatchesAsterisk(_, start, end, _, _) => {
+        /*         Pattern::MatchesAsterisk(_, start, end, _, _) => {
             logger.log(&format!(
                 "MATCHES --> path: {}, starts: {}, ends:{}",
                 path, start, end
@@ -451,7 +459,7 @@ fn matches_pattern(
             if path.starts_with(start) && path.ends_with(end) {
                 return Ok(true);
             }
-        }
+        } */
         Pattern::RelativeToDirLevel(_, pattern, _) => {
             logger.log(&format!(
                 "RELATIVE --> path: {}, pattern: {}",

@@ -228,6 +228,7 @@ pub enum CommandError {
     NoPathSpecified,
     NonMatchingWithoutVerbose,
     OutsideOfRepository(String, PathBuf),
+    EmptyPath,
 }
 
 impl Error for CommandError {}
@@ -556,6 +557,7 @@ impl fmt::Display for CommandError {
             CommandError::NoPathSpecified => write!(f, "fatal: no path specified"),
             CommandError::NonMatchingWithoutVerbose => write!(f, "fatal: --non-matching is only valid with --verbose"),
             CommandError::OutsideOfRepository(path, repo) => write!(f, "fatal: {path}: '{path}' is outside repository at '{}'", repo.to_string_lossy()),
+            CommandError::EmptyPath => write!(f, "fatal: empty string is not a valid pathspec. please use * instead if you meant to match all paths"),
         }
     }
 }
