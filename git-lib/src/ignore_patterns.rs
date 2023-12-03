@@ -475,16 +475,33 @@ fn matches_pattern(
                 "NOT RELATIVE--> path: {}, pattern: {}",
                 path, pattern
             ));
-            if path.ends_with(pattern) {
-                return Ok(true);
-            }
 
-            let mut path = Path::new(&path);
-            while let Some(parent) = path.parent() {
-                if parent.ends_with(pattern) {
-                    return Ok(true);
+            let mut index = 0;
+
+            if path.contains(pattern) {
+                for _ in path.chars() {
+                    if path[index..].starts_with(pattern) {
+                        if let Some(rest) = path.get(index + pattern.len()..) {
+                            logger.log(&format!("rest: {}", rest));
+
+                            if rest != "" && !rest.starts_with("/") && !is_dir(pattern) {
+                                logger.log("No cumple final");
+                                return Ok(false);
+                            }
+                        }
+                        if let Some(rest) = path.get(..index) {
+                            logger.log(&format!("rest: {}", rest));
+
+                            if rest != "" && !rest.ends_with("/") {
+                                logger.log("No cumple principio");
+
+                                return Ok(false);
+                            }
+                        }
+                        return Ok(true);
+                    }
+                    index += 1;
                 }
-                path = parent;
             }
         }
     }

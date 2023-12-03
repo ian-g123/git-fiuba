@@ -653,7 +653,7 @@ fn test_relative_patterns() {
     assert_eq!("", stderr);
     assert_eq!(expected, stdout);
 
-    write_to_exclude(path, "/name/a\n", false);
+    write_to_exclude(path, "name/a\n", false);
 
     let result = Command::new("../../../../../../target/debug/git")
         .arg("check-ignore")
@@ -673,6 +673,62 @@ fn test_relative_patterns() {
     let stderr = String::from_utf8(result.stderr).unwrap();
     let stdout = String::from_utf8(result.stdout).unwrap();
     let expected = "name/a\nname/a/b\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
+#[test]
+fn test_non_relative_patterns() {
+    let path = "./tests/data/commands/check_ignore/repo10";
+
+    create_check_ignore_scene(path);
+    write_to_exclude(path, "name\n", true);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("check-ignore")
+        .arg("name")
+        .arg("name_abc")
+        .arg("name.txt")
+        .arg("name/")
+        .arg("name/a")
+        .arg("name/a/b")
+        .arg("abc_name")
+        .arg("a/name")
+        .arg("a/b/name")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = "name\nname/\nname/a\nname/a/b\na/name\na/b/name\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
+    write_to_exclude(path, "name/\n", false);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("check-ignore")
+        .arg("name")
+        .arg("name_abc")
+        .arg("name.txt")
+        .arg("name/")
+        .arg("name/a")
+        .arg("name/a/b")
+        .arg("abc_name")
+        .arg("a/name")
+        .arg("a/b/name")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = "name/\nname/a\nname/a/b\n";
 
     assert_eq!("", stderr);
     assert_eq!(expected, stdout);
