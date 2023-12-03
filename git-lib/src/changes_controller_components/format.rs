@@ -1,3 +1,4 @@
+use crate::gitignore_patterns::ignore_patterns::GitignorePatterns;
 use crate::logger::Logger;
 use crate::objects_database::ObjectsDatabase;
 use crate::staging_area_components::staging_area::StagingArea;
@@ -19,6 +20,7 @@ pub trait Format {
         merge: bool,
         branches_diverge_info: (bool, usize, usize),
         index: &StagingArea,
+        patterns: &GitignorePatterns,
     ) -> Result<(), CommandError> {
         let initial_commit = {
             if commit_tree.is_none() {
@@ -32,6 +34,7 @@ pub trait Format {
         let changes_to_be_commited = changes_controller.get_changes_to_be_commited();
         let changes_not_staged = changes_controller.get_changes_not_staged();
         let untracked_files = changes_controller.get_untracked_files();
+        let untracked_files = delete_ignored_files(untracked_files, patterns, logger)?;
         let unmerged_paths = changes_controller.get_unmerged_changes();
 
         self.get_status(
@@ -39,7 +42,7 @@ pub trait Format {
             output,
             changes_to_be_commited,
             changes_not_staged,
-            untracked_files,
+            &untracked_files,
             (branch, commit_output, initial_commit),
             unmerged_paths,
             merge,
@@ -60,6 +63,20 @@ pub trait Format {
         merge: bool,
         branches_diverge_info: (bool, usize, usize),
     ) -> Result<(), CommandError>;
+}
+
+fn delete_ignored_files(
+    untracked: &Vec<String>,
+    patterns: &GitignorePatterns,
+    logger: &mut Logger,
+) -> Result<Vec<String>, CommandError> {
+    let mut filter: Vec<String> = Vec::new();
+    for path in untracked.iter() {
+        if patterns.should_ignore(path, logger)?.is_none() {
+            filter.push(path.to_string());
+        }
+    }
+    Ok(filter)
 }
 
 /*

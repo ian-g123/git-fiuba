@@ -1,9 +1,4 @@
-use std::{
-    env,
-    fs::{self, DirEntry, ReadDir},
-    io::{Error, Read, Write},
-    path::Path,
-};
+use std::io::{Read, Write};
 
 use git_lib::{command_errors::CommandError, git_repository::GitRepository};
 

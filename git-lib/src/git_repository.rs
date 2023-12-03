@@ -4,12 +4,9 @@ use std::{
     fs::{self, DirEntry, File, OpenOptions, ReadDir},
     io::{BufReader, Read, Write},
     path::{Path, PathBuf},
-    thread,
-    time::Duration,
 };
 
 use chrono::{DateTime, Local};
-use sha1::digest::block_buffer::Error;
 
 use crate::{
     changes_controller_components::{
@@ -24,6 +21,7 @@ use crate::{
     command_errors::CommandError,
     config::Config,
     diff_components::merge::merge_content,
+    gitignore_patterns::ignore_patterns::GitignorePatterns,
     join_paths,
     logger::Logger,
     objects::{
@@ -36,7 +34,7 @@ use crate::{
         git_object::{self, GitObject, GitObjectTrait},
         mode::Mode,
         proto_object::ProtoObject,
-        tag_object::{self, TagObject},
+        tag_object::TagObject,
         tree::Tree,
     },
     objects_database::ObjectsDatabase,
@@ -56,6 +54,7 @@ pub struct GitRepository<'a> {
     logger: Logger,
     output: &'a mut dyn Write,
     bare: bool,
+    git_ignore_patterns: Option<GitignorePatterns>,
 }
 
 impl<'a> GitRepository<'a> {
@@ -89,6 +88,7 @@ impl<'a> GitRepository<'a> {
             logger,
             output,
             bare,
+            git_ignore_patterns: None,
         })
     }
 
@@ -116,6 +116,7 @@ impl<'a> GitRepository<'a> {
             logger,
             output,
             bare,
+            git_ignore_patterns: None,
         };
         repo.create_files_and_dirs(branch_name)?;
         Ok(repo)
@@ -167,16 +168,23 @@ impl<'a> GitRepository<'a> {
     }
 
     fn create_files(&self, branch_name: &str) -> Result<(), CommandError> {
-        let name = "HEAD".to_string();
-        let branch_name = branch_name;
+        let path = "HEAD";
+        let content = format!("ref: refs/heads/{}", branch_name.to_string());
+        self.create_file_aux(path, &content)?;
+        let path = "objects/info/exclude";
+        let content = "# git ls-files --others --exclude-from=.git/info/exclude\n# Lines that start with '#' are comments.\n# For a project mostly in C, the following would be a good set of\n# exclude patterns (uncomment them if you want to use them):\n# *.[oa]\n# *~";
+        self.create_file_aux(path, content)?;
+        Ok(())
+    }
+
+    fn create_file_aux(&self, file: &str, content: &str) -> Result<(), CommandError> {
         if fs::create_dir_all(&self.git_path).is_ok() {
-            let path_complete = join_paths!(&self.git_path, name).ok_or(
+            let path_complete = join_paths!(&self.git_path, file).ok_or(
                 CommandError::FileCreationError("Error creando un archivo".to_string()),
             )?;
             match File::create(&path_complete) {
                 Ok(mut archivo) => {
-                    let texto = format!("ref: refs/heads/{}", branch_name.to_string());
-                    let _: Result<(), CommandError> = match archivo.write_all(texto.as_bytes()) {
+                    let _: Result<(), CommandError> = match archivo.write_all(content.as_bytes()) {
                         Ok(_) => Ok(()),
                         Err(err) => Err(CommandError::FileWriteError(err.to_string())),
                     };
@@ -586,6 +594,8 @@ impl<'a> GitRepository<'a> {
         let mut staging_area = StagingArea::open(&self.git_path)?;
         let mut pathspecs_clone: Vec<String> = pathspecs.clone();
         let mut position = 0;
+        let mut ignored_paths = Vec::<String>::new();
+
         for pathspec in &pathspecs {
             if !Path::new(pathspec).exists() {
                 if !self.is_in_last_commit_from_path(pathspec, last_commit) {
@@ -602,9 +612,19 @@ impl<'a> GitRepository<'a> {
         }
 
         for pathspec in pathspecs_clone.iter() {
-            self.add_path(pathspec, &mut staging_area)?
+            self.add_path(pathspec, &mut staging_area, &mut ignored_paths)?
         }
         staging_area.save()?;
+        ignored_paths.sort();
+        if !ignored_paths.is_empty() {
+            let mut message =
+                "The following paths are ignored by one of your .gitignore files:\n".to_string();
+            for path in ignored_paths.iter_mut() {
+                message += &format!("{}\n", path);
+            }
+            write!(self.output, "{}", message)
+                .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        }
         Ok(())
     }
 
@@ -629,7 +649,7 @@ impl<'a> GitRepository<'a> {
 
         let mut staging_area = StagingArea::open(&self.git_path)?;
         for pathspec in &pathspecs {
-            self.run_for_path_rm(pathspec, force, &mut staging_area)?
+            self.rm_path_from_staging_area(pathspec, force, &mut staging_area)?
         }
         staging_area.save()?;
         Ok(())
@@ -643,7 +663,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    fn run_for_path_rm(
+    fn rm_path_from_staging_area(
         &mut self,
         path: &str,
         force: bool,
@@ -653,15 +673,15 @@ impl<'a> GitRepository<'a> {
         let path_str = &get_path_str(path.to_path_buf())?;
 
         if path.is_file() {
-            self.run_for_file_rm(path_str, force, staging_area)?;
+            self.rm_file_from_staging_area(path_str, force, staging_area)?;
             return Ok(());
         } else {
-            self.run_for_dir_rm(path_str, force, staging_area)?;
+            self.rm_dir_from_staging_area(path_str, force, staging_area)?;
         }
         Ok(())
     }
 
-    fn run_for_file_rm(
+    fn rm_file_from_staging_area(
         &mut self,
         path: &str,
         force: bool,
@@ -671,7 +691,7 @@ impl<'a> GitRepository<'a> {
             self.verifies_version_of_index(path, staging_area)?;
         }
 
-        staging_area.remove_from_stagin_area(path, &mut self.logger)?;
+        staging_area.remove_entry(path, &mut self.logger)?;
 
         fs::remove_file(path).map_err(|_| {
             CommandError::FileOpenError(format!("No existe el archivo: {:?}", path))
@@ -744,20 +764,17 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    fn run_for_dir_rm(
+    fn rm_dir_from_staging_area(
         &mut self,
         path_str: &String,
         force: bool,
         staging_area: &mut StagingArea,
     ) -> Result<(), CommandError> {
-        // let read_dir = self.read_dir(&join_paths!(self.working_dir_path, path_str).ok_or(
-        //     CommandError::DirectoryCreationError("Error abriendo directorio".to_string()),
-        // )?)?;
         let read_dir = self.read_dir(path_str)?;
 
         for entry in read_dir {
             match entry {
-                Ok(entry) => self.try_run_for_path_rm(entry, force, staging_area)?,
+                Ok(entry) => self.try_rm_path(entry, force, staging_area)?,
                 Err(error) => {
                     self.logger.log(&format!("Error en entry: {:?}", error));
                     return Err(CommandError::FileOpenError(error.to_string()));
@@ -767,7 +784,7 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    fn try_run_for_path_rm(
+    fn try_rm_path(
         &mut self,
         entry: DirEntry,
         force: bool,
@@ -781,27 +798,33 @@ impl<'a> GitRepository<'a> {
             ));
         };
 
-        if self.should_ignore(path_str) {
-            return Ok(());
-        }
-
-        self.logger.log(&format!("entry: {:?}", path_str));
-        self.run_for_path_rm(path_str, force, staging_area)?;
+        self.rm_path_from_staging_area(path_str, force, staging_area)?;
         Ok(())
     }
 
-    fn add_path(&mut self, path: &str, staging_area: &mut StagingArea) -> Result<(), CommandError> {
+    fn add_path(
+        &mut self,
+        path: &str,
+        staging_area: &mut StagingArea,
+        ignored_files: &mut Vec<String>,
+    ) -> Result<(), CommandError> {
         let path = Path::new(path);
         let path_str = &Self::get_path_str(path)?;
         let path_str = join_paths!(self.working_dir_path, path_str).ok_or(
             CommandError::DirectoryCreationError("Error abriendo directorio".to_string()),
         )?;
-
-        if path.is_file() {
-            self.add_file(&path_str, staging_area)?;
+        if self.is_ilegal_path(&path_str) {
             return Ok(());
+        }
+        if self.should_ignore(&path_str)? {
+            ignored_files.push(path_str);
         } else {
-            self.add_dir(&path_str, staging_area)?;
+            if path.is_file() {
+                self.add_file(&path_str, staging_area)?;
+                return Ok(());
+            } else {
+                self.add_dir(&path_str, staging_area, ignored_files)?;
+            }
         }
         Ok(())
     }
@@ -810,11 +833,12 @@ impl<'a> GitRepository<'a> {
         &mut self,
         path_str: &str,
         staging_area: &mut StagingArea,
+        ignored_files: &mut Vec<String>,
     ) -> Result<(), CommandError> {
         let entries = self.read_dir(&path_str.to_string())?;
         for entry in entries {
             match entry {
-                Ok(entry) => self.try_run_for_path(entry, staging_area)?,
+                Ok(entry) => self.try_add_path(entry, staging_area, ignored_files)?,
                 Err(error) => {
                     self.log(&format!("Error in entry: {:?}", error));
                     return Err(CommandError::FileOpenError(error.to_string()));
@@ -824,14 +848,15 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    fn should_ignore(&self, path_str: &str) -> bool {
+    fn is_ilegal_path(&self, path_str: &str) -> bool {
         path_str.starts_with("./.git") || path_str.starts_with(".git")
     }
 
-    fn try_run_for_path(
+    fn try_add_path(
         &mut self,
         entry: DirEntry,
         staging_area: &mut StagingArea,
+        ignored_files: &mut Vec<String>,
     ) -> Result<(), CommandError> {
         let path = entry.path();
         let Some(path_str) = path.to_str() else {
@@ -844,10 +869,7 @@ impl<'a> GitRepository<'a> {
         } else {
             path_str[(self.working_dir_path.len() + 1)..].to_string()
         };
-        if self.should_ignore(&path_str_r) {
-            return Ok(());
-        }
-        self.add_path(&path_str_r, staging_area)?;
+        self.add_path(&path_str_r, staging_area, ignored_files)?;
         Ok(())
     }
 
@@ -930,8 +952,7 @@ impl<'a> GitRepository<'a> {
         reuse_commit_info: Option<String>,
         quiet: bool,
     ) -> Result<(), CommandError> {
-        let mut staging_area = self.staging_area()?;
-        self.update_staging_area_files(&files, &mut staging_area)?;
+        let mut staging_area = self.get_staging_area_updated_with(&files)?;
 
         self.commit_priv(
             message,
@@ -952,8 +973,7 @@ impl<'a> GitRepository<'a> {
         reuse_commit_info: Option<String>,
         quiet: bool,
     ) -> Result<(), CommandError> {
-        let mut staging_area = self.staging_area()?;
-        self.run_all_config(&mut staging_area)?;
+        let mut staging_area = self.get_commit_all_staging_area()?;
 
         self.commit_priv(
             message,
@@ -989,21 +1009,19 @@ impl<'a> GitRepository<'a> {
     /// Si se han introducido paths como argumentos del comando, se eliminan los cambios
     /// guardados en el Staging Area y se agregan los nuevos.\
     /// Estos archivos deben ser reconocidos por git.
-    fn update_staging_area_files(
+    fn get_staging_area_updated_with(
         &mut self,
         files: &Vec<String>,
-        staging_area: &mut StagingArea,
-    ) -> Result<(), CommandError> {
+    ) -> Result<StagingArea, CommandError> {
         self.log("Running pathspec configuration");
 
+        let mut staging_area = self.staging_area()?;
         for path in files.iter() {
             self.log(&format!("Updating: {}", path));
             if !Path::new(path).exists() {
                 staging_area.remove(path);
             } else if !self.is_untracked(path, &staging_area)? {
-                self.log(&format!("It's untracked: {}", path));
-
-                self.add_file(path, staging_area)?;
+                self.add_file(path, &mut staging_area)?;
             } else {
                 return Err(CommandError::UntrackedError(path.to_owned()));
             }
@@ -1012,13 +1030,14 @@ impl<'a> GitRepository<'a> {
 
         staging_area.save()?;
 
-        Ok(())
+        Ok(staging_area)
     }
 
     /// Guarda en el staging area todos los archivos modificados y elimina los borrados.\
     /// Los archivos untracked no se guardan.
-    fn run_all_config(&mut self, staging_area: &mut StagingArea) -> Result<(), CommandError> {
+    fn get_commit_all_staging_area(&mut self) -> Result<StagingArea, CommandError> {
         self.log("Running 'all' configuration\n");
+        let mut staging_area = self.staging_area()?;
         let files = &staging_area.get_files();
         for (path, _) in files {
             if !Path::new(&path).exists() {
@@ -1028,9 +1047,9 @@ impl<'a> GitRepository<'a> {
 
         self.log("Saving entries\n");
 
-        self.save_entries("./", staging_area, files)?;
+        self.save_entries("./", &mut staging_area, files)?;
         staging_area.save()?;
-        Ok(())
+        Ok(staging_area)
     }
 
     /// Ejecuta la creación del Commit.
@@ -1231,7 +1250,7 @@ impl<'a> GitRepository<'a> {
         let last_commit_tree = self.get_last_commit_tree()?;
         let merge = self.is_merge()?;
         let diverge_info = self.get_commits_ahead_and_behind_remote(&branch)?;
-
+        let patterns = self.get_ignore_patterns()?;
         long_format.show(
             &self.db()?,
             &self.git_path,
@@ -1244,6 +1263,7 @@ impl<'a> GitRepository<'a> {
             merge,
             diverge_info,
             &index,
+            &patterns,
         )
     }
 
@@ -1255,6 +1275,7 @@ impl<'a> GitRepository<'a> {
         let merge = self.is_merge()?;
         let diverge_info = self.get_commits_ahead_and_behind_remote(&branch)?;
         let index = self.staging_area()?;
+        let patterns = self.get_ignore_patterns()?;
 
         short_format.show(
             &self.db()?,
@@ -1268,6 +1289,7 @@ impl<'a> GitRepository<'a> {
             merge,
             diverge_info,
             &index,
+            &patterns,
         )
     }
 
@@ -2046,12 +2068,6 @@ impl<'a> GitRepository<'a> {
         path: &str,
         staging_area: &StagingArea,
     ) -> Result<bool, CommandError> {
-        /* let mut blob = Blob::new_from_path(path.to_string())?;
-        let hash = &blob.get_hash_string()?; */
-        /* let (is_in_last_commit, name) = self.is_in_last_commit_from_hash(hash.to_owned())?;
-        if staging_area.contains_key(path) || (is_in_last_commit && name == get_name(&path)?) {
-            return Ok(false);
-        } */
         let last_commit = &self.get_last_commit_tree()?;
         let is_in_last_commit = self.is_in_last_commit_from_path(path, last_commit)
             || staging_area.has_file_from_path(path);
@@ -3333,8 +3349,17 @@ impl<'a> GitRepository<'a> {
         }
 
         let (new_hash, mut new_tree) = self.get_checkout_branch_info(branch, &self.db()?)?;
-        let local_new_files =
+
+        let new_files: Vec<String> =
             add_local_new_files(untracked_files, &mut new_tree, &mut self.logger)?;
+
+        let mut local_new_files: Vec<String> = Vec::new();
+        for path in new_files.iter() {
+            if !self.should_ignore(path)? {
+                local_new_files.push(path.to_string());
+            }
+        }
+
         let mut deletions: Vec<String> = Vec::new();
         let mut modifications: Vec<String> = Vec::new();
         let mut conflicts: Vec<String> = Vec::new();
@@ -4336,6 +4361,114 @@ impl<'a> GitRepository<'a> {
 
         Ok(Some(tree))
     }
+
+    /// Check-ignore
+
+    /// Ejecuta el comando check-ignore para cada uno de los paths recibidos.
+    pub fn check_ignore_paths(
+        &mut self,
+        verbose: bool,
+        non_matching: bool,
+        paths: &Vec<String>,
+    ) -> Result<(), CommandError> {
+        let mut message = String::new();
+        let patterns = self.get_ignore_patterns()?;
+        for path in paths.iter() {
+            if path == "*" {
+                let mut entries: Vec<String> = Vec::new();
+                read_dir_level_entries("./", &mut entries)?;
+                entries.sort();
+                for entry in entries {
+                    message += &self.check_ignore_file(verbose, non_matching, &entry, &patterns)?;
+                }
+            } else {
+                message += &self.check_ignore_file(verbose, non_matching, &path, &patterns)?;
+            }
+        }
+
+        write!(self.output, "{}", message)
+            .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        Ok(())
+    }
+
+    /// Ejecuta el comando check-ignore para el path recibido. Utiliza la estructura GitignorePatterns.
+    pub fn check_ignore_file(
+        &mut self,
+        verbose: bool,
+        non_matching: bool,
+        path: &str,
+        gitignore_patterns: &GitignorePatterns,
+    ) -> Result<String, CommandError> {
+        if path == "" {
+            return Ok("".to_string());
+        }
+        self.log(&format!(
+            "Check-ignore args --> verbose: {}, non-matching {}, path: {}",
+            verbose, non_matching, path
+        ));
+
+        if let Some((gitignore_path, line_number, pattern)) =
+            gitignore_patterns.should_ignore(path, &mut self.logger)?
+        {
+            return Ok(pattern.to_string(path, &gitignore_path, line_number, verbose));
+        }
+        if non_matching {
+            return Ok(format!("::\t{}\n", path));
+        }
+
+        Ok("".to_string())
+    }
+
+    /// Devuelve true si el archivo 'path' debe ser ignorado por git.
+    fn should_ignore(&mut self, path: &str) -> Result<bool, CommandError> {
+        let gitignore_patterns = self.get_ignore_patterns()?;
+        let staging_area = self.staging_area()?;
+        Ok(gitignore_patterns
+            .should_ignore(path, &mut self.logger)?
+            .is_some()
+            && self.is_untracked(path, &staging_area)?)
+    }
+
+    /// Devuelve un GitignorePatterns
+    fn get_ignore_patterns(&mut self) -> Result<GitignorePatterns, CommandError> {
+        match self.git_ignore_patterns {
+            Some(ref patterns) => Ok(patterns.to_owned()),
+            None => {
+                let patterns: GitignorePatterns = GitignorePatterns::new(
+                    &self.git_path.to_owned(),
+                    &self.working_dir_path.to_owned(),
+                    &mut self.logger(),
+                )?;
+                self.git_ignore_patterns = Some(patterns.to_owned());
+                Ok(patterns)
+            }
+        }
+    }
+}
+
+// ----- Check-ignore -----
+
+/// Lee las entradas de un directorio y guarda en un vector sus nombres.
+fn read_dir_level_entries(path_name: &str, names: &mut Vec<String>) -> Result<(), CommandError> {
+    let path = Path::new(path_name);
+
+    let Ok(entries) = fs::read_dir(path.clone()) else {
+        return Err(CommandError::DirNotFound(path_name.to_owned()));
+    };
+    for entry in entries {
+        let Ok(entry) = entry else {
+            return Err(CommandError::DirNotFound(path_name.to_owned()));
+        };
+        let entry_path = entry.path();
+        let entry_name = get_path_str(entry_path.clone())?;
+
+        if entry_name.contains(".git") {
+            continue;
+        }
+        let path = &entry_name[2..];
+        names.push(get_name(path)?);
+    }
+    Ok(())
 }
 
 // ----- Ls-tree -----
@@ -4622,7 +4755,7 @@ fn read_packed_refs_file(git_path: &str) -> Result<HashMap<String, String>, Comm
         let Some((hash, ref_path)) = line.split_once(' ') else {
             return Err(CommandError::InvalidCommit);
         };
-        if hash.len() != 40 {
+        if line.starts_with("#") || hash.len() != 40 {
             continue;
         }
         _ = refs.insert(ref_path.to_string(), hash.to_string());
@@ -4632,7 +4765,7 @@ fn read_packed_refs_file(git_path: &str) -> Result<HashMap<String, String>, Comm
 }
 
 /// Devuelve la próxima línea del iterador.
-fn next_line(lines: &mut std::str::Lines<'_>) -> (bool, String) {
+pub fn next_line(lines: &mut std::str::Lines<'_>) -> (bool, String) {
     let Some(line) = lines.next() else {
         return (true, "".to_string());
     };
@@ -5159,7 +5292,7 @@ fn merge_blobs(
 }
 
 /// Devuelve el nombre de un archivo o directorio dado un PathBuf.
-fn get_path_str(path: PathBuf) -> Result<String, CommandError> {
+pub fn get_path_str(path: PathBuf) -> Result<String, CommandError> {
     let Some(path_name) = path.to_str() else {
         return Err(CommandError::DirNotFound("".to_string())); //cambiar
     };

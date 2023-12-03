@@ -1,14 +1,11 @@
 use std::{
     fs::{self, File},
-    io::{Error, Read, Write},
+    io::Write,
     process::Command,
 };
 
-use common::aux::create_base_scene;
-
 use crate::common::aux::{
-    change_dir_testfile1_content_and_remove_dir_testfile2, change_test_scene_4,
-    change_testfile_content, create_test_scene_2, create_test_scene_4, create_test_scene_5,
+    change_dir_testfile1_content_and_remove_dir_testfile2, change_test_scene_4, create_test_scene_5,
 };
 
 mod common {
