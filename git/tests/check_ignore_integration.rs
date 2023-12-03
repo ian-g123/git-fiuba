@@ -736,6 +736,63 @@ fn test_non_relative_patterns() {
     _ = fs::remove_dir_all(format!("{}", path));
 }
 
+#[test]
+fn test_ignore_next_char() {
+    let path = "./tests/data/commands/check_ignore/repo11";
+
+    create_check_ignore_scene(path);
+    write_to_exclude(path, "\\*name\n", true);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("check-ignore")
+        .arg("name")
+        .arg("name_abc")
+        .arg("name.txt")
+        .arg("name/")
+        .arg("name/a")
+        .arg("name/a/b")
+        .arg("abc_name")
+        .arg("a/name")
+        .arg("*name")
+        .arg("a/b/name")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = "*name\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
+    write_to_exclude(path, "\\name/\n", false);
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("check-ignore")
+        .arg("name")
+        .arg("name_abc")
+        .arg("name.txt")
+        .arg("name/")
+        .arg("name/a")
+        .arg("name/a/b")
+        .arg("abc_name")
+        .arg("a/name")
+        .arg("a/b/name")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    let expected = "name/\nname/a\nname/a/b\n";
+
+    assert_eq!("", stderr);
+    assert_eq!(expected, stdout);
+
+    _ = fs::remove_dir_all(format!("{}", path));
+}
+
 fn create_check_ignore_scene(path: &str) {
     create_base_scene(path);
     let Ok(_) = fs::create_dir_all(path.to_owned() + "/dir/") else {
