@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     env, fs,
     path::{Path, PathBuf},
 };
@@ -8,9 +7,10 @@ use crate::{
     command_errors::CommandError,
     git_repository::{get_path_str, next_line},
     join_paths,
-    logger::{self, Logger},
-    utils::aux::get_name,
+    logger::Logger,
 };
+
+use super::pattern::Pattern;
 
 const BACKSLASH: char = '\\';
 const SLASH: char = '/';
@@ -25,6 +25,8 @@ pub struct GitignorePatterns {
 }
 
 impl GitignorePatterns {
+    /// Crea un GitignorePatterns que lee todos los archivos .gitignore del repositorio y .git/info/exclude
+    /// y guarda los patrones establecidos en ellos.
     pub fn new(
         git_path: &str,
         working_dir_path: &str,
@@ -41,6 +43,8 @@ impl GitignorePatterns {
         Ok(Self { patterns })
     }
 
+    /// Dado un path, determina si el mismo debe ser ignorado por git según los patrones guardados por
+    /// la estructura.
     pub fn must_be_ignored(
         &self,
         path: &str,
@@ -63,16 +67,8 @@ impl GitignorePatterns {
         let mut negate_pattern: Option<(String, usize, Pattern)> = None;
         let mut last_pattern: Option<(String, usize, Pattern)> = None;
 
-        let mut patterns_matched: Vec<(String, usize, Pattern)> = Vec::new();
         for (dir_level, pattern_vec) in self.patterns.iter() {
-            logger.log(&format!("Gitignore path: {}", dir_level));
             for (line_number, pattern) in pattern_vec {
-                logger.log(&format!(
-                    "Line: {}, pattern: {}",
-                    line_number,
-                    pattern.get_pattern_read()
-                ));
-
                 let base_path = if dir_level.ends_with(".gitignore") {
                     dir_level[..dir_level.len() - 10].to_string()
                 } else {
@@ -80,25 +76,14 @@ impl GitignorePatterns {
                 };
 
                 if matches_pattern(&path, pattern, &base_path, logger)? {
-                    /* patterns_matched.push((
-                        dir_level.to_string(),
-                        line_number.to_owned(),
-                        pattern.to_owned(),
-                    ));*/
                     logger.log("matches pattern");
                     if pattern.negate_pattern() {
-                        logger.log(&format!("negate pattern"));
-
                         negate_pattern = Some((
                             dir_level.to_string(),
                             line_number.to_owned(),
                             pattern.clone(),
                         ));
-                    }
-                    /*else if negate_pattern.is_some() {
-                        negate_pattern = None;
-                    } */
-                    else {
+                    } else {
                         last_pattern = Some((
                             dir_level.to_string(),
                             line_number.to_owned(),
@@ -111,15 +96,15 @@ impl GitignorePatterns {
         if negate_pattern.is_some() {
             return Ok(negate_pattern);
         }
-        /*Ok(patterns_matched.pop()) */
         Ok(last_pattern)
     }
 }
 
+/// Obtiene la lista de archivos gitignore. Agrega .git/info/exclude.
 fn get_gitignore_files(
     git_path: &str,
     working_dir_path: &str,
-    logger: &mut Logger,
+    _logger: &mut Logger,
 ) -> Result<Vec<String>, CommandError> {
     let mut gitignore_base_path = working_dir_path;
     let mut gitignore_files: Vec<String> = Vec::new();
@@ -143,8 +128,6 @@ fn get_gitignore_files(
                 format!(" No se pudo formar la ruta del archivo info/exclude"),
             ))?;
         if Path::new(&exclude_path).exists() {
-            logger.log("Existe exclude");
-
             gitignore_files.insert(0, exclude_path);
         }
     }
@@ -152,10 +135,11 @@ fn get_gitignore_files(
     Ok(gitignore_files)
 }
 
+/// Lee un archivo de gitignore o exclude y obtiene los patrones del mismo.
 fn add_gitignore_patterns(
     gitignore_path: &str,
     patterns: &mut Vec<(String, Vec<(usize, Pattern)>)>,
-    logger: &mut Logger,
+    _logger: &mut Logger,
 ) -> Result<(), CommandError> {
     let mut patterns_hashmap: Vec<(usize, Pattern)> = Vec::new();
     let content = fs::read_to_string(gitignore_path)
@@ -183,11 +167,9 @@ fn add_gitignore_patterns(
         let mut negate_pattern = false;
         let mut starts_with = false;
         let mut ends_with = false;
-        let mut asterisk_index = 0;
 
         let last_index = line.len() - 1;
         for (i, character) in line.char_indices() {
-            logger.log(&format!("i = {}, char = {}", i, character));
             if ignore_pattern {
                 path += &character.to_string();
                 continue;
@@ -214,7 +196,6 @@ fn add_gitignore_patterns(
                             is_relative = true;
                         }
                     }
-                    logger.log(&format!("i = {}", i));
                     if i != 0 {
                         path += &character.to_string();
                     }
@@ -230,17 +211,7 @@ fn add_gitignore_patterns(
             pattern = Pattern::StartsWith(line, path, is_relative, negate_pattern);
         } else if ends_with {
             pattern = Pattern::EndsWith(line, path, is_relative, negate_pattern);
-        }
-        /* else if matches {
-            pattern = Pattern::MatchesAsterisk(
-                line,
-                path[..asterisk_index].to_string(),
-                path[asterisk_index..].to_string(),
-                is_relative,
-                negate_pattern,
-            );
-        } */
-        else if is_relative {
+        } else if is_relative {
             pattern = Pattern::RelativeToDirLevel(line, path, negate_pattern);
         } else {
             pattern = Pattern::NotRelativeToDirLevel(line, path, negate_pattern);
@@ -253,68 +224,7 @@ fn add_gitignore_patterns(
     Ok(())
 }
 
-#[derive(Clone, Debug)]
-pub enum Pattern {
-    StartsWith(String, String, bool, bool),
-    EndsWith(String, String, bool, bool),
-    RelativeToDirLevel(String, String, bool),
-    NotRelativeToDirLevel(String, String, bool),
-    //MatchesAsterisk(String, String, String, bool, bool),
-    // si queda tiempo, agregar: ? (MatchesOne), [a-z] (MatchesRange), **
-}
-
-impl Pattern {
-    fn negate_pattern(&self) -> bool {
-        match self {
-            Self::StartsWith(_, _, _, negate) => negate.to_owned(),
-            Self::EndsWith(_, _, _, negate) => negate.to_owned(),
-            //Self::MatchesAsterisk(_, _, _, _, negate) => negate.to_owned(),
-            Self::RelativeToDirLevel(_, _, negate) => negate.to_owned(),
-            Self::NotRelativeToDirLevel(_, _, negate) => negate.to_owned(),
-        }
-    }
-
-    fn is_relative(&self) -> bool {
-        match self {
-            Self::StartsWith(_, _, is_relative, _) => is_relative.to_owned(),
-            Self::EndsWith(_, _, is_relative, _) => is_relative.to_owned(),
-            //Self::MatchesAsterisk(_, _, _, is_relative, _) => is_relative.to_owned(),
-            Self::RelativeToDirLevel(_, _, _) => true,
-            Self::NotRelativeToDirLevel(__, _, _) => false,
-        }
-    }
-
-    fn get_pattern_read(&self) -> String {
-        match self {
-            Self::StartsWith(pattern_extracted, _, _, _) => pattern_extracted.to_string(),
-
-            Self::EndsWith(pattern_extracted, _, _, _) => pattern_extracted.to_string(),
-            //   Self::MatchesAsterisk(pattern_extracted, _, _, _, _) => pattern_extracted.to_string(),
-            Self::RelativeToDirLevel(pattern_extracted, _, _) => pattern_extracted.to_string(),
-            Self::NotRelativeToDirLevel(pattern_extracted, _, _) => pattern_extracted.to_string(),
-        }
-    }
-
-    pub fn to_string(
-        &self,
-        path: &str,
-        gitignore_path: &str,
-        line_number: usize,
-        verbose: bool,
-    ) -> String {
-        if verbose {
-            return format!(
-                "{}:{}:{}\t{}\n",
-                gitignore_path,
-                line_number,
-                self.get_pattern_read(),
-                path
-            );
-        }
-        format!("{}\n", path)
-    }
-}
-
+/// Dado un path que puede empezar con . o ../, obtiene el path real relativo al directorio actual.
 fn get_real_path(target_path: &str, base_path: &PathBuf) -> Option<String> {
     if let Ok(absolute_path) = fs::canonicalize(target_path) {
         if let Ok(relative_path) = absolute_path.strip_prefix(base_path) {
@@ -326,23 +236,13 @@ fn get_real_path(target_path: &str, base_path: &PathBuf) -> Option<String> {
     None
 }
 
+/// Devuelve true si el path coincide con el patrón.
 fn matches_pattern(
     path: &str,
     pattern: &Pattern,
-    base_path: &str,
+    _base_path: &str,
     logger: &mut Logger,
 ) -> Result<bool, CommandError> {
-    /* let path = {
-        if pattern.is_relative() {
-            logger.log(&format!("es relativo"));
-
-            path.to_string()
-        } else {
-            join_paths!(base_path, path).ok_or(CommandError::FileCreationError(format!(
-                " No se pudo formar la ruta del archivo"
-            )))?
-        }
-    }; */
     match pattern {
         Pattern::StartsWith(_, pattern, is_relative, _) => {
             logger.log(&format!(
@@ -353,46 +253,7 @@ fn matches_pattern(
                 is_dir(pattern)
             ));
 
-            if is_relative.to_owned() || is_dir(pattern) {
-                if path.starts_with(pattern) {
-                    logger.log(&format!("is_rel or dir, matches",));
-                    return Ok(true);
-                }
-                return Ok(false);
-            }
-
-            let mut e = pattern.len();
-            //let mut s = 0;
-            let mut index = 0;
-
-            if !is_relative.to_owned() || !is_dir(pattern) {
-                for _ in path.chars() {
-                    if path[index..].starts_with(pattern) {
-                        logger.log(&format!("e+index = {}", e + index));
-                        if (index > 0 && !path[index - 1..].starts_with("/"))
-                        /* || (!pattern.ends_with("/")
-                            && e + index < path.len() - 1
-                            && &path[e + index..] == "/")
-                        || !(e + index < path.len() - 1) */
-                        {
-                            return Ok(false);
-
-                            //s = index; //if index > 0 { index - 1 } else { 0 };
-                            //break;
-                        }
-                        return Ok(true);
-                    }
-                    index += 1;
-                }
-            }
-
-            /* logger.log(&format!("e={}", e));
-            if let Some(rest) = path.get(e..) {
-                if is_dir(pattern) && !rest.starts_with("/") {
-                    return Ok(false);
-                }
-            } */
-            return Ok(false);
+            return matches_starts_with(path, pattern, is_relative.to_owned());
         }
         Pattern::EndsWith(_, pattern, is_relative, _) => {
             logger.log(&format!(
@@ -402,81 +263,16 @@ fn matches_pattern(
                 is_dir(pattern),
                 is_relative.to_owned()
             ));
-            /* if !is_dir(pattern) && path.ends_with(pattern) {
-                return Ok(true);
-            } else if is_dir(pattern) { */
-            let mut s = 0;
-            let mut index = 0;
 
-            if path.contains(pattern) {
-                for _ in path.chars() {
-                    if path[index..].starts_with(pattern) {
-                        s = index;
-                        break;
-                    }
-                    index += 1;
-                }
-                //logger.log(&format!("Es dir. s={}", s));
-                let e = s + pattern.len();
-                /* if s > 0 {
-                    e -= 1;
-                } */
-
-                logger.log(&format!("s={},e={}", s, e));
-                logger.log(&format!(
-                    "Conditions: (1) {} (2) {} (3) {}",
-                    e < path.len() - 1 && !path[e..].starts_with("/"),
-                    is_relative.to_owned() && s > 0 && path[..s].contains("/"),
-                    !is_relative.to_owned()
-                        && is_dir(pattern)
-                        && s > 0
-                        && !path[..s].ends_with("/")
-                ));
-
-                if (e < path.len() - 1 && !path[e..].starts_with("/") && !is_dir(pattern))
-                    || (is_relative.to_owned() && s > 0 && path[..s].contains("/"))
-                /* || (!is_relative.to_owned()
-                && is_dir(pattern)
-                && s > 0
-                && !path[..s].ends_with("/")) */
-                {
-                    return Ok(false);
-                }
-                return Ok(true);
-            }
+            return matches_ends_with(path, pattern, is_relative.to_owned());
         }
-        /*         Pattern::MatchesAsterisk(_, start, end, _, _) => {
-            logger.log(&format!(
-                "MATCHES --> path: {}, starts: {}, ends:{}",
-                path, start, end
-            ));
 
-            /* if path.len() > start.len() + end.len() {
-                if path[start.len()..end.len()].contains("/") {
-                    return Ok(false);
-                }
-            } */
-            if path.starts_with(start) && path.ends_with(end) {
-                return Ok(true);
-            }
-        } */
         Pattern::RelativeToDirLevel(_, pattern, _) => {
             logger.log(&format!(
                 "RELATIVE --> path: {}, pattern: {}",
                 path, pattern
             ));
-            if path.starts_with(pattern) {
-                logger.log(&format!("comienza con el patrón",));
-                if let Some(rest) = path.get(pattern.len()..) {
-                    logger.log(&format!("rest: {}", rest));
-                    if rest != "" && !rest.starts_with("/") && !is_dir(pattern) {
-                        logger.log(&format!("no coincide"));
-
-                        return Ok(false);
-                    }
-                }
-                return Ok(true);
-            }
+            return matches_relative_pattern(path, pattern);
         }
         Pattern::NotRelativeToDirLevel(_, pattern, _) => {
             logger.log(&format!(
@@ -484,36 +280,9 @@ fn matches_pattern(
                 path, pattern
             ));
 
-            let mut index = 0;
-
-            if path.contains(pattern) {
-                for _ in path.chars() {
-                    if path[index..].starts_with(pattern) {
-                        if let Some(rest) = path.get(index + pattern.len()..) {
-                            logger.log(&format!("rest: {}", rest));
-
-                            if rest != "" && !rest.starts_with("/") && !is_dir(pattern) {
-                                logger.log("No cumple final");
-                                return Ok(false);
-                            }
-                        }
-                        if let Some(rest) = path.get(..index) {
-                            logger.log(&format!("rest: {}", rest));
-
-                            if rest != "" && !rest.ends_with("/") {
-                                logger.log("No cumple principio");
-
-                                return Ok(false);
-                            }
-                        }
-                        return Ok(true);
-                    }
-                    index += 1;
-                }
-            }
+            return matches_non_relative_pattern(path, pattern);
         }
     }
-    Ok(false)
 }
 
 /// Busca desde 'path_name' archivos .gitignore.
@@ -541,10 +310,7 @@ fn look_for_gitignore_files(
         if entry_path.is_dir() {
             look_for_gitignore_files(&entry_name, gitignore_files, logger, base_path)?;
         } else if entry_name.ends_with(".gitignore") {
-            logger.log(&format!("Buscando .gitignore antes: {}", entry_name));
-
             if let Some(path) = entry_name.strip_prefix(base_path) {
-                logger.log(&format!("Buscando .gitignore después: {}", path));
                 let path = if path.starts_with("/") {
                     path[1..].to_string()
                 } else {
@@ -559,7 +325,95 @@ fn look_for_gitignore_files(
     Ok(())
 }
 
+/// Devuelve true si el path pasado es un directorio.
 fn is_dir(path: &str) -> bool {
     let obj_path = Path::new(path);
-    path.ends_with("/")
+    path.ends_with("/") || obj_path.is_dir()
+}
+
+/// Devuelve true si el path coincide con el patrón STARTS_WITH
+fn matches_starts_with(path: &str, pattern: &str, is_relative: bool) -> Result<bool, CommandError> {
+    if is_relative || is_dir(pattern) {
+        if path.starts_with(pattern) {
+            return Ok(true);
+        }
+        return Ok(false);
+    }
+    let mut index = 0;
+
+    if !is_relative || !is_dir(pattern) {
+        for _ in path.chars() {
+            if path[index..].starts_with(pattern) {
+                if index > 0 && !path[index - 1..].starts_with("/") {
+                    return Ok(false);
+                }
+                return Ok(true);
+            }
+            index += 1;
+        }
+    }
+    Ok(false)
+}
+
+/// Devuelve true si el path coincide con el patrón ENDS_WITH
+fn matches_ends_with(path: &str, pattern: &str, is_relative: bool) -> Result<bool, CommandError> {
+    let mut s = 0;
+    let mut index = 0;
+
+    if path.contains(pattern) {
+        for _ in path.chars() {
+            if path[index..].starts_with(pattern) {
+                s = index;
+                break;
+            }
+            index += 1;
+        }
+        let e = s + pattern.len();
+
+        if (e < path.len() - 1 && !path[e..].starts_with("/") && !is_dir(pattern))
+            || (is_relative.to_owned() && s > 0 && path[..s].contains("/"))
+        {
+            return Ok(false);
+        }
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+/// Devuelve true si el path coincide con el patrón RELATIVE_TO_DIR_LEVEL
+fn matches_relative_pattern(path: &str, pattern: &str) -> Result<bool, CommandError> {
+    if path.starts_with(pattern) {
+        if let Some(rest) = path.get(pattern.len()..) {
+            if rest != "" && !rest.starts_with("/") && !is_dir(pattern) {
+                return Ok(false);
+            }
+        }
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+/// Devuelve true si el path coincide con el patrón NOT_RELATIVE_TO_DIR_LEVEL
+fn matches_non_relative_pattern(path: &str, pattern: &str) -> Result<bool, CommandError> {
+    let mut index = 0;
+
+    if path.contains(pattern) {
+        for _ in path.chars() {
+            if path[index..].starts_with(pattern) {
+                if let Some(rest) = path.get(index + pattern.len()..) {
+                    if rest != "" && !rest.starts_with("/") && !is_dir(pattern) {
+                        return Ok(false);
+                    }
+                }
+                if let Some(rest) = path.get(..index) {
+                    if rest != "" && !rest.ends_with("/") {
+                        return Ok(false);
+                    }
+                }
+                return Ok(true);
+            }
+            index += 1;
+        }
+    }
+    Ok(false)
 }

@@ -1,4 +1,4 @@
-use crate::ignore_patterns::GitignorePatterns;
+use crate::gitignore_patterns::ignore_patterns::GitignorePatterns;
 use crate::logger::Logger;
 use crate::objects_database::ObjectsDatabase;
 use crate::staging_area_components::staging_area::StagingArea;

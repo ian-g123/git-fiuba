@@ -23,7 +23,7 @@ use crate::{
     command_errors::CommandError,
     config::Config,
     diff_components::merge::merge_content,
-    ignore_patterns::{GitignorePatterns, Pattern},
+    gitignore_patterns::ignore_patterns::GitignorePatterns,
     join_paths,
     logger::Logger,
     objects::{

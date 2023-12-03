@@ -1,5 +1,4 @@
 use std::io;
-use std::io::BufRead;
 use std::io::Read;
 use std::io::Write;
 use std::str;
@@ -146,14 +145,8 @@ impl CheckIgnore {
                         break;
                     }
                     path += &input;
-                    //eprintln!("input: {} ===", input);
                 }
-                //eprintln!("path final: {} ===", path);
-                /* let path = if path == "\0" {
-                    path
-                } else {
-                    path[..path.len() - 1].to_string()
-                }; */
+
                 if path.is_empty() {
                     return Err(CommandError::EmptyPath);
                 }

@@ -1,15 +1,12 @@
 use std::{
     fs::{self, File, OpenOptions},
-    io::{Error, Read, Write},
+    io::Write,
     process::Command,
 };
 
 use common::aux::create_base_scene;
 
-use crate::common::aux::{
-    change_dir_testfile1_content_and_remove_dir_testfile2, change_test_scene_4,
-    change_testfile_content, create_test_scene_2, create_test_scene_4, create_test_scene_5,
-};
+use crate::common::aux::create_test_scene_5;
 
 mod common {
     pub mod aux;
@@ -803,7 +800,7 @@ fn test_read_from_stdin() {
     let mut file = File::create(path.to_owned() + "/stdin").unwrap();
     writeln!(
         file,
-        "name\nname_abc\nname.txt\nname/\nname/a\nname/a/b\nabc_name\na/name\na/b/name\n*name\n"
+        "name\nname_abc\nname.txt\nname/\nname/a\nname/a/b\nabc_name\na/name\na/b/name\n*name"
     )
     .unwrap();
     file.flush().unwrap();
