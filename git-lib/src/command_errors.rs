@@ -1,6 +1,7 @@
 use std::{
     error::Error,
     fmt::{self},
+    path::PathBuf,
 };
 
 /// Enumeración de errores de flags
@@ -222,6 +223,13 @@ pub enum CommandError {
 
     //index
     MetadataError(String),
+
+    // check-ignore
+    StdinAndPathsError,
+    NoPathSpecified,
+    NonMatchingWithoutVerbose,
+    OutsideOfRepository(String, PathBuf),
+    EmptyPath,
     // No rebase in progress
     NoRebaseInProgress,
 }
@@ -461,7 +469,7 @@ impl fmt::Display for CommandError {
             CommandError::RmFromStagingAreaError(path) => {
                 write!(
                     f,
-                    "No se puede remover un archivo que no fue agregado al Staging Area: {path}"
+                    "fatal: pathspec '{path}' did not match any files"
                 )
             }
             CommandError::PullError(msg) => {
@@ -551,7 +559,13 @@ impl fmt::Display for CommandError {
             CommandError::LsTreeErrorNotATree => write!(f, "fatal: not a tree object"),
             CommandError::AddStagingAreaError(path,e) => write!(f, "Error al añadir el archivo {}: {}",path, e),
             CommandError::MetadataError(e) => write!(f, "Error de metadatos: {}", e),
+            CommandError::StdinAndPathsError => write!(f, "fatal: cannot specify pathnames with --stdin"),
+            CommandError::NoPathSpecified => write!(f, "fatal: no path specified"),
+            CommandError::OutsideOfRepository(path, repo) => write!(f, "fatal: {path}: '{path}' is outside repository at '{}'", repo.to_string_lossy()),
+            CommandError::EmptyPath => write!(f, "fatal: empty string is not a valid pathspec. please use * instead if you meant to match all paths"),
+            CommandError::NonMatchingWithoutVerbose => write!(f, "fatal: --non-matching is only valid with --verbose"),            
             CommandError::NoRebaseInProgress => write!(f, "fatal: No rebase in progress?"),
-        }
+            
+    }
     }
 }

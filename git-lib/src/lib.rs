@@ -5,6 +5,7 @@ pub mod config;
 pub mod diff_components;
 pub mod file_compressor;
 pub mod git_repository;
+pub mod gitignore_patterns;
 pub mod logger;
 pub mod logger_sender;
 pub mod objects;

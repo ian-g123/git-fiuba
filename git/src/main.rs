@@ -1,8 +1,8 @@
 use git::commands::{
-    add::Add, branch::Branch, cat_file::CatFile, checkout::Checkout, clone::Clone,
-    command::Command, commit::Commit, fetch::Fetch, hash_object::HashObject, init::Init, log::Log,
-    ls_files::LsFiles, ls_tree::LsTree, merge::Merge, push::Push, rebase::Rebase,
-    show_ref::ShowRef, status::Status, tag::Tag,
+    add::Add, branch::Branch, cat_file::CatFile, check_ignore::CheckIgnore, checkout::Checkout,
+    clone::Clone, command::Command, commit::Commit, fetch::Fetch, hash_object::HashObject,
+    init::Init, log::Log, ls_files::LsFiles, ls_tree::LsTree, merge::Merge, push::Push,
+    rebase::Rebase, show_ref::ShowRef, status::Status, tag::Tag,
 };
 use git_lib::command_errors::CommandError;
 use std::{env, io};
@@ -46,6 +46,7 @@ fn run(command_name: &str, command_args: &[String]) -> Result<(), CommandError> 
         Rebase::run_from,
         ShowRef::run_from,
         LsTree::run_from,
+        CheckIgnore::run_from,
     ];
 
     for command in &commands {
