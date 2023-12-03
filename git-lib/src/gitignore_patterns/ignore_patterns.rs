@@ -45,7 +45,7 @@ impl GitignorePatterns {
 
     /// Dado un path, determina si el mismo debe ser ignorado por git según los patrones guardados por
     /// la estructura.
-    pub fn must_be_ignored(
+    pub fn should_ignore(
         &self,
         path: &str,
         logger: &mut Logger,

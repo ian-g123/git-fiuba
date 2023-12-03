@@ -72,7 +72,7 @@ fn delete_ignored_files(
 ) -> Result<Vec<String>, CommandError> {
     let mut filter: Vec<String> = Vec::new();
     for path in untracked.iter() {
-        if patterns.must_be_ignored(path, logger)?.is_none() {
+        if patterns.should_ignore(path, logger)?.is_none() {
             filter.push(path.to_string());
         }
     }

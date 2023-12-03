@@ -469,7 +469,7 @@ impl fmt::Display for CommandError {
             CommandError::RmFromStagingAreaError(path) => {
                 write!(
                     f,
-                    "No se puede remover un archivo que no fue agregado al Staging Area: {path}"
+                    "fatal: pathspec '{path}' did not match any files"
                 )
             }
             CommandError::PullError(msg) => {

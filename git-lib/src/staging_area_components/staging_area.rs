@@ -117,11 +117,7 @@ impl StagingArea {
         Ok(changes)
     }
 
-    pub fn remove_from_stagin_area(
-        &mut self,
-        path: &str,
-        logger: &mut Logger,
-    ) -> Result<(), CommandError> {
+    pub fn remove_entry(&mut self, path: &str, logger: &mut Logger) -> Result<(), CommandError> {
         if !self.is_in_staging_area(&path.to_string()) {
             return Err(CommandError::RmFromStagingAreaError(path.to_string()));
         }
