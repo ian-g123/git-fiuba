@@ -1,9 +1,6 @@
 use std::io::Cursor;
 
-use git_lib::{
-    git_repository::GitRepository, logger::Logger, objects::git_object::GitObjectTrait,
-    utils::aux::hex_string_to_u8_vec,
-};
+use git_lib::{git_repository::GitRepository, logger::Logger, objects::git_object::GitObjectTrait};
 
 #[test]
 #[ignore = "git-lib/tests/data/packfile-database.zip must be extracted before running the test"]
@@ -14,7 +11,7 @@ fn test() {
     let mut output_writer = Cursor::new(output);
     let mut repo = GitRepository::open(repo_path, &mut output_writer).unwrap();
     let commits = repo.get_log(true).unwrap();
-    let (mut commit, _) = commits.get(0).unwrap().to_owned();
+    let (mut commit, _, _) = commits.get(0).unwrap().to_owned();
     assert_eq!(commit.get_message(), "initialcommit");
     let tree = repo
         .db()
@@ -52,7 +49,7 @@ fn test_simple_delta_pack() {
     let mut repo = GitRepository::open(repo_path, &mut output_writer).unwrap();
     let commits = repo.get_log(true).unwrap();
 
-    for (mut commit, _) in commits {
+    for (mut commit, _, _) in commits {
         match commit.get_hash().unwrap() {
             [117, 117, 203, 199, 187, 45, 195, 211, 206, 11, 158, 164, 115, 45, 96, 213, 65, 62, 189, 175] =>
             {

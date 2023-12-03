@@ -26,9 +26,7 @@ impl Command for Log {
         }
 
         let instance = Self::new(args)?;
-        let mut commits = instance.run(output)?;
-        print_for_log(output, &mut commits)?;
-        Ok(())
+        instance.run(output)
     }
 
     fn config_adders(&self) -> ConfigAdderFunction<Self> {
@@ -55,12 +53,10 @@ impl Log {
         Ok(i + 1)
     }
 
-    fn run(
-        &self,
-        output: &mut dyn Write,
-    ) -> Result<Vec<(CommitObject, Option<String>)>, CommandError> {
+    fn run(&self, output: &mut dyn Write) -> Result<(), CommandError> {
         let mut repo = git_repository::GitRepository::open("", output)?;
-        let commits = repo.get_log(self.all)?;
-        Ok(commits)
+        let mut commits = repo.get_log(self.all)?;
+        print_for_log(output, &mut commits)?;
+        Ok(())
     }
 }

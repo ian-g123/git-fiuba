@@ -221,7 +221,6 @@ fn test_with_conflict_heavy() {
             .is_ok(),
         "No se pudo agregar el archivo fu"
     );
-    thread::sleep(Duration::from_secs(1));
 
     // hacemos rebase --continue
     let result = Command::new(git_bin)
@@ -253,8 +252,6 @@ fn test_with_conflict_heavy() {
         "No se pudo agregar el archivo fu"
     );
 
-    thread::sleep(Duration::from_secs(1));
-
     // hacemos rebase --continue
     let result = Command::new(git_bin)
         .arg("rebase")
@@ -284,8 +281,6 @@ fn test_with_conflict_heavy() {
             .is_ok(),
         "No se pudo agregar el archivo bar"
     );
-
-    thread::sleep(Duration::from_secs(1));
 
     // hacemos rebase --continue
     let result = Command::new(git_bin)
@@ -353,7 +348,6 @@ fn test_with_conflict_abort() {
             .is_ok(),
         "No se pudo agregar el archivo fu"
     );
-    thread::sleep(Duration::from_secs(1));
 
     // hacemos rebase --continue
     let result = Command::new(git_bin)
@@ -484,7 +478,6 @@ fn create_scene_without_conflict(path: &str, git_bin: &str) {
         "No se pudo hacer commit"
     );
 
-    thread::sleep(Duration::from_secs(1));
     // creamos la rama
     assert!(
         Command::new(git_bin)
@@ -511,7 +504,6 @@ fn create_scene_without_conflict(path: &str, git_bin: &str) {
         "No se pudo agregar el archivo fu"
     );
 
-    thread::sleep(Duration::from_secs(1));
     // hacemos commit
     assert!(
         Command::new(git_bin)
@@ -553,7 +545,6 @@ fn create_scene_without_conflict(path: &str, git_bin: &str) {
         "No se pudo agregar los archivos"
     );
 
-    thread::sleep(Duration::from_secs(1));
     // hacemos commit
     assert!(
         Command::new(git_bin)
@@ -576,7 +567,6 @@ fn create_scene_without_conflict(path: &str, git_bin: &str) {
             .is_ok(),
         "No se pudo cambiar a la master"
     );
-    thread::sleep(Duration::from_secs(1));
 }
 
 fn create_scene_with_conflict(path: &str, git_bin: &str) {
@@ -621,7 +611,6 @@ fn create_scene_with_conflict(path: &str, git_bin: &str) {
         "No se pudo hacer commit"
     );
 
-    thread::sleep(Duration::from_secs(1));
     // creamos la rama
     assert!(
         Command::new(git_bin)
@@ -648,7 +637,6 @@ fn create_scene_with_conflict(path: &str, git_bin: &str) {
         "No se pudo agregar el archivo fu"
     );
 
-    thread::sleep(Duration::from_secs(1));
     // hacemos commit
     assert!(
         Command::new(git_bin)
@@ -687,7 +675,6 @@ fn create_scene_with_conflict(path: &str, git_bin: &str) {
         "No se pudo agregar el archivo fu"
     );
 
-    thread::sleep(Duration::from_secs(1));
     // hacemos commit
     assert!(
         Command::new(git_bin)
@@ -710,7 +697,6 @@ fn create_scene_with_conflict(path: &str, git_bin: &str) {
             .is_ok(),
         "No se pudo cambiar a la master"
     );
-    thread::sleep(Duration::from_secs(1));
 }
 
 fn create_scene_with_conflict_heavy(path: &str, git_bin: &str) {
@@ -755,7 +741,6 @@ fn create_scene_with_conflict_heavy(path: &str, git_bin: &str) {
         "No se pudo hacer commit"
     );
 
-    thread::sleep(Duration::from_secs(1));
     // creamos la rama
     assert!(
         Command::new(git_bin)
@@ -782,7 +767,6 @@ fn create_scene_with_conflict_heavy(path: &str, git_bin: &str) {
         "No se pudo agregar el archivo fu"
     );
 
-    thread::sleep(Duration::from_secs(1));
     // hacemos commit
     assert!(
         Command::new(git_bin)
@@ -821,7 +805,6 @@ fn create_scene_with_conflict_heavy(path: &str, git_bin: &str) {
         "No se pudo agregar el archivo fu"
     );
 
-    thread::sleep(Duration::from_secs(1));
     // hacemos commit
     assert!(
         Command::new(git_bin)
@@ -852,7 +835,6 @@ fn create_scene_with_conflict_heavy(path: &str, git_bin: &str) {
         "No se pudo agregar los archivos"
     );
 
-    thread::sleep(Duration::from_secs(1));
     // hacemos commit
     assert!(
         Command::new(git_bin)
@@ -894,7 +876,6 @@ fn create_scene_with_conflict_heavy(path: &str, git_bin: &str) {
         "No se pudo agregar los archivos"
     );
 
-    thread::sleep(Duration::from_secs(1));
     // hacemos commit
     assert!(
         Command::new(git_bin)
@@ -925,7 +906,6 @@ fn create_scene_with_conflict_heavy(path: &str, git_bin: &str) {
         "No se pudo agregar los archivos"
     );
 
-    thread::sleep(Duration::from_secs(1));
     // hacemos commit
     assert!(
         Command::new(git_bin)
@@ -937,7 +917,6 @@ fn create_scene_with_conflict_heavy(path: &str, git_bin: &str) {
             .is_ok(),
         "No se pudo hacer commit"
     );
-    thread::sleep(Duration::from_secs(1));
 }
 
 fn get_commits_and_branches(output: String) -> String {

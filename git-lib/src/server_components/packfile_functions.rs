@@ -87,11 +87,11 @@ pub fn write_object_to_packfile(
 }
 
 pub fn make_packfile(
-    commits_map: HashMap<String, (CommitObject, Option<String>)>, // HashMap<hash, (CommitObject, Option<branch>)>
+    commits_map: HashMap<String, (CommitObject, usize, usize)>, // HashMap<hash, (CommitObject, Option<branch>)>
 ) -> Result<Vec<u8>, CommandError> {
     let mut hash_objects: HashMap<String, GitObject> = HashMap::new();
 
-    for (hash_commit, (commit_object, _branch)) in commits_map {
+    for (hash_commit, (commit_object, _branch, _index)) in commits_map {
         let Some(tree) = commit_object.get_tree() else {
             return Err(CommandError::PushTreeError);
         };

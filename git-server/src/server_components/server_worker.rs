@@ -260,17 +260,17 @@ impl ServerWorker {
 
         self.log(&format!("haves: {:?}", haves));
         self.log(&format!("wants: {:?}", wants));
-        let mut commits_map = HashMap::<String, (CommitObject, Option<String>)>::new();
+        let mut commits_map = HashMap::<String, (CommitObject, usize, usize)>::new();
         for want in wants {
             rebuild_commits_tree(
                 &repo.db()?,
                 &want,
                 &mut commits_map,
-                None,
                 false,
                 &haves,
                 true,
                 repo.logger(),
+                0,
             )?;
         }
         for have in haves {
@@ -278,7 +278,7 @@ impl ServerWorker {
         }
         self.log("╔==========");
         self.log("║ Packfile summary");
-        for (hash, (commit, _)) in &commits_map {
+        for (hash, (commit, _, _)) in &commits_map {
             self.log(&format!("║ {}: {}", hash, commit.get_message()));
             let mut hash_stack = Vec::<Tree>::new();
             let value = commit
