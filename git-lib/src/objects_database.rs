@@ -63,9 +63,6 @@ impl ObjectsDatabase {
             logger,
             Some(&self),
         );
-        // return read_git_object_from(self, &mut stream, &path, &hash_str, logger);
-
-        // self.read_object_from_packs(hash_str, logger)
     }
 
     /// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve el objeto que este representa.
@@ -87,9 +84,6 @@ impl ObjectsDatabase {
             logger,
             None,
         );
-        // return read_git_object_from(self, &mut stream, &path, &hash_str, logger);
-
-        // self.read_object_from_packs(hash_str, logger)
     }
 
     /// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve la ruta del objeto y su data descomprimida.
