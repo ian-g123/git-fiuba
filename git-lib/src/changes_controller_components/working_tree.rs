@@ -40,10 +40,12 @@ fn build_working_tree_aux(path_name: &str, tree: &mut Tree) -> Result<(), Comman
         if entry_path.is_dir() {
             let mut new_tree = Tree::new(path.to_owned());
             build_working_tree_aux(&full_path, &mut new_tree)?;
-            tree.add_object(get_name(path)?, Box::new(new_tree));
+            tree.add_object(get_name(path)?, Box::new(new_tree))?;
         } else {
-            let blob = Blob::new_from_path(path.to_string())?;
-            tree.add_object(get_name(path)?, Box::new(blob));
+            let content = fs::read(entry_path.clone())
+                .map_err(|_| CommandError::FileNotFound(full_path.to_owned()))?;
+            let blob = Blob::new_from_content_and_path(content, path)?;
+            tree.add_object(get_name(path)?, Box::new(blob))?;
         }
     }
     Ok(())

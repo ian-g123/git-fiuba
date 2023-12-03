@@ -37,13 +37,8 @@ impl GitObjectTrait for ProtoObject {
         todo!()
     }
 
-    fn content(&mut self, _: Option<&mut ObjectsDatabase>) -> Result<Vec<u8>, CommandError> {
+    fn content(&mut self, _: Option<&ObjectsDatabase>) -> Result<Vec<u8>, CommandError> {
         Ok(self.content.clone())
-    }
-
-    fn to_string_priv(&mut self) -> String {
-        let string = String::from_utf8_lossy(&self.content);
-        string.to_string()
     }
 
     fn get_hash(&mut self) -> Result<[u8; 20], CommandError> {

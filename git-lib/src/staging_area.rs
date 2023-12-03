@@ -50,6 +50,10 @@ impl StagingArea {
         self.unmerged_files.clone()
     }
 
+    pub fn remove_from_unmerged_files(&mut self, fil_name: &str) {
+        self.unmerged_files.remove(fil_name);
+    }
+
     pub fn get_changes(
         &self,
         last_commit_tree: &Option<Tree>,

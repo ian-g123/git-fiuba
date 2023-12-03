@@ -183,6 +183,7 @@ pub enum CommandError {
     CheckoutConflictsError,
     /// El tree guarda solo hashes y no sus objetos
     ShallowTree,
+    ShallowBlob(String),
 
     MergeConflictsCommit,
     /// Errror in object decompression
@@ -229,6 +230,8 @@ pub enum CommandError {
     NonMatchingWithoutVerbose,
     OutsideOfRepository(String, PathBuf),
     EmptyPath,
+    // No rebase in progress
+    NoRebaseInProgress,
 }
 
 impl Error for CommandError {}
@@ -528,6 +531,9 @@ impl fmt::Display for CommandError {
             CommandError::ShallowTree => {
                 write!(f, "El tree guarda solo hashes y no sus objetos")
             }
+            CommandError::ShallowBlob(msg) => {
+                write!(f, "No se pudo obtener el contenido del blob: {}", msg)
+            }
             CommandError::MergeConflictsCommit => write!(f, "error: Committing is not possible because you have unmerged files.\nhint: Fix them up in the work tree, and then use 'git add/rm <file>'\nhint: as appropriate to mark resolution and make a commit.\nfatal: Exiting because of an unresolved conflict."),
             CommandError::ErrorDecompressingObject(msg) => {
                 write!(f, "Errror in object decompression: {}", msg)
@@ -555,9 +561,11 @@ impl fmt::Display for CommandError {
             CommandError::MetadataError(e) => write!(f, "Error de metadatos: {}", e),
             CommandError::StdinAndPathsError => write!(f, "fatal: cannot specify pathnames with --stdin"),
             CommandError::NoPathSpecified => write!(f, "fatal: no path specified"),
-            CommandError::NonMatchingWithoutVerbose => write!(f, "fatal: --non-matching is only valid with --verbose"),
             CommandError::OutsideOfRepository(path, repo) => write!(f, "fatal: {path}: '{path}' is outside repository at '{}'", repo.to_string_lossy()),
             CommandError::EmptyPath => write!(f, "fatal: empty string is not a valid pathspec. please use * instead if you meant to match all paths"),
-        }
+            CommandError::NonMatchingWithoutVerbose => write!(f, "fatal: --non-matching is only valid with --verbose"),            
+            CommandError::NoRebaseInProgress => write!(f, "fatal: No rebase in progress?"),
+            
+    }
     }
 }
