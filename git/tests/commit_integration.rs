@@ -1,4 +1,8 @@
-use std::{fs, path::Path, process::Command};
+use std::{
+    fs::{self, File},
+    path::Path,
+    process::Command,
+};
 
 use common::aux::create_test_scene_6;
 
@@ -1031,6 +1035,35 @@ fn test_commit_output_deletions_and_insertions() {
     println!("Commit output:\n{}", result);
     let result: Vec<&str> = result.lines().collect();
     let expected = [" 1 file changed, 1 insertion(+), 2 deletions(-)"].to_vec();
+    assert_eq!(result[1..], expected);
+
+    let _file = File::create(path.to_owned() + "/new.txt").unwrap();
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("new.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .arg("testfile.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+    println!("stderr:\n{}", String::from_utf8(result.stderr).unwrap());
+
+    let result = String::from_utf8(result.stdout).unwrap();
+    println!("Commit output:\n{}", result);
+    let result: Vec<&str> = result.lines().collect();
+    let expected = [
+        " 1 file changed, 0 insertions(+), 0 deletions(-)",
+        " create mode 100644 new.txt",
+    ]
+    .to_vec();
     assert_eq!(result[1..], expected);
 
     _ = fs::remove_dir_all(format!("{}", path));
