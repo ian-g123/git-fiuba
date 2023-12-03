@@ -20,14 +20,14 @@ pub fn get_analysis(
 ) -> Result<
     (
         HashMap<String, (String, String)>,
-        HashMap<String, (CommitObject, Option<String>)>,
+        HashMap<String, (CommitObject, usize, usize)>,
     ),
     CommandError,
 > {
     let mut hash_branch_status = HashMap::<String, (String, String)>::new(); // HashMap<branch, (old_hash, new_hash)>
-    let mut commits_map = HashMap::<String, (CommitObject, Option<String>)>::new(); // HashMap<hash, (CommitObject, Option<branch>)>
+    let mut commits_map = HashMap::<String, (CommitObject, usize, usize)>::new(); // HashMap<hash, (CommitObject, Option<branch>)>
 
-    for (local_branch, local_hash) in local_branches {
+    for (i, (local_branch, local_hash)) in local_branches.into_iter().enumerate() {
         logger.log("Looping");
         logger.log(&format!(
             "local_branch: {}, local_hash: {}\n",
@@ -47,20 +47,15 @@ pub fn get_analysis(
             &db,
             &local_hash,
             &mut commits_map,
-            Some(local_branch.to_string()),
             false,
             &hash_to_look_for,
             true,
             logger,
+            i,
         )?;
 
-        if let Some((_, Some(remote_branch))) = commits_map.get(&remote_hash) {
-            if remote_branch == &local_branch {
-                hash_branch_status
-                    .insert(local_branch.to_string(), (remote_hash.clone(), local_hash));
-            } else {
-                return Err(CommandError::PushBranchBehind(local_branch.to_owned()));
-            }
+        if commits_map.contains_key(&remote_hash) {
+            hash_branch_status.insert(local_branch.to_string(), (remote_hash.clone(), local_hash));
         } else {
             return Err(CommandError::PushBranchBehind("".to_string()));
         }
@@ -74,19 +69,21 @@ pub fn get_analysis(
 pub fn rebuild_commits_tree(
     db: &ObjectsDatabase,
     hash_commit: &String,
-    commits_map: &mut HashMap<String, (CommitObject, Option<String>)>, // HashMap<hash, (commit, branch)>
-    branch: Option<String>,
+    commits_map: &mut HashMap<String, (CommitObject, usize, usize)>, // HashMap<hash, (commit, branch)>
     log_all: bool,
     hash_to_look_for: &HashSet<String>,
     build_tree: bool,
     logger: &mut Logger,
-) -> Result<(), CommandError> {
-    logger.log("rebuild_commits_tree");
-    if commits_map.contains_key(&hash_commit.to_string()) {
-        return Ok(());
+    color_idx: usize,
+) -> Result<usize, CommandError> {
+    if let Some((_, _, depth)) = commits_map.get(&hash_commit.to_string()) {
+        return Ok(depth.clone());
     }
 
-    logger.log(&format!("Reading file db.read_file: {}", hash_commit));
+    logger.log(&format!(
+        "BUILD COMMIT TREE Reading file db.read_file: {}",
+        hash_commit
+    ));
     let (type_str, len, content) = db.read_file(hash_commit, logger)?;
 
     logger.log(&format!("type_str: {}, len: {}", type_str, len));
@@ -109,54 +106,61 @@ pub fn rebuild_commits_tree(
     };
 
     if hash_to_look_for.contains(hash_commit) {
-        let commit_with_branch = (commit_object.to_owned(), branch);
+        let commit_with_branch = (commit_object.to_owned(), color_idx, 0);
         commits_map.insert(hash_commit.to_string(), commit_with_branch);
-        return Ok(());
+        return Ok(0);
     }
 
     let parents_hash = commit_object.get_parents();
-
-    if parents_hash.len() > 0 {
-        let principal_parent = &parents_hash[0];
-        rebuild_commits_tree(
+    logger.log(&format!(
+        "parents_hash: {:?} of the commit: {}",
+        parents_hash, hash_commit
+    ));
+    // if parents_hash.len() > 0 {
+    //     let principal_parent = &parents_hash[0];
+    //     logger.log(&format!(
+    //         "principal parent hash : {} of the commit: {}",
+    //         principal_parent, hash_commit
+    //     ));
+    //     let mut depth = rebuild_commits_tree(
+    //         db,
+    //         &principal_parent,
+    //         commits_map,
+    //         branch.clone(),
+    //         log_all,
+    //         hash_to_look_for,
+    //         build_tree,
+    //         logger,
+    //     )?;
+    let mut max_depth = 0;
+    for (i_color, parent_hash) in parents_hash.iter().enumerate() {
+        for hash_to_look_for_one in hash_to_look_for.iter() {
+            if let Some((_, _, depth)) = commits_map.get(&hash_to_look_for_one.to_string()) {
+                return Ok(depth.clone());
+            }
+        }
+        let depth = rebuild_commits_tree(
             db,
-            &principal_parent,
+            &parent_hash,
             commits_map,
-            branch.clone(),
             log_all,
             hash_to_look_for,
             build_tree,
             logger,
+            color_idx + i_color,
         )?;
-
-        if !log_all {
-            for parent_hash in parents_hash.iter().skip(1) {
-                for hash_to_look_for_one in hash_to_look_for.iter() {
-                    if commits_map.contains_key(&hash_to_look_for_one.to_string()) {
-                        return Ok(());
-                    }
-                }
-                rebuild_commits_tree(
-                    db,
-                    &parent_hash,
-                    commits_map,
-                    None,
-                    log_all,
-                    hash_to_look_for,
-                    build_tree,
-                    logger,
-                )?;
-            }
+        if depth > max_depth {
+            max_depth = depth;
         }
     }
 
-    if commits_map.contains_key(&hash_commit.to_string()) {
-        return Ok(());
+    if let Some((_, _, depth)) = commits_map.get(&hash_commit.to_string()) {
+        return Ok(depth.clone());
     }
 
-    let commit_with_branch = (commit_object.to_owned(), branch);
+    let commit_with_branch = (commit_object.to_owned(), color_idx, max_depth + 1);
     commits_map.insert(hash_commit.to_string(), commit_with_branch);
-    Ok(())
+    Ok(max_depth + 1)
 }
 
 /// Reconstruye el arbol de commits que le preceden a partir de un commit

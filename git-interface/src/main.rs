@@ -227,7 +227,7 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
 }
 
 impl Interface {
-    fn actualizar(&mut self) -> Option<Vec<(CommitObject, Option<String>)>> {
+    fn actualizar(&mut self) -> Option<Vec<(CommitObject, usize, usize)>> {
         let (staging_changes, unstaging_changes, merge_conflicts) = staged_area_func().unwrap();
         self.staging_changes = Rc::new(RefCell::new(staging_changes));
         self.unstaging_changes = Rc::new(RefCell::new(unstaging_changes));
@@ -922,7 +922,7 @@ impl Interface {
         branch_window
     }
 
-    fn set_right_area_ui(&mut self, commits: &Vec<(CommitObject, Option<String>)>) {
+    fn set_right_area_ui(&mut self, commits: &Vec<(CommitObject, usize, usize)>) {
         let date_list: gtk::ListBox = self.builder.object("date_list").unwrap();
         let author_list: gtk::ListBox = self.builder.object("author_list").unwrap();
         let drawing_area: gtk::DrawingArea = DrawingArea::new();
@@ -1352,19 +1352,19 @@ fn add_row_to_list(row_information: &String, row_list: &ListBox) {
 
 fn make_graph(
     drawing_area: &DrawingArea,
-    hash_branches: &mut HashMap<String, usize>,
-    hash_sons: &mut HashMap<String, Vec<(f64, f64, String)>>,
+    hash_branches: &mut HashMap<usize, usize>,
+    hash_sons: &mut HashMap<String, Vec<(f64, f64, usize)>>,
     identado: &mut usize,
-    commit: &(CommitObject, Option<String>),
+    commit: &(CommitObject, usize, usize),
     pos_y: f32,
 ) -> usize {
-    let commit_branch = commit.1.as_ref().unwrap();
-    if !hash_branches.contains_key(commit_branch) {
+    let commit_branch = commit.1.clone();
+    if !hash_branches.contains_key(&commit_branch) {
         hash_branches.insert(commit_branch.clone(), *identado);
         *identado += 1;
     }
 
-    let i = hash_branches.get(commit_branch).unwrap();
+    let i = hash_branches.get(&commit_branch).unwrap();
     let index_color = i % GRAPH_COLORS.len();
     let (color_1, color_2, color_3) = GRAPH_COLORS[index_color];
     let x = *i as f64 * 20.0;
@@ -1391,10 +1391,10 @@ fn make_graph(
 }
 
 fn draw_lines_to_sons(
-    hash_sons: &mut HashMap<String, Vec<(f64, f64, String)>>,
+    hash_sons: &mut HashMap<String, Vec<(f64, f64, usize)>>,
     commit_hash: &String,
     drawing_area: &DrawingArea,
-    hash_branches: &mut HashMap<String, usize>,
+    hash_branches: &mut HashMap<usize, usize>,
     x: f64,
     y: f64,
 ) {

@@ -16,10 +16,6 @@ fn test_clone() {
     let git_bin = "../../../../../../target/debug/git";
 
     create_base_scene(path.clone());
-    // let mut handle = start_deamon(path);
-    // let id = handle.id();
-    // println!("ID: {}", id);
-
     let _result = Command::new(git_bin)
         .arg("clone")
         .arg("git://127.1.0.0:9418/repo")

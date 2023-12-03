@@ -201,7 +201,7 @@ pub fn read_git_object_from(
 ) -> Result<GitObject, CommandError> {
     let (type_str, len) = get_type_and_len(stream)?;
 
-    git_object_from_data(type_str, stream, len, path, hash_str, logger, db)
+    git_object_from_data(type_str, stream, len, path, hash_str, logger, Some(db))
 }
 
 pub fn git_object_from_data(
@@ -211,7 +211,7 @@ pub fn git_object_from_data(
     path: &str,
     hash_str: &str,
     logger: &mut Logger,
-    db: &ObjectsDatabase,
+    db: Option<&ObjectsDatabase>,
 ) -> Result<GitObject, CommandError> {
     if type_str == "blob" {
         let mut blob = Blob::read_from(stream, len, path, hash_str, logger)?;
@@ -220,10 +220,10 @@ pub fn git_object_from_data(
         return Ok(blob);
     };
     if type_str == "tree" {
-        return Tree::read_from(Some(db), stream, len, path, hash_str, logger);
+        return Tree::read_from(db, stream, len, path, hash_str, logger);
     };
     if type_str == "commit" {
-        return CommitObject::read_from(Some(db), stream, logger, None);
+        return CommitObject::read_from(db, stream, logger, None);
     };
     if type_str == "tag" {
         return TagObject::read_from(stream, logger, hash_str.to_owned());

@@ -99,13 +99,12 @@ impl CommitObject {
 
         let tree_hash_str = u8_vec_to_hex_string(&tree_hash);
 
-        logger.log(&format!(
-            "Reading tree hash from database: {}",
-            tree_hash_str
-        ));
-
         let option_tree = match db {
             Some(db) => {
+                logger.log(&format!(
+                    "Reading tree hash from database: {}",
+                    tree_hash_str
+                ));
                 let mut tree = db.read_object(&tree_hash_str, logger)?;
                 logger.log(&format!(
                     "tree content en read_from : {}",
@@ -362,15 +361,14 @@ impl GitObjectTrait for CommitObject {
         let mut buf: Vec<u8> = Vec::new();
         let mut stream = Cursor::new(&mut buf);
 
-        let Some(tree) = self.tree.as_mut() else {
-            return Err(CommandError::InvalidCommit);
-        };
-
-        writeln!(stream, "tree {}", tree.get_hash_string()?)
+        writeln!(stream, "tree {}", u8_vec_to_hex_string(&self.tree_hash))
             .map_err(|err| CommandError::FileWriteError(err.to_string()))?;
 
         match db {
             Some(db) => {
+                let Some(tree) = self.tree.as_mut() else {
+                    return Err(CommandError::InvalidCommit);
+                };
                 let mut tree_box: GitObject = Box::new(tree.clone());
                 db.write(&mut tree_box, true, &mut Logger::new_dummy())?;
             }
@@ -605,7 +603,7 @@ mod test {
 
 pub fn print_for_log(
     stream: &mut dyn Write,
-    vec_commits: &mut Vec<(CommitObject, Option<String>)>,
+    vec_commits: &mut Vec<(CommitObject, usize, usize)>,
 ) -> Result<(), CommandError> {
     let mut buf: Vec<u8> = Vec::new();
     let mut writer_stream = Cursor::new(&mut buf);
@@ -717,41 +715,47 @@ fn print_merge_commit_for_log(
     Ok(())
 }
 
-pub fn sort_commits_descending_date2(
-    vec_commits: &mut Vec<(CommitObject, Option<String>)>,
-    parents_hash: &mut HashMap<String, HashSet<String>>,
-) {
-    vec_commits.sort_by(|a, b| {
-        // Comparar por timestamp en orden descendente
-        let timestamp_order = b.0.timestamp.cmp(&a.0.timestamp);
-        if timestamp_order != Ordering::Equal {
-            return timestamp_order;
-        }
+// pub fn sort_commits_descending_date2(
+//     vec_commits: &mut Vec<(CommitObject, Option<String>)>,
+//     parents_hash: &mut HashMap<String, HashSet<String>>,
+// ) {
+//     vec_commits.sort_by(|a, b| {
+//         // Comparar por timestamp en orden descendente
+//         let timestamp_order = b.0.timestamp.cmp(&a.0.timestamp);
+//         if timestamp_order != Ordering::Equal {
+//             return timestamp_order;
+//         }
 
-        // Si los timestamps son iguales, comparar por inclusión en el HashSet
-        match (&a.1, &b.1) {
-            (Some(parent_a), Some(parent_b)) => {
-                println!("parent_a: {:?}, parent_b: {:?}", parent_a, parent_b);
-                if parents_hash[parent_a].contains(parent_b) {
-                    Ordering::Greater
-                } else if parents_hash[parent_b].contains(parent_a) {
-                    Ordering::Less
-                } else {
-                    Ordering::Equal
-                }
-            }
-            (Some(_), None) => Ordering::Less,
-            (None, Some(_)) => Ordering::Greater,
-            (None, None) => Ordering::Equal,
-        }
-    });
-}
+//         // Si los timestamps son iguales, comparar por inclusión en el HashSet
+//         match (&a.1, &b.1) {
+//             (Some(parent_a), Some(parent_b)) => {
+//                 println!("parent_a: {:?}, parent_b: {:?}", parent_a, parent_b);
+//                 if parents_hash[parent_a].contains(parent_b) {
+//                     Ordering::Greater
+//                 } else if parents_hash[parent_b].contains(parent_a) {
+//                     Ordering::Less
+//                 } else {
+//                     Ordering::Equal
+//                 }
+//             }
+//             (Some(_), None) => Ordering::Less,
+//             (None, Some(_)) => Ordering::Greater,
+//             (None, None) => Ordering::Equal,
+//         }
+//     });
+// }
 
-pub fn sort_commits_descending_date(vec_commits: &mut Vec<(CommitObject, Option<String>)>) {
+pub fn sort_commits_descending_date(vec_commits: &mut Vec<(CommitObject, String)>) {
     vec_commits.sort_by(|a, b| b.0.timestamp.cmp(&a.0.timestamp));
 }
 
-pub fn sort_commits_ascending_date(vec_commits: &mut Vec<(CommitObject, Option<String>)>) {
+pub fn sort_commits_descending_date_and_topo(vec_commits: &mut Vec<(CommitObject, usize, usize)>) {
+    vec_commits.sort_by(|a, b| b.2.cmp(&a.2));
+    vec_commits.sort_by(|a, b| b.0.timestamp.cmp(&a.0.timestamp));
+}
+
+pub fn sort_commits_ascending_date_and_topo(vec_commits: &mut Vec<(CommitObject, usize, usize)>) {
+    vec_commits.sort_by(|a, b| a.2.cmp(&b.2));
     vec_commits.sort_by(|a, b| a.0.timestamp.cmp(&b.0.timestamp));
 }
 

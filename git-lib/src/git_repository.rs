@@ -28,8 +28,8 @@ use crate::{
         author::Author,
         blob::Blob,
         commit_object::{
-            sort_commits_ascending_date, sort_commits_descending_date,
-            write_commit_tree_to_database, CommitObject,
+            sort_commits_ascending_date_and_topo, sort_commits_descending_date,
+            sort_commits_descending_date_and_topo, write_commit_tree_to_database, CommitObject,
         },
         git_object::{self, GitObject, GitObjectTrait},
         mode::Mode,
@@ -304,8 +304,8 @@ impl<'a> GitRepository<'a> {
         let mut commits_topic =
             self.get_commits_until_ancestor(last_hash_topic_branch, ancestor_hash_to_look_for)?;
 
-        sort_commits_ascending_date(&mut commits_main);
-        sort_commits_ascending_date(&mut commits_topic);
+        sort_commits_ascending_date_and_topo(&mut commits_main);
+        sort_commits_ascending_date_and_topo(&mut commits_topic);
 
         let commits_todo = self.initialize_commits_todo(commits_main, commits_topic)?;
         let first_hash_commit_todo = &commits_todo[0].0;
@@ -355,8 +355,8 @@ impl<'a> GitRepository<'a> {
 
     fn initialize_commits_todo(
         &mut self,
-        mut commits_main: Vec<(CommitObject, Option<String>)>,
-        commits_topic: Vec<(CommitObject, Option<String>)>,
+        mut commits_main: Vec<(CommitObject, usize, usize)>,
+        commits_topic: Vec<(CommitObject, usize, usize)>,
     ) -> Result<Vec<(String, String)>, CommandError> {
         let mut verify = true;
         let mut commits_todo = Vec::new();
@@ -392,18 +392,18 @@ impl<'a> GitRepository<'a> {
         &mut self,
         last_hash_commit: String,
         hash_to_look_for: HashSet<String>,
-    ) -> Result<Vec<(CommitObject, Option<String>)>, CommandError> {
+    ) -> Result<Vec<(CommitObject, usize, usize)>, CommandError> {
         let db = self.db()?;
         let mut commits_map_topic = HashMap::new();
         rebuild_commits_tree(
             &db,
             &last_hash_commit,
             &mut commits_map_topic,
-            None,
             false,
             &hash_to_look_for,
             true,
-            &mut self.logger(),
+            self.logger(),
+            0,
         )?;
         Ok(commits_map_topic.drain().map(|(_, v)| v).collect())
     }
@@ -1702,7 +1702,7 @@ impl<'a> GitRepository<'a> {
                     "Error leyendo directorio de branches".to_string(),
                 ));
             };
-            if file_name == "HEAD" {
+            if file_name == "HEAD" || file_name == "ORIG_HEAD" {
                 continue;
             }
             let mut file = fs::File::open(path.path()).map_err(|error| {
@@ -1718,7 +1718,7 @@ impl<'a> GitRepository<'a> {
                     error.to_string()
                 ))
             })?;
-            branches.insert(file_name.to_string(), sha1);
+            branches.insert(file_name.trim().to_string(), sha1.trim().to_string());
         }
         Ok(branches)
     }
@@ -1758,16 +1758,16 @@ impl<'a> GitRepository<'a> {
         Ok(branches_with_their_commits)
     }
 
-    /// Devuelve al vector de branches_with_their_commits todos los nombres de las ramas y el hash del commit al que apuntan
-    pub fn push_all_remote_branch_hashes(&mut self) -> Result<Vec<(String, String)>, CommandError> {
-        let mut branches_with_their_commits: Vec<(String, String)> = Vec::new();
-        let branches_hashes = self.remote_branches()?;
-        for branch_hash in branches_hashes {
-            let branch_hash = (branch_hash.0, branch_hash.1.to_string());
-            branches_with_their_commits.push(branch_hash);
-        }
-        Ok(branches_with_their_commits)
-    }
+    // /// Devuelve al vector de branches_with_their_commits todos los nombres de las ramas y el hash del commit al que apuntan
+    // pub fn push_all_remote_branch_hashes(&mut self) -> Result<Vec<(String, String)>, CommandError> {
+    //     let mut branches_with_their_commits: Vec<(String, String)> = Vec::new();
+    //     let branches_hashes = self.remote_branches()?;
+    //     for branch_hash in branches_hashes {
+    //         let branch_hash = (branch_hash.0, branch_hash.1.to_string());
+    //         branches_with_their_commits.push(branch_hash);
+    //     }
+    //     Ok(branches_with_their_commits)
+    // }
 
     /// Devuelve al vector de branches_with_their_commits todos los nombres de las ramas y el hash del commit al que apuntan
     pub fn push_all_branch_hashes(&mut self) -> Result<Vec<(String, String)>, CommandError> {
@@ -1784,6 +1784,10 @@ impl<'a> GitRepository<'a> {
                 return Ok(branches_with_their_commits);
             }
         };
+        self.log(&format!(
+            "branches_remotes_hashes: {:?}",
+            branches_remotes_hashes
+        ));
         for branch_remote_hash in branches_remotes_hashes {
             let branch_name_remote = format!("origin/{}", branch_remote_hash.0);
             let branch_remote_hash = (branch_name_remote, branch_remote_hash.1.to_string());
@@ -2484,7 +2488,7 @@ impl<'a> GitRepository<'a> {
             CommandError::FileReadError(format!("No se pudo leer {path_to_branch} en log"))
         })?;
 
-        Ok(commit_hash[..commit_hash.len()].to_string())
+        Ok(commit_hash.trim().to_string())
     }
 
     pub fn get_last_commit_hash_branch_local_remote(
@@ -2709,9 +2713,9 @@ impl<'a> GitRepository<'a> {
     pub fn get_log(
         &mut self,
         all: bool,
-    ) -> Result<Vec<(CommitObject, Option<String>)>, CommandError> {
+    ) -> Result<Vec<(CommitObject, usize, usize)>, CommandError> {
         let mut branches_with_their_last_hash: Vec<(String, String)> = Vec::new();
-        let mut commits_map: HashMap<String, (CommitObject, Option<String>)> = HashMap::new();
+        let mut commits_map: HashMap<String, (CommitObject, usize, usize)> = HashMap::new();
 
         if all {
             branches_with_their_last_hash = self.push_all_branch_hashes()?;
@@ -2722,39 +2726,40 @@ impl<'a> GitRepository<'a> {
             branches_with_their_last_hash.push((current_branch, hash_commit));
         }
 
-        let mut commits_for_last_hash: Vec<(CommitObject, Option<String>)> = Vec::new();
+        let mut commits_for_last_hash: Vec<(CommitObject, String)> = Vec::new();
         for (branch, hash) in branches_with_their_last_hash {
-            let mut commit_object = self.db()?.read_object(&hash, &mut self.logger)?;
+            self.log(&format!(
+                "Opening database branch: '{}', hash: '{}'",
+                branch, hash
+            ));
+            let mut commit_object = self.db()?.read_object_shallow(&hash, &mut self.logger)?;
+
+            self.log("read success");
             let first_commit_branch =
                 commit_object
                     .as_mut_commit()
                     .ok_or(CommandError::DirectoryCreationError(
                         "Error creando directorio".to_string(),
                     ))?;
-            commits_for_last_hash.push((first_commit_branch.to_owned(), Some(branch)));
+            commits_for_last_hash.push((first_commit_branch.to_owned(), hash));
         }
         sort_commits_descending_date(&mut commits_for_last_hash);
 
-        for (mut commit, option_branch_name) in commits_for_last_hash {
-            if let Some(name_branch) = option_branch_name {
-                let hash_commit = commit.get_hash_string()?;
-                rebuild_commits_tree(
-                    &self.db()?,
-                    &hash_commit,
-                    &mut commits_map,
-                    Some(name_branch),
-                    all,
-                    &HashSet::<String>::new(),
-                    false,
-                    &mut self.logger,
-                )?;
-            } else {
-                return Err(CommandError::ReadRefsHeadError);
-            }
+        for (color_idex, (_, hash)) in commits_for_last_hash.iter().enumerate() {
+            rebuild_commits_tree(
+                &self.db()?,
+                &hash,
+                &mut commits_map,
+                all,
+                &HashSet::<String>::new(),
+                false,
+                self.logger(),
+                color_idex,
+            )?;
         }
 
         let mut commits = commits_map.drain().map(|(_, v)| v).collect();
-        sort_commits_descending_date(&mut commits);
+        sort_commits_descending_date_and_topo(&mut commits);
         Ok(commits)
     }
 
@@ -5463,4 +5468,56 @@ fn get_commits_rebase_merge(commit_type_path: &str) -> Result<Vec<(String, Strin
         commits.push((hash.to_string(), message.to_string()));
     }
     Ok(commits)
+}
+
+/// Reconstruye el arbol de commits que le preceden a partir de un commit
+pub fn get_parents_hash_map(
+    hash_commit: &String,
+    commits_map: &mut HashMap<String, (CommitObject, Option<String>)>, // HashMap<hash, (commit, branch)>
+    parents_hash: &mut HashMap<String, HashSet<String>>,
+    sons_hash: &mut HashMap<String, HashSet<String>>,
+    //logger: &mut Logger,
+) -> Result<(), CommandError> {
+    //println!("MMM{}", hash_commit);
+    // if parents_hash.contains_key(&hash_commit.to_string()) {
+    //     return Ok(());
+    // }
+
+    let commit_object = match commits_map.get_mut(hash_commit) {
+        Some(commit_object_box_aux) => commit_object_box_aux.0.to_owned(),
+        None => {
+            println!("WHAAAAAAAT");
+            return Ok(());
+        }
+    };
+
+    let parents_vec: Vec<String> = commit_object.get_parents();
+    // println!("padres {:?}", parents_vec);
+
+    for parent_hash in parents_vec.iter() {
+        let hash_set_p = parents_hash
+            .entry(hash_commit.to_string())
+            .or_insert(HashSet::new());
+        hash_set_p.insert(parent_hash.to_string());
+
+        let hash_set_s = sons_hash
+            .entry(parent_hash.to_string())
+            .or_insert(HashSet::new());
+        hash_set_s.insert(hash_commit.to_string());
+
+        let hash_set_s_s = sons_hash
+            .entry(hash_commit.to_string())
+            .or_insert(HashSet::new());
+
+        for childs in hash_set_s_s.iter() {
+            let hash_set_p_s = parents_hash
+                .entry(childs.to_string())
+                .or_insert(HashSet::new());
+            hash_set_p_s.insert(parent_hash.to_string());
+            //parents_hash.insert(childs.to_string(), hash_set_p_s.to_owned());
+        }
+        get_parents_hash_map(parent_hash, commits_map, parents_hash, sons_hash)?;
+    }
+
+    Ok(())
 }

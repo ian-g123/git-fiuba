@@ -98,6 +98,8 @@ pub enum CommandError {
     UnknownObjectType,
     /// Error al extraer datos de un un packfile
     ErrorExtractingPackfile,
+    /// Error al extraer datos de un un packfile
+    ErrorExtractingPackfileVerbose(String),
     CastingError,
     MessageIncomplete(String),
     AllAndFilesFlagsCombination(String),
@@ -232,6 +234,8 @@ pub enum CommandError {
     EmptyPath,
     // No rebase in progress
     NoRebaseInProgress,
+    // Error al intentar leer un valor en un Delta Offset
+    VariableLengthEncodingOfs(String),
 }
 
 impl Error for CommandError {}
@@ -374,6 +378,9 @@ impl fmt::Display for CommandError {
             }
             CommandError::ErrorExtractingPackfile => {
                 write!(f, "Error al extraer datos de un un packfile")
+            }
+            CommandError::ErrorExtractingPackfileVerbose(e) => {
+                write!(f, "Error al extraer datos de un un packfile: {}",e)
             }
 
             CommandError::CastingError => {
@@ -565,7 +572,8 @@ impl fmt::Display for CommandError {
             CommandError::EmptyPath => write!(f, "fatal: empty string is not a valid pathspec. please use * instead if you meant to match all paths"),
             CommandError::NonMatchingWithoutVerbose => write!(f, "fatal: --non-matching is only valid with --verbose"),            
             CommandError::NoRebaseInProgress => write!(f, "fatal: No rebase in progress?"),
-            
-    }
+            CommandError::VariableLengthEncodingOfs(e) => write!(f, "Error al intentar leer un valor en un Delta Offset: {}", e),
+
+        }
     }
 }
