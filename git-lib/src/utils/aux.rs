@@ -121,7 +121,7 @@ mod test {
     // Pureba que get_hash() obtenga correctamente el hash.
     // #[test]
     // fn get_hash_test() {
-    //     let mut logger = Logger::new("./tests/commands/hash_object/codigo1/.git/logs").unwrap();
+    //     let mut logger = Logger::new("./tests/commands/hash_object/codigo1/.git/logs.log").unwrap();
     //     let mut output_string = Vec::new();
     //     let mut stdout_mock = Cursor::new(&mut output_string);
     //     let path = "./src/main.rs".to_string();

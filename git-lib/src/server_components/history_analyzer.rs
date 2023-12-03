@@ -84,7 +84,7 @@ pub fn rebuild_commits_tree(
         "BUILD COMMIT TREE Reading file db.read_file: {}",
         hash_commit
     ));
-    let (type_str, len, content) = db.read_file(hash_commit, logger)?;
+    let (type_str, len, content) = db.read_object_data(hash_commit, logger)?;
 
     logger.log(&format!("type_str: {}, len: {}", type_str, len));
 

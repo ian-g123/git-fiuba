@@ -141,7 +141,7 @@ pub fn display_from_hash(
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (type_str, len, content) = db.read_file(hash, logger)?;
+    let (type_str, len, content) = db.read_object_data(hash, logger)?;
 
     let mut stream = std::io::Cursor::new(content);
     display_from_stream(type_str, len, &mut stream, logger, output)
@@ -175,7 +175,7 @@ pub fn display_type_from_hash(
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (type_str, len, content) = db.read_file(hash, logger)?;
+    let (type_str, len, content) = db.read_object_data(hash, logger)?;
     writeln!(output, "{}", type_str)
         .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
     Ok(())
@@ -187,7 +187,7 @@ pub fn display_size_from_hash(
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (type_str, len, content) = db.read_file(hash, logger)?;
+    let (type_str, len, content) = db.read_object_data(hash, logger)?;
     writeln!(output, "{}", len).map_err(|error| CommandError::FileWriteError(error.to_string()))?;
     Ok(())
 }

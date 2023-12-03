@@ -50,10 +50,8 @@ impl ObjectsDatabase {
         hash_str: &str,
         logger: &mut Logger,
     ) -> Result<GitObject, CommandError> {
-        logger.log(&format!("read_object hash_str: {}", hash_str));
-
-        let (type_str, len, content) = self.read_file(hash_str, logger)?;
-
+        logger.log(&format!("Database: Reading deep object: {}", hash_str));
+        let (type_str, len, content) = self.read_object_data(hash_str, logger)?;
         return git_object_from_data(
             type_str,
             &mut content.as_slice(),
@@ -71,9 +69,9 @@ impl ObjectsDatabase {
         hash_str: &str,
         logger: &mut Logger,
     ) -> Result<GitObject, CommandError> {
-        logger.log(&format!("read_object hash_str: {}", hash_str));
+        logger.log(&format!("Database: Reading deep object: {}", hash_str));
 
-        let (type_str, len, content) = self.read_file(hash_str, logger)?;
+        let (type_str, len, content) = self.read_object_data(hash_str, logger)?;
 
         return git_object_from_data(
             type_str,
@@ -86,12 +84,13 @@ impl ObjectsDatabase {
         );
     }
 
-    /// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve la ruta del objeto y su data descomprimida.
-    pub fn read_file(
+    /// Dado un hash que representa la ruta del objeto a `.git/objects`, devuelve su tipo, su longitud y el contenido.
+    pub fn read_object_data(
         &self,
         hash_str: &str,
         logger: &mut Logger,
     ) -> Result<(String, usize, Vec<u8>), CommandError> {
+        logger.log(&format!("Database: Reading data: {}", hash_str));
         //throws error if hash_str is not a valid sha1
         if hash_str.len() != 40 {
             return Err(CommandError::FileOpenError(format!(
@@ -107,10 +106,11 @@ impl ObjectsDatabase {
         )
         .exists()
         {
+            logger.log("Reading data form packfiles");
             let (pack_type, len, content) = self.read_object_data_from_packs(hash_str, logger)?;
             return Ok((pack_type.to_string(), len, content));
         }
-        logger.log(&format!("Database reading: {}", file_path));
+        logger.log(&format!("Reading data form path: {}", file_path));
 
         let mut file = File::open(&file_path).map_err(|error| {
             CommandError::FileOpenError(format!(
@@ -201,12 +201,13 @@ impl ObjectsDatabase {
                     error.to_string()
                 ))
             })?;
-
+            logger.log(&format!("Searching object in packfile: {}", packfile_path));
             if let Some(object) = search_object_data_from_hash(
                 hex_string_to_u8_vec(hash_str),
                 &mut index_file,
                 &mut packfile,
                 &self,
+                logger,
             )? {
                 return Ok(object);
             }

@@ -90,7 +90,7 @@ mod tests {
     fn test_logger_single_line() {
         let test_dir = "tests/data/logger/test1/";
         delete_directory_content(test_dir);
-        let path = format!("{test_dir}.git/logs");
+        let path = format!("{test_dir}.git/logs.log");
 
         let mut logger = Logger::new(&path).unwrap();
 
@@ -109,7 +109,7 @@ mod tests {
     fn test_logger_two_lines() {
         let test_dir = "tests/data/logger/test2/";
         delete_directory_content(test_dir);
-        let path = format!("{test_dir}.git/logs");
+        let path = format!("{test_dir}.git/logs.log");
 
         let mut logger = Logger::new(&path).unwrap();
 
@@ -130,7 +130,7 @@ mod tests {
     fn test_logger_open_existing_log_file() {
         let test_dir = "tests/data/logger/test3/";
         delete_directory_content(test_dir);
-        let path = format!("{test_dir}.git/logs");
+        let path = format!("{test_dir}.git/logs.log");
 
         let mut logger_1 = Logger::new(&path).unwrap();
         let msg_1 = "Hello, world 1!";

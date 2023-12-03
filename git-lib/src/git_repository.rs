@@ -63,8 +63,10 @@ impl<'a> GitRepository<'a> {
             CommandError::DirectoryCreationError("Error abriendo directorio .git".to_string()),
         )?;
         let (git_path, logger, bare) = if Path::new(&tentative_git_path).exists() {
-            let logs_path = &join_paths!(tentative_git_path, "logs").ok_or(
-                CommandError::DirectoryCreationError("Error creando archivo .git/logs".to_string()),
+            let logs_path = &join_paths!(tentative_git_path, "logs.log").ok_or(
+                CommandError::DirectoryCreationError(
+                    "Error creando archivo .git/logs.log".to_string(),
+                ),
             )?;
             (tentative_git_path, Logger::new(&logs_path)?, false)
         } else {
@@ -104,8 +106,10 @@ impl<'a> GitRepository<'a> {
             let tentative_git_path = join_paths!(path, ".git").ok_or(
                 CommandError::DirectoryCreationError("Error creando directorio .git".to_string()),
             )?;
-            let logs_path = &join_paths!(tentative_git_path, "logs").ok_or(
-                CommandError::DirectoryCreationError("Error creando archivo .git/logs".to_string()),
+            let logs_path = &join_paths!(tentative_git_path, "logs.log").ok_or(
+                CommandError::DirectoryCreationError(
+                    "Error creando archivo .git/logs.log".to_string(),
+                ),
             )?;
             (tentative_git_path, Logger::new(&logs_path)?)
         };

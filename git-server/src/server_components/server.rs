@@ -19,7 +19,7 @@ impl Server {
         })?;
         let path_str = path.to_string();
         let listener_handle = thread::spawn(move || {
-            let logger = Logger::new("logs").unwrap();
+            let logger = Logger::new("server-logs.log").unwrap();
             let mut worker_threads = vec![];
             for client_stream in listener.incoming() {
                 let path = path_str.clone();
