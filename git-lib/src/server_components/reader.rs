@@ -25,9 +25,10 @@ impl<'a> BuffedReader<'a> {
     // If the buffer is smaller than the given size, read from the stream until the buffer is at least the given size.
     pub fn record_and_fast_foward_to(&mut self, pos: usize) -> Result<(), CommandError> {
         let len = self.buffer.len();
+        println!("-> {} | {}", pos, len);
         if len < pos {
             let bytes_to_read = pos - len;
-            println!("recording {} bytes", bytes_to_read);
+            println!("+ {}", bytes_to_read);
             let mut buffer = vec![0; bytes_to_read];
             self.read_exact(&mut buffer).map_err(|error| {
                 CommandError::FileReadError(format!("Error al leer con buffed reader: {error}"))
