@@ -1433,7 +1433,8 @@ impl<'a> GitRepository<'a> {
             .collect();
         self.log(&format!("Wants {:#?}", wants));
         self.log(&format!("haves {:#?}", haves));
-        let objects_decompressed_data = server.fetch_objects(wants, haves, &mut self.logger)?;
+        let objects_decompressed_data =
+            server.fetch_objects(wants, haves, &self.db()?, &mut self.logger)?;
         self.save_objects_from_packfile(objects_decompressed_data)?;
 
         self.update_fetch_head(remote_branches, remote_reference)?;

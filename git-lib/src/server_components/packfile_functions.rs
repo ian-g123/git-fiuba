@@ -22,7 +22,7 @@ use crate::{
     utils::{aux::get_sha1, super_string::u8_vec_to_hex_string},
 };
 
-use super::reader::TcpStreamBuffedReader;
+use super::reader::BuffedReader;
 
 pub fn get_objects_from_tree(
     hash_objects: &mut HashMap<String, GitObject>,
@@ -121,7 +121,7 @@ pub fn make_packfile(
 }
 
 /// lee la firma del packfile, los primeros 4 bytes del socket
-fn read_pack_signature(socket: &mut TcpStream) -> Result<String, CommandError> {
+fn read_pack_signature(socket: &mut BuffedReader) -> Result<String, CommandError> {
     let signature_buf = &mut [0; 4];
     socket
         .read_exact(signature_buf)
@@ -132,7 +132,7 @@ fn read_pack_signature(socket: &mut TcpStream) -> Result<String, CommandError> {
 }
 
 /// lee la versión del packfile, los siguientes 4 bytes del socket
-fn read_version_number(socket: &mut TcpStream) -> Result<u32, CommandError> {
+fn read_version_number(socket: &mut BuffedReader) -> Result<u32, CommandError> {
     let mut version_buf = [0; 4];
     socket
         .read_exact(&mut version_buf)
@@ -142,7 +142,7 @@ fn read_version_number(socket: &mut TcpStream) -> Result<u32, CommandError> {
 }
 
 /// lee la cantidad de objetos en el packfile, los siguientes 4 bytes del socket
-fn read_object_number(socket: &mut TcpStream) -> Result<u32, CommandError> {
+fn read_object_number(socket: &mut BuffedReader) -> Result<u32, CommandError> {
     let mut object_number_buf = [0; 4];
     socket
         .read_exact(&mut object_number_buf)
@@ -151,45 +151,32 @@ fn read_object_number(socket: &mut TcpStream) -> Result<u32, CommandError> {
     Ok(object_number)
 }
 
-fn read_packfile_header(socket: &mut TcpStream) -> Result<u32, CommandError> {
-    let signature = read_pack_signature(socket)?;
+fn read_packfile_header(buffed_reader: &mut BuffedReader) -> Result<u32, CommandError> {
+    let signature = read_pack_signature(buffed_reader)?;
     if signature != "PACK" {
         return Err(CommandError::ErrorReadingPkt);
     }
-    let version = read_version_number(socket)?;
+    let version = read_version_number(buffed_reader)?;
     if version != 2 {
         return Err(CommandError::ErrorReadingPkt);
     }
-    let object_number = read_object_number(socket)?;
+    let object_number = read_object_number(buffed_reader)?;
     Ok(object_number)
 }
 
 /// Lee todos los objetos del packfile y devuelve un vector que contiene tuplas con:\
 /// `(tipo de objeto, tamaño del objeto, contenido del objeto en bytes)`
-fn read_objects_in_packfile(
-    socket: &mut TcpStream,
-    object_number: u32,
+fn read_objects_from_packfile_body(
+    buffed_reader: &mut BuffedReader,
+    exp_obj_number: u32,
+    db: &ObjectsDatabase,
+    logger: &mut Logger,
 ) -> Result<Vec<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
     let mut objects_data = Vec::new();
-    let mut buffed_reader = TcpStreamBuffedReader::new(socket);
-
-    for _ in 0..object_number {
-        let mut buffed_reader: &mut TcpStreamBuffedReader<'_> = &mut buffed_reader;
-        let (object_type, len) = read_object_header_from_packfile(buffed_reader)?;
-        if object_type == PackfileObjectType::RefDelta
-            || object_type == PackfileObjectType::OfsDelta
-        {
-            todo!("❌ Delta objects not implemented");
-        }
-        buffed_reader.clean_up_to_pos();
-        let mut decoder = flate2::read::ZlibDecoder::new(&mut buffed_reader);
-        let mut object_content = vec![0; len];
-
-        decoder
-            .read_exact(&mut object_content)
-            .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
-        let bytes_used = decoder.total_in() as usize;
-        buffed_reader.set_pos(bytes_used);
+    let mut offset = 0;
+    for _ in 0..exp_obj_number {
+        let (obj_type, len, object_content) =
+            read_one_object_data_from_packfile(buffed_reader, db, logger, offset)?;
 
         if object_content.len() != len {
             return Err(CommandError::ErrorDecompressingObject(format!(
@@ -199,7 +186,7 @@ fn read_objects_in_packfile(
             )));
         }
 
-        objects_data.push((object_type, len, object_content));
+        objects_data.push((obj_type, len, object_content));
     }
     Ok(objects_data)
 }
@@ -207,62 +194,57 @@ fn read_objects_in_packfile(
 /// Lee un objecto del packfile y devuelve una tuplas con:\
 /// `(tipo de objeto, tamaño del objeto, contenido del objeto en bytes)`
 fn read_object_from_offset(
-    socket: &mut dyn Read,
+    buffed_reader: &mut BuffedReader,
     offset: u32,
     db: &ObjectsDatabase,
     logger: &mut Logger,
 ) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
-    let mut previous_objects = vec![0; offset as usize];
+    buffed_reader.record_and_fast_foward_to(offset as usize);
 
-    socket.read_exact(&mut previous_objects).map_err(|e| {
-        CommandError::ErrorExtractingPackfileVerbose(format!(
-            "Error reading previous objects: {}",
-            e.to_string(),
-        ))
-    })?;
+    read_one_object_data_from_packfile(buffed_reader, db, logger, offset)
+}
 
-    let (obj_type, len) = read_object_header_from_packfile(socket)?;
+fn read_one_object_data_from_packfile(
+    buffed_reader: &mut BuffedReader,
+    db: &ObjectsDatabase,
+    logger: &mut Logger,
+    offset: u32,
+) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
+    let (obj_type, len) = read_object_header_from_packfile(buffed_reader)?;
     match obj_type {
-        PackfileObjectType::RefDelta => read_ref_delta(socket, db, len, logger),
-        PackfileObjectType::OfsDelta => {
-            read_ofs_delta(socket, offset, previous_objects, db, len, logger)
-        }
-        _ => read_undeltified_object(socket, len, obj_type),
+        PackfileObjectType::RefDelta => read_ref_delta(buffed_reader, db, len, logger),
+        PackfileObjectType::OfsDelta => read_ofs_delta(buffed_reader, offset, db, len, logger),
+        _ => read_undeltified_object(buffed_reader, len, obj_type),
     }
 }
 
 fn read_undeltified_object(
-    socket: &mut dyn Read,
+    buffed_reader: &mut BuffedReader,
     len: usize,
     obj_type: PackfileObjectType,
 ) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
-    let mut decoder = flate2::read::ZlibDecoder::new(socket);
-    let mut object_content = vec![0; len];
-    decoder
-        .read_exact(&mut object_content)
-        .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
-
+    let object_content = read_extract_rewind(buffed_reader, len)?;
     Ok((obj_type, len, object_content))
 }
 
 fn read_ofs_delta(
-    socket: &mut dyn Read,
+    buffed_reader: &mut BuffedReader,
     offset: u32,
-    mut previous_objects: Vec<u8>,
     db: &ObjectsDatabase,
     len: usize,
     logger: &mut Logger,
 ) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
     logger.log(&format!("Reading Delat Offset: {}", offset));
-    let base_obj_neg_offset = read_ofs(socket)?;
+    let (base_obj_neg_offset, bytes_used) = read_ofs(buffed_reader)?;
     let base_object_offset = offset - base_obj_neg_offset;
     logger.log("Reading base object");
-    let mut prev_obj_cursor = Cursor::new(&mut previous_objects);
+    let current_position = buffed_reader.get_pos();
     let (base_obj_type, base_obj_len, base_obj_content) =
-        read_object_from_offset(&mut prev_obj_cursor, base_object_offset, db, logger)?;
+        read_object_from_offset(buffed_reader, base_object_offset, db, logger)?;
+    buffed_reader.record_and_fast_foward_to(current_position);
 
     read_and_apply_delta_instructions(
-        socket,
+        buffed_reader,
         len,
         base_obj_type,
         base_obj_len,
@@ -272,16 +254,17 @@ fn read_ofs_delta(
 }
 
 fn read_ref_delta(
-    socket: &mut dyn Read,
+    buffed_reader: &mut BuffedReader,
     db: &ObjectsDatabase,
     len: usize,
     logger: &mut Logger,
 ) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
     logger.log("Reading Ref Delta");
-    let (base_obj_type, base_obj_len, base_obj_content) = read_ref_base_object(socket, db, logger)?;
+    let (base_obj_type, base_obj_len, base_obj_content) =
+        read_ref_base_object(buffed_reader, db, logger)?;
     let base_obj_type = PackfileObjectType::from_str(base_obj_type.as_str())?;
     read_and_apply_delta_instructions(
-        socket,
+        buffed_reader,
         len,
         base_obj_type,
         base_obj_len,
@@ -307,18 +290,14 @@ fn read_ref_base_object(
 }
 
 fn read_and_apply_delta_instructions(
-    socket: &mut dyn Read,
+    buffed_reader: &mut BuffedReader,
     len: usize,
     base_obj_type: PackfileObjectType,
     base_obj_len: usize,
     base_obj_content: Vec<u8>,
     logger: &mut Logger,
 ) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
-    let mut decoder = flate2::read::ZlibDecoder::new(socket);
-    let mut delta_content = vec![0; len];
-    decoder
-        .read_exact(&mut delta_content)
-        .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
+    let delta_content = read_extract_rewind(buffed_reader, len)?;
     let mut cursor = Cursor::new(delta_content);
     let base_obj_len_redundant = read_size_encoding(&mut cursor)?;
     if base_obj_len_redundant != base_obj_len {
@@ -334,26 +313,39 @@ fn read_and_apply_delta_instructions(
         let Some(instruction) = read_delta_instruction_from(&mut cursor, logger)? else {
             break;
         };
-        logger.log(&format!("Applying instruction: {:?}", instruction));
         instruction.apply(&mut writer_cursor, &base_obj_content)?;
     }
-    // logger.log(&format!(
-    //     "object content: ====\n{}\n====",
-    //     String::from_utf8_lossy(&object_content)
-    // ));
     if object_content.len() != new_obj_expected_len {
         return Err(CommandError::ErrorExtractingPackfileVerbose(format!(
             "Expected length: {}, Decompressed data length: {}",
             new_obj_expected_len,
-            object_content.len()
+            object_content.len(),
         )));
     }
     Ok((base_obj_type, new_obj_expected_len, object_content))
 }
 
-fn read_ofs(socket: &mut dyn Read) -> Result<u32, CommandError> {
+fn read_extract_rewind(
+    buffed_reader: &mut BuffedReader<'_>,
+    len: usize,
+) -> Result<Vec<u8>, CommandError> {
+    let base_post = buffed_reader.get_pos();
+    let mut buffed_reader_ref: &mut BuffedReader<'_> = buffed_reader;
+    let mut decoder = flate2::read::ZlibDecoder::new(&mut buffed_reader_ref);
+    let mut delta_content = vec![0; len]; // TODO with capacity
+    decoder
+        .read_exact(&mut delta_content)
+        .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
+    let bytes_used = decoder.total_in() as usize;
+    buffed_reader.record_and_fast_foward_to(base_post + bytes_used);
+    Ok(delta_content)
+}
+
+fn read_ofs(socket: &mut dyn Read) -> Result<(u32, u32), CommandError> {
     let mut offset = 0;
+    let mut bytes_used = 0;
     loop {
+        bytes_used += 1;
         let mut byte = [0; 1];
         socket
             .read_exact(&mut byte)
@@ -363,7 +355,7 @@ fn read_ofs(socket: &mut dyn Read) -> Result<u32, CommandError> {
 
         offset = (offset << 7) | byte_value;
         if last_byte {
-            return Ok(offset);
+            return Ok((offset, bytes_used));
         }
 
         offset += 1;
@@ -394,7 +386,7 @@ pub fn read_size_encoding(buffed_reader: &mut dyn Read) -> Result<usize, Command
 }
 
 pub fn read_object_header_from_packfile(
-    buffed_reader: &mut dyn Read,
+    buffed_reader: &mut BuffedReader,
 ) -> Result<(PackfileObjectType, usize), CommandError> {
     let mut first_byte_buf = [0; 1];
     buffed_reader
@@ -447,11 +439,15 @@ fn bits_to_usize(bits: &[u8]) -> usize {
 }
 
 /// Lee los objetos del socket, primero lee el header del packfile y luego lee los objetos
-pub fn read_objects(
+pub fn read_objects_from_packfile(
     socket: &mut TcpStream,
+    db: &ObjectsDatabase,
+    logger: &mut Logger,
 ) -> Result<Vec<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
-    let object_number = read_packfile_header(socket)?;
-    let objects_data = read_objects_in_packfile(socket, object_number)?;
+    let mut buffed_reader = BuffedReader::new(socket);
+    let object_number = read_packfile_header(&mut buffed_reader)?;
+    let objects_data =
+        read_objects_from_packfile_body(&mut buffed_reader, object_number, db, logger)?;
     Ok(objects_data)
 }
 
@@ -609,8 +605,9 @@ pub fn search_object_data_from_hash(
         "Object found in packfile index at offset: {}",
         packfile_offset
     ));
+    let mut buffed_reader = BuffedReader::new(&mut packfile);
     Ok(Some(read_object_from_offset(
-        &mut packfile,
+        &mut buffed_reader,
         packfile_offset,
         db,
         logger,

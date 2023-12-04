@@ -16,12 +16,14 @@ fn test_clone() {
     let git_bin = "../../../../../../target/debug/git";
 
     create_base_scene(path.clone());
-    let _result = Command::new(git_bin)
+    let result = Command::new(git_bin)
         .arg("clone")
         .arg("git://127.1.0.0:9418/repo")
         .current_dir(path)
         .output()
         .unwrap();
+    println!("stderr: {}", String::from_utf8(result.stderr).unwrap());
+    println!("stdout: {}", String::from_utf8(result.stdout).unwrap());
 
     compare_files(
         &format!("{}/repo/", path),

@@ -12,7 +12,7 @@ echo "=========================="
 echo "Clone Integration test"
 mkdir -p git/tests/data/commands/clone/test1/server-files
 cd git/tests/data/commands/clone/test1/server-files
-git daemon --verbose --reuseaddr --enable=receive-pack --informative-errors --base-path=. . &
+git daemon --verbose --reuseaddr --enable=receive-pack --informative-errors --base-path=. . & > "daemon.log"
 daemon_process=$!
 cd -
 sleep 1
@@ -24,14 +24,14 @@ echo "=========================="
 echo "Push Integration test"
 unzip -qq git/tests/data/commands/push/test1/server-files/repo_backup_push.zip -d git/tests/data/commands/push/test1/server-files/
 cd git/tests/data/commands/push/test1/server-files
-git daemon --verbose --reuseaddr --enable=receive-pack --informative-errors --base-path=. . &
+git daemon --verbose --reuseaddr --enable=receive-pack --informative-errors --base-path=. . & > "daemon.log"
 daemon_process=$!
 cd -
 sleep 1
 RUSTFLAGS="-Awarnings" cargo test -q -p git -p git-lib -p git-server --test push_integration -- --ignored
 kill $daemon_process
 
-Run packfile_database_integration.rs test
+# Run packfile_database_integration.rs test
 echo "=========================="
 echo "Packfile Integration test"
 rm -rf git-lib/tests/data/packfile/simple_packfile
@@ -60,20 +60,26 @@ success=0
 echo "First try"
 for i in {1..10}
 do
-    RUSTFLAGS="-Awarnings" cargo test -q -p git -p git-lib -p git-server --test server_test -- --ignored
+    echo "Attempt $i"
+    echo "Server test attempt $i" > server-test-stderr.txt
+    stdout=$(RUSTFLAGS="-Awarnings" cargo test -q -p git -p git-lib -p git-server --test server_test -- --ignored 2>server-test-stderr.txt)
     exit_status=$?
     if [ $exit_status -eq 0 ]; then
         success=1
         kill $daemon_process
         break
     fi
-        echo "Failed. Trying again"
+        echo "❌ Failed. Trying again"
+        sleep 0.5
 done
 
 if [ $success -eq 0 ]; then
     echo "Failed 10 times. Exiting"
+    cat server-test-stderr.txt
     kill $daemon_process
     echo "Try runnin"
     echo "RUSTFLAGS="-Awarnings" cargo test -q -p git -p git-lib -p git-server --test server_test -- --ignored"
     exit 1
 fi
+echo "✅ Passed"
+rm server-test-stderr.txt

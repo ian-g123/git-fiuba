@@ -13,7 +13,7 @@ use git_lib::{
     objects::{blob::Blob, commit_object::CommitObject, git_object::GitObjectTrait, tree::Tree},
     server_components::{
         history_analyzer::rebuild_commits_tree,
-        packfile_functions::{make_packfile, read_objects},
+        packfile_functions::{make_packfile, read_objects_from_packfile},
         packfile_object_type::PackfileObjectType,
         pkt_strings::Pkt,
     },
@@ -148,7 +148,7 @@ impl ServerWorker {
 
         let ref_update_map = self.read_ref_update_map()?;
 
-        let objects = read_objects(&mut self.socket)?;
+        let objects = read_objects_from_packfile(&mut self.socket, &mut repo.db()?, repo.logger())?;
         let objects_map = repo.save_objects_from_packfile(objects)?;
         let mut status = HashMap::<String, Option<String>>::new();
 
