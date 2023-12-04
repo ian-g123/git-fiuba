@@ -58,7 +58,7 @@ fn test_push() {
         "No se pudo agregar el archivo testfile"
     );
 
-    std::thread::sleep(Duration::from_millis(500));
+    std::thread::sleep(Duration::from_millis(1000));
 
     assert!(
         Command::new("../".to_owned() + git_bin)

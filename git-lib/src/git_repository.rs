@@ -1501,7 +1501,7 @@ impl<'a> GitRepository<'a> {
             let hash_commit = self.get_last_commit_hash_branch(&branch)?;
             local_branches.push((branch, hash_commit));
         }
-        
+
         self.push_branches(local_branches)?;
         Ok(())
     }
@@ -2950,8 +2950,17 @@ impl<'a> GitRepository<'a> {
     }
 
     /// Crea una nueva rama.
-    pub fn create_branch(&mut self, new_branch_info: &Vec<String>) -> Result<(), CommandError> {
-        let (commit_hash, new_is_remote) = self.get_start_point(new_branch_info)?;
+    pub fn create_branch(
+        &mut self,
+        new_branch_info: &Vec<String>,
+        option_hash: Option<String>,
+    ) -> Result<(), CommandError> {
+        let (mut commit_hash, new_is_remote) = self.get_start_point(new_branch_info)?;
+
+        if option_hash.is_some() {
+            commit_hash = option_hash.unwrap()
+        }
+
         let new_branch = new_branch_info[0].clone();
         let branches_path = join_paths!(self.git_path, "refs/heads/").ok_or(
             CommandError::DirectoryCreationError(

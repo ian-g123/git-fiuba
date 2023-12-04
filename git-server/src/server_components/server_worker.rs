@@ -132,7 +132,7 @@ impl ServerWorker {
             }
         })?;
 
-        let local_branches = repo.local_branches()?;
+        let mut local_branches = repo.local_branches()?;
         let mut sorted_branches = local_branches
             .clone()
             .into_iter()
@@ -159,10 +159,21 @@ impl ServerWorker {
         self.send("unpack ok\n")?;
         for (branch_path, (old_ref, new_ref)) in ref_update_map {
             let branch_name = branch_path[11..].to_string();
+            let local_branch_hash =
+                if let Some(local_branch_hash) = local_branches.get(&branch_name) {
+                    local_branch_hash
+                } else {
+                    // Guardamos la nueva rama en el archivo de ramas locales
+                    repo.create_branch(&vec![branch_name.to_string()], Some(new_ref.to_string()))?;
+                    local_branches = repo.local_branches()?;
+                    local_branches
+                        .get(&branch_name)
+                        .ok_or(CommandError::BranchExists(format!(
+                            "La rama {} no existe",
+                            branch_name
+                        )))?
+                };
 
-            let Some(local_branch_hash) = local_branches.get(&branch_name) else {
-                todo!("TODO new branch")
-            };
             if local_branch_hash != &old_ref {
                 status.insert(branch_name, Some("non-fast-forward".to_string()));
             } else {
@@ -336,6 +347,7 @@ impl ServerWorker {
                 );
             }
         }
+        println!("MAPP :{:?}", map);
         Ok(map)
     }
 

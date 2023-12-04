@@ -311,7 +311,8 @@ impl Interface {
                 "pull" => {
                     let err = repo.pull();
                     let mut message_for_pull =
-                        "Realice refresh para obtener los cambios".to_string();
+                        "Pull realizado con éxito.\nRealice refresh para obtener los cambios"
+                            .to_string();
                     if err.is_err() {
                         let err = err.unwrap_err();
                         message_for_pull = err.to_string() + "\nPull no pudo realizarse con éxito";
@@ -323,8 +324,10 @@ impl Interface {
                     let result_for_push = push_function(&mut binding_for_push);
                     if result_for_push.is_err() {
                         dialog_window(result_for_push.unwrap_err().to_string());
-                        return;
+                    } else {
+                        dialog_window("Push realizado con éxito".to_string());
                     }
+                    return;
                 }
                 "fetch" => {
                     if let Err(err) = repo.fetch() {
@@ -870,7 +873,7 @@ impl Interface {
                 return;
             }
             let vec_branch = vec![name_branch_text.to_string()];
-            match repo.create_branch(&vec_branch) {
+            match repo.create_branch(&vec_branch, None) {
                 Ok(_) => {
                     dialog_window("Rama creada con éxito".to_string());
                     new_name_branch.set_text("");

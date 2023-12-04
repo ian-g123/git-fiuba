@@ -53,15 +53,18 @@ pub fn get_analysis(
             logger,
             i,
         )?;
-
-        if commits_map.contains_key(&remote_hash) {
+        if commits_map.contains_key(&remote_hash)
+            || remote_hash == "0000000000000000000000000000000000000000".to_string()
+        {
             hash_branch_status.insert(local_branch.to_string(), (remote_hash.clone(), local_hash));
         } else {
+            println!("ENTROOO??????????");
             return Err(CommandError::PushBranchBehind("".to_string()));
         }
         commits_map.remove(&remote_hash);
+        println!("COMMITS MAP : {:?}", commits_map);
+        println!("HASH BRANCH : {:?}", hash_branch_status );
     }
-
     Ok((hash_branch_status, commits_map))
 }
 
