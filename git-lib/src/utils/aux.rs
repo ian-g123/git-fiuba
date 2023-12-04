@@ -55,7 +55,7 @@ pub fn hex_string_to_u8_vec(hex_string: &str) -> [u8; 20] {
                 result[i] = (n1 * 16 + n2) as u8;
                 i += 1;
             } else {
-                panic!("Invalid hex string");
+                panic!("Invalid hex string: '{}'", hex_string);
             }
         } else {
             break;
@@ -121,7 +121,7 @@ mod test {
     // Pureba que get_hash() obtenga correctamente el hash.
     // #[test]
     // fn get_hash_test() {
-    //     let mut logger = Logger::new("./tests/commands/hash_object/codigo1/.git/logs").unwrap();
+    //     let mut logger = Logger::new("./tests/commands/hash_object/codigo1/.git/logs.log").unwrap();
     //     let mut output_string = Vec::new();
     //     let mut stdout_mock = Cursor::new(&mut output_string);
     //     let path = "./src/main.rs".to_string();

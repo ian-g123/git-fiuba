@@ -63,12 +63,22 @@ impl<'a> GitRepository<'a> {
             CommandError::DirectoryCreationError("Error abriendo directorio .git".to_string()),
         )?;
         let (git_path, logger, bare) = if Path::new(&tentative_git_path).exists() {
-            let logs_path = &join_paths!(tentative_git_path, "logs").ok_or(
-                CommandError::DirectoryCreationError("Error creando archivo .git/logs".to_string()),
+            let logs_path = &join_paths!(tentative_git_path, "logs.log").ok_or(
+                CommandError::DirectoryCreationError(
+                    "Error creando archivo .git/logs.log".to_string(),
+                ),
             )?;
             (tentative_git_path, Logger::new(&logs_path)?, false)
         } else {
-            (path.to_string(), Logger::new_dummy(), true)
+            (
+                path.to_string(),
+                Logger::new(&join_paths!(path, "logs.log").ok_or(
+                    CommandError::DirectoryCreationError(
+                        "Error creando archivo .git/logs.log".to_string(),
+                    ),
+                )?)?,
+                true,
+            )
         };
         if !Path::new(&join_paths!(git_path, "objects").ok_or(
             CommandError::DirectoryCreationError("Error abriendo directorio .git".to_string()),
@@ -104,8 +114,10 @@ impl<'a> GitRepository<'a> {
             let tentative_git_path = join_paths!(path, ".git").ok_or(
                 CommandError::DirectoryCreationError("Error creando directorio .git".to_string()),
             )?;
-            let logs_path = &join_paths!(tentative_git_path, "logs").ok_or(
-                CommandError::DirectoryCreationError("Error creando archivo .git/logs".to_string()),
+            let logs_path = &join_paths!(tentative_git_path, "logs.log").ok_or(
+                CommandError::DirectoryCreationError(
+                    "Error creando archivo .git/logs.log".to_string(),
+                ),
             )?;
             (tentative_git_path, Logger::new(&logs_path)?)
         };
@@ -1375,7 +1387,7 @@ impl<'a> GitRepository<'a> {
     /// Actualiza la referencia `FETCH_HEAD` con el hash del último commit de cada rama.
     pub fn fetch(&mut self) -> Result<(), CommandError> {
         self.log("Fetching updates");
-        let (address, repository_path, repository_url) = self.get_remote_info()?;
+        let (protocol, address, repository_path, repository_url) = self.get_remote_info()?;
         self.log(&format!(
             "Address: {}, repository_path: {}, repository_url: {}",
             address, repository_path, repository_url
@@ -1391,12 +1403,18 @@ impl<'a> GitRepository<'a> {
 
     /// Abre el archivo config de la base de datos\
     /// obtiene el address, repository_path y repository_url del remote origin\
-    fn get_remote_info(&mut self) -> Result<(String, String, String), CommandError> {
+    fn get_remote_info(&mut self) -> Result<(String, String, String, String), CommandError> {
         let config = self.open_config()?;
         let Some(url) = config.get("remote \"origin\"", "url") else {
             return Err(CommandError::NoRemoteUrl);
         };
-        let Some((address, repository_path)) = url.split_once('/') else {
+        let (protocol, rest) = url
+            .split_once("://")
+            .ok_or(CommandError::InvalidConfigFile)?;
+        if protocol != "git" {
+            return Err(CommandError::UnsuportedProtocol(protocol.to_string()));
+        }
+        let Some((address, repository_path)) = rest.split_once('/') else {
             return Err(CommandError::InvalidConfigFile);
         };
         let (repository_url, _repository_port) = {
@@ -1406,6 +1424,7 @@ impl<'a> GitRepository<'a> {
             }
         };
         Ok((
+            protocol.to_owned(),
             address.to_owned(),
             repository_path.to_owned(),
             repository_url.to_owned(),
@@ -1427,7 +1446,8 @@ impl<'a> GitRepository<'a> {
             .collect();
         self.log(&format!("Wants {:#?}", wants));
         self.log(&format!("haves {:#?}", haves));
-        let objects_decompressed_data = server.fetch_objects(wants, haves, &mut self.logger)?;
+        let objects_decompressed_data =
+            server.fetch_objects(wants, haves, &self.db()?, &mut self.logger)?;
         self.save_objects_from_packfile(objects_decompressed_data)?;
 
         self.update_fetch_head(remote_branches, remote_reference)?;
@@ -1436,10 +1456,10 @@ impl<'a> GitRepository<'a> {
 
     pub fn save_objects_from_packfile(
         &mut self,
-        objects_decompressed_data: Vec<(PackfileObjectType, usize, Vec<u8>)>,
+        objects_decompressed_data: HashMap<[u8; 20], (PackfileObjectType, usize, Vec<u8>)>,
     ) -> Result<HashMap<String, (PackfileObjectType, usize, Vec<u8>)>, CommandError> {
         let mut objects = HashMap::<String, (PackfileObjectType, usize, Vec<u8>)>::new();
-        for (obj_type, len, content) in objects_decompressed_data {
+        for (hash, (obj_type, len, content)) in objects_decompressed_data {
             self.log(&format!(
                 "Saving object of type {} and len {}, with data {:?}",
                 obj_type,
@@ -1454,8 +1474,8 @@ impl<'a> GitRepository<'a> {
         Ok(objects)
     }
 
-    pub fn log(&mut self, content: &str) {
-        self.logger.log(content);
+    pub fn log(&mut self, message: &str) {
+        self.logger.log(message);
     }
 
     pub fn logger(&mut self) -> &mut Logger {
@@ -1470,7 +1490,10 @@ impl<'a> GitRepository<'a> {
 
     pub fn push(&mut self, local_branches: Vec<(String, String)>) -> Result<(), CommandError> {
         self.log("Push updates");
-        let (address, repository_path, repository_url) = self.get_remote_info()?;
+        let (protocol, address, repository_path, repository_url) = self.get_remote_info()?;
+        if protocol != "git" {
+            return Err(CommandError::UnsuportedProtocol(protocol.to_string()));
+        }
         self.log(&format!(
             "Address: {}, repository_path: {}, repository_url: {}",
             address, repository_path, repository_url
@@ -1478,9 +1501,6 @@ impl<'a> GitRepository<'a> {
 
         let mut server = GitServer::connect_to(&address, &mut self.logger)?;
         let refs_hash = self.receive_pack(&mut server, &repository_path, &repository_url)?; // ref_hash: HashMap<branch, hash>
-
-        // verificamos que todas las branches locales esten actualizadas
-        let (_, _, repository_url) = self.get_remote_info()?;
 
         let (hash_branch_status, commits_map) =
             get_analysis(local_branches, self.db()?, refs_hash, &mut self.logger).map_err(
@@ -2755,7 +2775,6 @@ impl<'a> GitRepository<'a> {
         all: bool,
     ) -> Result<Vec<(CommitObject, usize, usize)>, CommandError> {
         let mut branches_with_their_last_hash: Vec<(String, String)> = Vec::new();
-        let mut commits_map: HashMap<String, (CommitObject, usize, usize)> = HashMap::new();
 
         if all {
             branches_with_their_last_hash = self.push_all_branch_hashes()?;
@@ -2767,6 +2786,7 @@ impl<'a> GitRepository<'a> {
         }
 
         let mut commits_for_last_hash: Vec<(CommitObject, String)> = Vec::new();
+        self.log("Building commits for las hash 🚧");
         for (branch, hash) in branches_with_their_last_hash {
             self.log(&format!(
                 "Opening database branch: '{}', hash: '{}'",
@@ -2775,6 +2795,10 @@ impl<'a> GitRepository<'a> {
             let mut commit_object = self.db()?.read_object_shallow(&hash, &mut self.logger)?;
 
             self.log("read success");
+            self.log(&format!(
+                "🔍️ commits_for_last_hash size: {}",
+                commits_for_last_hash.len()
+            ));
             let first_commit_branch =
                 commit_object
                     .as_mut_commit()
@@ -2783,8 +2807,12 @@ impl<'a> GitRepository<'a> {
                     ))?;
             commits_for_last_hash.push((first_commit_branch.to_owned(), hash));
         }
+        self.log("Sorting commits 🚧");
+
         sort_commits_descending_date(&mut commits_for_last_hash);
 
+        self.log("Building commits hashmap 🚧");
+        let mut commits_map: HashMap<String, (CommitObject, usize, usize)> = HashMap::new();
         for (color_idex, (_, hash)) in commits_for_last_hash.iter().enumerate() {
             rebuild_commits_tree(
                 &self.db()?,
@@ -2798,7 +2826,9 @@ impl<'a> GitRepository<'a> {
             )?;
         }
 
+        self.log("Draining commits to vector 🚧");
         let mut commits = commits_map.drain().map(|(_, v)| v).collect();
+        self.log("Sorting commits 🚧");
         sort_commits_descending_date_and_topo(&mut commits);
         Ok(commits)
     }
@@ -3088,7 +3118,12 @@ impl<'a> GitRepository<'a> {
         let mut errors: String = String::new();
         let mut deletions = String::new();
         let mut config = Config::open(&self.git_path)?;
+        let current_branch = self.get_current_branch_name()?;
         for branch in branches {
+            if branch == &current_branch {
+                errors += &format!("Cannot delete branch '{current_branch}'");
+                continue;
+            }
             let path = branch_path.clone() + branch;
             let Ok(_) = File::open(path.clone()) else {
                 if are_remotes {
@@ -4003,10 +4038,6 @@ impl<'a> GitRepository<'a> {
             }
         };
 
-        if !db.has_object(&tag_ref)? && !self.tag_exists(&tag_ref)? {
-            return Err(CommandError::InvalidRef(tag_ref));
-        }
-
         let (tag_object, tag_ref) = self.read_tag_object(&tag_ref, db)?;
 
         self.log("Tag object read");
@@ -4040,14 +4071,25 @@ impl<'a> GitRepository<'a> {
         match db.read_object(&tag_ref, &mut self.logger) {
             Ok(object) => return Ok((object, tag_ref.to_string())),
             Err(_) => {
-                let path = join_paths!(self.git_path, "refs/tags/", tag_ref).ok_or(
+                let path_tag = join_paths!(self.git_path, "refs/tags/", tag_ref).ok_or(
                     CommandError::FileCreationError("Error creando path de tags".to_string()),
                 )?;
-                self.log(&format!("Tag path (read): {}", path));
-                let tag_ref = fs::read_to_string(path)
-                    .map_err(|error| CommandError::FileReadError(error.to_string()))?;
-                self.log(&format!("Tag ref (read): {}", tag_ref));
-                return self.read_tag_object(&tag_ref, db);
+
+                self.log(&format!("Tag path (read): {}", path_tag));
+                if let Ok(tag_ref) = fs::read_to_string(path_tag) {
+                    self.log(&format!("Tag ref (read): {}", tag_ref));
+                    return self.read_tag_object(&tag_ref, db);
+                } else if let Some(tag_ref) =
+                    self.try_read_commit_local_branch(tag_ref.to_string())?
+                {
+                    self.log(&format!("Tag ref (read): {}", tag_ref));
+                    return self.read_tag_object(&tag_ref, db);
+                } else if let Some(tag_ref) = self.try_read_commit_remote_branch(tag_ref)? {
+                    self.log(&format!("Tag ref (read): {}", tag_ref));
+                    return self.read_tag_object(&tag_ref, db);
+                } else {
+                    return Err(CommandError::InvalidRef(tag_ref.to_string()));
+                }
             }
         }
     }

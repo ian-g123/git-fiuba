@@ -106,10 +106,6 @@ impl CommitObject {
                     tree_hash_str
                 ));
                 let mut tree = db.read_object(&tree_hash_str, logger)?;
-                logger.log(&format!(
-                    "tree content en read_from : {}",
-                    String::from_utf8_lossy(&(tree.to_owned().content(None)?))
-                ));
 
                 let Some(tree) = tree.as_tree() else {
                     return Err(CommandError::InvalidCommit);
@@ -252,7 +248,20 @@ fn read_commit_info_from(
     };
     let (committer, committer_timestamp, committer_offset) = get_author_info(commiter_info)?;
 
-    lines_next(&mut lines)?;
+    let mut signature_block = Vec::new();
+    let sig_line = lines_next(&mut lines)?;
+    if sig_line == "gpgsig -----BEGIN PGP SIGNATURE-----" {
+        signature_block.push(sig_line);
+        let mut line = lines_next(&mut lines)?;
+        while line != " -----END PGP SIGNATURE-----" {
+            signature_block.push(line);
+            line = lines_next(&mut lines)?;
+        }
+        signature_block.push(line);
+
+        lines_next(&mut lines)?;
+        lines_next(&mut lines)?;
+    }
     let message = lines.collect();
 
     Ok((

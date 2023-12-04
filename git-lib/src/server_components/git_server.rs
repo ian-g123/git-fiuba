@@ -1,4 +1,7 @@
-use crate::{command_errors::CommandError, logger::Logger, logger_sender::LoggerSender};
+use crate::{
+    command_errors::CommandError, logger::Logger, logger_sender::LoggerSender,
+    objects_database::ObjectsDatabase,
+};
 use std::{
     collections::HashMap,
     io::{Read, Write},
@@ -6,8 +9,8 @@ use std::{
 };
 
 use super::{
-    packfile_functions::read_objects, packfile_object_type::PackfileObjectType, pkt_strings::Pkt,
-    reader::TcpStreamBuffedReader,
+    packfile_functions::read_objects_from_packfile, packfile_object_type::PackfileObjectType,
+    pkt_strings::Pkt, reader::BuffedReader,
 };
 
 pub struct GitServer {
@@ -89,8 +92,9 @@ impl GitServer {
         &mut self,
         wants_commits: Vec<String>,
         haves_commits: Vec<String>,
+        db: &ObjectsDatabase,
         logger: &mut Logger,
-    ) -> Result<Vec<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
+    ) -> Result<HashMap<[u8; 20], (PackfileObjectType, usize, Vec<u8>)>, CommandError> {
         logger.log("fetch_objects");
         let mut lines = Vec::<String>::new();
         for want_commit in wants_commits {
@@ -121,7 +125,7 @@ impl GitServer {
                 )))
             }
         }
-        Ok(read_objects(&mut self.socket)?)
+        read_objects_from_packfile(&mut self.socket, db, logger)
     }
 
     fn write_string_to_socket(&mut self, line: &str) -> Result<(), CommandError> {

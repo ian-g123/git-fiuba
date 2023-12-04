@@ -13,7 +13,7 @@ impl Command for Pull {
         _stdin: &mut dyn Read,
         output: &mut dyn Write,
     ) -> Result<(), CommandError> {
-        if name != "clone" {
+        if name != "pull" {
             return Err(CommandError::Name);
         }
         let pull = Self::new(args)?;

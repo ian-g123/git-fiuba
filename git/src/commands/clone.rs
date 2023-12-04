@@ -85,7 +85,7 @@ impl Clone {
     fn run(&self, _stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), CommandError> {
         let mut repo = GitRepository::init(&self.directory, "master", false, output)?;
         let address = self.get_address();
-        let url = address + &self.repository_path;
+        let url = format!("git://{}{}", address, &self.repository_path);
         repo.update_remote(url)?;
         repo.pull()?;
         Ok(())

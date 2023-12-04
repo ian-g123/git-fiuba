@@ -4,6 +4,7 @@ use std::{
     io::{self, Read, Write},
     path::Path,
     process::Command,
+    thread::sleep,
 };
 
 // Comando para correr el servidor
@@ -83,6 +84,8 @@ fn test_push() {
         .unwrap()
         .ends_with(" master -> master\n"));
 
+    sleep(std::time::Duration::from_millis(500));
+
     assert!(
         Command::new("git")
             .arg("pull")
@@ -108,6 +111,7 @@ fn test_push() {
         .unwrap()
         .starts_with("Cloning into 'user3'...\nReceiving objects:"));
 
+    sleep(std::time::Duration::from_millis(500));
     let mut readme = File::open(path.to_owned() + "/user3/README.md").unwrap();
     let mut contents = String::new();
     readme.read_to_string(&mut contents).unwrap();
@@ -115,8 +119,7 @@ fn test_push() {
 
     _ = fs::remove_dir_all(format!("{}/server_files/repo", path));
     _ = fs::remove_dir_all(format!("{}/server_files/repo_backup", path));
-    _ = fs::remove_file(format!("{}/server_files/logs", path));
-    _ = fs::remove_dir_all(format!("{}/server_files/logs", path));
+    _ = fs::remove_file(format!("{}/server_files/server-logs.log", path));
     _ = fs::remove_dir_all(format!("{}/user1", path));
     _ = fs::remove_dir_all(format!("{}/user2", path));
     _ = fs::remove_dir_all(format!("{}/user3", path));

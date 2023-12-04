@@ -236,6 +236,7 @@ pub enum CommandError {
     NoRebaseInProgress,
     // Error al intentar leer un valor en un Delta Offset
     VariableLengthEncodingOfs(String),
+    UnsuportedProtocol(String),
 }
 
 impl Error for CommandError {}
@@ -573,7 +574,7 @@ impl fmt::Display for CommandError {
             CommandError::NonMatchingWithoutVerbose => write!(f, "fatal: --non-matching is only valid with --verbose"),            
             CommandError::NoRebaseInProgress => write!(f, "fatal: No rebase in progress?"),
             CommandError::VariableLengthEncodingOfs(e) => write!(f, "Error al intentar leer un valor en un Delta Offset: {}", e),
-
+            CommandError::UnsuportedProtocol(e) => write!(f, "Unsuported protocol: {}", e),
         }
     }
 }
