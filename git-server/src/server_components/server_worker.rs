@@ -140,7 +140,7 @@ impl ServerWorker {
         sorted_branches.sort_unstable();
         let (first_branch_name, first_branch_hash) = sorted_branches.remove(0);
 
-        // self.send("version 1")?;
+        self.send("version 1")?;
         self.send(&format!(
             "{} refs/heads/{}\0\n",
             first_branch_hash, first_branch_name

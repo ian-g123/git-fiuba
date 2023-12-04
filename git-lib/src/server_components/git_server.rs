@@ -173,9 +173,7 @@ impl GitServer {
         let mut lines = self.send(&line)?;
 
         let mut refs_hash = HashMap::<String, String>::new();
-        println!(
-            "lines: {:?}", lines
-        );
+        
         let _version = lines.remove(0);
         let first_line = lines.remove(0);
 

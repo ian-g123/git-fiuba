@@ -1549,8 +1549,6 @@ impl<'a> GitRepository<'a> {
         let pack_file: Vec<u8> = make_packfile(commits_map)?;
         self.log("Sending packfile");
         server.send_packfile(&pack_file)?;
-        self.log("Getting response");
-        _ = server.get_response()?;
 
         Ok(())
     }
