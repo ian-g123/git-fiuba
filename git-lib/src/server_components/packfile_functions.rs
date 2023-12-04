@@ -11,7 +11,9 @@ use crate::{
     logger::{self, Logger},
     objects::{
         commit_object::CommitObject,
-        git_object::{GitObject, GitObjectTrait},
+        git_object::{
+            git_object_from_data, write_to_stream_from_content, GitObject, GitObjectTrait,
+        },
         tree::Tree,
     },
     objects_database::ObjectsDatabase,
@@ -171,12 +173,23 @@ fn read_objects_from_packfile_body(
     exp_obj_number: u32,
     db: &ObjectsDatabase,
     logger: &mut Logger,
-) -> Result<Vec<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
-    let mut objects_data = Vec::new();
-    let mut offset = 0;
-    for _ in 0..exp_obj_number {
+) -> Result<HashMap<[u8; 20], (PackfileObjectType, usize, Vec<u8>)>, CommandError> {
+    let mut objects_data = HashMap::<[u8; 20], (PackfileObjectType, usize, Vec<u8>)>::new();
+    for i in 0..exp_obj_number {
+        logger.log(&format!(
+            "Reading object number: {}/{}",
+            i + 1,
+            exp_obj_number
+        ));
         let (obj_type, len, object_content) =
-            read_one_object_data_from_packfile(buffed_reader, db, logger, offset)?;
+            read_one_object_data_from_packfile(buffed_reader, db, logger, Some(&objects_data))?;
+        let mut hashable_content = Vec::new();
+        write_to_stream_from_content(
+            &mut hashable_content,
+            object_content.clone(),
+            obj_type.to_string(),
+        )?;
+        let sha1 = get_sha1(&hashable_content);
 
         if object_content.len() != len {
             return Err(CommandError::ErrorDecompressingObject(format!(
@@ -186,7 +199,7 @@ fn read_objects_from_packfile_body(
             )));
         }
 
-        objects_data.push((obj_type, len, object_content));
+        objects_data.insert(sha1, (obj_type, len, object_content));
     }
     Ok(objects_data)
 }
@@ -199,22 +212,24 @@ fn read_object_from_offset(
     db: &ObjectsDatabase,
     logger: &mut Logger,
 ) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
-    buffed_reader.record_and_fast_foward_to(offset as usize);
-
-    read_one_object_data_from_packfile(buffed_reader, db, logger, offset)
+    buffed_reader.record_and_fast_foward_to(offset as usize)?;
+    read_one_object_data_from_packfile(buffed_reader, db, logger, None)
 }
 
 fn read_one_object_data_from_packfile(
     buffed_reader: &mut BuffedReader,
     db: &ObjectsDatabase,
     logger: &mut Logger,
-    offset: u32,
+    objects_data: Option<&HashMap<[u8; 20], (PackfileObjectType, usize, Vec<u8>)>>,
 ) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
+    let offset = buffed_reader.get_pos() as u32;
     let (obj_type, len) = read_object_header_from_packfile(buffed_reader)?;
     match obj_type {
-        PackfileObjectType::RefDelta => read_ref_delta(buffed_reader, db, len, logger),
+        PackfileObjectType::RefDelta => {
+            read_ref_delta(buffed_reader, objects_data, db, len, logger)
+        }
         PackfileObjectType::OfsDelta => read_ofs_delta(buffed_reader, offset, db, len, logger),
-        _ => read_undeltified_object(buffed_reader, len, obj_type),
+        _ => read_undeltified_object(buffed_reader, len, obj_type, logger),
     }
 }
 
@@ -222,7 +237,9 @@ fn read_undeltified_object(
     buffed_reader: &mut BuffedReader,
     len: usize,
     obj_type: PackfileObjectType,
+    logger: &mut Logger,
 ) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
+    logger.log(&format!("Reading Undeltified Object"));
     let object_content = read_extract_rewind(buffed_reader, len)?;
     Ok((obj_type, len, object_content))
 }
@@ -234,7 +251,7 @@ fn read_ofs_delta(
     len: usize,
     logger: &mut Logger,
 ) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
-    logger.log(&format!("Reading Delat Offset: {}", offset));
+    logger.log(&format!("Reading Delta Offset: {}", offset));
     let (base_obj_neg_offset, bytes_used) = read_ofs(buffed_reader)?;
     let base_object_offset = offset - base_obj_neg_offset;
     logger.log("Reading base object");
@@ -255,13 +272,14 @@ fn read_ofs_delta(
 
 fn read_ref_delta(
     buffed_reader: &mut BuffedReader,
+    objects_data: Option<&HashMap<[u8; 20], (PackfileObjectType, usize, Vec<u8>)>>,
     db: &ObjectsDatabase,
     len: usize,
     logger: &mut Logger,
 ) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
     logger.log("Reading Ref Delta");
     let (base_obj_type, base_obj_len, base_obj_content) =
-        read_ref_base_object(buffed_reader, db, logger)?;
+        read_ref_base_object(buffed_reader, objects_data, db, logger)?;
     let base_obj_type = PackfileObjectType::from_str(base_obj_type.as_str())?;
     read_and_apply_delta_instructions(
         buffed_reader,
@@ -275,6 +293,7 @@ fn read_ref_delta(
 
 fn read_ref_base_object(
     socket: &mut dyn Read,
+    objects_data: Option<&HashMap<[u8; 20], (PackfileObjectType, usize, Vec<u8>)>>,
     db: &ObjectsDatabase,
     logger: &mut Logger,
 ) -> Result<(String, usize, Vec<u8>), CommandError> {
@@ -282,6 +301,17 @@ fn read_ref_base_object(
     socket
         .read_exact(&mut base_obj_hash)
         .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
+    if let Some(objects_data) = objects_data {
+        if let Some((base_obj_type, base_obj_len, base_obj_content)) =
+            objects_data.get(&base_obj_hash)
+        {
+            return Ok((
+                base_obj_type.to_string(),
+                *base_obj_len,
+                base_obj_content.to_vec(),
+            ));
+        }
+    }
     let base_obj_hash_str = u8_vec_to_hex_string(&base_obj_hash);
     logger.log(&format!("Base object hash: {}", base_obj_hash_str));
     let (base_obj_type, base_obj_len, base_obj_content) =
@@ -443,12 +473,10 @@ pub fn read_objects_from_packfile(
     socket: &mut TcpStream,
     db: &ObjectsDatabase,
     logger: &mut Logger,
-) -> Result<Vec<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
+) -> Result<HashMap<[u8; 20], (PackfileObjectType, usize, Vec<u8>)>, CommandError> {
     let mut buffed_reader = BuffedReader::new(socket);
     let object_number = read_packfile_header(&mut buffed_reader)?;
-    let objects_data =
-        read_objects_from_packfile_body(&mut buffed_reader, object_number, db, logger)?;
-    Ok(objects_data)
+    read_objects_from_packfile_body(&mut buffed_reader, object_number, db, logger)
 }
 
 fn get_object_packfile_offset(

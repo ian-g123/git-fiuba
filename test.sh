@@ -44,6 +44,19 @@ unzip -qq git-lib/tests/data/packfile/big_delta.zip -d git-lib/tests/data/packfi
 unzip -qq git-lib/tests/data/packfile/really_big_delta.zip -d git-lib/tests/data/packfile/
 RUSTFLAGS="-Awarnings" cargo test -q -p git -p git-lib -p git-server --test packfile_database_integration -- --ignored
 
+# Run delta_objects_over_network_client.rs test
+echo "=========================="
+echo "Delta over network test"
+unzip -qq git/tests/data/commands/labdeltaclient/server_files/repo_with_two_commits.zip -d git/tests/data/commands/labdeltaclient/server_files/repo_with_two_commits
+unzip -qq git/tests/data/commands/labdeltaclient/user2_to_recieve_delta.zip -d git/tests/data/commands/labdeltaclient/user2_to_recieve_delta
+cd git/tests/data/commands/labdeltaclient/server_files
+git daemon --verbose --reuseaddr --enable=receive-pack --informative-errors --base-path=. . & > "daemon.log"
+daemon_process=$!
+cd -
+sleep 1
+RUSTFLAGS="-Awarnings" cargo test -q -p git -p git-lib -p git-server --test delta_objects_over_network_client -- --ignored
+kill $daemon_process
+
 # Run server_test
 echo "=========================="
 echo "Server test"
@@ -77,7 +90,7 @@ if [ $success -eq 0 ]; then
     echo "Failed 10 times. Exiting"
     cat server-test-stderr.txt
     kill $daemon_process
-    echo "Try runnin"
+    echo "Try running"
     echo "RUSTFLAGS="-Awarnings" cargo test -q -p git -p git-lib -p git-server --test server_test -- --ignored"
     exit 1
 fi

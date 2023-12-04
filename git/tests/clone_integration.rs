@@ -187,7 +187,6 @@ fn test_clone() {
         .output()
         .unwrap();
 
-    // panic!("STOP");
     _ = fs::remove_dir_all(format!("{}", path));
 }
 
@@ -371,20 +370,6 @@ fn modify_file_and_commit_in_server_repo(path: &str) {
             .is_ok(),
         "No se pudo hacer commit"
     );
-}
-
-fn _start_deamon(path: &str) -> Child {
-    let handle = Command::new("git")
-        .arg("daemon")
-        .arg("--verbose")
-        .arg("--reuseaddr")
-        .arg("--enable=receive-pack")
-        .arg("--base-path=.")
-        .current_dir(path.to_owned() + "/server-files")
-        .spawn()
-        .expect("No se pudo iniciar el daemon");
-
-    handle
 }
 
 fn create_base_scene(path: &str) {

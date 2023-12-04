@@ -1,7 +1,7 @@
 use git::commands::{
     add::Add, branch::Branch, cat_file::CatFile, check_ignore::CheckIgnore, checkout::Checkout,
     clone::Clone, command::Command, commit::Commit, fetch::Fetch, hash_object::HashObject,
-    init::Init, log::Log, ls_files::LsFiles, ls_tree::LsTree, merge::Merge, push::Push,
+    init::Init, log::Log, ls_files::LsFiles, ls_tree::LsTree, merge::Merge, pull::Pull, push::Push,
     rebase::Rebase, show_ref::ShowRef, status::Status, tag::Tag,
 };
 use git_lib::command_errors::CommandError;
@@ -35,6 +35,7 @@ fn run(command_name: &str, command_args: &[String]) -> Result<(), CommandError> 
         Commit::run_from,
         Status::run_from,
         Clone::run_from,
+        Pull::run_from,
         Fetch::run_from,
         Merge::run_from,
         Push::run_from,

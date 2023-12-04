@@ -94,7 +94,7 @@ impl GitServer {
         haves_commits: Vec<String>,
         db: &ObjectsDatabase,
         logger: &mut Logger,
-    ) -> Result<Vec<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
+    ) -> Result<HashMap<[u8; 20], (PackfileObjectType, usize, Vec<u8>)>, CommandError> {
         logger.log("fetch_objects");
         let mut lines = Vec::<String>::new();
         for want_commit in wants_commits {
@@ -125,7 +125,7 @@ impl GitServer {
                 )))
             }
         }
-        Ok(read_objects_from_packfile(&mut self.socket, db, logger)?)
+        read_objects_from_packfile(&mut self.socket, db, logger)
     }
 
     fn write_string_to_socket(&mut self, line: &str) -> Result<(), CommandError> {

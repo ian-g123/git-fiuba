@@ -55,7 +55,7 @@ pub fn hex_string_to_u8_vec(hex_string: &str) -> [u8; 20] {
                 result[i] = (n1 * 16 + n2) as u8;
                 i += 1;
             } else {
-                panic!("Invalid hex string");
+                panic!("Invalid hex string: '{}'", hex_string);
             }
         } else {
             break;
