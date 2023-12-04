@@ -362,6 +362,17 @@ fn read_extract_rewind(
 ) -> Result<Vec<u8>, CommandError> {
     let base_post = buffed_reader.get_pos();
     let mut buffed_reader_ref: &mut BuffedReader<'_> = buffed_reader;
+    if len == 0 {
+        let mut null_comprresed = [0; 8];
+        buffed_reader_ref
+            .read_exact(&mut null_comprresed)
+            .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
+        if null_comprresed == [120, 156, 3, 0, 0, 0, 0, 1] {
+            buffed_reader_ref.record_and_fast_foward_to(base_post + 8, logger)?;
+            return Ok(Vec::new());
+        }
+        buffed_reader_ref.record_and_fast_foward_to(base_post, logger)?;
+    }
     let mut decoder = flate2::read::ZlibDecoder::new(&mut buffed_reader_ref);
     let mut delta_content = vec![0; len]; // TODO with capacity
     decoder

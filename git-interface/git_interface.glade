@@ -23,8 +23,8 @@
             <property name="ellipsize">end</property>
             <attributes>
               <attribute name="font-desc" value="Garuda Bold 10"/>
-              <attribute name="scale" value="1.3"/>
-              <attribute name="foreground" value="#00007ae023b3"/>
+              <attribute name="scale" value="1.3999999999999999"/>
+              <attribute name="foreground" value="#0000d1ea2bf8"/>
               <attribute name="strikethrough-color" value="#000000000000"/>
             </attributes>
           </object>
@@ -45,8 +45,8 @@
             <property name="ellipsize">end</property>
             <attributes>
               <attribute name="font-desc" value="Garuda Bold 10"/>
-              <attribute name="scale" value="1.3"/>
-              <attribute name="foreground" value="#00007ae023b3"/>
+              <attribute name="scale" value="1.3999999999999999"/>
+              <attribute name="foreground" value="#0000d1ea2bf8"/>
               <attribute name="strikethrough-color" value="#000000000000"/>
             </attributes>
           </object>
@@ -199,8 +199,8 @@
             <property name="ellipsize">end</property>
             <attributes>
               <attribute name="font-desc" value="Garuda Bold 10"/>
-              <attribute name="scale" value="1.3"/>
-              <attribute name="foreground" value="#00007ae023b3"/>
+              <attribute name="scale" value="1.3999999999999999"/>
+              <attribute name="foreground" value="#0000d1ea2bf8"/>
               <attribute name="strikethrough-color" value="#000000000000"/>
             </attributes>
           </object>
@@ -280,8 +280,8 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkButton" id="accept_next_button">
-                            <property name="label" translatable="yes">Next</property>
+                          <object class="GtkButton" id="accept_both_button">
+                            <property name="label" translatable="yes">Accept Both</property>
                             <property name="visible">True</property>
                             <property name="can-focus">True</property>
                             <property name="receives-default">True</property>
@@ -414,24 +414,22 @@
     <property name="default-width">1000</property>
     <property name="default-height">562</property>
     <child>
-      <!-- n-columns=2 n-rows=1 -->
-      <object class="GtkGrid" id="principal grid">
+      <object class="GtkPaned">
         <property name="visible">True</property>
-        <property name="can-focus">False</property>
+        <property name="can-focus">True</property>
+        <property name="hexpand">True</property>
         <child>
           <!-- n-columns=1 n-rows=5 -->
-          <object class="GtkGrid" id="option_buttons">
-            <property name="width-request">95</property>
+          <object class="GtkGrid">
             <property name="visible">True</property>
             <property name="can-focus">False</property>
-            <property name="vexpand">True</property>
+            <property name="hexpand">True</property>
             <child>
-              <object class="GtkButton" id="pull_button">
-                <property name="label" translatable="yes">pull</property>
+              <object class="GtkEntry" id="entrada_de_mensaje">
+                <property name="height-request">43</property>
                 <property name="visible">True</property>
                 <property name="can-focus">True</property>
-                <property name="receives-default">True</property>
-                <property name="vexpand">True</property>
+                <property name="placeholder-text" translatable="yes">Message (Ctrl+Enter to commit on "insertar rama")</property>
               </object>
               <packing>
                 <property name="left-attach">0</property>
@@ -439,25 +437,32 @@
               </packing>
             </child>
             <child>
-              <object class="GtkButton" id="push_button">
-                <property name="label" translatable="yes">push</property>
+              <!-- n-columns=1 n-rows=1 -->
+              <object class="GtkGrid" id="buttons_staging_grid">
                 <property name="visible">True</property>
-                <property name="can-focus">True</property>
-                <property name="receives-default">True</property>
-                <property name="vexpand">True</property>
-              </object>
-              <packing>
-                <property name="left-attach">0</property>
-                <property name="top-attach">1</property>
-              </packing>
-            </child>
-            <child>
-              <object class="GtkButton" id="checkout_button">
-                <property name="label" translatable="yes">checkout</property>
-                <property name="visible">True</property>
-                <property name="can-focus">True</property>
-                <property name="receives-default">True</property>
-                <property name="vexpand">True</property>
+                <property name="can-focus">False</property>
+                <child>
+                  <object class="GtkAccelLabel" id="staged_changes">
+                    <property name="name">staged_changes</property>
+                    <property name="visible">True</property>
+                    <property name="can-focus">False</property>
+                    <property name="hexpand">True</property>
+                    <property name="vexpand">False</property>
+                    <property name="label" translatable="yes">Staged Changes</property>
+                    <property name="justify">right</property>
+                    <property name="ellipsize">end</property>
+                    <attributes>
+                      <attribute name="font-desc" value="Garuda Bold 10"/>
+                      <attribute name="scale" value="1.3999999999999999"/>
+                      <attribute name="foreground" value="#0000d1ea2bf8"/>
+                      <attribute name="strikethrough-color" value="#000000000000"/>
+                    </attributes>
+                  </object>
+                  <packing>
+                    <property name="left-attach">0</property>
+                    <property name="top-attach">0</property>
+                  </packing>
+                </child>
               </object>
               <packing>
                 <property name="left-attach">0</property>
@@ -465,54 +470,31 @@
               </packing>
             </child>
             <child>
-              <object class="GtkButton" id="fetch_button">
-                <property name="label" translatable="yes">fetch</property>
-                <property name="visible">True</property>
-                <property name="can-focus">True</property>
-                <property name="receives-default">True</property>
-                <property name="vexpand">True</property>
-              </object>
-              <packing>
-                <property name="left-attach">0</property>
-                <property name="top-attach">3</property>
-              </packing>
-            </child>
-            <child>
-              <object class="GtkButton" id="branch_button">
-                <property name="label" translatable="yes">branch</property>
-                <property name="visible">True</property>
-                <property name="can-focus">True</property>
-                <property name="receives-default">True</property>
-                <property name="vexpand">True</property>
-              </object>
-              <packing>
-                <property name="left-attach">0</property>
-                <property name="top-attach">4</property>
-              </packing>
-            </child>
-          </object>
-          <packing>
-            <property name="left-attach">0</property>
-            <property name="top-attach">0</property>
-          </packing>
-        </child>
-        <child>
-          <object class="GtkPaned">
-            <property name="visible">True</property>
-            <property name="can-focus">True</property>
-            <property name="hexpand">True</property>
-            <child>
-              <!-- n-columns=1 n-rows=4 -->
+              <!-- n-columns=1 n-rows=5 -->
               <object class="GtkGrid">
                 <property name="visible">True</property>
                 <property name="can-focus">False</property>
                 <property name="hexpand">True</property>
+                <property name="vexpand">True</property>
                 <child>
-                  <object class="GtkEntry" id="entrada_de_mensaje">
-                    <property name="height-request">43</property>
+                  <object class="GtkScrolledWindow">
                     <property name="visible">True</property>
                     <property name="can-focus">True</property>
-                    <property name="placeholder-text" translatable="yes">Message (Ctrl+Enter to commit on "insertar rama")</property>
+                    <property name="vexpand">True</property>
+                    <property name="shadow-type">in</property>
+                    <child>
+                      <object class="GtkViewport">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <child>
+                          <object class="GtkListBox" id="staging_list">
+                            <property name="name">staged_changes_list</property>
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
                   </object>
                   <packing>
                     <property name="left-attach">0</property>
@@ -520,31 +502,44 @@
                   </packing>
                 </child>
                 <child>
-                  <!-- n-columns=1 n-rows=1 -->
-                  <object class="GtkGrid" id="buttons_staging_grid">
+                  <object class="GtkAccelLabel" id="changes">
+                    <property name="name">Changes</property>
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
+                    <property name="hexpand">True</property>
+                    <property name="vexpand">False</property>
+                    <property name="label" translatable="yes">Changes</property>
+                    <property name="justify">right</property>
+                    <property name="ellipsize">end</property>
+                    <attributes>
+                      <attribute name="font-desc" value="Garuda Bold 10"/>
+                      <attribute name="scale" value="1.3999999999999999"/>
+                      <attribute name="foreground" value="#0000d1ea2bf8"/>
+                      <attribute name="strikethrough-color" value="#000000000000"/>
+                    </attributes>
+                  </object>
+                  <packing>
+                    <property name="left-attach">0</property>
+                    <property name="top-attach">1</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkScrolledWindow">
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="vexpand">True</property>
+                    <property name="shadow-type">in</property>
                     <child>
-                      <object class="GtkAccelLabel" id="staged_changes">
-                        <property name="name">staged_changes</property>
+                      <object class="GtkViewport">
                         <property name="visible">True</property>
                         <property name="can-focus">False</property>
-                        <property name="hexpand">True</property>
-                        <property name="vexpand">False</property>
-                        <property name="label" translatable="yes">Staged Changes</property>
-                        <property name="justify">right</property>
-                        <property name="ellipsize">end</property>
-                        <attributes>
-                          <attribute name="font-desc" value="Garuda Bold 10"/>
-                          <attribute name="scale" value="1.3"/>
-                          <attribute name="foreground" value="#00007ae023b3"/>
-                          <attribute name="strikethrough-color" value="#000000000000"/>
-                        </attributes>
+                        <child>
+                          <object class="GtkListBox" id="unstaging_list">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                          </object>
+                        </child>
                       </object>
-                      <packing>
-                        <property name="left-attach">0</property>
-                        <property name="top-attach">0</property>
-                      </packing>
                     </child>
                   </object>
                   <packing>
@@ -553,129 +548,21 @@
                   </packing>
                 </child>
                 <child>
-                  <!-- n-columns=1 n-rows=5 -->
-                  <object class="GtkGrid">
+                  <object class="GtkAccelLabel" id="merge_conflictts">
+                    <property name="name">Changes</property>
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
                     <property name="hexpand">True</property>
-                    <property name="vexpand">True</property>
-                    <child>
-                      <object class="GtkScrolledWindow">
-                        <property name="visible">True</property>
-                        <property name="can-focus">True</property>
-                        <property name="vexpand">True</property>
-                        <property name="shadow-type">in</property>
-                        <child>
-                          <object class="GtkViewport">
-                            <property name="visible">True</property>
-                            <property name="can-focus">False</property>
-                            <child>
-                              <object class="GtkListBox" id="staging_list">
-                                <property name="name">staged_changes_list</property>
-                                <property name="visible">True</property>
-                                <property name="can-focus">False</property>
-                              </object>
-                            </child>
-                          </object>
-                        </child>
-                      </object>
-                      <packing>
-                        <property name="left-attach">0</property>
-                        <property name="top-attach">0</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkAccelLabel" id="changes">
-                        <property name="name">Changes</property>
-                        <property name="visible">True</property>
-                        <property name="can-focus">False</property>
-                        <property name="hexpand">True</property>
-                        <property name="vexpand">False</property>
-                        <property name="label" translatable="yes">Changes</property>
-                        <property name="justify">right</property>
-                        <property name="ellipsize">end</property>
-                        <attributes>
-                          <attribute name="font-desc" value="Garuda Bold 10"/>
-                          <attribute name="scale" value="1.3"/>
-                          <attribute name="foreground" value="#00007ae023b3"/>
-                          <attribute name="strikethrough-color" value="#000000000000"/>
-                        </attributes>
-                      </object>
-                      <packing>
-                        <property name="left-attach">0</property>
-                        <property name="top-attach">1</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkScrolledWindow">
-                        <property name="visible">True</property>
-                        <property name="can-focus">True</property>
-                        <property name="vexpand">True</property>
-                        <property name="shadow-type">in</property>
-                        <child>
-                          <object class="GtkViewport">
-                            <property name="visible">True</property>
-                            <property name="can-focus">False</property>
-                            <child>
-                              <object class="GtkListBox" id="unstaging_list">
-                                <property name="visible">True</property>
-                                <property name="can-focus">False</property>
-                              </object>
-                            </child>
-                          </object>
-                        </child>
-                      </object>
-                      <packing>
-                        <property name="left-attach">0</property>
-                        <property name="top-attach">2</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkAccelLabel" id="merge_conflictts">
-                        <property name="name">Changes</property>
-                        <property name="visible">True</property>
-                        <property name="can-focus">False</property>
-                        <property name="hexpand">True</property>
-                        <property name="vexpand">False</property>
-                        <property name="label" translatable="yes">Merge Conflicts</property>
-                        <property name="justify">right</property>
-                        <property name="ellipsize">end</property>
-                        <attributes>
-                          <attribute name="font-desc" value="Garuda Bold 10"/>
-                          <attribute name="scale" value="1.3"/>
-                          <attribute name="foreground" value="#00007ae023b3"/>
-                          <attribute name="strikethrough-color" value="#000000000000"/>
-                        </attributes>
-                      </object>
-                      <packing>
-                        <property name="left-attach">0</property>
-                        <property name="top-attach">3</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkScrolledWindow">
-                        <property name="visible">True</property>
-                        <property name="can-focus">True</property>
-                        <property name="vexpand">True</property>
-                        <property name="shadow-type">in</property>
-                        <child>
-                          <object class="GtkViewport">
-                            <property name="visible">True</property>
-                            <property name="can-focus">False</property>
-                            <child>
-                              <object class="GtkListBox" id="merge_conflicts_list">
-                                <property name="visible">True</property>
-                                <property name="can-focus">False</property>
-                              </object>
-                            </child>
-                          </object>
-                        </child>
-                      </object>
-                      <packing>
-                        <property name="left-attach">0</property>
-                        <property name="top-attach">4</property>
-                      </packing>
-                    </child>
+                    <property name="vexpand">False</property>
+                    <property name="label" translatable="yes">Merge Conflicts</property>
+                    <property name="justify">right</property>
+                    <property name="ellipsize">end</property>
+                    <attributes>
+                      <attribute name="font-desc" value="Garuda Bold 10"/>
+                      <attribute name="scale" value="1.3999999999999999"/>
+                      <attribute name="foreground" value="#0000d1ea2bf8"/>
+                      <attribute name="strikethrough-color" value="#000000000000"/>
+                    </attributes>
                   </object>
                   <packing>
                     <property name="left-attach">0</property>
@@ -683,208 +570,295 @@
                   </packing>
                 </child>
                 <child>
-                  <!-- n-columns=2 n-rows=1 -->
-                  <object class="GtkGrid">
+                  <object class="GtkScrolledWindow">
                     <property name="visible">True</property>
-                    <property name="can-focus">False</property>
+                    <property name="can-focus">True</property>
+                    <property name="vexpand">True</property>
+                    <property name="shadow-type">in</property>
                     <child>
-                      <object class="GtkButton" id="commit_button">
-                        <property name="label" translatable="yes">Commit</property>
-                        <property name="height-request">49</property>
+                      <object class="GtkViewport">
                         <property name="visible">True</property>
-                        <property name="can-focus">True</property>
-                        <property name="receives-default">True</property>
-                        <property name="hexpand">True</property>
-                        <property name="vexpand">False</property>
+                        <property name="can-focus">False</property>
+                        <child>
+                          <object class="GtkListBox" id="merge_conflicts_list">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                          </object>
+                        </child>
                       </object>
-                      <packing>
-                        <property name="left-attach">0</property>
-                        <property name="top-attach">0</property>
-                      </packing>
-                    </child>
-                    <child>
-                      <object class="GtkButton" id="refresh_button">
-                        <property name="label">gtk-refresh</property>
-                        <property name="visible">True</property>
-                        <property name="can-focus">True</property>
-                        <property name="receives-default">True</property>
-                        <property name="use-stock">True</property>
-                        <property name="always-show-image">True</property>
-                      </object>
-                      <packing>
-                        <property name="left-attach">1</property>
-                        <property name="top-attach">0</property>
-                      </packing>
                     </child>
                   </object>
                   <packing>
                     <property name="left-attach">0</property>
-                    <property name="top-attach">1</property>
+                    <property name="top-attach">4</property>
                   </packing>
                 </child>
               </object>
               <packing>
-                <property name="resize">False</property>
-                <property name="shrink">True</property>
+                <property name="left-attach">0</property>
+                <property name="top-attach">3</property>
               </packing>
             </child>
             <child>
-              <object class="GtkScrolledWindow">
+              <!-- n-columns=2 n-rows=1 -->
+              <object class="GtkGrid">
                 <property name="visible">True</property>
-                <property name="can-focus">True</property>
-                <property name="shadow-type">in</property>
+                <property name="can-focus">False</property>
                 <child>
-                  <object class="GtkViewport">
+                  <object class="GtkButton" id="commit_button">
+                    <property name="label" translatable="yes">Commit</property>
+                    <property name="height-request">49</property>
                     <property name="visible">True</property>
-                    <property name="can-focus">False</property>
-                    <child>
-                      <object class="GtkPaned">
-                        <property name="visible">True</property>
-                        <property name="can-focus">True</property>
-                        <child>
-                          <!-- n-columns=1 n-rows=2 -->
-                          <object class="GtkGrid" id="grid_drawing_area">
-                            <property name="width-request">70</property>
-                            <property name="visible">True</property>
-                            <property name="can-focus">False</property>
-                            <child>
-                              <object class="GtkLabel" id="graph">
-                                <property name="visible">True</property>
-                                <property name="can-focus">False</property>
-                                <property name="hexpand">True</property>
-                                <property name="label" translatable="yes">graph</property>
-                              </object>
-                              <packing>
-                                <property name="left-attach">0</property>
-                                <property name="top-attach">0</property>
-                              </packing>
-                            </child>
-                            <child>
-                              <placeholder/>
-                            </child>
-                          </object>
-                          <packing>
-                            <property name="resize">False</property>
-                            <property name="shrink">True</property>
-                          </packing>
-                        </child>
-                        <child>
-                          <!-- n-columns=4 n-rows=2 -->
-                          <object class="GtkGrid" id="graph_grid">
-                            <property name="visible">True</property>
-                            <property name="can-focus">False</property>
-                            <child>
-                              <object class="GtkListBox" id="description_list">
-                                <property name="visible">True</property>
-                                <property name="can-focus">False</property>
-                                <property name="hexpand">True</property>
-                                <property name="vexpand">True</property>
-                              </object>
-                              <packing>
-                                <property name="left-attach">0</property>
-                                <property name="top-attach">1</property>
-                              </packing>
-                            </child>
-                            <child>
-                              <object class="GtkListBox" id="date_list">
-                                <property name="visible">True</property>
-                                <property name="can-focus">False</property>
-                                <property name="hexpand">True</property>
-                                <property name="vexpand">True</property>
-                              </object>
-                              <packing>
-                                <property name="left-attach">1</property>
-                                <property name="top-attach">1</property>
-                              </packing>
-                            </child>
-                            <child>
-                              <object class="GtkListBox" id="author_list">
-                                <property name="visible">True</property>
-                                <property name="can-focus">False</property>
-                                <property name="hexpand">True</property>
-                                <property name="vexpand">True</property>
-                              </object>
-                              <packing>
-                                <property name="left-attach">2</property>
-                                <property name="top-attach">1</property>
-                              </packing>
-                            </child>
-                            <child>
-                              <object class="GtkListBox" id="commit_hash_list">
-                                <property name="visible">True</property>
-                                <property name="can-focus">False</property>
-                                <property name="hexpand">True</property>
-                                <property name="vexpand">True</property>
-                              </object>
-                              <packing>
-                                <property name="left-attach">3</property>
-                                <property name="top-attach">1</property>
-                              </packing>
-                            </child>
-                            <child>
-                              <object class="GtkLabel" id="description_label">
-                                <property name="visible">True</property>
-                                <property name="can-focus">False</property>
-                                <property name="label" translatable="yes">Description</property>
-                              </object>
-                              <packing>
-                                <property name="left-attach">0</property>
-                                <property name="top-attach">0</property>
-                              </packing>
-                            </child>
-                            <child>
-                              <object class="GtkLabel" id="author_label">
-                                <property name="visible">True</property>
-                                <property name="can-focus">False</property>
-                                <property name="label" translatable="yes">Author</property>
-                              </object>
-                              <packing>
-                                <property name="left-attach">2</property>
-                                <property name="top-attach">0</property>
-                              </packing>
-                            </child>
-                            <child>
-                              <object class="GtkLabel" id="commit_label">
-                                <property name="visible">True</property>
-                                <property name="can-focus">False</property>
-                                <property name="label" translatable="yes">Commit</property>
-                              </object>
-                              <packing>
-                                <property name="left-attach">3</property>
-                                <property name="top-attach">0</property>
-                              </packing>
-                            </child>
-                            <child>
-                              <object class="GtkLabel" id="date_label">
-                                <property name="visible">True</property>
-                                <property name="can-focus">False</property>
-                                <property name="label" translatable="yes">Date</property>
-                              </object>
-                              <packing>
-                                <property name="left-attach">1</property>
-                                <property name="top-attach">0</property>
-                              </packing>
-                            </child>
-                          </object>
-                          <packing>
-                            <property name="resize">True</property>
-                            <property name="shrink">True</property>
-                          </packing>
-                        </child>
-                      </object>
-                    </child>
+                    <property name="can-focus">True</property>
+                    <property name="receives-default">True</property>
+                    <property name="hexpand">True</property>
+                    <property name="vexpand">False</property>
                   </object>
+                  <packing>
+                    <property name="left-attach">0</property>
+                    <property name="top-attach">0</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkButton" id="refresh_button">
+                    <property name="label">gtk-refresh</property>
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="receives-default">True</property>
+                    <property name="use-stock">True</property>
+                    <property name="always-show-image">True</property>
+                  </object>
+                  <packing>
+                    <property name="left-attach">1</property>
+                    <property name="top-attach">0</property>
+                  </packing>
                 </child>
               </object>
               <packing>
-                <property name="resize">True</property>
-                <property name="shrink">True</property>
+                <property name="left-attach">0</property>
+                <property name="top-attach">1</property>
+              </packing>
+            </child>
+            <child>
+              <!-- n-columns=4 n-rows=1 -->
+              <object class="GtkGrid">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <child>
+                  <object class="GtkButton" id="pull_button">
+                    <property name="label" translatable="yes">pull</property>
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="receives-default">True</property>
+                    <property name="hexpand">True</property>
+                  </object>
+                  <packing>
+                    <property name="left-attach">0</property>
+                    <property name="top-attach">0</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkButton" id="push_button">
+                    <property name="label" translatable="yes">push</property>
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="receives-default">True</property>
+                    <property name="hexpand">True</property>
+                  </object>
+                  <packing>
+                    <property name="left-attach">1</property>
+                    <property name="top-attach">0</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkButton" id="fetch_button">
+                    <property name="label" translatable="yes">fetch</property>
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="receives-default">True</property>
+                    <property name="hexpand">True</property>
+                  </object>
+                  <packing>
+                    <property name="left-attach">2</property>
+                    <property name="top-attach">0</property>
+                  </packing>
+                </child>
+                <child>
+                  <object class="GtkButton" id="branch_button">
+                    <property name="label" translatable="yes">branch</property>
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <property name="receives-default">True</property>
+                    <property name="hexpand">True</property>
+                  </object>
+                  <packing>
+                    <property name="left-attach">3</property>
+                    <property name="top-attach">0</property>
+                  </packing>
+                </child>
+              </object>
+              <packing>
+                <property name="left-attach">0</property>
+                <property name="top-attach">4</property>
               </packing>
             </child>
           </object>
           <packing>
-            <property name="left-attach">1</property>
-            <property name="top-attach">0</property>
+            <property name="resize">False</property>
+            <property name="shrink">True</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkScrolledWindow">
+            <property name="visible">True</property>
+            <property name="can-focus">True</property>
+            <property name="shadow-type">in</property>
+            <child>
+              <object class="GtkViewport">
+                <property name="visible">True</property>
+                <property name="can-focus">False</property>
+                <child>
+                  <object class="GtkPaned">
+                    <property name="visible">True</property>
+                    <property name="can-focus">True</property>
+                    <child>
+                      <!-- n-columns=1 n-rows=2 -->
+                      <object class="GtkGrid" id="grid_drawing_area">
+                        <property name="width-request">70</property>
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <child>
+                          <object class="GtkLabel" id="graph">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                            <property name="hexpand">True</property>
+                            <property name="label" translatable="yes">graph</property>
+                          </object>
+                          <packing>
+                            <property name="left-attach">0</property>
+                            <property name="top-attach">0</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <placeholder/>
+                        </child>
+                      </object>
+                      <packing>
+                        <property name="resize">False</property>
+                        <property name="shrink">True</property>
+                      </packing>
+                    </child>
+                    <child>
+                      <!-- n-columns=4 n-rows=2 -->
+                      <object class="GtkGrid" id="graph_grid">
+                        <property name="visible">True</property>
+                        <property name="can-focus">False</property>
+                        <child>
+                          <object class="GtkListBox" id="description_list">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                            <property name="hexpand">True</property>
+                            <property name="vexpand">True</property>
+                          </object>
+                          <packing>
+                            <property name="left-attach">0</property>
+                            <property name="top-attach">1</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkListBox" id="date_list">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                            <property name="hexpand">True</property>
+                            <property name="vexpand">True</property>
+                          </object>
+                          <packing>
+                            <property name="left-attach">1</property>
+                            <property name="top-attach">1</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkListBox" id="author_list">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                            <property name="hexpand">True</property>
+                            <property name="vexpand">True</property>
+                          </object>
+                          <packing>
+                            <property name="left-attach">2</property>
+                            <property name="top-attach">1</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkListBox" id="commit_hash_list">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                            <property name="hexpand">True</property>
+                            <property name="vexpand">True</property>
+                          </object>
+                          <packing>
+                            <property name="left-attach">3</property>
+                            <property name="top-attach">1</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkLabel" id="description_label">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                            <property name="label" translatable="yes">Description</property>
+                          </object>
+                          <packing>
+                            <property name="left-attach">0</property>
+                            <property name="top-attach">0</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkLabel" id="author_label">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                            <property name="label" translatable="yes">Author</property>
+                          </object>
+                          <packing>
+                            <property name="left-attach">2</property>
+                            <property name="top-attach">0</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkLabel" id="commit_label">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                            <property name="label" translatable="yes">Commit</property>
+                          </object>
+                          <packing>
+                            <property name="left-attach">3</property>
+                            <property name="top-attach">0</property>
+                          </packing>
+                        </child>
+                        <child>
+                          <object class="GtkLabel" id="date_label">
+                            <property name="visible">True</property>
+                            <property name="can-focus">False</property>
+                            <property name="label" translatable="yes">Date</property>
+                          </object>
+                          <packing>
+                            <property name="left-attach">1</property>
+                            <property name="top-attach">0</property>
+                          </packing>
+                        </child>
+                      </object>
+                      <packing>
+                        <property name="resize">True</property>
+                        <property name="shrink">True</property>
+                      </packing>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+          <packing>
+            <property name="resize">True</property>
+            <property name="shrink">True</property>
           </packing>
         </child>
       </object>

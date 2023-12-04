@@ -258,7 +258,7 @@ impl<'a> GitRepository<'a> {
             return Err(CommandError::NoRebaseInProgress);
         }
 
-        // obtenemos los commits done
+        // obtenemos los commits todo
         let commits_todo = self.get_commits_todo()?;
         let last_commit_hash = commits_todo[commits_todo.len() - 1].to_owned().0;
 
@@ -484,15 +484,13 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    fn rebase_continue(&mut self) -> Result<String, CommandError> {
+    pub fn rebase_continue(&mut self) -> Result<String, CommandError> {
         // se fija si hay conflictos
         if self.staging_area()?.has_conflicts() {
             return Err(CommandError::RebaseContinueError);
         }
         // obtenemos los commits todo y los commits done
-
         let mut commits_todo = self.get_commits_todo()?;
-
         let mut commits_done = self.get_commits_done()?;
 
         // si no hay commits todo, termina el rebase
@@ -1451,7 +1449,6 @@ impl<'a> GitRepository<'a> {
         let objects_decompressed_data =
             server.fetch_objects(wants, haves, &self.db()?, &mut self.logger)?;
         self.save_objects_from_packfile(objects_decompressed_data)?;
-
         self.update_fetch_head(remote_branches, remote_reference)?;
         Ok(())
     }
@@ -1490,7 +1487,29 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    pub fn push(&mut self, local_branches: Vec<(String, String)>) -> Result<(), CommandError> {
+    pub fn push(&mut self, all: bool, branch: String) -> Result<(), CommandError> {
+        let branch = if branch == "" {
+            self.get_current_branch_name()?
+        } else {
+            branch
+        };
+
+        let mut local_branches: Vec<(String, String)> = Vec::new(); // (branch, hash)
+        if all {
+            local_branches = self.push_all_local_branch_hashes()?;
+        } else {
+            let hash_commit = self.get_last_commit_hash_branch(&branch)?;
+            local_branches.push((branch, hash_commit));
+        }
+
+        self.push_branches(local_branches)?;
+        Ok(())
+    }
+
+    pub fn push_branches(
+        &mut self,
+        local_branches: Vec<(String, String)>,
+    ) -> Result<(), CommandError> {
         self.log("Push updates");
         let (protocol, address, repository_path, repository_url) = self.get_remote_info()?;
         if protocol != "git" {
@@ -1502,8 +1521,10 @@ impl<'a> GitRepository<'a> {
         ));
 
         let mut server = GitServer::connect_to(&address, &mut self.logger)?;
+        self.log("Updating remote references");
         let refs_hash = self.receive_pack(&mut server, &repository_path, &repository_url)?; // ref_hash: HashMap<branch, hash>
 
+        self.log("Getting analysis");
         let (hash_branch_status, commits_map) =
             get_analysis(local_branches, self.db()?, refs_hash, &mut self.logger).map_err(
                 |error| match error {
@@ -1522,12 +1543,12 @@ impl<'a> GitRepository<'a> {
             return Ok(());
         }
 
+        self.log("Negociating with server");
         server.negociate_recieve_pack(hash_branch_status)?;
 
         let pack_file: Vec<u8> = make_packfile(commits_map)?;
+        self.log("Sending packfile");
         server.send_packfile(&pack_file)?;
-
-        _ = server.get_response()?;
 
         Ok(())
     }
@@ -2042,9 +2063,17 @@ impl<'a> GitRepository<'a> {
         staging_area: &mut StagingArea,
         db: Option<ObjectsDatabase>,
     ) -> Result<(), CommandError> {
-        source_tree.restore(&self.working_dir_path, &mut self.logger, db)?;
+        source_tree.restore(&self.working_dir_path, &mut self.logger, db.clone())?;
         staging_area.flush_soft_files(&self.working_dir_path)?;
         staging_area.save()?;
+        // let db = match db {
+        //     Some(db) => db,
+        //     None => self.db()?,
+        // };
+        // let escribir = staging_area
+        //     .has_changes(&db, &Some(source_tree), self.logger())?
+        //     .to_string();
+        // self.logger().log(&format!("EN RESTORE: {}", escribir));
         Ok(())
     }
 
@@ -2277,12 +2306,18 @@ impl<'a> GitRepository<'a> {
 
             self.restore_merge_conflict(merged_tree, &mut staging_area)?;
         } else {
+            self.restore_merge_fastfoward(
+                merged_tree.clone(),
+                &mut staging_area,
+                Some(self.db()?),
+            )?;
+
             let mut boxed_tree: GitObject = Box::new(merged_tree.clone());
             let _merge_tree_hash_str = self.db()?.write(&mut boxed_tree, true, &mut self.logger)?;
             let merge_commit = self.create_new_commit(
                 message,
                 [topic_commit.get_hash_string()?].to_vec(),
-                merged_tree.clone(),
+                merged_tree,
             )?;
 
             let mut boxed_commit: GitObject = Box::new(merge_commit.clone());
@@ -2292,7 +2327,7 @@ impl<'a> GitRepository<'a> {
 
             let branch_path = self.get_branch_path_for_rebase()?;
             self.set_branch_commit_to(branch_path, &merge_commit_hash_str)?;
-            self.restore(merged_tree, &mut staging_area, None)?;
+            // self.restore(merged_tree, &mut staging_area, None)?;
         }
         Ok(())
     }
@@ -2349,11 +2384,21 @@ impl<'a> GitRepository<'a> {
             .db()?
             .write(&mut boxed_commit, false, &mut self.logger)?;
 
+        staging_area.update_to_tree(&self.working_dir_path, &merge_tree)?;
+
+        let escribir = staging_area
+            .has_changes(&self.db()?, &Some(merge_tree.clone()), self.logger())?
+            .to_string();
+        self.logger()
+            .log(&format!("EN REBASE CONTINUE: {}", escribir));
+
+        self.restore(merge_tree.to_owned(), &mut staging_area, Some(self.db()?))?;
+
         let branch_path = self.get_branch_path_for_rebase()?;
         self.set_branch_commit_to(branch_path, &merge_commit_hash_str)?;
 
-        let db = self.db()?;
-        self.restore(merge_tree, &mut staging_area, Some(db))?;
+        // let db = self.db()?;
+        // self.restore(merge_tree, &mut staging_area, Some(db))?;
         self.delete_file("MERGE_MSG")?;
         self.delete_file("MERGE_HEAD")?;
         self.delete_file("AUTO_MERGE")?;
@@ -2380,7 +2425,7 @@ impl<'a> GitRepository<'a> {
             fs::remove_dir_all(&rebase_merge_path).map_err(|_| {
                 CommandError::DirectoryCreationError("Error borrando directorio".to_string())
             })?;
-            self.checkout(branch_name, false)?;
+            //self.checkout(branch_name, false)?;
             return Ok(branch_name.to_string());
         }
 
@@ -2905,8 +2950,17 @@ impl<'a> GitRepository<'a> {
     }
 
     /// Crea una nueva rama.
-    pub fn create_branch(&mut self, new_branch_info: &Vec<String>) -> Result<(), CommandError> {
-        let (commit_hash, new_is_remote) = self.get_start_point(new_branch_info)?;
+    pub fn create_branch(
+        &mut self,
+        new_branch_info: &Vec<String>,
+        option_hash: Option<String>,
+    ) -> Result<(), CommandError> {
+        let (mut commit_hash, new_is_remote) = self.get_start_point(new_branch_info)?;
+
+        if option_hash.is_some() {
+            commit_hash = option_hash.unwrap()
+        }
+
         let new_branch = new_branch_info[0].clone();
         let branches_path = join_paths!(self.git_path, "refs/heads/").ok_or(
             CommandError::DirectoryCreationError(
@@ -5518,23 +5572,15 @@ pub fn get_parents_hash_map(
     commits_map: &mut HashMap<String, (CommitObject, Option<String>)>, // HashMap<hash, (commit, branch)>
     parents_hash: &mut HashMap<String, HashSet<String>>,
     sons_hash: &mut HashMap<String, HashSet<String>>,
-    //logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    //println!("MMM{}", hash_commit);
-    // if parents_hash.contains_key(&hash_commit.to_string()) {
-    //     return Ok(());
-    // }
-
     let commit_object = match commits_map.get_mut(hash_commit) {
         Some(commit_object_box_aux) => commit_object_box_aux.0.to_owned(),
         None => {
-            println!("WHAAAAAAAT");
             return Ok(());
         }
     };
 
     let parents_vec: Vec<String> = commit_object.get_parents();
-    // println!("padres {:?}", parents_vec);
 
     for parent_hash in parents_vec.iter() {
         let hash_set_p = parents_hash

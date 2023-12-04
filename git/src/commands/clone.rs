@@ -48,11 +48,15 @@ impl Clone {
             directory: String::new(),
         }
     }
+
     fn add_repository_config(
         clone: &mut Clone,
         i: usize,
         args: &[String],
     ) -> Result<usize, CommandError> {
+        if clone.repository_url != "" {
+            return Err(CommandError::WrongFlag);
+        }
         let url_and_repo = args[i].clone();
         if !url_and_repo.starts_with("git://") {
             return Err(CommandError::InvalidArgument(

@@ -44,13 +44,10 @@ impl Push {
     }
 
     pub fn new_default(output: &mut dyn Write) -> Result<Push, CommandError> {
-        let mut repo = GitRepository::open("", output).unwrap();
-        let current_branch = repo.get_current_branch_name()?;
-
         Ok(Push {
             all: false,
             // remote: "origin".to_string(),
-            branch: current_branch,
+            branch: "".to_string()
         })
     }
 
@@ -65,19 +62,7 @@ impl Push {
 
     pub fn run(&self, output: &mut dyn Write) -> Result<(), CommandError> {
         let mut repo = GitRepository::open("", output)?;
-        let mut local_branches: Vec<(String, String)> = Vec::new(); // (branch, hash)
-
-        if self.all {
-            local_branches = repo.push_all_local_branch_hashes()?;
-        } else {
-            let hash_commit = repo.get_last_commit_hash_branch(&self.branch)?;
-            local_branches.push((self.branch.to_owned(), hash_commit));
-        }
-
-        println!("local_branches: {:?}", local_branches);
-
-        repo.push(local_branches)?;
-
+        repo.push(self.all, self.branch.to_owned())?;
         Ok(())
     }
 }

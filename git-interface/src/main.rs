@@ -34,6 +34,7 @@ const GRAPH_COLORS: [(f64, f64, f64); 10] = [
     (1.0, 1.0, 1.0), // Blanco
 ];
 
+#[derive(Clone)]
 struct Interface {
     builder: gtk::Builder,
     staging_changes: Rc<RefCell<HashSet<String>>>,
@@ -91,20 +92,20 @@ fn initial_window(
         if let Some(file) = chooser_dialog_window_clone.current_folder() {
             let repo_dir_text = file.to_str().unwrap().to_string();
             let mut binding = io::stdout();
-            if GitRepository::open(&repo_dir_text, &mut binding).is_err() {
-                *rc_repo_dir_text.borrow_mut() = file.to_str().unwrap().to_string();
-                dialog_window(
-                    format!(
-                        "No se pudo conectar satisfactoriamente a un repositorio Git en {}",
-                        rc_repo_dir_text.borrow_mut()
-                    )
-                    .to_string(),
-                );
-            } else {
-                *rc_correct_path.borrow_mut() = true;
-                *rc_repo_dir_text.borrow_mut() = repo_dir_text;
-                chooser_dialog_window_clone.hide();
-                gtk::main_quit();
+            println!("repo_dir_text: {}", repo_dir_text);
+
+            match GitRepository::open(&repo_dir_text, &mut binding) {
+                Ok(_) => {
+                    *rc_correct_path.borrow_mut() = true;
+                    *rc_repo_dir_text.borrow_mut() = repo_dir_text;
+                    chooser_dialog_window_clone.hide();
+                    gtk::main_quit();
+                }
+                Err(error) => {
+                    *rc_repo_dir_text.borrow_mut() = file.to_str().unwrap().to_string();
+                    dialog_window(format!("{}", error).to_string());
+                    println!("se encontró");
+                }
             }
         } else {
             dialog_window("No se ha seleccionado un directorio que proporcione git".to_string());
@@ -259,7 +260,6 @@ impl Interface {
         let buttons = [
             ("pull", self.build_button("pull_button".to_string())),
             ("push", self.build_button("push_button".to_string())),
-            ("checkout", self.build_button("checkout_button".to_string())),
             ("fetch", self.build_button("fetch_button".to_string())),
             ("branch", self.build_button("branch_button".to_string())),
             ("commit", self.build_button("commit_button".to_string())),
@@ -311,7 +311,8 @@ impl Interface {
                 "pull" => {
                     let err = repo.pull();
                     let mut message_for_pull =
-                        "Realice refresh para obtener los cambios".to_string();
+                        "Pull realizado con éxito.\nRealice refresh para obtener los cambios"
+                            .to_string();
                     if err.is_err() {
                         let err = err.unwrap_err();
                         message_for_pull = err.to_string() + "\nPull no pudo realizarse con éxito";
@@ -323,8 +324,10 @@ impl Interface {
                     let result_for_push = push_function(&mut binding_for_push);
                     if result_for_push.is_err() {
                         dialog_window(result_for_push.unwrap_err().to_string());
-                        return;
+                    } else {
+                        dialog_window("Push realizado con éxito".to_string());
                     }
+                    return;
                 }
                 "fetch" => {
                     if let Err(err) = repo.fetch() {
@@ -364,9 +367,6 @@ impl Interface {
                     if let ControlFlow::Break(_) = refresh_function(interface) {
                         return;
                     }
-                }
-                "checkout" => {
-                    todo!();
                 }
                 _ => {
                     eprintln!("Acción no reconocida: {}", button_action);
@@ -602,21 +602,128 @@ impl Interface {
             let branch_window_clone2 = branch_window.clone();
             let principal_window = self.principal_window.clone();
             let branch_window_clone3 = branch_window.clone();
+            let branch_window_clone4 = branch_window.clone();
             let principal_window_clone2 = self.principal_window.clone();
-            let clone_branch_name = branch_name.clone();
+            let principal_window_clone3 = self.principal_window.clone();
             let branch_name_clone = branch_name.clone();
+            let branch_name_clone3 = branch_name.clone();
             let clone_branch_list = branches_list.clone();
+            let clone_branch_list2 = branches_list.clone();
             let branch_list_clone = branches_list.clone();
             let current_branch_clone = current_branch.clone();
+            let current_branch_clone2 = current_branch.clone();
+            let branch_name_clone2 = branch_name.clone();
+            let builder_clone2 = builder.clone();
 
             let checkout_button = Button::with_label("Checkout");
             let merge_button = Button::with_label("Merge");
+            let rebase_button = Button::with_label("Rebase");
             let box_outer = gtk::Box::new(Orientation::Horizontal, 0);
             let label = Label::new(Some(&branch_name));
             box_outer.pack_start(&label, true, true, 0);
             box_outer.pack_end(&checkout_button, false, false, 0);
             box_outer.pack_end(&merge_button, false, false, 0);
+            box_outer.pack_end(&rebase_button, false, false, 0);
             branches_list.add(&box_outer);
+
+            rebase_button.connect_clicked(move |_| {
+                let mut binding = io::stdout();
+                let mut repo = GitRepository::open("", &mut binding).unwrap();
+
+                if repo.staging_area().unwrap().has_conflicts() {
+                    dialog_window(
+                        "Existen conflictos de merge sin resolver.\nResuélvalos y luego presione el botón 'commit'"
+                            .to_string(),
+                    );
+                    return;
+                }
+
+                let current_branch_clone = current_branch_clone.clone();
+                let clone_clone_branch_name = branch_name_clone.clone();
+                let builder_clone = builder.clone();
+                let principal_window_clone = principal_window.clone();
+
+                // Crea un nuevo cuadro de diálogo.
+                let dialog = gtk::Dialog::new();
+                dialog.set_transient_for(Some(&branch_window_clone3));
+                dialog.set_title("Confirmación de Rebase");
+                let from_branch = clone_clone_branch_name.clone();
+                let to_branch = current_branch_clone.clone();
+                let text_label = format!(
+                    "\n¿Desea realizar el rebase de {} a {}?\n",
+                    from_branch, to_branch
+                );
+
+                // Obtiene el área de contenido del cuadro de diálogo.
+                let content_area = dialog.content_area();
+
+                // Agrega una etiqueta al cuadro de diálogo.
+                let label = Label::new(None);
+                let dialog_message =
+                    format!("<span size=\"medium\">{}</span>", text_label.to_string());
+                label.set_markup(&dialog_message);
+                content_area.add(&label);
+
+                // Agrega botones al cuadro de diálogo.
+                let accept_button: gtk::Widget = dialog.add_button("Accept", gtk::ResponseType::Accept.into());
+
+                // Obtener el contexto de estilo del botón
+                let style_context = accept_button.style_context();
+
+                // Crear un proveedor de CSS
+                let css_provider = CssProvider::new();
+                CssProvider::load_from_data(&css_provider, b"button { border: 2px solid green; }")
+                    .expect("Failed to load CSS.");
+
+                // Agregar el proveedor de CSS al contexto de estilo del botón
+                StyleContext::add_provider(
+                    &style_context,
+                    &css_provider,
+                    gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+                );
+
+                // Muestra el cuadro de diálogo y espera hasta que se cierre.
+                dialog.show_all();
+                let response = dialog.run();
+
+                // Maneja la respuesta del cuadro de diálogo.
+                match response {
+                    gtk::ResponseType::Accept => {
+                        match repo.initialize_rebase(to_branch, from_branch) {
+                            Ok(_) => {
+                                if repo.staging_area().unwrap().has_conflicts(){
+                                    dialog_window("Resuelve los merge conflicts y luego presiona el botón 'commit'
+                                    cuando hayas finalizado".to_string())
+                                }else {
+                                    dialog_window("Rebase realizado con éxito".to_string())
+                                }
+                            },
+                            Err(err) => dialog_window(err.to_string()),
+                        };
+                        let (staging_changes, unstaging_changes, files_merge_conflict) =
+                            staged_area_func().unwrap();
+                        let mut interface = Interface {
+                            builder: builder_clone.clone(),
+                            staging_changes: Rc::new(RefCell::new(staging_changes)),
+                            unstaging_changes: Rc::new(RefCell::new(unstaging_changes)),
+                            files_merge_conflict: Rc::new(RefCell::new(files_merge_conflict)),
+                            principal_window: principal_window_clone,
+                        };
+                        let principal_window = principal_window.borrow_mut().clone();
+                        principal_window.set_sensitive(true);
+                        branch_window_clone.hide();
+                        remove_childs(&clone_branch_list);
+                        let builder = builder_clone.clone();
+                        let branch_window_clone = branch_window_clone.clone();
+                        remove_widgets_to_branch_window(builder, branch_window_clone);
+                        interface.branch_function(false);
+                        interface.staged_area_ui();
+                    }
+                    _ => {}
+                }
+                // Cierra el cuadro de diálogo.
+                unsafe { dialog.destroy() };
+            });
 
             merge_button.connect_clicked(move |_| {
                 let mut binding = io::stdout();
@@ -630,14 +737,14 @@ impl Interface {
                     return;
                 }
 
-                let current_branch_clone = current_branch_clone.clone();
-                let clone_clone_branch_name = clone_branch_name.clone();
-                let builder_clone = builder.clone();
-                let principal_window_clone = principal_window.clone();
+                let current_branch_clone = current_branch_clone2.clone();
+                let clone_clone_branch_name = branch_name_clone2.clone();
+                let builder_clone = builder_clone2.clone();
+                let principal_window_clone = principal_window_clone2.clone();
 
                 // Crea un nuevo cuadro de diálogo.
                 let dialog = gtk::Dialog::new();
-                dialog.set_transient_for(Some(&branch_window_clone3));
+                dialog.set_transient_for(Some(&branch_window_clone4));
                 dialog.set_title("Confirmación de Merge");
                 let from_branch = clone_clone_branch_name.clone();
                 let to_branch = current_branch_clone.clone();
@@ -684,7 +791,7 @@ impl Interface {
                         match repo.merge(&vec![clone_clone_branch_name]) {
                             Ok(_) => {
                                 if repo.staging_area().unwrap().has_conflicts(){
-                                    dialog_window("Resuelve los merge conflicts y luego presiona el botón 'commmit'
+                                    dialog_window("Resuelve los merge conflicts y luego presiona el botón 'commit'
                                     cuando hayas finalizado".to_string())
                                 }else {
                                     dialog_window("Merge realizado con éxito".to_string())
@@ -694,6 +801,7 @@ impl Interface {
                         };
                         let (staging_changes, unstaging_changes, files_merge_conflict) =
                             staged_area_func().unwrap();
+                            let principal_window_clone2 = principal_window_clone.clone();
                         let mut interface = Interface {
                             builder: builder_clone.clone(),
                             staging_changes: Rc::new(RefCell::new(staging_changes)),
@@ -701,13 +809,13 @@ impl Interface {
                             files_merge_conflict: Rc::new(RefCell::new(files_merge_conflict)),
                             principal_window: principal_window_clone,
                         };
-                        let principal_window = principal_window.borrow_mut().clone();
+                        let principal_window = principal_window_clone2.borrow_mut().clone();
                         principal_window.set_sensitive(true);
-                        branch_window_clone.hide();
-                        remove_childs(&clone_branch_list);
+                        let branch_window_clone4 = branch_window_clone4.clone();
+                        branch_window_clone4.hide();
+                        remove_childs(&clone_branch_list2);
                         let builder = builder_clone.clone();
-                        let branch_window_clone = branch_window_clone.clone();
-                        remove_widgets_to_branch_window(builder, branch_window_clone);
+                        remove_widgets_to_branch_window(builder, branch_window_clone4);
                         interface.branch_function(false);
                         interface.staged_area_ui();
                     }
@@ -721,13 +829,13 @@ impl Interface {
             checkout_button.connect_clicked(move |_| {
                 let mut binding = io::stdout();
                 let mut repo = GitRepository::open("", &mut binding).unwrap();
-                match repo.checkout(&branch_name_clone, false) {
+                match repo.checkout(&branch_name_clone3, false) {
                     Ok(_) => dialog_window("Checkout realizado con éxito".to_string()),
                     Err(err) => dialog_window(err.to_string()),
                 };
                 let (staging_changes, unstaging_changes, files_merge_conflict) =
                     staged_area_func().unwrap();
-                let principal_window = principal_window_clone2.clone();
+                let principal_window = principal_window_clone3.clone();
                 let principal_window2: gtk::Window = builder_clone.object("window app").unwrap();
                 principal_window2.set_sensitive(true);
                 let mut interface = Interface {
@@ -765,7 +873,7 @@ impl Interface {
                 return;
             }
             let vec_branch = vec![name_branch_text.to_string()];
-            match repo.create_branch(&vec_branch) {
+            match repo.create_branch(&vec_branch, None) {
                 Ok(_) => {
                     dialog_window("Rama creada con éxito".to_string());
                     new_name_branch.set_text("");
@@ -789,7 +897,7 @@ impl Interface {
             self.builder.object("accept_current_button").unwrap();
         let accept_incoming_button: gtk::Button =
             self.builder.object("accept_incoming_button").unwrap();
-        let accept_next_button: gtk::Button = self.builder.object("accept_next_button").unwrap();
+        let accept_both_button: gtk::Button = self.builder.object("accept_both_button").unwrap();
 
         //let current_scrolled: gtk::ScrolledWindow = self.builder.object("current_scrolled").unwrap();
         let viewport_current: gtk::Viewport = self.builder.object("viewport_current").unwrap();
@@ -833,7 +941,7 @@ impl Interface {
         );
 
         // Obtener el contexto de estilo del botón
-        let style_context = accept_next_button.style_context();
+        let style_context = accept_both_button.style_context();
         let css_provider = CssProvider::new();
         CssProvider::load_from_data(&css_provider, b"button { border: 3px solid #24E02A; }")
             .expect("Failed to load CSS.");
@@ -867,7 +975,7 @@ impl Interface {
 
         grid_buttons.attach(&accept_current_button, 0, 0, 1, 1);
         grid_buttons.attach(&accept_incoming_button, 1, 0, 1, 1);
-        grid_buttons.attach(&accept_next_button, 2, 0, 1, 1);
+        grid_buttons.attach(&accept_both_button, 2, 0, 1, 1);
 
         viewport_current.add(&current_label);
         //current_scrolled.add(&viewport_current);
@@ -1015,7 +1123,7 @@ impl Interface {
         let merge_window: gtk::Window = self.builder.object("merge_window").unwrap();
         merge_window.show_all();
 
-        let buttons = ["current", "incoming", "next"];
+        let buttons = ["current", "incoming", "both"];
 
         for button in buttons {
             self.merge_function_button(
@@ -1125,10 +1233,9 @@ impl Interface {
                     &mut interface2.builder.clone(),
                     merge_window.clone(),
                 );
+
                 refresh_function(interface2);
-
                 dialog_window("Merge conflict resolved successfully".to_string());
-
                 return;
             }
 
@@ -1147,7 +1254,7 @@ fn remove_widgets_to_merge_window(builder: &mut gtk::Builder, merge_window: gtk:
 
     let accept_current_button: gtk::Button = builder.object("accept_current_button").unwrap();
     let accept_incoming_button: gtk::Button = builder.object("accept_incoming_button").unwrap();
-    let accept_next_button: gtk::Button = builder.object("accept_next_button").unwrap();
+    let accept_both_button: gtk::Button = builder.object("accept_both_button").unwrap();
 
     let scrolled_labels: gtk::ScrolledWindow = builder.object("scrolled_labels").unwrap();
     let viewport_labels: gtk::Viewport = builder.object("viewport_labels").unwrap();
@@ -1172,7 +1279,7 @@ fn remove_widgets_to_merge_window(builder: &mut gtk::Builder, merge_window: gtk:
 
     grid_buttons.remove(&accept_current_button);
     grid_buttons.remove(&accept_incoming_button);
-    grid_buttons.remove(&accept_next_button);
+    grid_buttons.remove(&accept_both_button);
 
     viewport_new.remove(&new_label);
     viewport_current.remove(&current_label);
@@ -1258,7 +1365,9 @@ fn staged_area_func() -> Result<(HashSet<String>, HashSet<String>, HashSet<Strin
 }
 
 fn commit_function(interface: Interface) {
-    let commit_entry_msg: gtk::Entry = interface
+    let clone_interface = Rc::new(RefCell::new(interface));
+    let commit_entry_msg: gtk::Entry = clone_interface
+        .borrow_mut()
         .builder
         .object("entrada_de_mensaje")
         .expect("No se pudo obtener la entrada de mensaje");
@@ -1281,7 +1390,10 @@ fn commit_function(interface: Interface) {
 
     // verificamos si existe .git/MERGE_HEAD para saber si se trata de un merge
     let merge_head_path = Path::new(".git/MERGE_HEAD");
-    let is_merge = merge_head_path.exists();
+    let rebase_head_path = Path::new(".git/rebase-merge");
+    let is_rebase = rebase_head_path.exists();
+    let is_merge = merge_head_path.exists() && !is_rebase;
+
     if is_merge {
         if repo.staging_area().unwrap().has_conflicts() {
             dialog_window(
@@ -1290,11 +1402,29 @@ fn commit_function(interface: Interface) {
             );
             return;
         }
-
         match repo.merge_continue() {
             Ok(_) => {
-                refresh_function(interface);
+                refresh_function(clone_interface.borrow_mut().clone());
                 dialog_window("Merge finalizado con éxito.\nSi escribió un mensaje de commit, no fue utilizado".to_string());
+            }
+            Err(err) => dialog_window(err.to_string()),
+        };
+        return;
+    }
+
+    // verificamos si existe .git/REBASE_HEAD para saber si se trata de un rebase
+    if is_rebase {
+        if repo.staging_area().unwrap().has_conflicts() {
+            dialog_window(
+                "Existen conflictos de merge sin resolver.\nResuélvalos y luego presione el botón 'commit'"
+                    .to_string(),
+            );
+            return;
+        }
+        match repo.merge_continue_rebase() {
+            Ok(_) => {
+                refresh_function(clone_interface.borrow_mut().clone());
+                dialog_window("Rebase finalizado con éxito.\nSi escribió un mensaje de commit, no fue utilizado".to_string());
             }
             Err(err) => dialog_window(err.to_string()),
         };
@@ -1308,7 +1438,7 @@ fn commit_function(interface: Interface) {
 
     match repo.commit(message.to_string(), &vec![], false, None, false) {
         Ok(_) => {
-            refresh_function(interface);
+            refresh_function(clone_interface.borrow_mut().clone());
             dialog_window("Commit realizado con éxito".to_string());
         }
         Err(err) => dialog_window(err.to_string()),
@@ -1336,6 +1466,9 @@ fn dialog_window(message: String) {
 }
 
 fn push_function(output: &mut dyn Write) -> Result<(), CommandError> {
+    // let mut repo = GitRepository::open("", output)?;
+    // let local_branches = repo.local_branches()?;
+    // repo.push()
     let push = Push::new_default(output).unwrap();
     push.run(output)
 }

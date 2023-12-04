@@ -153,6 +153,10 @@ impl ObjectsDatabase {
         if let Err(error) = fs::create_dir_all(parent_path) {
             return Err(CommandError::FileOpenError(error.to_string()));
         };
+        // si existe el path, no se guarda
+        if std::path::Path::new(&path).exists() {
+            return Ok(hash_str);
+        }
         let Ok(mut file) = File::create(&path) else {
             return Err(CommandError::FileOpenError(
                 "Error al abrir archivo para escritura".to_string(),

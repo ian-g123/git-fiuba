@@ -19,7 +19,8 @@ pub struct Logger {
 impl Logger {
     /// Instancia logger para escribir en el archivo en path. Lo crea si no existe.
     pub fn new(path_name: &str) -> Result<Self, CommandError> {
-        let path = Path::new(path_name);
+        let path_name = path_name.to_string();
+        let path = Path::new(&path_name);
         if let Some(dir) = path.parent() {
             let _ = fs::create_dir_all(dir);
         }
@@ -29,11 +30,7 @@ impl Logger {
             .append(true)
             .open(path)
             .map_err(|error| {
-                CommandError::FileOpenError(format!(
-                    "{}: {}",
-                    path_name.to_string(),
-                    error.to_string()
-                ))
+                CommandError::FileOpenError(format!("{}: {}", path_name, error.to_string()))
             })?;
         let (tx, rx) = channel::<String>();
 

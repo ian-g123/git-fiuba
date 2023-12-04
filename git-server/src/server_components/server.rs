@@ -12,7 +12,7 @@ pub struct Server {
 
 impl Server {
     pub fn start_server(address: &str, path: &str) -> Result<Server, CommandError> {
-        println!("Starting server...");
+        println!("Starting server at {}...", address);
         let listener = TcpListener::bind(address).map_err(|error| CommandError::Io {
             message: format!("No se pudo iniciar el servidor en la dirección {}", address),
             error: error.to_string(),

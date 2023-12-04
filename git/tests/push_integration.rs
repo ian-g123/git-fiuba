@@ -3,6 +3,7 @@ use std::{
     io::{self, Read, Write},
     path::Path,
     process::Command,
+    time::Duration,
 };
 
 // Comando para iniciar daemon
@@ -56,6 +57,8 @@ fn test_push() {
             .is_ok(),
         "No se pudo agregar el archivo testfile"
     );
+
+    std::thread::sleep(Duration::from_millis(1000));
 
     assert!(
         Command::new("../".to_owned() + git_bin)

@@ -87,6 +87,9 @@ impl ServerWorker {
         let mut stdout = io::stdout();
         let repo_path = self.repo_path(repo_relative_path)?;
         let mut repo = GitRepository::open(&repo_path, &mut stdout).map_err(|error| {
+            if let Err(error_send) =self.write_string_to_socket("0000") {
+                return error_send
+            }
             CommandError::Io {
                 message: format!("No se pudo abrir el repositorio {}.\n Tal vez no sea el path correcto o no tengas acceso.", repo_path),
                 error: error.to_string(),
@@ -129,7 +132,7 @@ impl ServerWorker {
             }
         })?;
 
-        let local_branches = repo.local_branches()?;
+        let mut local_branches = repo.local_branches()?;
         let mut sorted_branches = local_branches
             .clone()
             .into_iter()
@@ -137,6 +140,7 @@ impl ServerWorker {
         sorted_branches.sort_unstable();
         let (first_branch_name, first_branch_hash) = sorted_branches.remove(0);
 
+        self.send("version 1")?;
         self.send(&format!(
             "{} refs/heads/{}\0\n",
             first_branch_hash, first_branch_name
@@ -155,10 +159,21 @@ impl ServerWorker {
         self.send("unpack ok\n")?;
         for (branch_path, (old_ref, new_ref)) in ref_update_map {
             let branch_name = branch_path[11..].to_string();
+            let local_branch_hash =
+                if let Some(local_branch_hash) = local_branches.get(&branch_name) {
+                    local_branch_hash
+                } else {
+                    // Guardamos la nueva rama en el archivo de ramas locales
+                    repo.create_branch(&vec![branch_name.to_string()], Some(new_ref.to_string()))?;
+                    local_branches = repo.local_branches()?;
+                    local_branches
+                        .get(&branch_name)
+                        .ok_or(CommandError::BranchExists(format!(
+                            "La rama {} no existe",
+                            branch_name
+                        )))?
+                };
 
-            let Some(local_branch_hash) = local_branches.get(&branch_name) else {
-                todo!("TODO new branch")
-            };
             if local_branch_hash != &old_ref {
                 status.insert(branch_name, Some("non-fast-forward".to_string()));
             } else {

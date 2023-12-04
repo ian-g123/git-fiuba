@@ -125,6 +125,9 @@ impl GitServer {
                 )))
             }
         }
+        logger.log(
+            "Reading objects"
+        );
         read_objects_from_packfile(&mut self.socket, db, logger)
     }
 
@@ -170,7 +173,7 @@ impl GitServer {
         let mut lines = self.send(&line)?;
 
         let mut refs_hash = HashMap::<String, String>::new();
-
+        
         let _version = lines.remove(0);
         let first_line = lines.remove(0);
 
