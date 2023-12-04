@@ -23,8 +23,8 @@
             <property name="ellipsize">end</property>
             <attributes>
               <attribute name="font-desc" value="Garuda Bold 10"/>
-              <attribute name="scale" value="1.3"/>
-              <attribute name="foreground" value="#00007ae023b3"/>
+              <attribute name="scale" value="1.3999999999999999"/>
+              <attribute name="foreground" value="#0000d1ea2bf8"/>
               <attribute name="strikethrough-color" value="#000000000000"/>
             </attributes>
           </object>
@@ -45,8 +45,8 @@
             <property name="ellipsize">end</property>
             <attributes>
               <attribute name="font-desc" value="Garuda Bold 10"/>
-              <attribute name="scale" value="1.3"/>
-              <attribute name="foreground" value="#00007ae023b3"/>
+              <attribute name="scale" value="1.3999999999999999"/>
+              <attribute name="foreground" value="#0000d1ea2bf8"/>
               <attribute name="strikethrough-color" value="#000000000000"/>
             </attributes>
           </object>
@@ -199,8 +199,8 @@
             <property name="ellipsize">end</property>
             <attributes>
               <attribute name="font-desc" value="Garuda Bold 10"/>
-              <attribute name="scale" value="1.3"/>
-              <attribute name="foreground" value="#00007ae023b3"/>
+              <attribute name="scale" value="1.3999999999999999"/>
+              <attribute name="foreground" value="#0000d1ea2bf8"/>
               <attribute name="strikethrough-color" value="#000000000000"/>
             </attributes>
           </object>
@@ -280,8 +280,8 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkButton" id="accept_next_button">
-                            <property name="label" translatable="yes">Next</property>
+                          <object class="GtkButton" id="accept_both_button">
+                            <property name="label" translatable="yes">Accept Both</property>
                             <property name="visible">True</property>
                             <property name="can-focus">True</property>
                             <property name="receives-default">True</property>
@@ -536,8 +536,8 @@
                         <property name="ellipsize">end</property>
                         <attributes>
                           <attribute name="font-desc" value="Garuda Bold 10"/>
-                          <attribute name="scale" value="1.3"/>
-                          <attribute name="foreground" value="#00007ae023b3"/>
+                          <attribute name="scale" value="1.3999999999999999"/>
+                          <attribute name="foreground" value="#0000d1ea2bf8"/>
                           <attribute name="strikethrough-color" value="#000000000000"/>
                         </attributes>
                       </object>
@@ -596,8 +596,8 @@
                         <property name="ellipsize">end</property>
                         <attributes>
                           <attribute name="font-desc" value="Garuda Bold 10"/>
-                          <attribute name="scale" value="1.3"/>
-                          <attribute name="foreground" value="#00007ae023b3"/>
+                          <attribute name="scale" value="1.3999999999999999"/>
+                          <attribute name="foreground" value="#0000d1ea2bf8"/>
                           <attribute name="strikethrough-color" value="#000000000000"/>
                         </attributes>
                       </object>
@@ -642,8 +642,8 @@
                         <property name="ellipsize">end</property>
                         <attributes>
                           <attribute name="font-desc" value="Garuda Bold 10"/>
-                          <attribute name="scale" value="1.3"/>
-                          <attribute name="foreground" value="#00007ae023b3"/>
+                          <attribute name="scale" value="1.3999999999999999"/>
+                          <attribute name="foreground" value="#0000d1ea2bf8"/>
                           <attribute name="strikethrough-color" value="#000000000000"/>
                         </attributes>
                       </object>

@@ -465,6 +465,10 @@ impl StagingArea {
         working_dir: &Tree,
     ) -> Result<(), CommandError> {
         self.files.clear();
+        self.unmerged_files.clear();
+        self.soft_files.clear();
+        self.soft_unmerged_files.clear();
+        
         let mut boxed_working_dir: GitObject = Box::new(working_dir.to_owned());
         self.add_object(repo_path, &mut boxed_working_dir, "")?;
         Ok(())

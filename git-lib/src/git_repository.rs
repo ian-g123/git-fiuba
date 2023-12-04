@@ -246,7 +246,7 @@ impl<'a> GitRepository<'a> {
             return Err(CommandError::NoRebaseInProgress);
         }
 
-        // obtenemos los commits done
+        // obtenemos los commits todo
         let commits_todo = self.get_commits_todo()?;
         let last_commit_hash = commits_todo[commits_todo.len() - 1].to_owned().0;
 
@@ -472,15 +472,13 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    fn rebase_continue(&mut self) -> Result<String, CommandError> {
+    pub fn rebase_continue(&mut self) -> Result<String, CommandError> {
         // se fija si hay conflictos
         if self.staging_area()?.has_conflicts() {
             return Err(CommandError::RebaseContinueError);
         }
         // obtenemos los commits todo y los commits done
-
         let mut commits_todo = self.get_commits_todo()?;
-
         let mut commits_done = self.get_commits_done()?;
 
         // si no hay commits todo, termina el rebase
@@ -2022,9 +2020,17 @@ impl<'a> GitRepository<'a> {
         staging_area: &mut StagingArea,
         db: Option<ObjectsDatabase>,
     ) -> Result<(), CommandError> {
-        source_tree.restore(&self.working_dir_path, &mut self.logger, db)?;
+        source_tree.restore(&self.working_dir_path, &mut self.logger, db.clone())?;
         staging_area.flush_soft_files(&self.working_dir_path)?;
         staging_area.save()?;
+        // let db = match db {
+        //     Some(db) => db,
+        //     None => self.db()?,
+        // };
+        // let escribir = staging_area
+        //     .has_changes(&db, &Some(source_tree), self.logger())?
+        //     .to_string();
+        // self.logger().log(&format!("EN RESTORE: {}", escribir));
         Ok(())
     }
 
@@ -2257,12 +2263,36 @@ impl<'a> GitRepository<'a> {
 
             self.restore_merge_conflict(merged_tree, &mut staging_area)?;
         } else {
+            // self.log(&format!("Staging area en rebase: {:?}", staging_area));
+            // let escribir = staging_area
+            //     .has_changes(&self.db()?, &Some(merged_tree.clone()), self.logger())?
+            //     .to_string();
+            // println!("EN REBASE FAST FORWARD : {:?}", escribir);
+            // self.logger()
+            //     .log(&format!("EN REBASE FAST FORWARD CONTINUE: {}", escribir));
+
+            // let cloned_tree = merged_tree.clone();
+
+            //staging_area.update_to_tree(&self.working_dir_path, &merged_tree)?;
+            // let changes_files = staging_area.get_changes(&Some(cloned_tree), self.logger())?;
+            // for changed_file in changes_files {
+            //     let repo_path = &self.working_dir_path;
+            //     let file_path = &changed_file.0;
+            //     let hash = &changed_file.1;
+            //     staging_area.add(repo_path, file_path, hash)?;
+            // }
+            // staging_area.flush_soft_files(&self.working_dir_path)?;
+            // staging_area.save()?;
+
+            // let merged_tree = staging_area.get_working_tree_staged(self.logger())?;
+            self.restore_merge_fastfoward(merged_tree.clone(), &mut staging_area, Some(self.db()?))?;
+
             let mut boxed_tree: GitObject = Box::new(merged_tree.clone());
             let _merge_tree_hash_str = self.db()?.write(&mut boxed_tree, true, &mut self.logger)?;
             let merge_commit = self.create_new_commit(
                 message,
                 [topic_commit.get_hash_string()?].to_vec(),
-                merged_tree.clone(),
+                merged_tree,
             )?;
 
             let mut boxed_commit: GitObject = Box::new(merge_commit.clone());
@@ -2272,7 +2302,7 @@ impl<'a> GitRepository<'a> {
 
             let branch_path = self.get_branch_path_for_rebase()?;
             self.set_branch_commit_to(branch_path, &merge_commit_hash_str)?;
-            self.restore(merged_tree, &mut staging_area, None)?;
+            // self.restore(merged_tree, &mut staging_area, None)?;
         }
         Ok(())
     }
@@ -2329,11 +2359,21 @@ impl<'a> GitRepository<'a> {
             .db()?
             .write(&mut boxed_commit, false, &mut self.logger)?;
 
+        staging_area.update_to_tree(&self.working_dir_path, &merge_tree)?;
+
+        let escribir = staging_area
+            .has_changes(&self.db()?, &Some(merge_tree.clone()), self.logger())?
+            .to_string();
+        self.logger()
+            .log(&format!("EN REBASE CONTINUE: {}", escribir));
+
+        self.restore(merge_tree.to_owned(), &mut staging_area, Some(self.db()?))?;
+
         let branch_path = self.get_branch_path_for_rebase()?;
         self.set_branch_commit_to(branch_path, &merge_commit_hash_str)?;
 
-        let db = self.db()?;
-        self.restore(merge_tree, &mut staging_area, Some(db))?;
+        // let db = self.db()?;
+        // self.restore(merge_tree, &mut staging_area, Some(db))?;
         self.delete_file("MERGE_MSG")?;
         self.delete_file("MERGE_HEAD")?;
         self.delete_file("AUTO_MERGE")?;
@@ -2360,7 +2400,7 @@ impl<'a> GitRepository<'a> {
             fs::remove_dir_all(&rebase_merge_path).map_err(|_| {
                 CommandError::DirectoryCreationError("Error borrando directorio".to_string())
             })?;
-            self.checkout(branch_name, false)?;
+            //self.checkout(branch_name, false)?;
             return Ok(branch_name.to_string());
         }
 
