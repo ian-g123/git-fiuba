@@ -96,3 +96,45 @@ if [ $success -eq 0 ]; then
 fi
 echo "✅ Passed"
 rm server-test-stderr.txt
+
+
+# Run delta_objects_server
+echo "=========================="
+echo "Server test with deltas"
+rm -rf git-server/tests/data/test_delta_objects/server_files/repo
+rm -rf git-server/tests/data/test_delta_objects/server_files/repo_backup
+unzip -qq git-server/tests/data/test_delta_objects/server_files/repo_backup.zip -d git-server/tests/data/test_delta_objects/server_files/repo_backup
+unzip -qq git-server/tests/data/test_delta_objects/user1_to_send_delta.zip -d git-server/tests/data/test_delta_objects/user1_to_send_delta
+cd git-server/tests/data/test_delta_objects/server_files
+../../../../../target/debug/git-server &
+daemon_process=$!
+cd -
+sleep 1
+
+success=0
+echo "First try"
+for i in {1..10}
+do
+    echo "Attempt $i"
+    echo "Server test attempt $i" > server-test-stderr.txt
+    stdout=$(RUSTFLAGS="-Awarnings" cargo test -q -p git -p git-lib -p git-server --test delta_objects_server -- --ignored 2>server-test-stderr.txt)
+    exit_status=$?
+    if [ $exit_status -eq 0 ]; then
+        success=1
+        kill $daemon_process
+        break
+    fi
+        echo "❌ Failed. Trying again"
+        sleep 0.5
+done
+
+if [ $success -eq 0 ]; then
+    echo "Failed 10 times. Exiting"
+    cat server-test-stderr.txt
+    kill $daemon_process
+    echo "Try running"
+    echo "RUSTFLAGS="-Awarnings" cargo test -q -p git -p git-lib -p git-server --test delta_objects_server -- --ignored"
+    exit 1
+fi
+echo "✅ Passed"
+rm server-test-stderr.txt

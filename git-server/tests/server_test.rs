@@ -4,6 +4,7 @@ use std::{
     io::{self, Read, Write},
     path::Path,
     process::Command,
+    thread::sleep,
 };
 
 // Comando para correr el servidor
@@ -83,6 +84,8 @@ fn test_push() {
         .unwrap()
         .ends_with(" master -> master\n"));
 
+    sleep(std::time::Duration::from_millis(500));
+
     assert!(
         Command::new("git")
             .arg("pull")
@@ -108,6 +111,7 @@ fn test_push() {
         .unwrap()
         .starts_with("Cloning into 'user3'...\nReceiving objects:"));
 
+    sleep(std::time::Duration::from_millis(500));
     let mut readme = File::open(path.to_owned() + "/user3/README.md").unwrap();
     let mut contents = String::new();
     readme.read_to_string(&mut contents).unwrap();

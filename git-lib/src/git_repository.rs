@@ -70,7 +70,15 @@ impl<'a> GitRepository<'a> {
             )?;
             (tentative_git_path, Logger::new(&logs_path)?, false)
         } else {
-            (path.to_string(), Logger::new_dummy(), true)
+            (
+                path.to_string(),
+                Logger::new(&join_paths!(path, "logs.log").ok_or(
+                    CommandError::DirectoryCreationError(
+                        "Error creando archivo .git/logs.log".to_string(),
+                    ),
+                )?)?,
+                true,
+            )
         };
         if !Path::new(&join_paths!(git_path, "objects").ok_or(
             CommandError::DirectoryCreationError("Error abriendo directorio .git".to_string()),

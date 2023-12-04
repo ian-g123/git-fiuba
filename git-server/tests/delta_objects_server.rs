@@ -1,44 +1,54 @@
 use core::panic;
 use std::{
-    fs::{self},
-    io::{self},
+    fs::{self, File},
+    io::{self, Error, Read},
     path::Path,
     process::Command,
+    thread::sleep,
 };
 
+use git_lib::file_compressor::extract;
+
 // Comando para iniciar daemon
-// cd ../server-files/; clear; git daemon --verbos --reuseaddr --enable=receive-pack --informative-errors --base-path=. .
+// cargo build; clear; cd ../server_files/; ../../../../../target/debug/git-server
 #[test]
 #[ignore = "Needs server"]
 fn test() {
-    let path = "./tests/data/commands/labdeltaclient";
-    let git_bin = "../../../../../../target/debug/git";
+    let path = "./tests/data/test_delta_objects";
 
     create_base_scene(path.clone());
-    let result = Command::new(git_bin)
-        .arg("fetch")
+    let result = Command::new("git")
+        .arg("push")
         .current_dir(path.to_string() + "/repo")
         .output()
         .unwrap();
     println!("stderr: {}", String::from_utf8(result.stderr).unwrap());
     println!("stdout: {}", String::from_utf8(result.stdout).unwrap());
 
-    let result = Command::new(git_bin)
-        .arg("merge")
-        .current_dir(path.to_string() + "/repo")
+    sleep(std::time::Duration::from_millis(500));
+    let result = Command::new("git")
+        .arg("clone")
+        .arg("git://127.1.0.0:9418/repo")
+        .arg("repo_copy")
+        .current_dir(path.to_string())
         .output()
         .unwrap();
+
     println!("stderr: {}", String::from_utf8(result.stderr).unwrap());
     println!("stdout: {}", String::from_utf8(result.stdout).unwrap());
+    sleep(std::time::Duration::from_millis(500));
 
-    let new_content = fs::read_to_string(path.to_string() + "/repo/file1").unwrap();
+    let new_content = fs::read_to_string(path.to_string() + "/repo_copy/file1").unwrap();
     let new_content_expected = fs::read_to_string(path.to_string() + "/file2").unwrap();
 
     assert_eq!(new_content, new_content_expected);
+
     _ = fs::remove_dir_all(format!("{}/repo", path));
-    _ = fs::remove_dir_all(format!("{}/user2_to_recieve_delta", path));
+    _ = fs::remove_dir_all(format!("{}/repo_copy", path));
+    _ = fs::remove_dir_all(format!("{}/user1_to_send_delta", path));
     _ = fs::remove_dir_all(format!("{}/server_files/repo", path));
-    _ = fs::remove_dir_all(format!("{}/server_files/repo_with_two_commits", path));
+    _ = fs::remove_dir_all(format!("{}/server_files/repo_backup", path));
+    _ = fs::remove_file(format!("{}/server_files/server-logs.log", path));
 
     _ = fs::remove_file(format!("{}/server_files/daemon.log", path));
 }
@@ -52,12 +62,12 @@ fn create_base_scene(path: &str) {
     };
 
     copy_dir_all(
-        format!("{}/server_files/repo_with_two_commits", path),
+        format!("{}/server_files/repo_backup", path),
         format!("{}/server_files/repo", path),
     )
     .unwrap();
     copy_dir_all(
-        format!("{}/user2_to_recieve_delta", path),
+        format!("{}/user1_to_send_delta", path),
         format!("{}/repo", path),
     )
     .unwrap();
