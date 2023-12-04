@@ -1501,7 +1501,7 @@ impl<'a> GitRepository<'a> {
             let hash_commit = self.get_last_commit_hash_branch(&branch)?;
             local_branches.push((branch, hash_commit));
         }
-        println!("local_branches: {:?}", local_branches);
+        
         self.push_branches(local_branches)?;
         Ok(())
     }
@@ -1521,8 +1521,10 @@ impl<'a> GitRepository<'a> {
         ));
 
         let mut server = GitServer::connect_to(&address, &mut self.logger)?;
+        self.log("Updating remote references");
         let refs_hash = self.receive_pack(&mut server, &repository_path, &repository_url)?; // ref_hash: HashMap<branch, hash>
 
+        self.log("Getting analysis");
         let (hash_branch_status, commits_map) =
             get_analysis(local_branches, self.db()?, refs_hash, &mut self.logger).map_err(
                 |error| match error {
@@ -1541,11 +1543,13 @@ impl<'a> GitRepository<'a> {
             return Ok(());
         }
 
+        self.log("Negociating with server");
         server.negociate_recieve_pack(hash_branch_status)?;
 
         let pack_file: Vec<u8> = make_packfile(commits_map)?;
+        self.log("Sending packfile");
         server.send_packfile(&pack_file)?;
-
+        self.log("Getting response");
         _ = server.get_response()?;
 
         Ok(())
