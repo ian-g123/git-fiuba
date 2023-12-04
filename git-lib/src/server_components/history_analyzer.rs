@@ -58,12 +58,9 @@ pub fn get_analysis(
         {
             hash_branch_status.insert(local_branch.to_string(), (remote_hash.clone(), local_hash));
         } else {
-            println!("ENTROOO??????????");
             return Err(CommandError::PushBranchBehind("".to_string()));
         }
         commits_map.remove(&remote_hash);
-        println!("COMMITS MAP : {:?}", commits_map);
-        println!("HASH BRANCH : {:?}", hash_branch_status );
     }
     Ok((hash_branch_status, commits_map))
 }
@@ -172,13 +169,7 @@ pub fn get_parents_hash_map(
     commits_map: &mut HashMap<String, (CommitObject, Option<String>)>, // HashMap<hash, (commit, branch)>
     parents_hash: &mut HashMap<String, HashSet<String>>,
     sons_hash: &mut HashMap<String, HashSet<String>>,
-    //logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    println!("MMM{}", hash_commit);
-    // if parents_hash.contains_key(&hash_commit.to_string()) {
-    //     return Ok(());
-    // }
-
     let commit_object = match commits_map.get_mut(hash_commit) {
         Some(commit_object_box_aux) => commit_object_box_aux.0.to_owned(),
         None => return Ok(()),

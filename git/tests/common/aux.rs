@@ -15,8 +15,6 @@ pub fn create_test_scene_1(path: &str) {
         panic!("No se pudo copiar el archivo")
     };
 
-    println!("Repo creado");
-
     assert!(Path::new(&(path.to_owned() + "/testfile.txt")).exists())
 }
 

@@ -158,7 +158,6 @@ impl ObjectsDatabase {
             return Ok(hash_str);
         }
         let Ok(mut file) = File::create(&path) else {
-            println!("Error al crear archivo para escrituraafafafa");
             return Err(CommandError::FileOpenError(
                 "Error al abrir archivo para escritura".to_string(),
             ));

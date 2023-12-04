@@ -5572,23 +5572,15 @@ pub fn get_parents_hash_map(
     commits_map: &mut HashMap<String, (CommitObject, Option<String>)>, // HashMap<hash, (commit, branch)>
     parents_hash: &mut HashMap<String, HashSet<String>>,
     sons_hash: &mut HashMap<String, HashSet<String>>,
-    //logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    //println!("MMM{}", hash_commit);
-    // if parents_hash.contains_key(&hash_commit.to_string()) {
-    //     return Ok(());
-    // }
-
     let commit_object = match commits_map.get_mut(hash_commit) {
         Some(commit_object_box_aux) => commit_object_box_aux.0.to_owned(),
         None => {
-            println!("WHAAAAAAAT");
             return Ok(());
         }
     };
 
     let parents_vec: Vec<String> = commit_object.get_parents();
-    // println!("padres {:?}", parents_vec);
 
     for parent_hash in parents_vec.iter() {
         let hash_set_p = parents_hash

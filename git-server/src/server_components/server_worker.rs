@@ -347,7 +347,6 @@ impl ServerWorker {
                 );
             }
         }
-        println!("MAPP :{:?}", map);
         Ok(map)
     }
 
