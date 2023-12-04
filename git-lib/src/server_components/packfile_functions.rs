@@ -1,15 +1,19 @@
 use std::{
     collections::HashMap,
-    io::{Cursor, Read, Write},
+    fmt::format,
+    io::{Cursor, Read, Seek, SeekFrom, Write},
     net::TcpStream,
 };
 
 use crate::{
     command_errors::CommandError,
     file_compressor::compress,
+    logger::{self, Logger},
     objects::{
         commit_object::CommitObject,
-        git_object::{GitObject, GitObjectTrait},
+        git_object::{
+            git_object_from_data, write_to_stream_from_content, GitObject, GitObjectTrait,
+        },
         tree::Tree,
     },
     objects_database::ObjectsDatabase,
@@ -20,7 +24,7 @@ use crate::{
     utils::{aux::get_sha1, super_string::u8_vec_to_hex_string},
 };
 
-use super::reader::TcpStreamBuffedReader;
+use super::reader::BuffedReader;
 
 pub fn get_objects_from_tree(
     hash_objects: &mut HashMap<String, GitObject>,
@@ -119,7 +123,7 @@ pub fn make_packfile(
 }
 
 /// lee la firma del packfile, los primeros 4 bytes del socket
-fn read_pack_signature(socket: &mut TcpStream) -> Result<String, CommandError> {
+fn read_pack_signature(socket: &mut BuffedReader) -> Result<String, CommandError> {
     let signature_buf = &mut [0; 4];
     socket
         .read_exact(signature_buf)
@@ -130,7 +134,7 @@ fn read_pack_signature(socket: &mut TcpStream) -> Result<String, CommandError> {
 }
 
 /// lee la versión del packfile, los siguientes 4 bytes del socket
-fn read_version_number(socket: &mut TcpStream) -> Result<u32, CommandError> {
+fn read_version_number(socket: &mut BuffedReader) -> Result<u32, CommandError> {
     let mut version_buf = [0; 4];
     socket
         .read_exact(&mut version_buf)
@@ -140,7 +144,7 @@ fn read_version_number(socket: &mut TcpStream) -> Result<u32, CommandError> {
 }
 
 /// lee la cantidad de objetos en el packfile, los siguientes 4 bytes del socket
-fn read_object_number(socket: &mut TcpStream) -> Result<u32, CommandError> {
+fn read_object_number(socket: &mut BuffedReader) -> Result<u32, CommandError> {
     let mut object_number_buf = [0; 4];
     socket
         .read_exact(&mut object_number_buf)
@@ -149,45 +153,43 @@ fn read_object_number(socket: &mut TcpStream) -> Result<u32, CommandError> {
     Ok(object_number)
 }
 
-fn read_packfile_header(socket: &mut TcpStream) -> Result<u32, CommandError> {
-    let signature = read_pack_signature(socket)?;
+fn read_packfile_header(buffed_reader: &mut BuffedReader) -> Result<u32, CommandError> {
+    let signature = read_pack_signature(buffed_reader)?;
     if signature != "PACK" {
         return Err(CommandError::ErrorReadingPkt);
     }
-    let version = read_version_number(socket)?;
+    let version = read_version_number(buffed_reader)?;
     if version != 2 {
         return Err(CommandError::ErrorReadingPkt);
     }
-    let object_number = read_object_number(socket)?;
+    let object_number = read_object_number(buffed_reader)?;
     Ok(object_number)
 }
 
 /// Lee todos los objetos del packfile y devuelve un vector que contiene tuplas con:\
 /// `(tipo de objeto, tamaño del objeto, contenido del objeto en bytes)`
-fn read_objects_in_packfile(
-    socket: &mut TcpStream,
-    object_number: u32,
-) -> Result<Vec<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
-    let mut objects_data = Vec::new();
-    let mut buffed_reader = TcpStreamBuffedReader::new(socket);
-
-    for _ in 0..object_number {
-        let mut buffed_reader: &mut TcpStreamBuffedReader<'_> = &mut buffed_reader;
-        let (object_type, len) = read_object_header_from_packfile(buffed_reader)?;
-        if object_type == PackfileObjectType::RefDelta
-            || object_type == PackfileObjectType::OfsDelta
-        {
-            todo!("❌ Delta objects not implemented");
-        }
-        buffed_reader.clean_up_to_pos();
-        let mut decoder = flate2::read::ZlibDecoder::new(&mut buffed_reader);
-        let mut object_content = vec![0; len];
-
-        decoder
-            .read_exact(&mut object_content)
-            .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
-        let bytes_used = decoder.total_in() as usize;
-        buffed_reader.set_pos(bytes_used);
+fn read_objects_from_packfile_body(
+    buffed_reader: &mut BuffedReader,
+    exp_obj_number: u32,
+    db: &ObjectsDatabase,
+    logger: &mut Logger,
+) -> Result<HashMap<[u8; 20], (PackfileObjectType, usize, Vec<u8>)>, CommandError> {
+    let mut objects_data = HashMap::<[u8; 20], (PackfileObjectType, usize, Vec<u8>)>::new();
+    for i in 0..exp_obj_number {
+        logger.log(&format!(
+            "Reading object number: {}/{}",
+            i + 1,
+            exp_obj_number
+        ));
+        let (obj_type, len, object_content) =
+            read_one_object_data_from_packfile(buffed_reader, db, logger, Some(&objects_data))?;
+        let mut hashable_content = Vec::new();
+        write_to_stream_from_content(
+            &mut hashable_content,
+            object_content.clone(),
+            obj_type.to_string(),
+        )?;
+        let sha1 = get_sha1(&hashable_content);
 
         if object_content.len() != len {
             return Err(CommandError::ErrorDecompressingObject(format!(
@@ -197,7 +199,7 @@ fn read_objects_in_packfile(
             )));
         }
 
-        objects_data.push((object_type, len, object_content));
+        objects_data.insert(sha1, (obj_type, len, object_content));
     }
     Ok(objects_data)
 }
@@ -205,74 +207,169 @@ fn read_objects_in_packfile(
 /// Lee un objecto del packfile y devuelve una tuplas con:\
 /// `(tipo de objeto, tamaño del objeto, contenido del objeto en bytes)`
 fn read_object_from_offset(
-    socket: &mut dyn Read,
+    buffed_reader: &mut BuffedReader,
     offset: u32,
+    db: &ObjectsDatabase,
+    logger: &mut Logger,
 ) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
-    println!("read_object_from_offset with offset: {}", offset);
-    let mut previous_objects = vec![0; offset as usize];
-    let mut socket = socket;
+    buffed_reader.record_and_fast_foward_to(offset as usize, logger)?;
+    read_one_object_data_from_packfile(buffed_reader, db, logger, None)
+}
 
+fn read_one_object_data_from_packfile(
+    buffed_reader: &mut BuffedReader,
+    db: &ObjectsDatabase,
+    logger: &mut Logger,
+    objects_data: Option<&HashMap<[u8; 20], (PackfileObjectType, usize, Vec<u8>)>>,
+) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
+    let offset = buffed_reader.get_pos() as u32;
+    let (obj_type, len) = read_object_header_from_packfile(buffed_reader)?;
+    match obj_type {
+        PackfileObjectType::RefDelta => {
+            read_ref_delta(buffed_reader, objects_data, db, len, logger)
+        }
+        PackfileObjectType::OfsDelta => read_ofs_delta(buffed_reader, offset, db, len, logger),
+        _ => read_undeltified_object(buffed_reader, len, obj_type, logger),
+    }
+}
+
+fn read_undeltified_object(
+    buffed_reader: &mut BuffedReader,
+    len: usize,
+    obj_type: PackfileObjectType,
+    logger: &mut Logger,
+) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
+    logger.log(&format!("Reading Undeltified Object"));
+    let object_content = read_extract_rewind(buffed_reader, len, logger)?;
+    Ok((obj_type, len, object_content))
+}
+
+fn read_ofs_delta(
+    buffed_reader: &mut BuffedReader,
+    offset: u32,
+    db: &ObjectsDatabase,
+    len: usize,
+    logger: &mut Logger,
+) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
+    logger.log(&format!("Reading Delta Offset: {}", offset));
+    let base_obj_neg_offset = read_ofs(buffed_reader)?;
+    let base_object_offset = offset - base_obj_neg_offset;
+    logger.log("Reading base object");
+    let current_position = buffed_reader.get_pos();
+    let (base_obj_type, base_obj_len, base_obj_content) =
+        read_object_from_offset(buffed_reader, base_object_offset, db, logger)?;
+    buffed_reader.record_and_fast_foward_to(current_position, logger)?;
+
+    read_and_apply_delta_instructions(
+        buffed_reader,
+        len,
+        base_obj_type,
+        base_obj_len,
+        base_obj_content,
+        logger,
+    )
+}
+
+fn read_ref_delta(
+    buffed_reader: &mut BuffedReader,
+    objects_data: Option<&HashMap<[u8; 20], (PackfileObjectType, usize, Vec<u8>)>>,
+    db: &ObjectsDatabase,
+    len: usize,
+    logger: &mut Logger,
+) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
+    logger.log("Reading Ref Delta");
+    let (base_obj_type, base_obj_len, base_obj_content) =
+        read_ref_base_object(buffed_reader, objects_data, db, logger)?;
+    let base_obj_type = PackfileObjectType::from_str(base_obj_type.as_str())?;
+    read_and_apply_delta_instructions(
+        buffed_reader,
+        len,
+        base_obj_type,
+        base_obj_len,
+        base_obj_content,
+        logger,
+    )
+}
+
+fn read_ref_base_object(
+    socket: &mut dyn Read,
+    objects_data: Option<&HashMap<[u8; 20], (PackfileObjectType, usize, Vec<u8>)>>,
+    db: &ObjectsDatabase,
+    logger: &mut Logger,
+) -> Result<(String, usize, Vec<u8>), CommandError> {
+    let mut base_obj_hash = [0; 20];
     socket
-        .read_exact(&mut previous_objects)
+        .read_exact(&mut base_obj_hash)
         .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
-
-    let (object_type, len) = read_object_header_from_packfile(socket)?;
-    if object_type == PackfileObjectType::RefDelta {
-        todo!("❌ RefDelta objects not implemented");
+    if let Some(objects_data) = objects_data {
+        if let Some((base_obj_type, base_obj_len, base_obj_content)) =
+            objects_data.get(&base_obj_hash)
+        {
+            return Ok((
+                base_obj_type.to_string(),
+                *base_obj_len,
+                base_obj_content.to_vec(),
+            ));
+        }
     }
-    if object_type == PackfileObjectType::OfsDelta {
-        let base_obj_neg_offset = read_ofs(socket)?;
-        let base_object_offset = offset - base_obj_neg_offset;
-        println!("Reading base object");
-        let mut prev_obj_cursor = Cursor::new(&mut previous_objects);
-        let (base_obj_type, base_obj_len, base_obj_content) =
-            read_object_from_offset(&mut prev_obj_cursor, base_object_offset)?;
-        println!("base object read");
-        let mut decoder = flate2::read::ZlibDecoder::new(&mut socket);
-        let mut delta_content = vec![0; len];
-        decoder
-            .read_exact(&mut delta_content)
-            .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
+    let base_obj_hash_str = u8_vec_to_hex_string(&base_obj_hash);
+    logger.log(&format!("Base object hash: {}", base_obj_hash_str));
+    let (base_obj_type, base_obj_len, base_obj_content) =
+        db.read_object_data(&base_obj_hash_str, logger)?;
+    Ok((base_obj_type, base_obj_len, base_obj_content))
+}
 
-        let mut cursor = Cursor::new(delta_content);
-        let base_obj_len_redundant = read_size_encoding(&mut cursor)?;
-        if base_obj_len_redundant != base_obj_len {
-            return Err(CommandError::ErrorExtractingPackfileVerbose(format!(
-                "Base object length ({}) is not equal to the one in the delta object ({})",
-                base_obj_len, base_obj_len_redundant
-            )));
-        }
-        let object_len = read_size_encoding(&mut cursor)?;
-        let mut object_content = Vec::new();
-        // let mut object_content = vec![0; object_len];
-        let mut writer_cursor = Cursor::new(&mut object_content);
-        // while apply_delta_instruction(&mut cursor, &base_obj_content, &mut writer_cursor).unwrap() {
-        // }
-
-        loop {
-            let Some(instruction) = read_delta_instruction_from(&mut cursor)? else {
-                break;
-            };
-            // println!("instruction: {:?}", instruction);
-            instruction.apply(&mut writer_cursor, &base_obj_content)?;
-        }
-        if object_content.len() != object_len {
-            panic!("len es diferente");
-        }
-        println!(
-            "object hash: {}",
-            u8_vec_to_hex_string(&get_sha1(&object_content))
-        );
-        return Ok((base_obj_type, object_len, object_content));
+fn read_and_apply_delta_instructions(
+    buffed_reader: &mut BuffedReader,
+    len: usize,
+    base_obj_type: PackfileObjectType,
+    base_obj_len: usize,
+    base_obj_content: Vec<u8>,
+    logger: &mut Logger,
+) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
+    let delta_content = read_extract_rewind(buffed_reader, len, logger)?;
+    let mut cursor = Cursor::new(delta_content);
+    let base_obj_len_redundant = read_size_encoding(&mut cursor)?;
+    if base_obj_len_redundant != base_obj_len {
+        return Err(CommandError::ErrorExtractingPackfileVerbose(format!(
+            "Base object length ({}) is not equal to the one in the delta object ({})",
+            base_obj_len, base_obj_len_redundant
+        )));
     }
+    let new_obj_expected_len = read_size_encoding(&mut cursor)?;
+    let mut object_content = Vec::with_capacity(new_obj_expected_len);
+    let mut writer_cursor = Cursor::new(&mut object_content);
+    loop {
+        let Some(instruction) = read_delta_instruction_from(&mut cursor, logger)? else {
+            break;
+        };
+        instruction.apply(&mut writer_cursor, &base_obj_content)?;
+    }
+    if object_content.len() != new_obj_expected_len {
+        return Err(CommandError::ErrorExtractingPackfileVerbose(format!(
+            "Expected length: {}, Decompressed data length: {}",
+            new_obj_expected_len,
+            object_content.len(),
+        )));
+    }
+    Ok((base_obj_type, new_obj_expected_len, object_content))
+}
 
-    let mut decoder = flate2::read::ZlibDecoder::new(socket);
-    let mut object_content = vec![0; len];
+fn read_extract_rewind(
+    buffed_reader: &mut BuffedReader<'_>,
+    len: usize,
+    logger: &mut Logger,
+) -> Result<Vec<u8>, CommandError> {
+    let base_post = buffed_reader.get_pos();
+    let mut buffed_reader_ref: &mut BuffedReader<'_> = buffed_reader;
+    let mut decoder = flate2::read::ZlibDecoder::new(&mut buffed_reader_ref);
+    let mut delta_content = vec![0; len]; // TODO with capacity
     decoder
-        .read_exact(&mut object_content)
+        .read_exact(&mut delta_content)
         .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
-
-    Ok((object_type, len, object_content))
+    let bytes_used = decoder.total_in() as usize;
+    buffed_reader.record_and_fast_foward_to(base_post + bytes_used, logger)?;
+    Ok(delta_content)
 }
 
 fn read_ofs(socket: &mut dyn Read) -> Result<u32, CommandError> {
@@ -318,7 +415,7 @@ pub fn read_size_encoding(buffed_reader: &mut dyn Read) -> Result<usize, Command
 }
 
 pub fn read_object_header_from_packfile(
-    buffed_reader: &mut dyn Read,
+    buffed_reader: &mut BuffedReader,
 ) -> Result<(PackfileObjectType, usize), CommandError> {
     let mut first_byte_buf = [0; 1];
     buffed_reader
@@ -371,23 +468,33 @@ fn bits_to_usize(bits: &[u8]) -> usize {
 }
 
 /// Lee los objetos del socket, primero lee el header del packfile y luego lee los objetos
-pub fn read_objects(
+pub fn read_objects_from_packfile(
     socket: &mut TcpStream,
-) -> Result<Vec<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
-    let object_number = read_packfile_header(socket)?;
-    let objects_data = read_objects_in_packfile(socket, object_number)?;
-    Ok(objects_data)
+    db: &ObjectsDatabase,
+    logger: &mut Logger,
+) -> Result<HashMap<[u8; 20], (PackfileObjectType, usize, Vec<u8>)>, CommandError> {
+    let mut buffed_reader = BuffedReader::new(socket);
+    let object_number = read_packfile_header(&mut buffed_reader)?;
+    read_objects_from_packfile_body(&mut buffed_reader, object_number, db, logger)
 }
 
 fn get_object_packfile_offset(
     sha1: &[u8; 20],
     index_file: &mut dyn Read,
+    logger: &mut Logger,
 ) -> Result<Option<u32>, CommandError> {
+    logger.log(&format!(
+        "Searching object in packfile index: {}",
+        u8_vec_to_hex_string(sha1)
+    ));
     // The first four bytes are always 255, 116, 79, 99
     let mut header_bytes = [0; 4];
-    index_file
-        .read_exact(&mut header_bytes)
-        .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
+    index_file.read_exact(&mut header_bytes).map_err(|e| {
+        CommandError::ErrorExtractingPackfileVerbose(format!(
+            "Error al leer header del index: {}",
+            e.to_string()
+        ))
+    })?;
     if header_bytes != [255, 116, 79, 99] {
         return Err(CommandError::ErrorExtractingPackfileVerbose(format!(
             "el error ocurre en la funcion get_object_packfile al 
@@ -397,9 +504,12 @@ fn get_object_packfile_offset(
     }
     // The next four bytes denote the version number
     let mut version_bytes = [0; 4];
-    index_file
-        .read_exact(&mut version_bytes)
-        .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
+    index_file.read_exact(&mut version_bytes).map_err(|e| {
+        CommandError::ErrorExtractingPackfileVerbose(format!(
+            "Error al leer version del index: {}",
+            e.to_string()
+        ))
+    })?;
     if version_bytes != [0, 0, 0, 2] {
         return Err(CommandError::ErrorExtractingPackfileVerbose(format!(
             "el error ocurre en la funcion get_object_packfile al 
@@ -412,72 +522,21 @@ fn get_object_packfile_offset(
     // each, 1024 bytes long in total. According to the documentation, “[the] N-th entry
     // of this table records the number of objects in the corresponding pack, the first
     // byte of whose object name is less than or equal to N.”
-    let mut cumulative_objects_counts: Vec<u8> = vec![0; 1024];
-    index_file
-        .read_exact(&mut cumulative_objects_counts)
-        .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
-    let object_group_index = sha1[0] as usize;
-    let prev_object_group_count = u32::from_be_bytes(
-        cumulative_objects_counts[(object_group_index - 1) * 4..object_group_index * 4]
-            .to_vec()
-            .try_into()
-            .map_err(|_| {
-                CommandError::ErrorExtractingPackfileVerbose(format!(
-                    "Could not get prev_object_group_count value: {:?}, {}",
-                    cumulative_objects_counts, object_group_index
-                ))
-            })?,
-    );
-    let object_group_count = u32::from_be_bytes(
-        cumulative_objects_counts[object_group_index * 4..(object_group_index + 1) * 4]
-            .to_vec()
-            .try_into()
-            .map_err(|_| {
-                CommandError::ErrorExtractingPackfileVerbose(format!(
-                    "Could not get object_group_count value: {:?}, {}",
-                    cumulative_objects_counts, object_group_index
-                ))
-            })?,
-    );
-    let object_count = u32::from_be_bytes(
-        cumulative_objects_counts[cumulative_objects_counts.len() - 4..]
-            .to_vec()
-            .try_into()
-            .map_err(|_| {
-                CommandError::ErrorExtractingPackfileVerbose(format!(
-                    "Could not get object_count value: {:?}, {}",
-                    cumulative_objects_counts, object_group_index
-                ))
-            })?,
-    );
+    let (prev_object_group_count, object_count, number_of_objects_in_group) =
+        read_first_layer(index_file, sha1)?;
 
     // The second layer of the fanout table contains the 20-byte object names, in order.
     // We already know how many to expect from the first layer of the fanout table.
-    let mut prev_group_object_names = vec![0; prev_object_group_count as usize * 20];
-    index_file
-        .read_exact(&mut prev_group_object_names)
-        .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
-    let mut number_objets_read_in_group = 0;
-    let mut found = false;
-    for _ in 0..object_group_count {
-        let mut object_name = [0; 20];
-        index_file
-            .read_exact(&mut object_name)
-            .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
-        if object_name == *sha1 {
-            found = true;
-            break;
-        }
-        number_objets_read_in_group += 1;
-    }
-    if !found {
+    let Some(index_of_object) = read_seccond_layer(
+        prev_object_group_count,
+        index_file,
+        number_of_objects_in_group,
+        sha1,
+        object_count,
+    )?
+    else {
         return Ok(None);
-    }
-    let index_of_object = prev_object_group_count + number_objets_read_in_group;
-    let mut rest_objets = vec![0; (object_count - index_of_object - 1) as usize * 20];
-    index_file
-        .read_exact(&mut rest_objets)
-        .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
+    };
 
     // The third layer of the fanout table gives us a four-byte cyclic redundancy check value for each object.
     let mut crcs = vec![0; object_count as usize * 4];
@@ -505,18 +564,120 @@ fn get_object_packfile_offset(
     Ok(Some(offset))
 }
 
+fn read_seccond_layer(
+    prev_object_group_count: u32,
+    index_file: &mut dyn Read,
+    number_of_objects_in_group: u32,
+    sha1: &[u8; 20],
+    object_count: u32,
+) -> Result<Option<u32>, CommandError> {
+    let mut prev_group_object_names = vec![0; prev_object_group_count as usize * 20];
+    index_file
+        .read_exact(&mut prev_group_object_names)
+        .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
+    // index_file
+    //     .seek(SeekFrom::Current((prev_object_group_count * 20) as i64))
+    //     .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
+    let mut number_objets_read_in_group = 0;
+    let mut found = false;
+    for _ in 0..number_of_objects_in_group {
+        let mut object_name = [0; 20];
+        index_file
+            .read_exact(&mut object_name)
+            .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
+
+        if object_name == *sha1 {
+            found = true;
+            break;
+        }
+        number_objets_read_in_group += 1;
+    }
+    if !found {
+        return Ok(None);
+    }
+    let index_of_object = prev_object_group_count + number_objets_read_in_group;
+    let mut rest_objets = vec![0; (object_count - index_of_object - 1) as usize * 20];
+    index_file
+        .read_exact(&mut rest_objets)
+        .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
+    Ok(Some(index_of_object))
+}
+
+fn read_first_layer(
+    index_file: &mut dyn Read,
+    sha1: &[u8; 20],
+) -> Result<(u32, u32, u32), CommandError> {
+    let mut cumulative_objects_counts: Vec<u8> = vec![0; 1024];
+    index_file
+        .read_exact(&mut cumulative_objects_counts)
+        .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
+    let object_group_index = sha1[0] as usize;
+    let prev_object_group_count = if object_group_index == 0 {
+        0
+    } else {
+        u32::from_be_bytes(
+            cumulative_objects_counts[(object_group_index - 1) * 4..object_group_index * 4]
+                .to_vec()
+                .try_into()
+                .map_err(|_| {
+                    CommandError::ErrorExtractingPackfileVerbose(format!(
+                        "Could not get prev_object_group_count value: {:?}, {}",
+                        cumulative_objects_counts, object_group_index
+                    ))
+                })?,
+        )
+    };
+    let object_group_count = u32::from_be_bytes(
+        cumulative_objects_counts[object_group_index * 4..(object_group_index + 1) * 4]
+            .to_vec()
+            .try_into()
+            .map_err(|_| {
+                CommandError::ErrorExtractingPackfileVerbose(format!(
+                    "Could not get object_group_count value: {:?}, {}",
+                    cumulative_objects_counts, object_group_index
+                ))
+            })?,
+    );
+    let object_count = u32::from_be_bytes(
+        cumulative_objects_counts[cumulative_objects_counts.len() - 4..]
+            .to_vec()
+            .try_into()
+            .map_err(|_| {
+                CommandError::ErrorExtractingPackfileVerbose(format!(
+                    "Could not get object_count value: {:?}, {}",
+                    cumulative_objects_counts, object_group_index
+                ))
+            })?,
+    );
+    let number_of_objects_in_group = object_group_count - prev_object_group_count;
+    Ok((
+        prev_object_group_count,
+        object_count,
+        number_of_objects_in_group,
+    ))
+}
+
 pub fn search_object_data_from_hash(
     sha1: [u8; 20],
     mut index_file: &mut dyn Read,
     mut packfile: &mut dyn Read,
     db: &ObjectsDatabase,
+    logger: &mut Logger,
 ) -> Result<Option<(PackfileObjectType, usize, Vec<u8>)>, CommandError> {
-    let Some(packfile_offset) = get_object_packfile_offset(&sha1, &mut index_file)? else {
+    let Some(packfile_offset) = get_object_packfile_offset(&sha1, &mut index_file, logger)? else {
+        logger.log("Object not found in packfile");
         return Ok(None);
     };
+    logger.log(&format!(
+        "Object found in packfile index at offset: {}",
+        packfile_offset
+    ));
+    let mut buffed_reader = BuffedReader::new(&mut packfile);
     Ok(Some(read_object_from_offset(
-        &mut packfile,
+        &mut buffed_reader,
         packfile_offset,
+        db,
+        logger,
     )?))
 }
 
@@ -629,7 +790,8 @@ fn test_read_index_with_three_objects() {
         let mut index_file = std::io::Cursor::new(index_file_bits);
 
         let sha1 = crate::utils::aux::hex_string_to_u8_vec(hash);
-        let offset = get_object_packfile_offset(&sha1, &mut index_file).unwrap();
+        let offset =
+            get_object_packfile_offset(&sha1, &mut index_file, &mut Logger::new_dummy()).unwrap();
         assert_eq!(offset, Some(expected_offset));
     }
 

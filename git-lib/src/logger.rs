@@ -9,6 +9,7 @@ use std::{
 
 use crate::{command_errors::CommandError, logger_sender::LoggerSender};
 
+#[derive(Debug)]
 pub struct Logger {
     logs_sender: Option<Sender<String>>,
     writer_thread_handle: Option<thread::JoinHandle<()>>,
@@ -58,8 +59,8 @@ impl Logger {
     /// Escribe msg en el archivo de logs
     pub fn log(&mut self, msg: &str) {
         if let Some(sender) = &self.logs_sender {
-            let _ = sender.send(msg.to_string());
-            let _ = sender.send("\n".to_string());
+            let time = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+            let _ = sender.send(format!("{}: {}\n", time, msg));
         }
     }
 
@@ -90,7 +91,7 @@ mod tests {
     fn test_logger_single_line() {
         let test_dir = "tests/data/logger/test1/";
         delete_directory_content(test_dir);
-        let path = format!("{test_dir}.git/logs");
+        let path = format!("{test_dir}.git/logs.log");
 
         let mut logger = Logger::new(&path).unwrap();
 
@@ -102,14 +103,15 @@ mod tests {
         let Ok(output_content) = fs::read_to_string(path) else {
             panic!("No se pudo leer archivo de salida")
         };
-        assert_eq!(output_content, format!("{msg}\n"));
+        let lines = output_content.lines().collect::<Vec<&str>>();
+        assert_line(&lines, 0, msg);
     }
 
     #[test]
     fn test_logger_two_lines() {
         let test_dir = "tests/data/logger/test2/";
         delete_directory_content(test_dir);
-        let path = format!("{test_dir}.git/logs");
+        let path = format!("{test_dir}.git/logs.log");
 
         let mut logger = Logger::new(&path).unwrap();
 
@@ -123,14 +125,17 @@ mod tests {
         let Ok(output_content) = fs::read_to_string(path) else {
             panic!("No se pudo leer archivo de salida")
         };
-        assert_eq!(output_content, format!("{}\n{}\n", msg_1, msg_2));
+
+        let lines = output_content.lines().collect::<Vec<&str>>();
+        assert_line(&lines, 0, msg_1);
+        assert_line(&lines, 1, msg_2);
     }
 
     #[test]
     fn test_logger_open_existing_log_file() {
         let test_dir = "tests/data/logger/test3/";
         delete_directory_content(test_dir);
-        let path = format!("{test_dir}.git/logs");
+        let path = format!("{test_dir}.git/logs.log");
 
         let mut logger_1 = Logger::new(&path).unwrap();
         let msg_1 = "Hello, world 1!";
@@ -146,8 +151,9 @@ mod tests {
         let Ok(output_content) = fs::read_to_string(path) else {
             panic!("No se pudo leer archivo de salida")
         };
-
-        assert_eq!(output_content, format!("{}\n{}\n", msg_1, msg_2));
+        let lines = output_content.lines().collect::<Vec<&str>>();
+        assert_line(&lines, 0, msg_1);
+        assert_line(&lines, 1, msg_2);
     }
 
     fn delete_directory_content(path: &str) {
@@ -156,5 +162,12 @@ mod tests {
             let _ = fs::remove_dir_all(dir);
         }
         let _ = fs::create_dir_all(dir);
+    }
+
+    fn assert_line(lines: &Vec<&str>, line_number: usize, expected_line: &str) {
+        assert_eq!(
+            &lines[line_number][lines[line_number].len() - expected_line.len()..],
+            expected_line
+        );
     }
 }

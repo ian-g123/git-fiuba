@@ -147,6 +147,7 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
         files_merge_conflict: Rc::new(RefCell::new(files_merge_conflict)),
         principal_window: Rc::new(RefCell::new(window)),
     };
+    repo.log("Getting commits");
     let commits = match repo.get_log(true) {
         Ok(commits) => commits,
         Err(err) => {
@@ -154,6 +155,8 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
             return ControlFlow::Break(());
         }
     };
+    repo.log(&format!("Counted: {:?}", commits.len()));
+
     interface.staged_area_ui();
     let err_activation = interface.buttons_activation();
     if err_activation.is_err() {

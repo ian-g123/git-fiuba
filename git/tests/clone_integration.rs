@@ -16,12 +16,14 @@ fn test_clone() {
     let git_bin = "../../../../../../target/debug/git";
 
     create_base_scene(path.clone());
-    let _result = Command::new(git_bin)
+    let result = Command::new(git_bin)
         .arg("clone")
         .arg("git://127.1.0.0:9418/repo")
         .current_dir(path)
         .output()
         .unwrap();
+    println!("stderr: {}", String::from_utf8(result.stderr).unwrap());
+    println!("stdout: {}", String::from_utf8(result.stdout).unwrap());
 
     compare_files(
         &format!("{}/repo/", path),
@@ -185,7 +187,6 @@ fn test_clone() {
         .output()
         .unwrap();
 
-    // panic!("STOP");
     _ = fs::remove_dir_all(format!("{}", path));
 }
 
@@ -369,20 +370,6 @@ fn modify_file_and_commit_in_server_repo(path: &str) {
             .is_ok(),
         "No se pudo hacer commit"
     );
-}
-
-fn _start_deamon(path: &str) -> Child {
-    let handle = Command::new("git")
-        .arg("daemon")
-        .arg("--verbose")
-        .arg("--reuseaddr")
-        .arg("--enable=receive-pack")
-        .arg("--base-path=.")
-        .current_dir(path.to_owned() + "/server-files")
-        .spawn()
-        .expect("No se pudo iniciar el daemon");
-
-    handle
 }
 
 fn create_base_scene(path: &str) {

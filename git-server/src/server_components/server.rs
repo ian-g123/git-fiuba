@@ -19,12 +19,14 @@ impl Server {
         })?;
         let path_str = path.to_string();
         let listener_handle = thread::spawn(move || {
-            let logger = Logger::new("logs").unwrap();
+            let logger = Logger::new("server-logs.log").unwrap();
             let mut worker_threads = vec![];
             for client_stream in listener.incoming() {
                 let path = path_str.clone();
-                let logger_sender = logger.get_logs_sender().unwrap();
+                let mut logger_sender = logger.get_logs_sender().unwrap();
                 let worker_thread = thread::spawn(move || {
+                    println!("New connection");
+                    logger_sender.log(&format!("New connection"));
                     let path = path.clone();
                     let mut worker = ServerWorker::new(path, client_stream.unwrap(), logger_sender);
                     worker.handle_connection()

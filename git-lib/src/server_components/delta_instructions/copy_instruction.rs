@@ -25,6 +25,13 @@ impl DeltaInstructionTrait for CopyInstruction {
     where
         Self: Sized,
     {
+        if first_byte == 0b1000_0000 {
+            return Ok(Box::new(Self {
+                offset: 0,
+                size: 0x10000,
+            }));
+        }
+
         let mut offset = 0;
         for i in 0..4 {
             if first_byte >> i & 1 == 0 {
@@ -52,6 +59,10 @@ impl DeltaInstructionTrait for CopyInstruction {
                 )
             })?;
             size |= (byte[0] as u32) << (i * 8);
+        }
+
+        if size == 0 {
+            size = 0x10000;
         }
         Ok(Box::new(Self { offset, size }))
     }

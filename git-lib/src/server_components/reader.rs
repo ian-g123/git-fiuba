@@ -1,35 +1,49 @@
-use std::{
-    io::{Read, Result},
-    net::TcpStream,
-};
+use std::io::Read;
 
-pub struct TcpStreamBuffedReader<'a> {
-    stream: &'a TcpStream,
+use crate::{command_errors::CommandError, logger::Logger};
+
+pub struct BuffedReader<'a> {
+    stream: &'a mut dyn Read,
     buffer: Vec<u8>,
     pos: usize,
 }
 
-impl<'a> TcpStreamBuffedReader<'a> {
-    pub fn new(stream: &'a TcpStream) -> TcpStreamBuffedReader<'a> {
-        TcpStreamBuffedReader {
+impl<'a> BuffedReader<'a> {
+    pub fn new(stream: &'a mut dyn Read) -> BuffedReader<'a> {
+        BuffedReader {
             stream,
             buffer: Vec::new(),
             pos: 0,
         }
     }
 
-    pub fn clean_up_to_pos(&mut self) {
-        self.buffer.drain(..self.pos);
-        self.pos = 0;
+    // If the buffer is smaller than the given size, read from the stream until the buffer is at least the given size.
+    pub fn record_and_fast_foward_to(
+        &mut self,
+        pos: usize,
+        logger: &mut Logger,
+    ) -> Result<(), CommandError> {
+        let len = self.buffer.len();
+        logger.log(&format!("BuffedReader: -> {} | len {}", pos, len));
+        if len < pos {
+            let bytes_to_read = pos - len;
+            logger.log(&format!("BuffedReader: + {}", bytes_to_read));
+            let mut buffer = vec![0; bytes_to_read];
+            self.read_exact(&mut buffer).map_err(|error| {
+                CommandError::FileReadError(format!("Error al leer con buffed reader: {error}"))
+            })?;
+        }
+        self.pos = pos;
+        Ok(())
     }
 
-    pub fn set_pos(&mut self, pos: usize) {
-        self.pos = pos;
+    pub fn get_pos(&self) -> usize {
+        self.pos.clone()
     }
 }
 
-impl<'a> Read for TcpStreamBuffedReader<'a> {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+impl<'a> Read for BuffedReader<'a> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let num_bytes_to_read = buf.len();
         let mut num_bytes_read = 0;
         if self.pos + 1 < self.buffer.len() {
