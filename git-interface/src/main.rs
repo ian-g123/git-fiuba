@@ -34,6 +34,7 @@ const GRAPH_COLORS: [(f64, f64, f64); 10] = [
     (1.0, 1.0, 1.0), // Blanco
 ];
 
+#[derive(Clone)]
 struct Interface {
     builder: gtk::Builder,
     staging_changes: Rc<RefCell<HashSet<String>>>,
@@ -1399,6 +1400,7 @@ fn commit_function(interface: Interface) {
         }
         match repo.merge_continue() {
             Ok(_) => {
+                refresh_function(clone_interface.borrow_mut().clone());
                 dialog_window("Merge finalizado con éxito.\nSi escribió un mensaje de commit, no fue utilizado".to_string());
             }
             Err(err) => dialog_window(err.to_string()),
@@ -1417,7 +1419,7 @@ fn commit_function(interface: Interface) {
         }
         match repo.merge_continue_rebase() {
             Ok(_) => {
-                refresh_function(interface);
+                refresh_function(clone_interface.borrow_mut().clone());
                 dialog_window("Rebase finalizado con éxito.\nSi escribió un mensaje de commit, no fue utilizado".to_string());
             }
             Err(err) => dialog_window(err.to_string()),
@@ -1432,7 +1434,7 @@ fn commit_function(interface: Interface) {
 
     match repo.commit(message.to_string(), &vec![], false, None, false) {
         Ok(_) => {
-            refresh_function(interface);
+            refresh_function(clone_interface.borrow_mut().clone());
             dialog_window("Commit realizado con éxito".to_string());
         }
         Err(err) => dialog_window(err.to_string()),
