@@ -354,6 +354,65 @@ fn test_list_tags() {
     _ = std::fs::remove_dir_all(format!("{}", path));
 }
 
+#[test]
+fn test_tag_branch() {
+    let path = "./tests/data/commands/tag/repo5";
+    create_test_scene_2(path);
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("add")
+        .arg("dir/testfile1.txt")
+        .arg("dir/testfile2.txt")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("commit")
+        .arg("-m")
+        .arg("message")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("tag")
+        .arg("tag1")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    _ = Command::new("../../../../../../target/debug/git")
+        .arg("checkout")
+        .arg("-b")
+        .arg("b1")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    let result = Command::new("../../../../../../target/debug/git")
+        .arg("tag")
+        .arg("tag2")
+        .arg("b1")
+        .current_dir(path)
+        .output()
+        .unwrap();
+
+    println!("Tag error: {}", String::from_utf8(result.stderr).unwrap());
+    let stdout = String::from_utf8(result.stdout).unwrap();
+    println!("Tag stdout: {}", stdout);
+    let b1_path = format!("{}/.git/refs/heads/b1", path);
+    let tag_path = format!("{}/.git/refs/tags/tag2", path);
+
+    let b1_commit = fs::read_to_string(b1_path.clone()).unwrap();
+
+    assert!(Path::new(&tag_path).exists());
+
+    let tag_hash = fs::read_to_string(tag_path).unwrap();
+    assert_eq!(tag_hash, b1_commit);
+    _ = std::fs::remove_dir_all(format!("{}", path));
+}
+
 fn check_tag_info(
     path: &str,
     tag_path: &str,
