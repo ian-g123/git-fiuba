@@ -1449,7 +1449,6 @@ impl<'a> GitRepository<'a> {
         let objects_decompressed_data =
             server.fetch_objects(wants, haves, &self.db()?, &mut self.logger)?;
         self.save_objects_from_packfile(objects_decompressed_data)?;
-
         self.update_fetch_head(remote_branches, remote_reference)?;
         Ok(())
     }
@@ -1488,7 +1487,29 @@ impl<'a> GitRepository<'a> {
         Ok(())
     }
 
-    pub fn push(&mut self, local_branches: Vec<(String, String)>) -> Result<(), CommandError> {
+    pub fn push(&mut self, all: bool, branch: String) -> Result<(), CommandError> {
+        let branch = if branch == "" {
+            self.get_current_branch_name()?
+        } else {
+            branch
+        };
+
+        let mut local_branches: Vec<(String, String)> = Vec::new(); // (branch, hash)
+        if all {
+            local_branches = self.push_all_local_branch_hashes()?;
+        } else {
+            let hash_commit = self.get_last_commit_hash_branch(&branch)?;
+            local_branches.push((branch, hash_commit));
+        }
+        println!("local_branches: {:?}", local_branches);
+        self.push_branches(local_branches)?;
+        Ok(())
+    }
+
+    pub fn push_branches(
+        &mut self,
+        local_branches: Vec<(String, String)>,
+    ) -> Result<(), CommandError> {
         self.log("Push updates");
         let (protocol, address, repository_path, repository_url) = self.get_remote_info()?;
         if protocol != "git" {
@@ -2283,29 +2304,11 @@ impl<'a> GitRepository<'a> {
 
             self.restore_merge_conflict(merged_tree, &mut staging_area)?;
         } else {
-            // self.log(&format!("Staging area en rebase: {:?}", staging_area));
-            // let escribir = staging_area
-            //     .has_changes(&self.db()?, &Some(merged_tree.clone()), self.logger())?
-            //     .to_string();
-            // println!("EN REBASE FAST FORWARD : {:?}", escribir);
-            // self.logger()
-            //     .log(&format!("EN REBASE FAST FORWARD CONTINUE: {}", escribir));
-
-            // let cloned_tree = merged_tree.clone();
-
-            //staging_area.update_to_tree(&self.working_dir_path, &merged_tree)?;
-            // let changes_files = staging_area.get_changes(&Some(cloned_tree), self.logger())?;
-            // for changed_file in changes_files {
-            //     let repo_path = &self.working_dir_path;
-            //     let file_path = &changed_file.0;
-            //     let hash = &changed_file.1;
-            //     staging_area.add(repo_path, file_path, hash)?;
-            // }
-            // staging_area.flush_soft_files(&self.working_dir_path)?;
-            // staging_area.save()?;
-
-            // let merged_tree = staging_area.get_working_tree_staged(self.logger())?;
-            self.restore_merge_fastfoward(merged_tree.clone(), &mut staging_area, Some(self.db()?))?;
+            self.restore_merge_fastfoward(
+                merged_tree.clone(),
+                &mut staging_area,
+                Some(self.db()?),
+            )?;
 
             let mut boxed_tree: GitObject = Box::new(merged_tree.clone());
             let _merge_tree_hash_str = self.db()?.write(&mut boxed_tree, true, &mut self.logger)?;

@@ -1463,6 +1463,9 @@ fn dialog_window(message: String) {
 }
 
 fn push_function(output: &mut dyn Write) -> Result<(), CommandError> {
+    // let mut repo = GitRepository::open("", output)?;
+    // let local_branches = repo.local_branches()?;
+    // repo.push()
     let push = Push::new_default(output).unwrap();
     push.run(output)
 }

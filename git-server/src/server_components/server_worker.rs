@@ -87,6 +87,9 @@ impl ServerWorker {
         let mut stdout = io::stdout();
         let repo_path = self.repo_path(repo_relative_path)?;
         let mut repo = GitRepository::open(&repo_path, &mut stdout).map_err(|error| {
+            if let Err(error_send) =self.write_string_to_socket("0000") {
+                return error_send
+            }
             CommandError::Io {
                 message: format!("No se pudo abrir el repositorio {}.\n Tal vez no sea el path correcto o no tengas acceso.", repo_path),
                 error: error.to_string(),

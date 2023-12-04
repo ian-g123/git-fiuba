@@ -125,6 +125,9 @@ impl GitServer {
                 )))
             }
         }
+        logger.log(
+            "Reading objects"
+        );
         read_objects_from_packfile(&mut self.socket, db, logger)
     }
 
