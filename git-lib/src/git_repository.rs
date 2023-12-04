@@ -1468,8 +1468,8 @@ impl<'a> GitRepository<'a> {
         Ok(objects)
     }
 
-    pub fn log(&mut self, content: &str) {
-        self.logger.log(content);
+    pub fn log(&mut self, message: &str) {
+        self.logger.log(message);
     }
 
     pub fn logger(&mut self) -> &mut Logger {
@@ -2727,7 +2727,6 @@ impl<'a> GitRepository<'a> {
         all: bool,
     ) -> Result<Vec<(CommitObject, usize, usize)>, CommandError> {
         let mut branches_with_their_last_hash: Vec<(String, String)> = Vec::new();
-        let mut commits_map: HashMap<String, (CommitObject, usize, usize)> = HashMap::new();
 
         if all {
             branches_with_their_last_hash = self.push_all_branch_hashes()?;
@@ -2739,6 +2738,7 @@ impl<'a> GitRepository<'a> {
         }
 
         let mut commits_for_last_hash: Vec<(CommitObject, String)> = Vec::new();
+        self.log("Building commits for las hash 🚧");
         for (branch, hash) in branches_with_their_last_hash {
             self.log(&format!(
                 "Opening database branch: '{}', hash: '{}'",
@@ -2747,6 +2747,10 @@ impl<'a> GitRepository<'a> {
             let mut commit_object = self.db()?.read_object_shallow(&hash, &mut self.logger)?;
 
             self.log("read success");
+            self.log(&format!(
+                "🔍️ commits_for_last_hash size: {}",
+                commits_for_last_hash.len()
+            ));
             let first_commit_branch =
                 commit_object
                     .as_mut_commit()
@@ -2755,8 +2759,12 @@ impl<'a> GitRepository<'a> {
                     ))?;
             commits_for_last_hash.push((first_commit_branch.to_owned(), hash));
         }
+        self.log("Sorting commits 🚧");
+
         sort_commits_descending_date(&mut commits_for_last_hash);
 
+        self.log("Building commits hashmap 🚧");
+        let mut commits_map: HashMap<String, (CommitObject, usize, usize)> = HashMap::new();
         for (color_idex, (_, hash)) in commits_for_last_hash.iter().enumerate() {
             rebuild_commits_tree(
                 &self.db()?,
@@ -2770,7 +2778,9 @@ impl<'a> GitRepository<'a> {
             )?;
         }
 
+        self.log("Draining commits to vector 🚧");
         let mut commits = commits_map.drain().map(|(_, v)| v).collect();
+        self.log("Sorting commits 🚧");
         sort_commits_descending_date_and_topo(&mut commits);
         Ok(commits)
     }

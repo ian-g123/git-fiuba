@@ -50,7 +50,7 @@ impl ObjectsDatabase {
         hash_str: &str,
         logger: &mut Logger,
     ) -> Result<GitObject, CommandError> {
-        logger.log(&format!("Database: Reading deep object: {}", hash_str));
+        logger.log(&format!("Database: Reading deep object ⚠️: {}", hash_str));
         let (type_str, len, content) = self.read_object_data(hash_str, logger)?;
         return git_object_from_data(
             type_str,
@@ -69,10 +69,8 @@ impl ObjectsDatabase {
         hash_str: &str,
         logger: &mut Logger,
     ) -> Result<GitObject, CommandError> {
-        logger.log(&format!("Database: Reading deep object: {}", hash_str));
-
+        logger.log(&format!("Database: Reading shallow object: {}", hash_str));
         let (type_str, len, content) = self.read_object_data(hash_str, logger)?;
-
         return git_object_from_data(
             type_str,
             &mut content.as_slice(),

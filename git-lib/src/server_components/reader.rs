@@ -1,6 +1,6 @@
 use std::io::Read;
 
-use crate::command_errors::CommandError;
+use crate::{command_errors::CommandError, logger::Logger};
 
 pub struct BuffedReader<'a> {
     stream: &'a mut dyn Read,
@@ -17,18 +17,17 @@ impl<'a> BuffedReader<'a> {
         }
     }
 
-    pub fn clean_up_to_pos(&mut self) {
-        self.buffer.drain(..self.pos);
-        self.pos = 0;
-    }
-
     // If the buffer is smaller than the given size, read from the stream until the buffer is at least the given size.
-    pub fn record_and_fast_foward_to(&mut self, pos: usize) -> Result<(), CommandError> {
+    pub fn record_and_fast_foward_to(
+        &mut self,
+        pos: usize,
+        logger: &mut Logger,
+    ) -> Result<(), CommandError> {
         let len = self.buffer.len();
-        println!("-> {} | {}", pos, len);
+        logger.log(&format!("BuffedReader: -> {} | len {}", pos, len));
         if len < pos {
             let bytes_to_read = pos - len;
-            println!("+ {}", bytes_to_read);
+            logger.log(&format!("BuffedReader: + {}", bytes_to_read));
             let mut buffer = vec![0; bytes_to_read];
             self.read_exact(&mut buffer).map_err(|error| {
                 CommandError::FileReadError(format!("Error al leer con buffed reader: {error}"))

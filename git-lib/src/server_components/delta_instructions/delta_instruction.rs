@@ -22,10 +22,6 @@ pub fn read_delta_instruction_from(
         return Ok(None);
     }
     let byte = first_byte[0];
-    logger.log(&format!(
-        "Reading delta instruction. First byte: {:b}",
-        byte
-    ));
     if byte & 0b1000_0000 == 0 {
         logger.log("Data instruction");
         Ok(Some(DataInstruction::read_from(byte, stream)?))

@@ -106,10 +106,6 @@ impl CommitObject {
                     tree_hash_str
                 ));
                 let mut tree = db.read_object(&tree_hash_str, logger)?;
-                logger.log(&format!(
-                    "tree content en read_from : {}",
-                    String::from_utf8_lossy(&(tree.to_owned().content(None)?))
-                ));
 
                 let Some(tree) = tree.as_tree() else {
                     return Err(CommandError::InvalidCommit);

@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fmt::format,
-    io::{Cursor, Read, Write},
+    io::{Cursor, Read, Seek, SeekFrom, Write},
     net::TcpStream,
 };
 
@@ -212,7 +212,7 @@ fn read_object_from_offset(
     db: &ObjectsDatabase,
     logger: &mut Logger,
 ) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
-    buffed_reader.record_and_fast_foward_to(offset as usize)?;
+    buffed_reader.record_and_fast_foward_to(offset as usize, logger)?;
     read_one_object_data_from_packfile(buffed_reader, db, logger, None)
 }
 
@@ -240,7 +240,7 @@ fn read_undeltified_object(
     logger: &mut Logger,
 ) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
     logger.log(&format!("Reading Undeltified Object"));
-    let object_content = read_extract_rewind(buffed_reader, len)?;
+    let object_content = read_extract_rewind(buffed_reader, len, logger)?;
     Ok((obj_type, len, object_content))
 }
 
@@ -258,7 +258,7 @@ fn read_ofs_delta(
     let current_position = buffed_reader.get_pos();
     let (base_obj_type, base_obj_len, base_obj_content) =
         read_object_from_offset(buffed_reader, base_object_offset, db, logger)?;
-    buffed_reader.record_and_fast_foward_to(current_position)?;
+    buffed_reader.record_and_fast_foward_to(current_position, logger)?;
 
     read_and_apply_delta_instructions(
         buffed_reader,
@@ -327,7 +327,7 @@ fn read_and_apply_delta_instructions(
     base_obj_content: Vec<u8>,
     logger: &mut Logger,
 ) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
-    let delta_content = read_extract_rewind(buffed_reader, len)?;
+    let delta_content = read_extract_rewind(buffed_reader, len, logger)?;
     let mut cursor = Cursor::new(delta_content);
     let base_obj_len_redundant = read_size_encoding(&mut cursor)?;
     if base_obj_len_redundant != base_obj_len {
@@ -358,6 +358,7 @@ fn read_and_apply_delta_instructions(
 fn read_extract_rewind(
     buffed_reader: &mut BuffedReader<'_>,
     len: usize,
+    logger: &mut Logger,
 ) -> Result<Vec<u8>, CommandError> {
     let base_post = buffed_reader.get_pos();
     let mut buffed_reader_ref: &mut BuffedReader<'_> = buffed_reader;
@@ -367,7 +368,7 @@ fn read_extract_rewind(
         .read_exact(&mut delta_content)
         .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
     let bytes_used = decoder.total_in() as usize;
-    buffed_reader.record_and_fast_foward_to(base_post + bytes_used)?;
+    buffed_reader.record_and_fast_foward_to(base_post + bytes_used, logger)?;
     Ok(delta_content)
 }
 
@@ -521,74 +522,21 @@ fn get_object_packfile_offset(
     // each, 1024 bytes long in total. According to the documentation, “[the] N-th entry
     // of this table records the number of objects in the corresponding pack, the first
     // byte of whose object name is less than or equal to N.”
-    let mut cumulative_objects_counts: Vec<u8> = vec![0; 1024];
-    index_file
-        .read_exact(&mut cumulative_objects_counts)
-        .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
-    let object_group_index = sha1[0] as usize;
-    let prev_object_group_count = u32::from_be_bytes(
-        cumulative_objects_counts[(object_group_index - 1) * 4..object_group_index * 4]
-            .to_vec()
-            .try_into()
-            .map_err(|_| {
-                CommandError::ErrorExtractingPackfileVerbose(format!(
-                    "Could not get prev_object_group_count value: {:?}, {}",
-                    cumulative_objects_counts, object_group_index
-                ))
-            })?,
-    );
-    let object_group_count = u32::from_be_bytes(
-        cumulative_objects_counts[object_group_index * 4..(object_group_index + 1) * 4]
-            .to_vec()
-            .try_into()
-            .map_err(|_| {
-                CommandError::ErrorExtractingPackfileVerbose(format!(
-                    "Could not get object_group_count value: {:?}, {}",
-                    cumulative_objects_counts, object_group_index
-                ))
-            })?,
-    );
-    let object_count = u32::from_be_bytes(
-        cumulative_objects_counts[cumulative_objects_counts.len() - 4..]
-            .to_vec()
-            .try_into()
-            .map_err(|_| {
-                CommandError::ErrorExtractingPackfileVerbose(format!(
-                    "Could not get object_count value: {:?}, {}",
-                    cumulative_objects_counts, object_group_index
-                ))
-            })?,
-    );
-    let number_of_objects_in_group = object_group_count - prev_object_group_count;
+    let (prev_object_group_count, object_count, number_of_objects_in_group) =
+        read_first_layer(index_file, sha1)?;
 
     // The second layer of the fanout table contains the 20-byte object names, in order.
     // We already know how many to expect from the first layer of the fanout table.
-    let mut prev_group_object_names = vec![0; prev_object_group_count as usize * 20];
-    index_file
-        .read_exact(&mut prev_group_object_names)
-        .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
-    let mut number_objets_read_in_group = 0;
-    let mut found = false;
-    for _ in 0..number_of_objects_in_group {
-        let mut object_name = [0; 20];
-        index_file
-            .read_exact(&mut object_name)
-            .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
-
-        if object_name == *sha1 {
-            found = true;
-            break;
-        }
-        number_objets_read_in_group += 1;
-    }
-    if !found {
+    let Some(index_of_object) = read_seccond_layer(
+        prev_object_group_count,
+        index_file,
+        number_of_objects_in_group,
+        sha1,
+        object_count,
+    )?
+    else {
         return Ok(None);
-    }
-    let index_of_object = prev_object_group_count + number_objets_read_in_group;
-    let mut rest_objets = vec![0; (object_count - index_of_object - 1) as usize * 20];
-    index_file
-        .read_exact(&mut rest_objets)
-        .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
+    };
 
     // The third layer of the fanout table gives us a four-byte cyclic redundancy check value for each object.
     let mut crcs = vec![0; object_count as usize * 4];
@@ -614,6 +562,99 @@ fn get_object_packfile_offset(
     })?);
 
     Ok(Some(offset))
+}
+
+fn read_seccond_layer(
+    prev_object_group_count: u32,
+    index_file: &mut dyn Read,
+    number_of_objects_in_group: u32,
+    sha1: &[u8; 20],
+    object_count: u32,
+) -> Result<Option<u32>, CommandError> {
+    let mut prev_group_object_names = vec![0; prev_object_group_count as usize * 20];
+    index_file
+        .read_exact(&mut prev_group_object_names)
+        .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
+    // index_file
+    //     .seek(SeekFrom::Current((prev_object_group_count * 20) as i64))
+    //     .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
+    let mut number_objets_read_in_group = 0;
+    let mut found = false;
+    for _ in 0..number_of_objects_in_group {
+        let mut object_name = [0; 20];
+        index_file
+            .read_exact(&mut object_name)
+            .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
+
+        if object_name == *sha1 {
+            found = true;
+            break;
+        }
+        number_objets_read_in_group += 1;
+    }
+    if !found {
+        return Ok(None);
+    }
+    let index_of_object = prev_object_group_count + number_objets_read_in_group;
+    let mut rest_objets = vec![0; (object_count - index_of_object - 1) as usize * 20];
+    index_file
+        .read_exact(&mut rest_objets)
+        .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
+    Ok(Some(index_of_object))
+}
+
+fn read_first_layer(
+    index_file: &mut dyn Read,
+    sha1: &[u8; 20],
+) -> Result<(u32, u32, u32), CommandError> {
+    let mut cumulative_objects_counts: Vec<u8> = vec![0; 1024];
+    index_file
+        .read_exact(&mut cumulative_objects_counts)
+        .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
+    let object_group_index = sha1[0] as usize;
+    let prev_object_group_count = if object_group_index == 0 {
+        0
+    } else {
+        u32::from_be_bytes(
+            cumulative_objects_counts[(object_group_index - 1) * 4..object_group_index * 4]
+                .to_vec()
+                .try_into()
+                .map_err(|_| {
+                    CommandError::ErrorExtractingPackfileVerbose(format!(
+                        "Could not get prev_object_group_count value: {:?}, {}",
+                        cumulative_objects_counts, object_group_index
+                    ))
+                })?,
+        )
+    };
+    let object_group_count = u32::from_be_bytes(
+        cumulative_objects_counts[object_group_index * 4..(object_group_index + 1) * 4]
+            .to_vec()
+            .try_into()
+            .map_err(|_| {
+                CommandError::ErrorExtractingPackfileVerbose(format!(
+                    "Could not get object_group_count value: {:?}, {}",
+                    cumulative_objects_counts, object_group_index
+                ))
+            })?,
+    );
+    let object_count = u32::from_be_bytes(
+        cumulative_objects_counts[cumulative_objects_counts.len() - 4..]
+            .to_vec()
+            .try_into()
+            .map_err(|_| {
+                CommandError::ErrorExtractingPackfileVerbose(format!(
+                    "Could not get object_count value: {:?}, {}",
+                    cumulative_objects_counts, object_group_index
+                ))
+            })?,
+    );
+    let number_of_objects_in_group = object_group_count - prev_object_group_count;
+    Ok((
+        prev_object_group_count,
+        object_count,
+        number_of_objects_in_group,
+    ))
 }
 
 pub fn search_object_data_from_hash(

@@ -58,8 +58,8 @@ impl Logger {
     /// Escribe msg en el archivo de logs
     pub fn log(&mut self, msg: &str) {
         if let Some(sender) = &self.logs_sender {
-            let _ = sender.send(msg.to_string());
-            let _ = sender.send("\n".to_string());
+            let time = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+            let _ = sender.send(format!("{}: {}\n", time, msg));
         }
     }
 
