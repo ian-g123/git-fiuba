@@ -252,7 +252,20 @@ fn read_commit_info_from(
     };
     let (committer, committer_timestamp, committer_offset) = get_author_info(commiter_info)?;
 
-    lines_next(&mut lines)?;
+    let mut signature_block = Vec::new();
+    let sig_line = lines_next(&mut lines)?;
+    if sig_line == "gpgsig -----BEGIN PGP SIGNATURE-----" {
+        signature_block.push(sig_line);
+        let mut line = lines_next(&mut lines)?;
+        while line != " -----END PGP SIGNATURE-----" {
+            signature_block.push(line);
+            line = lines_next(&mut lines)?;
+        }
+        signature_block.push(line);
+
+        lines_next(&mut lines)?;
+        lines_next(&mut lines)?;
+    }
     let message = lines.collect();
 
     Ok((

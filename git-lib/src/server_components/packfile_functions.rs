@@ -252,13 +252,13 @@ fn read_ofs_delta(
     logger: &mut Logger,
 ) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
     logger.log(&format!("Reading Delta Offset: {}", offset));
-    let (base_obj_neg_offset, bytes_used) = read_ofs(buffed_reader)?;
+    let base_obj_neg_offset = read_ofs(buffed_reader)?;
     let base_object_offset = offset - base_obj_neg_offset;
     logger.log("Reading base object");
     let current_position = buffed_reader.get_pos();
     let (base_obj_type, base_obj_len, base_obj_content) =
         read_object_from_offset(buffed_reader, base_object_offset, db, logger)?;
-    buffed_reader.record_and_fast_foward_to(current_position);
+    buffed_reader.record_and_fast_foward_to(current_position)?;
 
     read_and_apply_delta_instructions(
         buffed_reader,
@@ -367,15 +367,13 @@ fn read_extract_rewind(
         .read_exact(&mut delta_content)
         .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
     let bytes_used = decoder.total_in() as usize;
-    buffed_reader.record_and_fast_foward_to(base_post + bytes_used);
+    buffed_reader.record_and_fast_foward_to(base_post + bytes_used)?;
     Ok(delta_content)
 }
 
-fn read_ofs(socket: &mut dyn Read) -> Result<(u32, u32), CommandError> {
+fn read_ofs(socket: &mut dyn Read) -> Result<u32, CommandError> {
     let mut offset = 0;
-    let mut bytes_used = 0;
     loop {
-        bytes_used += 1;
         let mut byte = [0; 1];
         socket
             .read_exact(&mut byte)
@@ -385,7 +383,7 @@ fn read_ofs(socket: &mut dyn Read) -> Result<(u32, u32), CommandError> {
 
         offset = (offset << 7) | byte_value;
         if last_byte {
-            return Ok((offset, bytes_used));
+            return Ok(offset);
         }
 
         offset += 1;

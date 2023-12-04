@@ -142,7 +142,6 @@ pub fn display_from_hash(
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
     let (type_str, len, content) = db.read_object_data(hash, logger)?;
-
     let mut stream = std::io::Cursor::new(content);
     display_from_stream(type_str, len, &mut stream, logger, output)
 }
