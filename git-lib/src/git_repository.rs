@@ -3048,7 +3048,12 @@ impl<'a> GitRepository<'a> {
         let mut errors: String = String::new();
         let mut deletions = String::new();
         let mut config = Config::open(&self.git_path)?;
+        let current_branch = self.get_current_branch_name()?;
         for branch in branches {
+            if branch == &current_branch {
+                errors += &format!("Cannot delete branch '{current_branch}'");
+                continue;
+            }
             let path = branch_path.clone() + branch;
             let Ok(_) = File::open(path.clone()) else {
                 if are_remotes {
