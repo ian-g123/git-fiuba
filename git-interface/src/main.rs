@@ -258,7 +258,6 @@ impl Interface {
         let buttons = [
             ("pull", self.build_button("pull_button".to_string())),
             ("push", self.build_button("push_button".to_string())),
-            ("checkout", self.build_button("checkout_button".to_string())),
             ("fetch", self.build_button("fetch_button".to_string())),
             ("branch", self.build_button("branch_button".to_string())),
             ("commit", self.build_button("commit_button".to_string())),
@@ -363,9 +362,6 @@ impl Interface {
                     if let ControlFlow::Break(_) = refresh_function(interface) {
                         return;
                     }
-                }
-                "checkout" => {
-                    todo!();
                 }
                 _ => {
                     eprintln!("Acción no reconocida: {}", button_action);
@@ -1364,7 +1360,9 @@ fn staged_area_func() -> Result<(HashSet<String>, HashSet<String>, HashSet<Strin
 }
 
 fn commit_function(interface: Interface) {
-    let commit_entry_msg: gtk::Entry = interface
+    let clone_interface = Rc::new(RefCell::new(interface));
+    let commit_entry_msg: gtk::Entry = clone_interface
+        .borrow_mut()
         .builder
         .object("entrada_de_mensaje")
         .expect("No se pudo obtener la entrada de mensaje");
@@ -1392,7 +1390,6 @@ fn commit_function(interface: Interface) {
     let is_merge = merge_head_path.exists() && !is_rebase;
 
     if is_merge {
-        println!("jhhh");
         if repo.staging_area().unwrap().has_conflicts() {
             dialog_window(
                 "Existen conflictos de merge sin resolver.\nResuélvalos y luego presione el botón 'commit'"
@@ -1402,7 +1399,6 @@ fn commit_function(interface: Interface) {
         }
         match repo.merge_continue() {
             Ok(_) => {
-                refresh_function(interface);
                 dialog_window("Merge finalizado con éxito.\nSi escribió un mensaje de commit, no fue utilizado".to_string());
             }
             Err(err) => dialog_window(err.to_string()),
