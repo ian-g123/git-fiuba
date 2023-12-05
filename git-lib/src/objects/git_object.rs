@@ -1,6 +1,6 @@
 use crate::{
-    command_errors::CommandError,
-    logger::Logger, objects_database::ObjectsDatabase, utils::super_string::u8_vec_to_hex_string,
+    command_errors::CommandError, logger::Logger, objects_database::ObjectsDatabase,
+    utils::super_string::u8_vec_to_hex_string,
 };
 
 use super::{
@@ -125,7 +125,7 @@ pub trait GitObjectTrait: Debug {
         _modifications: &mut Vec<String>,
         _conflicts: &mut Vec<String>,
         _common: &mut Tree,
-        _unstaged_files: &Vec<String>,
+        _unstaged_files: &[String],
         _staged: &HashMap<String, Vec<u8>>,
         _db: &ObjectsDatabase,
     ) -> Result<bool, CommandError> {

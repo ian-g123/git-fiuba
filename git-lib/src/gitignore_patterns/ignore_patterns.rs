@@ -179,7 +179,7 @@ fn add_gitignore_patterns(
 
                 BACKSLASH => ignore_pattern = true,
                 ASTERISK => {
-                    if i == 0 || (i == 0 && (line.starts_with('/') || line.starts_with('!'))) {
+                    if i == 0 {
                         ends_with = true;
                     } else if i == last_index {
                         starts_with = true;
@@ -311,8 +311,8 @@ fn look_for_gitignore_files(
             look_for_gitignore_files(&entry_name, gitignore_files, logger, base_path)?;
         } else if entry_name.ends_with(".gitignore") {
             if let Some(path) = entry_name.strip_prefix(base_path) {
-                let path = if path.starts_with('/') {
-                    path[1..].to_string()
+                let path = if let Some(striped_path) = path.strip_prefix('/') {
+                    striped_path.to_string()
                 } else {
                     path.to_string()
                 };

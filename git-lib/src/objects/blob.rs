@@ -277,7 +277,7 @@ impl GitObjectTrait for Blob {
         modifications: &mut Vec<String>,
         _conflicts: &mut Vec<String>,
         _common: &mut Tree,
-        unstaged_files: &Vec<String>,
+        unstaged_files: &[String],
         staged: &HashMap<String, Vec<u8>>,
         db: &ObjectsDatabase,
     ) -> Result<bool, CommandError> {

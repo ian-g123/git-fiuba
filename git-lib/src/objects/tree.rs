@@ -505,7 +505,7 @@ impl GitObjectTrait for Tree {
         modifications: &mut Vec<String>,
         conflicts: &mut Vec<String>,
         common: &mut Tree,
-        unstaged_files: &Vec<String>,
+        unstaged_files: &[String],
         staged: &HashMap<String, Vec<u8>>,
         db: &ObjectsDatabase,
     ) -> Result<bool, CommandError> {
