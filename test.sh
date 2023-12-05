@@ -12,7 +12,7 @@ echo "=========================="
 echo "Clone Integration test"
 mkdir -p git/tests/data/commands/clone/test1/server-files
 cd git/tests/data/commands/clone/test1/server-files
-git daemon --verbose --reuseaddr --enable=receive-pack --informative-errors --base-path=. . & > "daemon.log"
+git daemon --log-destination=none --reuseaddr --enable=receive-pack --informative-errors --base-path=. . & > "daemon.log"
 daemon_process=$!
 cd -
 sleep 1
@@ -24,7 +24,7 @@ echo "=========================="
 echo "Push Integration test"
 unzip -qq git/tests/data/commands/push/test1/server-files/repo_backup_push.zip -d git/tests/data/commands/push/test1/server-files/
 cd git/tests/data/commands/push/test1/server-files
-git daemon --verbose --reuseaddr --enable=receive-pack --informative-errors --base-path=. . & > "daemon.log"
+git daemon --log-destination=none --reuseaddr --enable=receive-pack --informative-errors --base-path=. . & > "daemon.log"
 daemon_process=$!
 cd -
 sleep 1
@@ -50,7 +50,7 @@ echo "Delta over network test"
 unzip -qq git/tests/data/commands/labdeltaclient/server_files/repo_with_two_commits.zip -d git/tests/data/commands/labdeltaclient/server_files/repo_with_two_commits
 unzip -qq git/tests/data/commands/labdeltaclient/user2_to_recieve_delta.zip -d git/tests/data/commands/labdeltaclient/user2_to_recieve_delta
 cd git/tests/data/commands/labdeltaclient/server_files
-git daemon --verbose --reuseaddr --enable=receive-pack --informative-errors --base-path=. . & > "daemon.log"
+git daemon --log-destination=none --reuseaddr --enable=receive-pack --informative-errors --base-path=. . & > "daemon.log"
 daemon_process=$!
 cd -
 sleep 1
