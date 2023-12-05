@@ -223,8 +223,7 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
         };
         merge_window.clone().hide();
         remove_widgets_to_merge_window(&mut interface.builder.clone(), merge_window.clone());
-        if let ControlFlow::Break(_) = refresh_function(interface2) {
-        }
+        if let ControlFlow::Break(_) = refresh_function(interface2) {}
     });
     ControlFlow::Continue(())
 }
@@ -362,8 +361,7 @@ impl Interface {
                         files_merge_conflict: Rc::clone(&files_merge_conflict),
                         principal_window: window,
                     };
-                    if let ControlFlow::Break(_) = refresh_function(interface) {
-                    }
+                    if let ControlFlow::Break(_) = refresh_function(interface) {}
                 }
                 _ => {
                     eprintln!("Acción no reconocida: {}", button_action);
@@ -531,7 +529,7 @@ impl Interface {
                 return;
             }
         };
-        let mut local_branches = match repo.local_branches() {
+        let mut local_branches = match repo.local_branches_refs() {
             Ok(local_branches) => local_branches,
             Err(err) => {
                 dialog_window(err.to_string());
@@ -870,7 +868,7 @@ impl Interface {
                 return;
             }
             let vec_branch = vec![name_branch_text.to_string()];
-            match repo.create_branch(&vec_branch, None) {
+            match repo.create_branch_from_cmd_args(&vec_branch) {
                 Ok(_) => {
                     dialog_window("Rama creada con éxito".to_string());
                     new_name_branch.set_text("");

@@ -101,7 +101,7 @@ impl Checkout {
         if !self.checkout_or_update.is_empty() {
             repo.update_files_or_checkout(self.checkout_or_update.clone())?;
         } else if !self.new_branch.is_empty() {
-            repo.create_branch(&self.new_branch, None)?;
+            repo.create_branch_from_cmd_args(&self.new_branch)?;
             let name = self.new_branch[0].clone();
             repo.checkout(&name, true)?;
         } else {

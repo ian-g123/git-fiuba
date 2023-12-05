@@ -138,3 +138,174 @@ if [ $success -eq 0 ]; then
 fi
 echo "✅ Passed"
 rm server-test-stderr.txt
+
+# Run Integration Test
+# We tests a custom git client against a custom git server so we use target/debug/git binnary
+echo "=========================="
+echo "Server-Client Integration test"
+rm -rf server_client_integration_test
+mkdir server_client_integration_test
+mkdir server_client_integration_test/server
+mkdir server_client_integration_test/client
+cd server_client_integration_test/server
+../../target/debug/git init --bare repo
+../../target/debug/git-server & > "server_terminal.log"
+server_process=$!
+cd -
+sleep 1
+cd server_client_integration_test/client
+../../target/debug/git clone git://127.1.0.0:9418/repo user1
+cd user1
+echo "Contenido Incial" > file
+../../../target/debug/git add file
+../../../target/debug/git commit -m InitialCommit
+../../../target/debug/git push
+cd -
+
+sleep 1
+
+master_branch_user_1=$(cat user1/.git/refs/heads/master)
+../../target/debug/git clone git://127.1.0.0:9418/repo user2
+if [ ! -f user2/.git/refs/heads/master ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+master_branch_user_2=$(cat user2/.git/refs/heads/master)
+if [ "$master_branch_user_1" != "$master_branch_user_2" ]; then
+    echo "❌ Failed. Branches are not equal"
+    kill $server_process
+    exit 1
+fi
+
+echo "✅ Primer push"
+
+sleep 1
+
+cd user1
+../../../target/debug/git branch rama
+echo "Contenido Master" > file1
+../../../target/debug/git add file1
+../../../target/debug/git commit -m MasterCommit
+../../../target/debug/git checkout rama
+echo "Contenido Rama" > file2
+../../../target/debug/git add file2
+../../../target/debug/git commit -m RamaCommit
+echo "Contenido Rama" > file3
+../../../target/debug/git add file3
+../../../target/debug/git commit -m RamaCommit2
+../../../target/debug/git push
+
+cd -
+
+echo "✅ Push con varias ramas"
+
+sleep 1
+
+cd user2
+../../../target/debug/git pull
+cd -
+if [ ! -f user2/.git/refs/heads/master ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+if [ ! -f user2/.git/refs/heads/rama ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+master_branch_user_1=$(cat user1/.git/refs/heads/master)
+master_branch_user_2=$(cat user2/.git/refs/heads/master)
+if [ "$master_branch_user_1" != "$master_branch_user_2" ]; then
+    echo "❌ Failed. Branches are not equal"
+    kill $server_process
+    exit 1
+fi
+rama_branch_user_1=$(cat user1/.git/refs/heads/rama)
+if [ ! -f user2/.git/refs/heads/rama ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+rama_branch_user_2=$(cat user2/.git/refs/heads/rama)
+if [ "$rama_branch_user_1" != "$rama_branch_user_2" ]; then
+    echo "❌ Failed. Branches are not equal"
+    kill $server_process
+    exit 1
+fi
+
+cd user2
+if [ ! -f file1 ]; then
+    echo "❌ Failed. File1 not found"
+    kill $server_process
+    exit 1
+fi
+../../target/debug/git checkout rama
+if [ ! -f file2 ]; then
+    echo "❌ Failed. File2 not found"
+    kill $server_process
+    exit 1
+fi
+if [ ! -f file3 ]; then
+    echo "❌ Failed. File3 not found"
+    kill $server_process
+    exit 1
+fi
+
+echo "✅ Pull con varias ramas"
+
+sleep 1
+
+cd -
+../../target/debug/git clone git://127.1.0.0:9418/repo user3
+if [ ! -f user3/.git/refs/heads/master ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+if [ ! -f user3/.git/refs/heads/rama ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+
+master_branch_user_3=$(cat user3/.git/refs/heads/master)
+if [ "$master_branch_user_1" != "$master_branch_user_3" ]; then
+    echo "❌ Failed. Branches are not equal"
+    kill $server_process
+    exit 1
+fi
+
+rama_branch_user_3=$(cat user3/.git/refs/heads/rama)
+if [ "$rama_branch_user_1" != "$rama_branch_user_3" ]; then
+    echo "❌ Failed. Branches are not equal"
+    kill $server_process
+    exit 1
+fi
+
+cd user3
+if [ ! -f file1 ]; then
+    echo "❌ Failed. File1 not found"
+    kill $server_process
+    exit 1
+fi
+../../target/debug/git checkout rama
+if [ ! -f file2 ]; then
+    echo "❌ Failed. File2 not found"
+    kill $server_process
+    exit 1
+fi
+
+if [ ! -f file3 ]; then
+    echo "❌ Failed. File3 not found"
+    kill $server_process
+    exit 1
+fi
+
+echo "✅ Clone con varias ramas"
+
+kill $server_process
+rm -rf server_client_integration_test
+echo "✅ Passed"
+

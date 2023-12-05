@@ -383,22 +383,6 @@ impl ChangesController {
     }
 }
 
-/// Devuelve true si el contenido del objeto y el path pasados difieren.
-fn content_differs(path: &str, object: &mut GitObject) -> Result<bool, CommandError> {
-    let staged_content: String = String::from_utf8(object.content(None)?)
-        .map_err(|error| CommandError::FileReadError(error.to_string()))?;
-
-    let Ok(mut current_file) = File::open(path) else {
-        return Err(CommandError::FileOpenError(path.to_string()));
-    };
-    let mut current_content = String::new();
-    current_file
-        .read_to_string(&mut current_content)
-        .map_err(|_: std::io::Error| CommandError::FileReadError(path.to_string()))?;
-
-    Ok(current_content == staged_content)
-}
-
 fn check_isnt_in_last_commit(
     last_commit: &Option<Tree>,
     path: &str,

@@ -187,7 +187,7 @@ impl Branch {
         if !self.rename.is_empty() {
             repo.rename_branch(&self.rename)?;
         } else if !self.create.is_empty() {
-            repo.create_branch(&self.create, None)?;
+            repo.create_branch_from_cmd_args(&self.create)?;
         } else if !self.delete_locals.is_empty() {
             repo.delete_branches(&self.delete_locals, false)?;
         } else if !self.delete_remotes.is_empty() {
