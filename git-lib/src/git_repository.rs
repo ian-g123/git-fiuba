@@ -1387,7 +1387,7 @@ impl<'a> GitRepository<'a> {
     /// Actualiza la referencia `FETCH_HEAD` con el hash del último commit de cada rama.
     pub fn fetch(&mut self) -> Result<(), CommandError> {
         self.log("Fetching updates");
-        let (protocol, address, repository_path, repository_url) = self.get_remote_info()?;
+        let (_protocol, address, repository_path, repository_url) = self.get_remote_info()?;
         self.log(&format!(
             "Address: {}, repository_path: {}, repository_url: {}",
             address, repository_path, repository_url
@@ -1458,7 +1458,7 @@ impl<'a> GitRepository<'a> {
         objects_decompressed_data: HashMap<[u8; 20], (PackfileObjectType, usize, Vec<u8>)>,
     ) -> Result<HashMap<String, (PackfileObjectType, usize, Vec<u8>)>, CommandError> {
         let mut objects = HashMap::<String, (PackfileObjectType, usize, Vec<u8>)>::new();
-        for (hash, (obj_type, len, content)) in objects_decompressed_data {
+        for (_hash, (obj_type, len, content)) in objects_decompressed_data {
             self.log(&format!(
                 "Saving object of type {} and len {}, with data {:?}",
                 obj_type,
@@ -2669,10 +2669,7 @@ impl<'a> GitRepository<'a> {
         if staging_area.has_conflicts() {
             return Err(CommandError::UnmergedFiles);
         }
-        let merge_tree = staging_area.get_working_tree_staged(self.logger())?;
-
-        // let mut boxed_tree: GitObject = Box::new(merge_tree.clone());
-        // let merge_tree_hash_str = self.db()?.write(&mut boxed_tree, true, &mut self.logger)?;
+        staging_area.get_working_tree_staged(self.logger())?;
 
         let get_last_commit_hash = self
             .get_last_commit_hash()?
@@ -5362,7 +5359,7 @@ fn merge_blobs(
     common_blob: &mut Blob,
     head_name: &str,
     destin_name: &str,
-    logger: &mut Logger,
+    _logger: &mut Logger,
     db: &ObjectsDatabase,
 ) -> Result<(Blob, bool), CommandError> {
     let head_content = head_blob.content(Some(db))?;

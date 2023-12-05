@@ -10,7 +10,7 @@ use std::{
 
 use super::{
     packfile_functions::read_objects_from_packfile, packfile_object_type::PackfileObjectType,
-    pkt_strings::Pkt, reader::BuffedReader,
+    pkt_strings::Pkt,
 };
 
 pub struct GitServer {

@@ -10,7 +10,7 @@ pub struct LongFormat;
 impl Format for LongFormat {
     fn get_status(
         &self,
-        logger: &mut Logger,
+        _logger: &mut Logger,
         output: &mut dyn Write,
         changes_to_be_commited: &HashMap<String, ChangeType>,
         changes_not_staged: &HashMap<String, ChangeType>,
@@ -104,12 +104,6 @@ pub fn sort_hashmap_and_filter_unmodified(
         }
     }
     sorted_files
-}
-
-fn sort_vector(files: &Vec<String>) -> Vec<String> {
-    let mut files = files.to_owned();
-    files.sort();
-    files
 }
 
 fn set_unmerged_message(unmerged_paths: &HashMap<String, ChangeType>) -> String {

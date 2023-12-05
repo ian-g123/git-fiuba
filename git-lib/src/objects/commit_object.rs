@@ -13,11 +13,10 @@ use crate::{
     },
 };
 use std::{
-    cmp::Ordering,
-    collections::{HashMap, HashSet},
+    collections::{HashMap},
     fs::{self, File},
     io::{Cursor, Read, Write},
-    path::{self, Path},
+    path::{Path},
 };
 
 extern crate chrono;
@@ -515,7 +514,7 @@ pub fn write_commit_tree_to_database(
     let mut boxed_tree: Box<dyn GitObjectTrait> = Box::new(tree.clone());
 
     db.write(&mut boxed_tree, false, logger)?;
-    for (_, (child_hash, child_obj_opt)) in tree.get_objects().iter_mut() {
+    for (_, (_child_hash, child_obj_opt)) in tree.get_objects().iter_mut() {
         let Some(child) = child_obj_opt else {
             return Err(CommandError::ShallowTree);
         };

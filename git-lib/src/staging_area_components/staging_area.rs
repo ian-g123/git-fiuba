@@ -117,7 +117,7 @@ impl StagingArea {
         Ok(changes)
     }
 
-    pub fn remove_entry(&mut self, path: &str, logger: &mut Logger) -> Result<(), CommandError> {
+    pub fn remove_entry(&mut self, path: &str, _logger: &mut Logger) -> Result<(), CommandError> {
         if !self.is_in_staging_area(&path.to_string()) {
             return Err(CommandError::RmFromStagingAreaError(path.to_string()));
         }
@@ -347,7 +347,7 @@ impl StagingArea {
 
     pub fn soft_add(
         &mut self,
-        repo_path: &str,
+        _repo_path: &str,
         file_path: &str,
         hash: &str,
     ) -> Result<(), CommandError> {
@@ -366,7 +366,7 @@ impl StagingArea {
 
     pub fn soft_add_unmerged_file(
         &mut self,
-        repo_path: &str,
+        _repo_path: &str,
         file_path: &str,
         common_hash: Option<String>,
         head_hash: Option<String>,
@@ -468,7 +468,7 @@ impl StagingArea {
         self.unmerged_files.clear();
         self.soft_files.clear();
         self.soft_unmerged_files.clear();
-        
+
         let mut boxed_working_dir: GitObject = Box::new(working_dir.to_owned());
         self.add_object(repo_path, &mut boxed_working_dir, "")?;
         Ok(())
@@ -781,8 +781,7 @@ fn read_entries(
 #[cfg(test)]
 mod tests {
     use crate::{
-        staging_area_components::{index_entry_type::IndexEntryType, staging_area},
-        utils::aux::hex_string_to_u8_vec,
+        staging_area_components::index_entry_type::IndexEntryType, utils::aux::hex_string_to_u8_vec,
     };
 
     use super::*;

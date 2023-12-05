@@ -2,12 +2,10 @@ use std::{
     collections::HashMap,
     fs::File,
     io::{Read, Write},
-    option,
     path::Path,
 };
 
 use crate::{
-    changes_controller_components::changes_types::ChangeType,
     command_errors::CommandError,
     git_repository::get_current_file_content,
     objects_database::ObjectsDatabase,

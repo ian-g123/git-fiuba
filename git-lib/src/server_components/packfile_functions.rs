@@ -1,18 +1,17 @@
 use std::{
     collections::HashMap,
-    fmt::format,
-    io::{Cursor, Read, Seek, SeekFrom, Write},
+    io::{Cursor, Read, Write},
     net::TcpStream,
 };
 
 use crate::{
     command_errors::CommandError,
     file_compressor::compress,
-    logger::{self, Logger},
+    logger::{Logger},
     objects::{
         commit_object::CommitObject,
         git_object::{
-            git_object_from_data, write_to_stream_from_content, GitObject, GitObjectTrait,
+            write_to_stream_from_content, GitObject, GitObjectTrait,
         },
         tree::Tree,
     },

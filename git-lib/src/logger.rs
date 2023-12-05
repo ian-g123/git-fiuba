@@ -2,7 +2,6 @@ use std::{
     fs::{self, File},
     io::Write,
     path::Path,
-    process::Command,
     sync::mpsc::{channel, Sender},
     thread,
 };

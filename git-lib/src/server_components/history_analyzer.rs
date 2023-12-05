@@ -1,14 +1,11 @@
 use std::{
     collections::{HashMap, HashSet},
-    hash::Hash,
-    io::Cursor,
-    option,
 };
 
 use crate::{
     command_errors::CommandError,
     logger::Logger,
-    objects::{commit_object::CommitObject, git_object::get_type_and_len},
+    objects::{commit_object::CommitObject},
     objects_database::ObjectsDatabase,
 };
 

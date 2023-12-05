@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::Write};
+use std::{io::Write};
 
 use crate::{
     command_errors::CommandError,
