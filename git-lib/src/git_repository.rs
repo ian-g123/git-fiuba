@@ -93,7 +93,7 @@ impl<'a> GitRepository<'a> {
         }
 
         Ok(GitRepository {
-            git_path: git_path,
+            git_path,
             working_dir_path: path.to_string(),
             logger,
             output,
@@ -828,13 +828,11 @@ impl<'a> GitRepository<'a> {
         }
         if self.should_ignore(&path_str)? {
             ignored_files.push(path_str);
+        } else if path.is_file() {
+            self.add_file(&path_str, staging_area)?;
+            return Ok(());
         } else {
-            if path.is_file() {
-                self.add_file(&path_str, staging_area)?;
-                return Ok(());
-            } else {
-                self.add_dir(&path_str, staging_area, ignored_files)?;
-            }
+            self.add_dir(&path_str, staging_area, ignored_files)?;
         }
         Ok(())
     }

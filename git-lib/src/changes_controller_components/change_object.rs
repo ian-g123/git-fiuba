@@ -10,11 +10,7 @@ pub struct ChangeObject {
 impl ChangeObject {
     /// Crea un ChangeObject
     pub fn new(path: String, x: ChangeType, y: ChangeType) -> Self {
-        ChangeObject {
-            path: path,
-            x: x,
-            y: y,
-        }
+        ChangeObject { path, x, y }
     }
 
     /// Crea un ChangeObject
