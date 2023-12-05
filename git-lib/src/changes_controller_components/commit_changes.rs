@@ -154,9 +154,7 @@ fn compare_content(file1: Vec<String>, file2: Vec<String>, _logger: &mut Logger)
                     deletions += file1_read.len();
                     file1_read = Vec::new();
                     file2_read = Vec::new();
-                } else if line1 != line2
-                    || (line1 == line2 && (!file1_read.is_empty() || !file2_read.is_empty()))
-                {
+                } else {
                     file1_read.push(line1.to_string());
                     file2_read.push(line2.to_string());
                 }

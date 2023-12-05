@@ -371,10 +371,7 @@ impl ChangesController {
         let has_hash = staging_area.has_file_from_hash(&hash);
 
         let isnt_in_last_commit = check_isnt_in_last_commit(last_commit, &path, &hash, logger)?;
-        if !has_path
-            && (!has_hash || (has_hash && content_differs(&path, object)?))
-            && isnt_in_last_commit
-        {
+        if !has_path && isnt_in_last_commit {
             untracked.push(path.clone());
             return Ok((true, path));
         } else if has_path && !has_hash {
