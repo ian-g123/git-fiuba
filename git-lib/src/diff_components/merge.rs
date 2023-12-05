@@ -43,20 +43,16 @@ fn build_output(
     let mut merged_content = String::new();
     let merge_conflicts = !conflicts_content.is_empty();
     for i in 0..max_iter {
-        match conflicts_content.get(&i) {
-            Some((head_lines, destin_lines)) => {
-                merged_content.push_str(&format!("<<<<<<< {}\n", head_name));
-                merged_content.push_str(&head_lines.join("\n"));
-                merged_content.push_str("\n=======\n");
-                merged_content.push_str(&destin_lines.join("\n"));
-                merged_content.push_str(&format!("\n>>>>>>> {}\n", destin_name));
-            }
-            _ => {}
+        if let Some((head_lines, destin_lines)) = conflicts_content.get(&i) {
+            merged_content.push_str(&format!("<<<<<<< {}\n", head_name));
+            merged_content.push_str(&head_lines.join("\n"));
+            merged_content.push_str("\n=======\n");
+            merged_content.push_str(&destin_lines.join("\n"));
+            merged_content.push_str(&format!("\n>>>>>>> {}\n", destin_name));
         };
-        match no_conflicts_content.get(&i) {
-            Some(line) => merged_content.push_str(&(line.to_owned() + "\n")),
-            _ => {}
-        };
+        if let Some(line) = no_conflicts_content.get(&i) {
+            merged_content.push_str(&(line.to_owned() + "\n"))
+        }
     }
     merged_content.pop();
     Ok((merged_content, merge_conflicts))
@@ -167,12 +163,11 @@ fn merge_diffs(
         let head_common_line_op = common_not_changed_in_head.get(&line_index);
         let destin_common_line_op = common_not_changed_in_destin.get(&line_index);
 
-        match (head_common_line_op, destin_common_line_op) {
-            (Some(head_comon_line), Some(_destin_comon_line)) => {
-                no_conflicts_content.insert(merge_index, head_comon_line.to_string());
-                merge_index += 1;
-            }
-            _ => {}
+        if let (Some(head_comon_line), Some(_destin_comon_line)) =
+            (head_common_line_op, destin_common_line_op)
+        {
+            no_conflicts_content.insert(merge_index, head_comon_line.to_string());
+            merge_index += 1;
         }
 
         line_index += 1;
@@ -191,8 +186,8 @@ fn just_adds(diff_line: &(Vec<String>, Vec<String>)) -> bool {
 /// contiene las líneas nuevas lineas de "otro" y el segundo vector contiene las líneas de "común"
 /// que cambiaron en "otro".
 fn get_diffs(
-    common_content: &String,
-    other_content: &String,
+    common_content: &str,
+    other_content: &str,
 ) -> Result<
     (
         HashMap<usize, String>,

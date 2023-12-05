@@ -165,7 +165,9 @@ impl ChangesController {
     ) -> Result<HashMap<String, ChangeType>, CommandError> {
         let staging_files = staging_area.get_files();
         let Some(mut tree) = last_commit_tree.to_owned() else {
-            let changes: HashMap<String, ChangeType> = staging_files.keys().map(|path| (path.to_string(), ChangeType::Added))
+            let changes: HashMap<String, ChangeType> = staging_files
+                .keys()
+                .map(|path| (path.to_string(), ChangeType::Added))
                 .collect();
             return Ok(changes);
         };

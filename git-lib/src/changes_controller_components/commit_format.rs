@@ -1,4 +1,4 @@
-use std::{io::Write};
+use std::io::Write;
 
 use crate::{
     command_errors::CommandError,
@@ -63,7 +63,7 @@ impl CommitFormat {
 }
 
 fn get_commit_sucess_message(
-    changes_to_be_commited: &Vec<(String, ChangeType)>,
+    changes_to_be_commited: &[(String, ChangeType)],
     files_changed: usize,
     insertions: usize,
     deletions: usize,

@@ -29,6 +29,23 @@ fn build_working_tree_aux(path_name: &str, tree: &mut Tree) -> Result<(), Comman
         };
         let entry_path = entry.path();
         let full_path = &get_path_name(entry_path.clone())?;
+        // warning: stripping a prefix manually
+        //   --> git-lib/src/changes_controller_components/working_tree.rs:33:13
+        //   |
+        // 33 |             &full_path[2..]
+        //   |             ^^^^^^^^^^^^^^^
+        //   |
+        // note: the prefix was tested here
+        //  --> git-lib/src/changes_controller_components/working_tree.rs:32:20
+        //   |
+        // 32 |         let path = if full_path.starts_with("./") {
+        //   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        //   = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#manual_strip
+        //   = note: `#[warn(clippy::manual_strip)]` on by default
+        // help: try using the `strip_prefix` method
+        //   |
+        // 32 ~         let path = if let Some(<stripped>) = full_path.strip_prefix("./") {
+        // 33 ~             <stripped>
         let path = if full_path.starts_with("./") {
             &full_path[2..]
         } else {

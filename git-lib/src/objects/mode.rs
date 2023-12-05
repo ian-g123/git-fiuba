@@ -14,7 +14,7 @@ pub enum Mode {
     ExecutableFile = 100755,
     SymbolicLink = 120000,
     Submodule = 160000,
-    Tree = 040000,
+    Tree = 40000,
 }
 
 impl Mode {
@@ -46,7 +46,7 @@ impl Mode {
             Mode::ExecutableFile => 100755,
             Mode::SymbolicLink => 120000,
             Mode::Submodule => 160000,
-            Mode::Tree => 040000,
+            Mode::Tree => 40000,
         }
     }
 

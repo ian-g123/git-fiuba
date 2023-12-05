@@ -53,7 +53,7 @@ pub struct GitRepository<'a> {
     working_dir_path: String,
     logger: Logger,
     output: &'a mut dyn Write,
-    bare: bool,
+    _bare: bool,
     git_ignore_patterns: Option<GitignorePatterns>,
 }
 
@@ -97,7 +97,7 @@ impl<'a> GitRepository<'a> {
             working_dir_path: path.to_string(),
             logger,
             output,
-            bare,
+            _bare: bare,
             git_ignore_patterns: None,
         })
     }
@@ -127,7 +127,7 @@ impl<'a> GitRepository<'a> {
             working_dir_path: path.to_string(),
             logger,
             output,
-            bare,
+            _bare: bare,
             git_ignore_patterns: None,
         };
         repo.create_files_and_dirs(branch_name)?;
@@ -221,7 +221,7 @@ impl<'a> GitRepository<'a> {
     }
 
     pub fn hash_object(&mut self, mut object: GitObject, write: bool) -> Result<(), CommandError> {
-        let hex_string = u8_vec_to_hex_string(&mut object.get_hash()?);
+        let hex_string = u8_vec_to_hex_string(&object.get_hash()?);
         if write {
             self.db()?.write(&mut object, false, &mut self.logger)?;
             self.logger
@@ -1019,7 +1019,7 @@ impl<'a> GitRepository<'a> {
     /// Estos archivos deben ser reconocidos por git.
     fn get_staging_area_updated_with(
         &mut self,
-        files: &Vec<String>,
+        files: &[String],
     ) -> Result<StagingArea, CommandError> {
         self.log("Running pathspec configuration");
 
@@ -1047,7 +1047,7 @@ impl<'a> GitRepository<'a> {
         self.log("Running 'all' configuration\n");
         let mut staging_area = self.staging_area()?;
         let files = &staging_area.get_files();
-        for (path, _) in files {
+        for path in files.keys() {
             if !Path::new(&path).exists() {
                 staging_area.remove(path);
             }
@@ -1679,10 +1679,7 @@ impl<'a> GitRepository<'a> {
             ),
         )?;
         let paths = fs::read_dir(branches_path).map_err(|error| {
-            CommandError::FileReadError(format!(
-                "Error leyendo directorio de branches: {}",
-                error
-            ))
+            CommandError::FileReadError(format!("Error leyendo directorio de branches: {}", error))
         })?;
         for path in paths {
             let path = path.map_err(|error| {
@@ -2162,8 +2159,7 @@ impl<'a> GitRepository<'a> {
                 .map_err(|error| {
                     CommandError::FileReadError(format!(
                         "Error leyendo archivo {}: {}",
-                        entry_name,
-                        error
+                        entry_name, error
                     ))
                 })?;
                 let blob = Blob::new_from_content_and_path(content, &entry_name)?;
@@ -2763,8 +2759,7 @@ impl<'a> GitRepository<'a> {
         fs::remove_file(path).map_err(|error| {
             CommandError::FileWriteError(format!(
                 "Error borrando archivo {}: {}",
-                relative_path,
-                error
+                relative_path, error
             ))
         })?;
         Ok(())
@@ -2827,7 +2822,10 @@ impl<'a> GitRepository<'a> {
         }
 
         self.log("Draining commits to vector 🚧");
-        let mut commits = commits_map.drain().map(|(_, v)| v).collect();
+        let mut commits = commits_map
+            .drain()
+            .map(|(_, v)| v)
+            .collect::<Vec<(CommitObject, usize, usize)>>();
         self.log("Sorting commits 🚧");
         sort_commits_descending_date_and_topo(&mut commits);
         Ok(commits)
@@ -3484,7 +3482,7 @@ impl<'a> GitRepository<'a> {
     fn set_checkout_local_conflicts(
         &mut self,
         conflicts: Vec<String>,
-        untracked_files: &Vec<String>,
+        untracked_files: &[String],
     ) -> Result<(), CommandError> {
         let mut untracked_conflicts: Vec<String> = Vec::new();
         let mut unstaged_conflicts: Vec<String> = Vec::new();
@@ -3715,7 +3713,7 @@ impl<'a> GitRepository<'a> {
         new_tree: &mut Tree,
         common: &mut Tree,
         conflicts: &mut Vec<String>,
-        files: &Vec<String>,
+        files: &[String],
         is_staged: bool,
         staging_files: &HashMap<String, String>,
     ) -> Result<(), CommandError> {
@@ -3745,10 +3743,9 @@ impl<'a> GitRepository<'a> {
                             let Some(hash) = staging_files.get(path) else {
                                 return Err(CommandError::ObjectHashNotKnown);
                             };
-                            
+
                             self.get_staged_file_content(hash)?
                         } else {
-                            
                             get_current_file_content(path)?
                         }
                     };
@@ -4059,13 +4056,6 @@ impl<'a> GitRepository<'a> {
         Ok((tag, tag_ref))
     }
 
-    fn tag_exists(&self, tag_name: &str) -> Result<bool, CommandError> {
-        let path = join_paths!(self.git_path, "refs/tags/", tag_name).ok_or(
-            CommandError::FileCreationError("Error creando path de tags".to_string()),
-        )?;
-        Ok(Path::new(&path).exists())
-    }
-
     fn read_tag_object(
         &mut self,
         tag_ref: &str,
@@ -4196,10 +4186,7 @@ impl<'a> GitRepository<'a> {
         };
         for path in paths {
             let path = path.map_err(|error| {
-                CommandError::FileReadError(format!(
-                    "Error leyendo directorio de tags: {}",
-                    error
-                ))
+                CommandError::FileReadError(format!("Error leyendo directorio de tags: {}", error))
             })?;
             let file_name = &path.file_name();
             let Some(tag_name) = file_name.to_str() else {
@@ -4454,7 +4441,7 @@ impl<'a> GitRepository<'a> {
         &mut self,
         verbose: bool,
         non_matching: bool,
-        paths: &Vec<String>,
+        paths: &[String],
     ) -> Result<(), CommandError> {
         let mut message = String::new();
         let patterns = self.get_ignore_patterns()?;
@@ -4560,7 +4547,7 @@ fn read_dir_level_entries(path_name: &str, names: &mut Vec<String>) -> Result<()
 
 /// Obtiene el mensaje de salida del comando ls-tree. Depende de los flags: -l, --long, --name-only, --status-only.
 fn get_ls_tree_message(
-    info: &Vec<(String, Mode, String, String, usize)>,
+    info: &[(String, Mode, String, String, usize)],
     show_size: bool,
     only_name: bool,
 ) -> String {
@@ -4570,22 +4557,9 @@ fn get_ls_tree_message(
             message += &format!("{}\n", path);
         } else if show_size {
             if type_str == "blob" {
-                message += &format!(
-                    "{} {} {}{:>8}	{}\n",
-                    mode,
-                    type_str,
-                    hash,
-                    size,
-                    path,
-                );
+                message += &format!("{} {} {}{:>8}	{}\n", mode, type_str, hash, size, path,);
             } else {
-                message += &format!(
-                    "{} {} {}       -	{}\n",
-                    mode,
-                    type_str,
-                    hash,
-                    path,
-                );
+                message += &format!("{} {} {}       -	{}\n", mode, type_str, hash, path,);
             }
         } else {
             message += &format!("{} {} {}	{}\n", mode, type_str, hash, path);
@@ -4931,8 +4905,8 @@ fn remove_new_files_commited(
 /// Compara el cotenido de las 3 versiones de un archivo (rama actual, nueva rama y ancestro) para determinar si hay conflictos.
 fn has_conflicts(
     path: &str,
-    content: &Vec<u8>,
-    new_content: &Vec<u8>,
+    content: &[u8],
+    new_content: &[u8],
     common: &mut Tree,
     _logger: &mut Logger,
 ) -> Result<bool, CommandError> {
@@ -4959,7 +4933,7 @@ fn has_conflicts(
 
 /// Elimina archivos nuevos de la rama actual del árbol que se usará para actualizar el index.
 fn remove_local_changes_from_tree(
-    untracked_files: &Vec<String>,
+    untracked_files: &[String],
     tree: &mut Tree,
     logger: &mut Logger,
 ) {
@@ -5042,19 +5016,13 @@ fn get_refs_paths_and_hash(
     ))?;
 
     let paths = fs::read_dir(branches_path.clone()).map_err(|error| {
-        CommandError::FileReadError(format!(
-            "Error leyendo directorio de branches: {}",
-            error
-        ))
+        CommandError::FileReadError(format!("Error leyendo directorio de branches: {}", error))
     })?;
     for entry in paths {
         logger.log(&format!("Entry: {:?}", entry));
 
         let entry = entry.map_err(|error| {
-            CommandError::FileReadError(format!(
-                "Error leyendo directorio de branches: {}",
-                error
-            ))
+            CommandError::FileReadError(format!("Error leyendo directorio de branches: {}", error))
         })?;
         let entry_path = entry.path();
         let path_str = &get_path_name(entry_path.clone())?;
@@ -5127,7 +5095,7 @@ fn merge_trees(
                 let common_entry = common_entry_opt
                     .to_owned()
                     .ok_or(CommandError::ShallowTree)?;
-                match is_in_common(
+                if let Some(merged_object) = is_in_common(
                     head_entry,
                     destin_entry,
                     common_entry,
@@ -5139,8 +5107,7 @@ fn merge_trees(
                     working_dir,
                     db,
                 )? {
-                    Some(merged_object) => merged_tree.add_object(key, merged_object)?,
-                    _ => {}
+                    merged_tree.add_object(key, merged_object)?
                 }
             }
             None => {
@@ -5233,9 +5200,7 @@ fn is_in_common(
                             Ok(Some(Box::new(merged_blob.to_owned())))
                         }
                     }
-                    (_, _) => {
-                        Err(CommandError::MergeConflict("".to_string()))
-                    }
+                    (_, _) => Err(CommandError::MergeConflict("".to_string())),
                 },
             }
         }
@@ -5325,9 +5290,7 @@ fn is_not_in_common(
                             Ok(Box::new(merged_blob.to_owned()))
                         }
                     }
-                    (_, _) => {
-                        Err(CommandError::MergeConflict("".to_string()))
-                    }
+                    (_, _) => Err(CommandError::MergeConflict("".to_string())),
                 },
             }
         }
@@ -5395,8 +5358,7 @@ fn update_last_commit(commit_hash: &str) -> Result<(), CommandError> {
     file.write_all(commit_hash.as_bytes()).map_err(|error| {
         CommandError::FileWriteError(format!(
             "Error al escribir en archivo {}: {}",
-            currect_branch,
-            error
+            currect_branch, error
         ))
     })?;
     Ok(())
@@ -5429,17 +5391,11 @@ fn _remote_branches(base_path: &str) -> Result<HashMap<String, String>, CommandE
     let mut branches = HashMap::<String, String>::new();
     let branches_path = format!("{}/.git/refs/remotes/origin/", base_path);
     let paths = fs::read_dir(branches_path).map_err(|error| {
-        CommandError::FileReadError(format!(
-            "Error leyendo directorio de branches: {}",
-            error
-        ))
+        CommandError::FileReadError(format!("Error leyendo directorio de branches: {}", error))
     })?;
     for path in paths {
         let path = path.map_err(|error| {
-            CommandError::FileReadError(format!(
-                "Error leyendo directorio de branches: {}",
-                error
-            ))
+            CommandError::FileReadError(format!("Error leyendo directorio de branches: {}", error))
         })?;
         let file_name = &path.file_name();
         let Some(file_name) = file_name.to_str() else {
@@ -5448,17 +5404,11 @@ fn _remote_branches(base_path: &str) -> Result<HashMap<String, String>, CommandE
             ));
         };
         let mut file = fs::File::open(path.path()).map_err(|error| {
-            CommandError::FileReadError(format!(
-                "Error leyendo directorio de branches: {}",
-                error
-            ))
+            CommandError::FileReadError(format!("Error leyendo directorio de branches: {}", error))
         })?;
         let mut sha1 = String::new();
         file.read_to_string(&mut sha1).map_err(|error| {
-            CommandError::FileReadError(format!(
-                "Error leyendo directorio de branches: {}",
-                error
-            ))
+            CommandError::FileReadError(format!("Error leyendo directorio de branches: {}", error))
         })?;
         branches.insert(file_name.to_string(), sha1);
     }
@@ -5476,7 +5426,7 @@ fn _update_remote_branches(
     for (sha1, mut ref_path) in branch_remote_refs {
         ref_path.replace_range(0..11, "");
         _update_ref(base_path, &sha1, &ref_path)?;
-    };
+    }
     Ok(())
 }
 
@@ -5485,10 +5435,7 @@ fn _update_ref(base_path: &str, sha1: &str, ref_name: &str) -> Result<(), Comman
     let file_path = dir_path.to_owned() + ref_name;
 
     fs::create_dir_all(dir_path).map_err(|error| {
-        CommandError::DirectoryCreationError(format!(
-            "Error creando directorio de refs: {}",
-            error
-        ))
+        CommandError::DirectoryCreationError(format!("Error creando directorio de refs: {}", error))
     })?;
     let mut file = fs::OpenOptions::new()
         .create(true)

@@ -13,10 +13,10 @@ use crate::{
     },
 };
 use std::{
-    collections::{HashMap},
+    collections::HashMap,
     fs::{self, File},
     io::{Cursor, Read, Write},
-    path::{Path},
+    path::Path,
 };
 
 extern crate chrono;
@@ -369,25 +369,13 @@ impl GitObjectTrait for CommitObject {
         writeln!(stream, "tree {}", u8_vec_to_hex_string(&self.tree_hash))
             .map_err(|err| CommandError::FileWriteError(err.to_string()))?;
 
-        match db {
-            Some(db) => {
-                let Some(tree) = self.tree.as_mut() else {
-                    return Err(CommandError::InvalidCommit);
-                };
-                let mut tree_box: GitObject = Box::new(tree.clone());
-                db.write(&mut tree_box, true, &mut Logger::new_dummy())?;
-            }
-            None => {}
+        if let Some(db) = db {
+            let Some(tree) = self.tree.as_mut() else {
+                return Err(CommandError::InvalidCommit);
+            };
+            let mut tree_box: GitObject = Box::new(tree.clone());
+            db.write(&mut tree_box, true, &mut Logger::new_dummy())?;
         };
-
-        // if self.tree.is_some() {
-        //     writeln!(
-        //         stream,
-        //         "tree {}",
-        //         self.tree.as_mut().unwrap().get_hash_string()?
-        //     )
-        //     .map_err(|err| CommandError::FileWriteError(err.to_string()))?;
-        // }
 
         for parent in &self.parents {
             writeln!(stream, "parent {}", parent)
@@ -750,16 +738,16 @@ fn print_merge_commit_for_log(
 //     });
 // }
 
-pub fn sort_commits_descending_date(vec_commits: &mut Vec<(CommitObject, String)>) {
+pub fn sort_commits_descending_date(vec_commits: &mut [(CommitObject, String)]) {
     vec_commits.sort_by(|a, b| b.0.timestamp.cmp(&a.0.timestamp));
 }
 
-pub fn sort_commits_descending_date_and_topo(vec_commits: &mut Vec<(CommitObject, usize, usize)>) {
+pub fn sort_commits_descending_date_and_topo(vec_commits: &mut [(CommitObject, usize, usize)]) {
     vec_commits.sort_by(|a, b| b.2.cmp(&a.2));
     vec_commits.sort_by(|a, b| b.0.timestamp.cmp(&a.0.timestamp));
 }
 
-pub fn sort_commits_ascending_date_and_topo(vec_commits: &mut Vec<(CommitObject, usize, usize)>) {
+pub fn sort_commits_ascending_date_and_topo(vec_commits: &mut [(CommitObject, usize, usize)]) {
     vec_commits.sort_by(|a, b| a.2.cmp(&b.2));
     vec_commits.sort_by(|a, b| a.0.timestamp.cmp(&b.0.timestamp));
 }

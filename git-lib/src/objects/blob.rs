@@ -252,14 +252,10 @@ impl GitObjectTrait for Blob {
         db: Option<ObjectsDatabase>,
     ) -> Result<(), CommandError> {
         let mut file = File::create(path).map_err(|error| {
-            CommandError::FileOpenError(format!(
-                "Error al crear archivo {}: {}",
-                path,
-                error
-            ))
+            CommandError::FileOpenError(format!("Error al crear archivo {}: {}", path, error))
         })?;
         let content = match db {
-            Some(mut db) => self.content(Some(&mut db))?,
+            Some(db) => self.content(Some(&db))?,
             None => self.content(None)?,
         };
         logger.log(&format!(
@@ -268,11 +264,7 @@ impl GitObjectTrait for Blob {
             String::from_utf8(content.clone()).unwrap()
         ));
         file.write_all(&content).map_err(|error| {
-            CommandError::FileWriteError(format!(
-                "Error al escribir archivo {}: {}",
-                path,
-                error
-            ))
+            CommandError::FileWriteError(format!("Error al escribir archivo {}: {}", path, error))
         })?;
         Ok(())
     }
@@ -313,19 +305,11 @@ impl GitObjectTrait for Blob {
             }
         }
         let mut file = File::create(path).map_err(|error| {
-            CommandError::FileOpenError(format!(
-                "Error al crear archivo {}: {}",
-                path,
-                error
-            ))
+            CommandError::FileOpenError(format!("Error al crear archivo {}: {}", path, error))
         })?;
 
         file.write_all(&new_content).map_err(|error| {
-            CommandError::FileWriteError(format!(
-                "Error al escribir archivo {}: {}",
-                path,
-                error
-            ))
+            CommandError::FileWriteError(format!("Error al escribir archivo {}: {}", path, error))
         })?;
 
         if let Some(staged_content) = staged.get(path) {

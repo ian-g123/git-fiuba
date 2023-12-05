@@ -286,7 +286,7 @@ mod test {
             "tag1".to_string(),
             Author::new("name", "email"),
             1700314430,
-            -0300,
+            -300,
             hash,
         );
 

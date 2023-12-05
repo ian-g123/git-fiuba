@@ -14,7 +14,7 @@ impl Format for LongFormat {
         output: &mut dyn Write,
         changes_to_be_commited: &HashMap<String, ChangeType>,
         changes_not_staged: &HashMap<String, ChangeType>,
-        untracked_files: &Vec<String>,
+        untracked_files: &[String],
         (branch, commit_output, initial_commit): (&str, bool, bool),
         unmerged_paths: &HashMap<String, ChangeType>,
         merge: bool,
@@ -114,7 +114,8 @@ fn set_unmerged_message(unmerged_paths: &HashMap<String, ChangeType>) -> String 
     }
     let unmerged_paths = sort_hashmap_and_filter_unmodified(unmerged_paths);
     message += "\nYou have unmerged paths.\n  (fix conflicts and run \"git commit\")\n  (use \"git merge --abort\" to abort the merge)\n\n";
-    message += "Unmerged paths:\n  (use \"git add/rm <file>...\" as appropriate to mark resolution)\n";
+    message +=
+        "Unmerged paths:\n  (use \"git add/rm <file>...\" as appropriate to mark resolution)\n";
 
     for (path, change_type) in unmerged_paths.iter() {
         let change = change_type.get_long_type();

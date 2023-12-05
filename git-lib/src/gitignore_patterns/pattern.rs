@@ -24,7 +24,7 @@ impl Pattern {
             Self::StartsWith(_, _, is_relative, _) => is_relative.to_owned(),
             Self::EndsWith(_, _, is_relative, _) => is_relative.to_owned(),
             Self::RelativeToDirLevel(_, _, _) => true,
-            Self::NotRelativeToDirLevel(__, _, _) => false,
+            Self::NotRelativeToDirLevel(_, _, _) => false,
         }
     }
 

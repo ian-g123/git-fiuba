@@ -6,10 +6,7 @@ use std::{
 use crate::{
     command_errors::CommandError,
     objects_database::ObjectsDatabase,
-    utils::{
-        aux::*,
-        super_string::{u8_vec_to_hex_string, SuperStrings},
-    },
+    utils::{aux::*, super_string::u8_vec_to_hex_string},
 };
 use crate::{join_paths, logger::Logger};
 
