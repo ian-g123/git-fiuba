@@ -9,8 +9,8 @@ use crate::{
 };
 
 use super::{
-    changes_controller::ChangesController, changes_types::ChangeType,
-    commit_changes::CommitChanges, long_format::sort_hashmap_and_filter_unmodified,
+    changes_controller::ChangesController, changes_types::ChangeType, commit_changes,
+    long_format::sort_hashmap_and_filter_unmodified,
 };
 
 pub struct CommitFormat;
@@ -37,13 +37,14 @@ impl CommitFormat {
             staging_area,
         )?;
         let changes_to_be_commited = changes_controller.get_changes_to_be_commited();
-        let (files_changed, insertions, deletions) = CommitChanges::new(
-            staging_area.get_files(),
-            db,
-            logger,
-            commit_tree.clone(),
-            changes_to_be_commited,
-        )?;
+        let (files_changed, insertions, deletions) =
+            commit_changes::get_changes_insertions_and_deletions(
+                staging_area.get_files(),
+                db,
+                logger,
+                commit_tree.clone(),
+                changes_to_be_commited,
+            )?;
         let is_root = commit_tree.is_none();
         let changes_to_be_commited = sort_hashmap_and_filter_unmodified(changes_to_be_commited);
         let output_message = get_commit_sucess_message(
