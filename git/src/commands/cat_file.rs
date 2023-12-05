@@ -1,5 +1,5 @@
 use crate::commands::command::Command;
-use git_lib::{command_errors::CommandError, git_repository::GitRepository, join_paths};
+use git_lib::{command_errors::CommandError, git_repository::GitRepository};
 
 use std::{
     io::{Read, Write},
