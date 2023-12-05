@@ -9,7 +9,7 @@ use super::super_string::u8_vec_to_hex_string;
 /// Obtiene el nombre de un archivo dada su ruta. Si la ruta no existe, devuelve error.
 pub fn get_name(path_string: &str) -> Result<String, CommandError> {
     let var = path_string
-        .split("/")
+        .split('/')
         .last()
         .map(|s| s.to_string())
         .ok_or_else(|| CommandError::FileNotFound(path_string.to_owned()))?;
@@ -22,9 +22,9 @@ pub fn get_sha1_str(data: &[u8]) -> String {
     let hash_result = get_sha1(data);
 
     // Formatea los bytes del hash en una cadena hexadecimal
-    let hex_string = u8_vec_to_hex_string(&hash_result);
+    
 
-    hex_string
+    u8_vec_to_hex_string(&hash_result)
 }
 
 pub fn get_sha1(data: &[u8]) -> [u8; 20] {
@@ -100,7 +100,7 @@ mod test {
         let path = "dir/git";
 
         let res_expected = "git";
-        match get_name(&path.to_string()) {
+        match get_name(path) {
             Ok(result) => assert_eq!(res_expected, result),
             Err(error) => assert!(false, "{}", error),
         }

@@ -1,14 +1,12 @@
 use std::{
     fs::{self, File},
-    io::{Error, Read, Write},
+    io::Write,
     process::Command,
 };
 
-use common::aux::create_base_scene;
-
 use crate::common::aux::{
-    change_dir_testfile1_content_and_remove_dir_testfile2, change_test_scene_4,
-    change_testfile_content, create_test_scene_2, create_test_scene_4, create_test_scene_5,
+    change_dir_testfile1_content_and_remove_dir_testfile2, change_testfile_content,
+    create_test_scene_5,
 };
 
 mod common {
@@ -156,7 +154,7 @@ fn test_general() {
     let stdout = String::from_utf8(result.stdout).unwrap();
     assert_eq!(stdout, expected);
 
-    _ = std::fs::remove_dir_all(format!("{}", path));
+    _ = std::fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -314,7 +312,7 @@ fn test_unmerged() {
     let expected = format!("100644 {testfile1_hash_common} 1\tdir/testfile1.txt\n100644 {testfile1_hash_head} 2\tdir/testfile1.txt\n100644 {testfile1_hash_remote} 3\tdir/testfile1.txt\n100644 {testfile2_hash_common} 1\tdir/testfile2.txt\n100644 {testfile2_hash_head} 2\tdir/testfile2.txt\n");
     assert_eq!(stdout, expected);
 
-    _ = std::fs::remove_dir_all(format!("{}", path));
+    _ = std::fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -448,7 +446,7 @@ fn test_modified() {
 
     assert_eq!(stdout, expected);
 
-    _ = std::fs::remove_dir_all(format!("{}", path));
+    _ = std::fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -517,7 +515,7 @@ fn test_files() {
 
     assert_eq!(stdout, expected);
 
-    _ = std::fs::remove_dir_all(format!("{}", path));
+    _ = std::fs::remove_dir_all(path.to_string());
 }
 
 fn get_hash(file: &str, path: &str) -> String {
@@ -542,7 +540,7 @@ fn change_dir_testfile1_testfile2_unmerged(path: &str) {
 pub fn change_dir_testfile1_content_and_remove_dir_testfile2_bis(path: &str) {
     let mut file = File::create(path.to_owned() + "/dir/testfile1.txt").unwrap();
     file.write_all(b"linea 1\nlinea 6\nlinea 3").unwrap();
-    _ = fs::remove_file(path.to_string() + "/dir/testfile2.txt").unwrap();
+    fs::remove_file(path.to_string() + "/dir/testfile2.txt").unwrap();
 }
 
 pub fn change_testfile_content_bis(path: &str) {

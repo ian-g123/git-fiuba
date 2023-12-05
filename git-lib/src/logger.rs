@@ -29,7 +29,7 @@ impl Logger {
             .append(true)
             .open(path)
             .map_err(|error| {
-                CommandError::FileOpenError(format!("{}: {}", path_name, error.to_string()))
+                CommandError::FileOpenError(format!("{}: {}", path_name, error))
             })?;
         let (tx, rx) = channel::<String>();
 

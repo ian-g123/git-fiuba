@@ -23,11 +23,7 @@ pub trait Format {
         patterns: &GitignorePatterns,
     ) -> Result<(), CommandError> {
         let initial_commit = {
-            if commit_tree.is_none() {
-                true
-            } else {
-                false
-            }
+            commit_tree.is_none()
         };
         let changes_controller =
             ChangesController::new(db, git_path, working_dir, logger, commit_tree, index)?;

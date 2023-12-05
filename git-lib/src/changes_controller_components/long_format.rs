@@ -30,10 +30,10 @@ impl Format for LongFormat {
         }
         let (remote_exists, ahead, behind) = branches_diverge_info;
         if remote_exists {
-            output_message += &format!("{}", set_diverge_message(ahead, behind, &branch));
+            output_message += &set_diverge_message(ahead, behind, branch).to_string();
         }
         if merge {
-            output_message += &format!("{}", set_unmerged_message(unmerged_paths));
+            output_message += &set_unmerged_message(unmerged_paths).to_string();
         }
 
         let changes_to_be_commited = sort_hashmap_and_filter_unmodified(changes_to_be_commited);
@@ -109,14 +109,12 @@ pub fn sort_hashmap_and_filter_unmodified(
 fn set_unmerged_message(unmerged_paths: &HashMap<String, ChangeType>) -> String {
     let mut message = String::new();
     if unmerged_paths.is_empty() {
-        message += &format!("\nAll conflicts fixed but you are still merging.\n  (use \"git commit\" to conclude merge)\n");
+        message += "\nAll conflicts fixed but you are still merging.\n  (use \"git commit\" to conclude merge)\n";
         return message;
     }
     let unmerged_paths = sort_hashmap_and_filter_unmodified(unmerged_paths);
-    message += &format!("\nYou have unmerged paths.\n  (fix conflicts and run \"git commit\")\n  (use \"git merge --abort\" to abort the merge)\n\n");
-    message += &format!(
-        "Unmerged paths:\n  (use \"git add/rm <file>...\" as appropriate to mark resolution)\n"
-    );
+    message += "\nYou have unmerged paths.\n  (fix conflicts and run \"git commit\")\n  (use \"git merge --abort\" to abort the merge)\n\n";
+    message += "Unmerged paths:\n  (use \"git add/rm <file>...\" as appropriate to mark resolution)\n";
 
     for (path, change_type) in unmerged_paths.iter() {
         let change = change_type.get_long_type();

@@ -51,7 +51,7 @@ pub fn get_analysis(
             i,
         )?;
         if commits_map.contains_key(&remote_hash)
-            || remote_hash == "0000000000000000000000000000000000000000".to_string()
+            || remote_hash == *"0000000000000000000000000000000000000000"
         {
             hash_branch_status.insert(local_branch.to_string(), (remote_hash.clone(), local_hash));
         } else {
@@ -74,7 +74,7 @@ pub fn rebuild_commits_tree(
     color_idx: usize,
 ) -> Result<usize, CommandError> {
     if let Some((_, _, depth)) = commits_map.get(&hash_commit.to_string()) {
-        return Ok(depth.clone());
+        return Ok(*depth);
     }
 
     logger.log(&format!(
@@ -133,12 +133,12 @@ pub fn rebuild_commits_tree(
     for (i_color, parent_hash) in parents_hash.iter().enumerate() {
         for hash_to_look_for_one in hash_to_look_for.iter() {
             if let Some((_, _, depth)) = commits_map.get(&hash_to_look_for_one.to_string()) {
-                return Ok(depth.clone());
+                return Ok(*depth);
             }
         }
         let depth = rebuild_commits_tree(
             db,
-            &parent_hash,
+            parent_hash,
             commits_map,
             log_all,
             hash_to_look_for,
@@ -152,7 +152,7 @@ pub fn rebuild_commits_tree(
     }
 
     if let Some((_, _, depth)) = commits_map.get(&hash_commit.to_string()) {
-        return Ok(depth.clone());
+        return Ok(*depth);
     }
 
     let commit_with_branch = (commit_object.to_owned(), color_idx, max_depth + 1);

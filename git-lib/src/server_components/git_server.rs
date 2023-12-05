@@ -120,9 +120,7 @@ impl GitServer {
                 lines.push(line);
             }
             None => {
-                return Err(CommandError::ErrorReadingPktVerbose(format!(
-                    "fetch_objects leyó un flush-pkt"
-                )))
+                return Err(CommandError::ErrorReadingPktVerbose("fetch_objects leyó un flush-pkt".to_string()))
             }
         }
         logger.log(
@@ -139,7 +137,7 @@ impl GitServer {
     }
 
     pub fn send_packfile(&mut self, packfile: &Vec<u8>) -> Result<(), CommandError> {
-        self.log(&format!("⏫: [PACKFILE]"));
+        self.log("⏫: [PACKFILE]");
 
         self.write_to_socket(packfile)?;
         Ok(())
@@ -210,15 +208,15 @@ impl GitServer {
             let line = format!("{} {} refs/heads/{}\n", new_hash, old_hash, branch);
 
             self.write_in_tpk_to_socket(&line).map_err(|_| {
-                return CommandError::SendingMessage(
+                CommandError::SendingMessage(
                     "Error al enviar el hash del branch".to_string(),
-                );
+                )
             })?;
         }
         self.write_string_to_socket("0000").map_err(|_| {
-            return CommandError::SendingMessage("Error al enviar 0000 al servidor".to_string());
+            CommandError::SendingMessage("Error al enviar 0000 al servidor".to_string())
         })?;
-        return Ok(());
+        Ok(())
     }
 
     pub fn get_response(&mut self) -> Result<Vec<String>, CommandError> {

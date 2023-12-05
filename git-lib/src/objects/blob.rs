@@ -74,7 +74,7 @@ impl Blob {
             _mode: mode,
             path: Some(path.to_string()),
             hash: Some(hash),
-            name: Some(get_name(&path)?),
+            name: Some(get_name(path)?),
         })
     }
 
@@ -114,7 +114,7 @@ impl Blob {
 
     /// Crea un Blob a partir de su hash. Si la ruta no existe, devuelve Error.
     pub fn new_from_hash_and_path(hash: [u8; 20], path: &str) -> Result<Self, CommandError> {
-        let mode = if path != "" {
+        let mode = if !path.is_empty() {
             Mode::get_mode(path.to_string())?
         } else {
             Mode::RegularFile
@@ -124,7 +124,7 @@ impl Blob {
             _mode: mode,
             path: Some(path.to_string()),
             hash: Some(hash),
-            name: Some(get_name(&path.to_string())?),
+            name: Some(get_name(path)?),
         })
     }
 
@@ -153,7 +153,7 @@ impl Blob {
         _: &str,
         logger: &mut Logger,
     ) -> Result<GitObject, CommandError> {
-        let mut content = vec![0; len as usize];
+        let mut content = vec![0; len];
 
         stream
             .read_exact(&mut content)
@@ -170,7 +170,7 @@ impl Blob {
         output: &mut dyn Write,
         _logger: &mut Logger,
     ) -> Result<(), CommandError> {
-        let mut content = vec![0; len as usize];
+        let mut content = vec![0; len];
         stream
             .read_exact(&mut content)
             .map_err(|error| CommandError::FileReadError(error.to_string()))?;
@@ -255,7 +255,7 @@ impl GitObjectTrait for Blob {
             CommandError::FileOpenError(format!(
                 "Error al crear archivo {}: {}",
                 path,
-                error.to_string()
+                error
             ))
         })?;
         let content = match db {
@@ -271,7 +271,7 @@ impl GitObjectTrait for Blob {
             CommandError::FileWriteError(format!(
                 "Error al escribir archivo {}: {}",
                 path,
-                error.to_string()
+                error
             ))
         })?;
         Ok(())
@@ -316,7 +316,7 @@ impl GitObjectTrait for Blob {
             CommandError::FileOpenError(format!(
                 "Error al crear archivo {}: {}",
                 path,
-                error.to_string()
+                error
             ))
         })?;
 
@@ -324,13 +324,13 @@ impl GitObjectTrait for Blob {
             CommandError::FileWriteError(format!(
                 "Error al escribir archivo {}: {}",
                 path,
-                error.to_string()
+                error
             ))
         })?;
 
         if let Some(staged_content) = staged.get(path) {
             self.content = Some(staged_content.to_vec());
-            self.hash = Some(get_sha1(&staged_content));
+            self.hash = Some(get_sha1(staged_content));
         }
 
         Ok(false)

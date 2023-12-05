@@ -79,7 +79,7 @@ impl CommitObject {
     }
 
     pub fn get_message(&self) -> String {
-        return self.message.clone();
+        self.message.clone()
     }
 
     pub fn get_author(&self) -> Author {
@@ -114,10 +114,7 @@ impl CommitObject {
             None => None,
         };
 
-        let hash_u8: Option<[u8; 20]> = match hash_commit {
-            Some(hash) => Some(hex_string_to_u8_vec(&hash)),
-            None => None,
-        };
+        let hash_u8: Option<[u8; 20]> = hash_commit.map(|hash| hex_string_to_u8_vec(&hash));
 
         Ok(Box::new(CommitObject {
             tree: option_tree,
@@ -684,7 +681,7 @@ fn print_normal_commit_for_log(
         _ = write!(writer_stream, " {}", branch_str);
     }
 
-    _ = write!(writer_stream, "\n");
+    _ = writeln!(writer_stream);
     _ = writeln!(writer_stream, "Author: {}", commit.author);
     _ = writeln!(writer_stream, "Date: {}", commit.get_timestamp_string());
     _ = writeln!(writer_stream, "\n    {}\n", commit.message);
@@ -714,7 +711,7 @@ fn print_merge_commit_for_log(
         let branch_str = branch_vec.join(" ");
         _ = write!(writer_stream, " {}", branch_str);
     }
-    _ = write!(writer_stream, "\n");
+    _ = writeln!(writer_stream);
     _ = writeln!(writer_stream, "{}", merges);
     _ = writeln!(writer_stream, "Author: {}", commit.author);
     _ = writeln!(writer_stream, "Date: {}", commit.get_timestamp_string());

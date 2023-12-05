@@ -1,6 +1,5 @@
 use std::{
-    fs::{self, File},
-    io::{Error, Read, Write},
+    fs::{self},
     process::Command,
 };
 
@@ -29,7 +28,7 @@ fn test_working_tree_clean_long_format() {
         .unwrap();
     println!("{}", String::from_utf8(result.stderr).unwrap());
     assert_eq!(String::from_utf8(result.stdout).unwrap(), expected);
-    _ = std::fs::remove_dir_all(format!("{}", path));
+    _ = std::fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -47,7 +46,7 @@ fn test_working_tree_clean_short_format() {
         .output()
         .unwrap();
     assert_eq!(String::from_utf8(result.stdout).unwrap(), expected);
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -67,7 +66,7 @@ fn test_no_changes_added_to_commit() {
     let result = String::from_utf8(result.stdout).unwrap();
     println!("{}", result);
     assert_eq!(result, expected);
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -88,7 +87,7 @@ fn test_no_changes_added_to_commit_short_format() {
     let result = String::from_utf8(result.stdout).unwrap();
     println!("{}", result);
     assert_eq!(result, expected);
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -154,7 +153,7 @@ fn general_test_long() {
     let expected = "On branch master\nChanges to be committed:\n  (use \"git restore --staged <file>...\" to unstage)\n\tdeleted:   dir/testfile3.txt\n\nChanges not staged for commit:\n  (use \"git add/rm <file>...\" to update what will be committed)\n  (use \"git restore <file>...\" to discard changes in working directory)\n\tmodified:   testfile.txt\n\nUntracked files:\n  (use \"git add <file>...\" to include in what will be committed)\n\tdir/testfile1.txt\n\tdir/testfile2.txt\n\tdir/testfile4.txt\n\n";
     assert_eq!(String::from_utf8(result.stdout).unwrap(), expected);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -226,7 +225,7 @@ fn general_test_short() {
     "?? dir/testfile1.txt\n?? dir/testfile2.txt\nD  dir/testfile3.txt\n?? dir/testfile4.txt\n M testfile.txt\n";
     assert_eq!(String::from_utf8(result.stdout).unwrap(), expected);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -298,7 +297,7 @@ fn test_untracked_folder() {
     let result = String::from_utf8(result.stdout).unwrap();
     assert_eq!(result, expected);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -312,5 +311,5 @@ fn test_status_remote_info() {
         .unwrap();
     let result = String::from_utf8(result.stderr).unwrap();
     println!("{}", result);
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }

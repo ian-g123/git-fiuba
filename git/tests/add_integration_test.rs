@@ -38,7 +38,7 @@ fn test_single_file() {
         },
     }
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -75,7 +75,7 @@ fn test_single_file_in_root() {
         },
     }
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -117,7 +117,7 @@ fn test_two_files_in_dir() {
             Err(error) => panic!("No se pudo leer el staging area: {:?}", error),
         },
     }
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -162,7 +162,7 @@ fn test_two_files_sep_arguments() {
         },
     }
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -205,7 +205,7 @@ fn test_invalid_file() {
 
     assert!(!Path::new(&format!("{}/.git/index", path)).exists());
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 fn create_test_scene_1(path: &str) {
@@ -213,7 +213,7 @@ fn create_test_scene_1(path: &str) {
 
     let Ok(_) = fs::copy(
         "tests/data/commands/add/testfile.txt",
-        &(path.to_owned() + "/testfile.txt"),
+        (path.to_owned() + "/testfile.txt"),
     ) else {
         panic!("No se pudo copiar el archivo")
     };
@@ -229,13 +229,13 @@ fn create_test_scene_2(path: &str) {
     };
     let Ok(_) = fs::copy(
         "tests/data/commands/add/dir/testfile1.txt",
-        &(path.to_owned() + "/dir/testfile1.txt"),
+        (path.to_owned() + "/dir/testfile1.txt"),
     ) else {
         panic!("No se pudo copiar el archivo")
     };
     let Ok(_) = fs::copy(
         "tests/data/commands/add/dir/testfile2.txt",
-        &(path.to_owned() + "/dir/testfile2.txt"),
+        (path.to_owned() + "/dir/testfile2.txt"),
     ) else {
         panic!("No se pudo copiar el archivo")
     };
@@ -245,7 +245,7 @@ fn create_test_scene_2(path: &str) {
 }
 
 fn create_base_scene(path: &str) {
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
     let Ok(_) = fs::create_dir_all(path.clone()) else {
         panic!("No se pudo crear el directorio")
     };

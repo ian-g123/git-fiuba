@@ -161,7 +161,7 @@ impl IndexEntry {
                 String::from_utf8(path_bytes).map_err(|error| {
                     CommandError::FileReadError(format!(
                         "Error convirtiendo path a string{}",
-                        error.to_string()
+                        error
                     ))
                 })?
             }
@@ -201,14 +201,14 @@ impl IndexEntry {
             .map_err(|error| {
                 CommandError::MetadataError(format!(
                     "No se pudo obtener el ctime del archivo: {}",
-                    error.to_string()
+                    error
                 ))
             })?
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|error| {
                 CommandError::MetadataError(format!(
                     "No se pudo obtener el ctime del archivo: {}",
-                    error.to_string()
+                    error
                 ))
             })?;
         let mtime = metadata
@@ -216,14 +216,14 @@ impl IndexEntry {
             .map_err(|error| {
                 CommandError::MetadataError(format!(
                     "No se pudo obtener el mtime del archivo: {}",
-                    error.to_string()
+                    error
                 ))
             })?
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|error| {
                 CommandError::MetadataError(format!(
                     "No se pudo obtener el mtime del archivo: {}",
-                    error.to_string()
+                    error
                 ))
             })?;
         let dev = metadata.dev() as u32;
@@ -269,7 +269,7 @@ impl IndexEntry {
             dev: 0,
             ino: 0,
             entry_type: IndexEntryType::RegularFile,
-            unix_permission: unix_permission,
+            unix_permission,
             uid: 0,
             gid: 0,
             fsize: 0,
@@ -356,7 +356,7 @@ impl IndexEntry {
             .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
         let padding = 8 - ((62 + path.len() + 1) % 8);
         if padding != 8 {
-            let padding_bytes = vec![0; padding as usize];
+            let padding_bytes = vec![0; padding];
             stream
                 .write_all(&padding_bytes)
                 .map_err(|error| CommandError::FileWriteError(error.to_string()))?;

@@ -2,8 +2,6 @@ use std::{
     fs::{self, File},
     io::{Read, Write},
     process::Command,
-    thread,
-    time::Duration,
 };
 
 #[test]
@@ -47,12 +45,10 @@ fn test_without_conflict() {
     let result_log_str = String::from_utf8(result_log.unwrap().stdout).unwrap();
     let result_log_str_vec = get_commits_and_branches(result_log_str);
 
-    let expected_log = format!(
-        "[(\"master1\", Some(\"master\")), (\"topic1\", Some(\"topic\")), (\"inicial\", None)]"
-    );
+    let expected_log = "[(\"master1\", Some(\"master\")), (\"topic1\", Some(\"topic\")), (\"inicial\", None)]".to_string();
     assert_eq!(result_log_str_vec, expected_log);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -113,12 +109,10 @@ fn test_with_conflict() {
     let result_log_str = String::from_utf8(result_log.unwrap().stdout).unwrap();
     let result_log_str_vec = get_commits_and_branches(result_log_str);
 
-    let expected_log = format!(
-        "[(\"master1\", Some(\"master\")), (\"topic1\", Some(\"topic\")), (\"inicial\", None)]"
-    );
+    let expected_log = "[(\"master1\", Some(\"master\")), (\"topic1\", Some(\"topic\")), (\"inicial\", None)]".to_string();
     assert_eq!(result_log_str_vec, expected_log);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -177,11 +171,9 @@ fn test_with_conflict_with_1_argument() {
     let result_log_str = String::from_utf8(result_log.unwrap().stdout).unwrap();
     let result_log_str_vec = get_commits_and_branches(result_log_str);
 
-    let expected_log = format!(
-        "[(\"master1\", Some(\"master\")), (\"topic1\", Some(\"topic\")), (\"inicial\", None)]"
-    );
+    let expected_log = "[(\"master1\", Some(\"master\")), (\"topic1\", Some(\"topic\")), (\"inicial\", None)]".to_string();
     assert_eq!(result_log_str_vec, expected_log);
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 fn read_file(file_path: &str) -> Result<String, std::io::Error> {
@@ -307,12 +299,10 @@ fn test_with_conflict_heavy() {
     let result_log_str = String::from_utf8(result_log.unwrap().stdout).unwrap();
     let result_log_str_vec = get_commits_and_branches(result_log_str);
 
-    let expected_log = format!(
-        "[(\"master3\", Some(\"master\")), (\"master2\", None), (\"master1\", None), (\"topic2\", Some(\"topic\")), (\"topic1\", None), (\"inicial\", None)]"
-    );
+    let expected_log = "[(\"master3\", Some(\"master\")), (\"master2\", None), (\"master1\", None), (\"topic2\", Some(\"topic\")), (\"topic1\", None), (\"inicial\", None)]".to_string();
     assert_eq!(result_log_str_vec, expected_log);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -367,9 +357,7 @@ fn test_with_conflict_abort() {
     let result_log_str = String::from_utf8(result_log.unwrap().stdout).unwrap();
     let result_log_str_vec = get_commits_and_branches(result_log_str);
 
-    let expected_log = format!(
-        "[(\"master1\", Some(\"master\")), (\"topic2\", Some(\"topic\")), (\"topic1\", None), (\"inicial\", None)]"
-    );
+    let expected_log = "[(\"master1\", Some(\"master\")), (\"topic2\", Some(\"topic\")), (\"topic1\", None), (\"inicial\", None)]".to_string();
 
     assert_eq!(result_log_str_vec, expected_log);
 
@@ -390,9 +378,7 @@ fn test_with_conflict_abort() {
     let result_log_str = String::from_utf8(result_log.unwrap().stdout).unwrap();
     let result_log_str_vec = get_commits_and_branches(result_log_str);
 
-    let expected_log = format!(
-        "[(\"master3\", Some(\"master\")), (\"master2\", None), (\"master1\", None), (\"inicial\", None)]"
-    );
+    let expected_log = "[(\"master3\", Some(\"master\")), (\"master2\", None), (\"master1\", None), (\"inicial\", None)]".to_string();
     assert_eq!(result_log_str_vec, expected_log);
 
     // hacemos rebase --continue
@@ -430,17 +416,17 @@ fn test_with_conflict_abort() {
     let result_log_str_vec = get_commits_and_branches(result_log_str);
 
     let expected_log =
-        format!("[(\"topic2\", Some(\"topic\")), (\"topic1\", None), (\"inicial\", None)]");
+        "[(\"topic2\", Some(\"topic\")), (\"topic1\", None), (\"inicial\", None)]".to_string();
     assert_eq!(result_log_str_vec, expected_log);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 fn create_scene_without_conflict(path: &str, git_bin: &str) {
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 
     // creamos el directorio
-    fs::create_dir_all(format!("{}", path)).unwrap();
+    fs::create_dir_all(path.to_string()).unwrap();
 
     // creamos el archivo fu y ponemos un contenido que lo cambiaremos en otra rama
     let mut file = File::create(format!("{}/fu", path)).unwrap();
@@ -570,10 +556,10 @@ fn create_scene_without_conflict(path: &str, git_bin: &str) {
 }
 
 fn create_scene_with_conflict(path: &str, git_bin: &str) {
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 
     // creamos el directorio
-    fs::create_dir_all(format!("{}", path)).unwrap();
+    fs::create_dir_all(path.to_string()).unwrap();
 
     // creamos el archivo fu y ponemos un contenido que lo cambiaremos en otra rama
     let mut file = File::create(format!("{}/fu", path)).unwrap();
@@ -700,10 +686,10 @@ fn create_scene_with_conflict(path: &str, git_bin: &str) {
 }
 
 fn create_scene_with_conflict_heavy(path: &str, git_bin: &str) {
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 
     // creamos el directorio
-    fs::create_dir_all(format!("{}", path)).unwrap();
+    fs::create_dir_all(path.to_string()).unwrap();
 
     // creamos el archivo fu y ponemos un contenido que lo cambiaremos en otra rama
     let mut file = File::create(format!("{}/fu", path)).unwrap();
@@ -929,7 +915,7 @@ fn get_commits_and_branches(output: String) -> String {
         let message = lines[index_msj_line].trim();
 
         let mut branch: Option<&str> = None;
-        let branch_vec = lines[0].splitn(2, " ").collect::<Vec<&str>>();
+        let branch_vec = lines[0].splitn(2, ' ').collect::<Vec<&str>>();
         if branch_vec.len() > 1 {
             branch = Some(branch_vec[1]);
         }
@@ -938,5 +924,5 @@ fn get_commits_and_branches(output: String) -> String {
     }
 
     let result = format!("{:?}", commits);
-    return result;
+    result
 }

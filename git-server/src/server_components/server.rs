@@ -24,7 +24,7 @@ impl Server {
                 let mut logger_sender = logger.get_logs_sender().unwrap();
                 let worker_thread = thread::spawn(move || {
                     println!("New connection");
-                    logger_sender.log(&format!("New connection"));
+                    logger_sender.log("New connection");
                     let path = path.clone();
                     let mut worker = ServerWorker::new(path, client_stream.unwrap(), logger_sender);
                     worker.handle_connection()
@@ -34,7 +34,7 @@ impl Server {
         });
 
         Ok(Server {
-            listener_handle: listener_handle,
+            listener_handle,
         })
     }
 }

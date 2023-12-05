@@ -37,19 +37,19 @@ impl ChangesController {
         index: &StagingArea,
     ) -> Result<ChangesController, CommandError> {
         let working_tree = build_working_tree(working_dir)?;
-        let index_changes = Self::check_staging_area_status(db, &index, &commit_tree, logger)?;
+        let index_changes = Self::check_staging_area_status(db, index, &commit_tree, logger)?;
         let (working_tree_changes, mut untracked, mut untracked_files) =
             Self::check_working_tree_status(
                 working_dir,
                 working_tree,
-                &index,
+                index,
                 &commit_tree,
                 logger,
                 &index_changes,
             )?;
         untracked.sort();
         untracked_files.sort();
-        let unmerged_changes = Self::check_unmerged_paths(&index, logger)?;
+        let unmerged_changes = Self::check_unmerged_paths(index, logger)?;
 
         Ok(Self {
             index_changes,
@@ -165,9 +165,7 @@ impl ChangesController {
     ) -> Result<HashMap<String, ChangeType>, CommandError> {
         let staging_files = staging_area.get_files();
         let Some(mut tree) = last_commit_tree.to_owned() else {
-            let changes: HashMap<String, ChangeType> = staging_files
-                .iter()
-                .map(|(path, _)| (path.to_string(), ChangeType::Added))
+            let changes: HashMap<String, ChangeType> = staging_files.keys().map(|path| (path.to_string(), ChangeType::Added))
                 .collect();
             return Ok(changes);
         };
@@ -325,7 +323,7 @@ impl ChangesController {
         _: &mut Logger,
         staged_changes: &HashMap<String, ChangeType>,
     ) {
-        if untracked.len() == 0 || untracked_number == 0 {
+        if untracked.is_empty() || untracked_number == 0 {
             return;
         }
         let last_file = &untracked[untracked.len() - 1];

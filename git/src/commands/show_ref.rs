@@ -104,7 +104,7 @@ impl ShowRef {
     /// Configura el flag --hash.
     fn add_hash_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let flag = args[i].clone();
-        if flag != "-s".to_string() && !flag.starts_with("--hash") {
+        if flag != *"-s" && !flag.starts_with("--hash") {
             return Err(CommandError::WrongFlag);
         }
 

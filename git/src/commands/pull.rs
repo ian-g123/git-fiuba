@@ -29,7 +29,7 @@ impl Command for Pull {
 
 impl Pull {
     fn new(args: &[String]) -> Result<Pull, CommandError> {
-        if args.len() != 0 {
+        if !args.is_empty() {
             return Err(CommandError::PullError(
                 "Pull command takes no arguments".to_string(),
             ));

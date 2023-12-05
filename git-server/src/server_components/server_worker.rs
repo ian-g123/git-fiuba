@@ -58,15 +58,13 @@ impl ServerWorker {
 
     fn handle_connection_priv(&mut self) -> Result<(), CommandError> {
         let Some(presentation) = self.read_tpk()? else {
-            return Err(CommandError::ErrorReadingPktVerbose(format!(
-                "handle_connection_priv leyó flush-pkt"
-            )));
+            return Err(CommandError::ErrorReadingPktVerbose("handle_connection_priv leyó flush-pkt".to_string()));
         };
-        let presentation_components: Vec<&str> = presentation.split("\0").collect();
+        let presentation_components: Vec<&str> = presentation.split('\0').collect();
         let command_and_repo_path = presentation_components[0];
         let (command, repo_path) =
             command_and_repo_path
-                .split_once(" ")
+                .split_once(' ')
                 .ok_or(CommandError::ErrorReadingPktVerbose(format!(
                     "Error al leer command_and_repo_path: {}",
                     command_and_repo_path
@@ -176,18 +174,16 @@ impl ServerWorker {
 
             if local_branch_hash != &old_ref {
                 status.insert(branch_name, Some("non-fast-forward".to_string()));
+            } else if check_commits_between(
+                &objects_map,
+                &old_ref,
+                &new_ref,
+                &mut Logger::new_dummy(),
+            )? {
+                status.insert(branch_name, None);
+                repo.write_to_internal_file(&branch_path, &new_ref)?;
             } else {
-                if check_commits_between(
-                    &objects_map,
-                    &old_ref,
-                    &new_ref,
-                    &mut Logger::new_dummy(),
-                )? {
-                    status.insert(branch_name, None);
-                    repo.write_to_internal_file(&branch_path, &new_ref)?;
-                } else {
-                    status.insert(branch_name, Some("non-fast-forward".to_string()));
-                }
+                status.insert(branch_name, Some("non-fast-forward".to_string()));
             }
         }
 

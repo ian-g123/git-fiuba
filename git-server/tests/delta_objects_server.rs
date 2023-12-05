@@ -28,7 +28,7 @@ fn test() {
         .arg("clone")
         .arg("git://127.1.0.0:9418/repo")
         .arg("repo_copy")
-        .current_dir(path.to_string())
+        .current_dir(path)
         .output()
         .unwrap();
 

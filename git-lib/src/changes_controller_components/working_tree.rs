@@ -14,7 +14,7 @@ pub fn build_working_tree(working_dir: &str) -> Result<Tree, CommandError> {
 }
 
 fn build_working_tree_aux(path_name: &str, tree: &mut Tree) -> Result<(), CommandError> {
-    let path = if path_name == "" {
+    let path = if path_name.is_empty() {
         Path::new("./")
     } else {
         Path::new(path_name)
@@ -32,14 +32,14 @@ fn build_working_tree_aux(path_name: &str, tree: &mut Tree) -> Result<(), Comman
         let path = if full_path.starts_with("./") {
             &full_path[2..]
         } else {
-            &full_path
+            full_path
         };
         if full_path.contains(".git") {
             continue;
         }
         if entry_path.is_dir() {
             let mut new_tree = Tree::new(path.to_owned());
-            build_working_tree_aux(&full_path, &mut new_tree)?;
+            build_working_tree_aux(full_path, &mut new_tree)?;
             tree.add_object(get_name(path)?, Box::new(new_tree))?;
         } else {
             let content = fs::read(entry_path.clone())
@@ -57,27 +57,4 @@ pub fn get_path_name(path: PathBuf) -> Result<String, CommandError> {
         return Err(CommandError::DirNotFound("".to_string())); //cambiar
     };
     Ok(path_name.to_string())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // #[test]
-    // #[ignore]
-    // fn print_working_tree() {
-    //     let wt = build_working_tree().unwrap();
-    //     validate_tree(wt);
-    // }
-
-    // fn validate_tree(tree: Tree) {
-    //     for (name, object) in tree.get_objects().iter_mut() {
-    //         if let Some(new_tree) = object.as_tree() {
-    //             validate_tree(new_tree.clone())
-    //         } else {
-    //             let path = PathBuf::from(name);
-    //             assert!(path.exists(), "File name: {}", name);
-    //         }
-    //     }
-    // }
 }

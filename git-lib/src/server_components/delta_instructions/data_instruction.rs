@@ -29,8 +29,8 @@ impl DeltaInstructionTrait for DataInstruction {
                 "Error escribiendo instruccion delta".to_string(),
             )
         })?;
-        return Ok(Box::new(DataInstruction {
-            data_to_append: data_to_append,
-        }));
+        Ok(Box::new(DataInstruction {
+            data_to_append,
+        }))
     }
 }

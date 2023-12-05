@@ -45,11 +45,11 @@ fn build_output(
     for i in 0..max_iter {
         match conflicts_content.get(&i) {
             Some((head_lines, destin_lines)) => {
-                merged_content.push_str(&format!("<<<<<<< {}\n", head_name.to_string()));
+                merged_content.push_str(&format!("<<<<<<< {}\n", head_name));
                 merged_content.push_str(&head_lines.join("\n"));
-                merged_content.push_str(&format!("\n=======\n"));
+                merged_content.push_str("\n=======\n");
                 merged_content.push_str(&destin_lines.join("\n"));
-                merged_content.push_str(&format!("\n>>>>>>> {}\n", destin_name.to_string()));
+                merged_content.push_str(&format!("\n>>>>>>> {}\n", destin_name));
             }
             _ => {}
         };

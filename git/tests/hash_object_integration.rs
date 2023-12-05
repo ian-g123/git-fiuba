@@ -4,7 +4,7 @@ use std::{fs, path::Path, process::Command};
 fn test_hash_object_integration() {
     let path = "./tests/data/commands/hash_object/repo1";
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
     let Ok(_) = fs::create_dir_all(path.clone()) else {
         panic!("No se pudo crear el directorio")
     };
@@ -24,7 +24,7 @@ fn test_hash_object_integration() {
         .output();
     match result {
         Ok(output) => {
-            assert_eq!(output.status.success(), true);
+            assert!(output.status.success());
             assert_eq!(
                 String::from_utf8(output.stdout).unwrap(),
                 "30d74d258442c7c65512eafab474568dd706c430\n"
@@ -40,5 +40,5 @@ fn test_hash_object_integration() {
     )
     .exists());
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }

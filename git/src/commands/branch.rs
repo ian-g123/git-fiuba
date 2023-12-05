@@ -74,7 +74,7 @@ impl Branch {
             return Err(CommandError::ShowAllAndDelete);
         }
 
-        if self.show_remotes == true {
+        if self.show_remotes {
             self.show_remotes = false;
         }
         self.show_all = true;

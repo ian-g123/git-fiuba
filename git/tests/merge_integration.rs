@@ -12,7 +12,7 @@ fn test_merge() {
 
     create_base_scene(path.clone(), git_bin.clone());
 
-    modify_file_and_commit_in_both_repos_not_overlaping_files(&path, git_bin);
+    modify_file_and_commit_in_both_repos_not_overlaping_files(path, git_bin);
 
     let result = Command::new(git_bin)
         .arg("merge")
@@ -34,7 +34,7 @@ fn test_merge() {
     file.read_to_string(&mut content).unwrap();
     assert_eq!(content, "Contenido local\n");
 
-    modify_file_and_commit_in_both_repos_none_overlaping_lines(&path, git_bin);
+    modify_file_and_commit_in_both_repos_none_overlaping_lines(path, git_bin);
 
     let result = Command::new(git_bin)
         .arg("merge")
@@ -54,7 +54,7 @@ fn test_merge() {
         "Primera linea modificada en rama2\nSeparador\nTercera linea modificada en master\n"
     );
 
-    modify_file_and_commit_in_both_repos_overlaping_changes(&path, git_bin);
+    modify_file_and_commit_in_both_repos_overlaping_changes(path, git_bin);
 
     let result = Command::new(git_bin)
         .arg("merge")
@@ -121,7 +121,7 @@ fn test_merge() {
     file.read_to_string(&mut content).unwrap();
     assert_eq!(content, "Mergeado\n");
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 fn modify_file_and_commit_in_both_repos_none_overlaping_lines(path: &str, git_bin: &str) {
@@ -179,7 +179,7 @@ fn modify_file_and_commit_in_both_repos_none_overlaping_lines(path: &str, git_bi
         Command::new(git_bin)
             .arg("add")
             .arg("testfile")
-            .current_dir(path.to_owned())
+            .current_dir(path)
             .status()
             .is_ok(),
         "No se pudo agregar el archivo testfile"
@@ -189,7 +189,7 @@ fn modify_file_and_commit_in_both_repos_none_overlaping_lines(path: &str, git_bi
         .arg("commit")
         .arg("-m")
         .arg("modificacion_local_not_overlaping")
-        .current_dir(path.to_owned())
+        .current_dir(path)
         .output()
         .unwrap();
 
@@ -256,7 +256,7 @@ fn modify_file_and_commit_in_both_repos_overlaping_changes(path: &str, git_bin: 
         Command::new(git_bin)
             .arg("add")
             .arg("testfile")
-            .current_dir(path.to_owned())
+            .current_dir(path)
             .status()
             .is_ok(),
         "No se pudo agregar el archivo testfile"
@@ -266,7 +266,7 @@ fn modify_file_and_commit_in_both_repos_overlaping_changes(path: &str, git_bin: 
         .arg("commit")
         .arg("-m")
         .arg("modificacion_local_overlaping")
-        .current_dir(path.to_owned())
+        .current_dir(path)
         .output()
         .unwrap();
 }
@@ -324,17 +324,17 @@ fn modify_file_and_commit_in_both_repos_not_overlaping_files(path: &str, git_bin
         Command::new(git_bin)
             .arg("add")
             .arg("file-local")
-            .current_dir(path.to_owned())
+            .current_dir(path)
             .status()
             .is_ok(),
         "No se pudo agregar el archivo file-local"
     );
 
-    let result = Command::new(git_bin)
+    let _result = Command::new(git_bin)
         .arg("commit")
         .arg("-m")
         .arg("modificacion_local_no_overlaping_files")
-        .current_dir(path.to_owned())
+        .current_dir(path)
         .output()
         .unwrap();
 }

@@ -46,7 +46,7 @@ impl CommitChanges {
                     logger.log(&format!("added: {}", path));
 
                     if let Some(hash) = hash {
-                        insertions += count_insertions(&hash, logger, db)?;
+                        insertions += count_insertions(hash, logger, db)?;
                         files_changed += 1;
                     }
                 }

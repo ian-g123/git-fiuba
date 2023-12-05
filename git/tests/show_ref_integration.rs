@@ -1,7 +1,6 @@
 use std::{
     fs::{self, File},
     io::Write,
-    path::Path,
     process::Command,
 };
 
@@ -248,13 +247,13 @@ fn test_show_all_refs() {
 
     let expected = format!(
         "{}\n{}\n{}\nadb82\n21b09\n71815\n{}\n{} refs/tags/tag1{}\n{}\n",
-        master_commit1[..5].to_string(),
-        master_commit2[..5].to_string(),
-        master_commit2[..5].to_string(),
-        tag1_object[..5].to_string(),
-        master_commit1[..5].to_string(),
+        &master_commit1[..5],
+        &master_commit2[..5],
+        &master_commit2[..5],
+        &tag1_object[..5],
+        &master_commit1[..5],
         "^{}",
-        master_commit1[..5].to_string()
+        &master_commit1[..5]
     );
 
     assert_eq!(expected, stdout);
@@ -273,13 +272,13 @@ fn test_show_all_refs() {
 
     let expected = format!(
         "{}\n{}\n{}\nadb8\n21b0\n7181\n{}\n{} refs/tags/tag1{}\n{}\n",
-        master_commit1[..4].to_string(),
-        master_commit2[..4].to_string(),
-        master_commit2[..4].to_string(),
-        tag1_object[..4].to_string(),
-        master_commit1[..4].to_string(),
+        &master_commit1[..4],
+        &master_commit2[..4],
+        &master_commit2[..4],
+        &tag1_object[..4],
+        &master_commit1[..4],
         "^{}",
-        master_commit1[..4].to_string()
+        &master_commit1[..4]
     );
 
     assert_eq!(expected, stdout);
@@ -341,10 +340,10 @@ fn test_show_all_refs() {
     println!("Stderr: {}", stderr);
     let stdout = String::from_utf8(result.stdout).unwrap();
 
-    let expected = format!("");
+    let expected = String::new();
     assert_eq!(expected, stdout);
 
-    _ = std::fs::remove_dir_all(format!("{}", path));
+    _ = std::fs::remove_dir_all(path.to_string());
 }
 
 fn create_remote_files(path: &str, remote: &str) {

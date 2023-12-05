@@ -1,4 +1,4 @@
-use common::aux::create_base_scene;
+
 
 mod common {
     pub mod aux;
@@ -6,16 +6,11 @@ mod common {
 
 use std::{
     fs::{self, File},
-    io::{Read, Write},
-    path::Path,
+    io::{Write},
     process::Command,
-    result,
 };
 
-use crate::common::aux::{
-    change_dir_testfile1_content_and_remove_dir_testfile2, change_testfile_content,
-    create_test_scene_1, create_test_scene_2,
-};
+
 
 #[test]
 fn test_ckeckout() {
@@ -25,7 +20,7 @@ fn test_ckeckout() {
     fs::create_dir_all(path_repo).unwrap();
 
     Command::new(git_bin)
-        .args(&["init"])
+        .args(["init"])
         .current_dir(path_repo)
         .output()
         .expect("failed to initialize git repository");
@@ -67,5 +62,5 @@ fn test_ckeckout() {
         "Feature not implemented: checkout to ditached HEAD state\n"
     );
 
-    fs::remove_dir_all(format!("{}", path_repo)).unwrap();
+    fs::remove_dir_all(path_repo.to_string()).unwrap();
 }

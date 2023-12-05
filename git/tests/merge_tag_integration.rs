@@ -12,7 +12,7 @@ fn test_merge_tag_on_tip_no_conflicts() {
 
     create_base_scene(path.clone(), git_bin.clone());
 
-    branch_none_overlaping_tag_on_branch_tip(&path, git_bin);
+    branch_none_overlaping_tag_on_branch_tip(path, git_bin);
 
     let result = Command::new(git_bin)
         .arg("merge")
@@ -45,7 +45,7 @@ fn test_merge_tag_on_tip_no_conflicts() {
         "Merge branch 'rama2' into master\n\n".to_string()
     );
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -55,7 +55,7 @@ fn test_merge_tag_behind_tip() {
 
     create_base_scene(path.clone(), git_bin.clone());
 
-    branch_none_overlaping_tag_behind_branch_tip(&path, git_bin);
+    branch_none_overlaping_tag_behind_branch_tip(path, git_bin);
 
     let result = Command::new(git_bin)
         .arg("merge")
@@ -88,7 +88,7 @@ fn test_merge_tag_behind_tip() {
         "Merge tag 'tag_1' into master\n\n".to_string()
     );
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -98,7 +98,7 @@ fn test_merge_tag_conflicts() {
 
     create_base_scene(path.clone(), git_bin.clone());
 
-    branch_overlaping_tag(&path, git_bin);
+    branch_overlaping_tag(path, git_bin);
 
     let result = Command::new(git_bin)
         .arg("merge")
@@ -119,14 +119,14 @@ fn test_merge_tag_conflicts() {
         "Primera linea modificada en rama2\nSeparador\n<<<<<<< master\nTercera linea modificada en master\n=======\nTercera linea modificada en rama2\n>>>>>>> rama2\n"
     );
 
-    let result = Command::new(git_bin)
+    let _result = Command::new(git_bin)
         .arg("add")
         .arg("testfile")
         .current_dir(path)
         .output()
         .unwrap();
 
-    let result = Command::new(git_bin)
+    let _result = Command::new(git_bin)
         .arg("merge")
         .arg("--continue")
         .current_dir(path)
@@ -146,7 +146,7 @@ fn test_merge_tag_conflicts() {
         "Merge branch 'rama2' into master\n\n".to_string()
     );
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 fn branch_none_overlaping_tag_on_branch_tip(path: &str, git_bin: &str) {
@@ -214,7 +214,7 @@ fn branch_none_overlaping_tag_on_branch_tip(path: &str, git_bin: &str) {
         Command::new(git_bin)
             .arg("add")
             .arg("testfile")
-            .current_dir(path.to_owned())
+            .current_dir(path)
             .status()
             .is_ok(),
         "No se pudo agregar el archivo testfile"
@@ -224,7 +224,7 @@ fn branch_none_overlaping_tag_on_branch_tip(path: &str, git_bin: &str) {
         .arg("commit")
         .arg("-m")
         .arg("modificacion_local_not_overlaping")
-        .current_dir(path.to_owned())
+        .current_dir(path)
         .output()
         .unwrap();
 
@@ -322,7 +322,7 @@ fn branch_none_overlaping_tag_behind_branch_tip(path: &str, git_bin: &str) {
         Command::new(git_bin)
             .arg("add")
             .arg("testfile")
-            .current_dir(path.to_owned())
+            .current_dir(path)
             .status()
             .is_ok(),
         "No se pudo agregar el archivo testfile"
@@ -332,7 +332,7 @@ fn branch_none_overlaping_tag_behind_branch_tip(path: &str, git_bin: &str) {
         .arg("commit")
         .arg("-m")
         .arg("modificacion_local_not_overlaping")
-        .current_dir(path.to_owned())
+        .current_dir(path)
         .output()
         .unwrap();
 
@@ -407,7 +407,7 @@ fn branch_overlaping_tag(path: &str, git_bin: &str) {
         Command::new(git_bin)
             .arg("add")
             .arg("testfile")
-            .current_dir(path.to_owned())
+            .current_dir(path)
             .status()
             .is_ok(),
         "No se pudo agregar el archivo testfile"
@@ -417,7 +417,7 @@ fn branch_overlaping_tag(path: &str, git_bin: &str) {
         .arg("commit")
         .arg("-m")
         .arg("modificacion_local_overlaping")
-        .current_dir(path.to_owned())
+        .current_dir(path)
         .output()
         .unwrap();
 

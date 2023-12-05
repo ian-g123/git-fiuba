@@ -2,7 +2,7 @@ use core::panic;
 use std::{
     fs::{self, File},
     io::{Error, Read, Write},
-    process::{Child, Command},
+    process::{Command},
 };
 
 use git_lib::{file_compressor::extract, join_paths};
@@ -54,7 +54,7 @@ fn test_clone() {
     file.read_to_string(&mut content).unwrap();
     assert_eq!(content, "contenido\n");
 
-    modify_file_and_commit_in_server_repo(&path);
+    modify_file_and_commit_in_server_repo(path);
 
     let result = Command::new("../".to_owned() + git_bin)
         .arg("fetch")
@@ -91,7 +91,7 @@ fn test_clone() {
     file.read_to_string(&mut content).unwrap();
     assert_eq!(content, "Primera linea\nSeparador\nTercera linea\n");
 
-    modify_file_and_commit_in_both_repos_not_overlaping(&path);
+    modify_file_and_commit_in_both_repos_not_overlaping(path);
 
     let _result = Command::new("../".to_owned() + git_bin)
         .arg("fetch")
@@ -115,7 +115,7 @@ fn test_clone() {
     file.read_to_string(&mut content).unwrap();
     assert_eq!(content, "Contenido local\n");
 
-    modify_file_and_commit_in_both_repos_none_overlaping_lines(&path);
+    modify_file_and_commit_in_both_repos_none_overlaping_lines(path);
 
     let _result = Command::new("../".to_owned() + git_bin)
         .arg("fetch")
@@ -137,7 +137,7 @@ fn test_clone() {
         "Primera linea modificada en servidor\nSeparador\nTercera linea modificada en local\n"
     );
 
-    modify_file_and_commit_in_both_repos_overlaping_changes(&path);
+    modify_file_and_commit_in_both_repos_overlaping_changes(path);
 
     let _result = Command::new("../".to_owned() + git_bin)
         .arg("fetch")
@@ -187,7 +187,7 @@ fn test_clone() {
         .output()
         .unwrap();
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 fn modify_file_and_commit_in_both_repos_none_overlaping_lines(path: &str) {
@@ -437,7 +437,7 @@ fn read_file(repo_path: &str, hash_str: &str) -> Result<Vec<u8>, Error> {
         &hash_str[0..2],
         &hash_str[2..]
     );
-    let mut file = File::open(&path).unwrap();
+    let mut file = File::open(path).unwrap();
     let mut data = Vec::new();
     file.read_to_end(&mut data).unwrap();
     let decompressed_data = extract(&data).unwrap();

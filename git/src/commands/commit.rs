@@ -227,7 +227,7 @@ fn read_from_stdin(stdin: &mut dyn Read) -> Result<String, CommandError> {
 fn check_end_message(message: &str, end: &str) -> bool {
     let split_message: Vec<String> = message.lines().map(String::from).collect();
     if let Some(last) = split_message.to_owned().last() {
-        if last.to_owned() == end.to_string() {
+        if *last == *end {
             return true;
         }
     }
@@ -238,7 +238,7 @@ fn check_end_message(message: &str, end: &str) -> bool {
 fn ignore_commented_lines(message: String) -> String {
     let split_message: Vec<&str> = message
         .lines()
-        .filter(|line| !line.trim_start().starts_with("#"))
+        .filter(|line| !line.trim_start().starts_with('#'))
         .collect();
     split_message.join("\n")
 }
@@ -250,7 +250,7 @@ pub fn read_message_completely(i: usize, args: &[String]) -> Result<(String, usi
     let end: char;
     if message.starts_with('"') {
         end = '"';
-    } else if message.starts_with("'") {
+    } else if message.starts_with('\'') {
         end = '\'';
     } else {
         return Ok((message, number_of_words));

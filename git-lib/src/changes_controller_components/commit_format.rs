@@ -44,7 +44,7 @@ impl CommitFormat {
             commit_tree.clone(),
             changes_to_be_commited,
         )?;
-        let is_root = if commit_tree.is_none() { true } else { false };
+        let is_root = commit_tree.is_none();
         let changes_to_be_commited = sort_hashmap_and_filter_unmodified(changes_to_be_commited);
         let output_message = get_commit_sucess_message(
             &changes_to_be_commited,
@@ -74,16 +74,16 @@ fn get_commit_sucess_message(
 ) -> Result<String, CommandError> {
     let mut output_message = format!("[{} ", branch_name);
     if is_root {
-        output_message += &format!("(root-commit) ");
+        output_message += "(root-commit) ";
     }
     let message_vec: Vec<&str> = message.lines().collect();
     let message = message_vec.join(" ");
-    output_message += &format!("{}] {}\n", hash[..7].to_string(), message);
+    output_message += &format!("{}] {}\n", &hash[..7], message);
     output_message += &format!(" {} file", files_changed);
     if files_changed > 1 {
         output_message += "s";
     }
-    output_message += &format!(" changed");
+    output_message += " changed";
     if insertions > 0 {
         if insertions == 1 {
             output_message += &format!(", {} insertion(+)", insertions);

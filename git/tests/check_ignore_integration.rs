@@ -49,7 +49,7 @@ fn test_comment() {
     assert_eq!(expected, stdout);
     assert_eq!("", stderr);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -119,7 +119,7 @@ fn test_gitignore_root_ends_with() {
     assert_eq!("", stderr);
     assert_eq!(expected, stdout);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -173,7 +173,7 @@ fn test_gitignore_next_level_ends_with() {
     assert_eq!("", stderr);
     assert_eq!(expected, stdout);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -243,7 +243,7 @@ fn test_exclude_ends_with() {
     assert_eq!("", stderr);
     assert_eq!(expected, stdout);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -289,7 +289,7 @@ fn test_order_negate() {
     assert_eq!("", stderr);
     assert_eq!(expected, stdout);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -411,7 +411,7 @@ fn test_ends_with_general() {
     assert_eq!("", stderr);
     assert_eq!(expected, stdout);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -547,7 +547,7 @@ fn test_starts_with() {
     assert_eq!("", stderr);
     assert_eq!(expected, stdout);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -594,7 +594,7 @@ fn test_non_matching() {
     assert_eq!("", stderr);
     assert_eq!(expected, stdout);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -674,7 +674,7 @@ fn test_relative_patterns() {
     assert_eq!("", stderr);
     assert_eq!(expected, stdout);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -730,7 +730,7 @@ fn test_non_relative_patterns() {
     assert_eq!("", stderr);
     assert_eq!(expected, stdout);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -787,7 +787,7 @@ fn test_ignore_next_char() {
     assert_eq!("", stderr);
     assert_eq!(expected, stdout);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -820,7 +820,7 @@ fn test_read_from_stdin() {
     assert_eq!("", stderr);
     assert_eq!(expected, stdout);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 #[test]
@@ -930,7 +930,7 @@ fn test_other_commands() {
     assert_eq!("", stderr);
     assert_eq!(expected, stdout);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path.to_string());
 }
 
 fn create_check_ignore_scene(path: &str) {
