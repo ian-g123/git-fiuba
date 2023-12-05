@@ -1,13 +1,11 @@
 use core::panic;
 use std::{
-    fs::{self, File},
-    io::{self, Error, Read},
+    fs::{self},
+    io::{self},
     path::Path,
     process::Command,
     thread::sleep,
 };
-
-use git_lib::file_compressor::extract;
 
 // Comando para iniciar daemon
 // cargo build; clear; cd ../server_files/; ../../../../../target/debug/git-server

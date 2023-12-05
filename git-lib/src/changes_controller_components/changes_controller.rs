@@ -30,7 +30,7 @@ impl ChangesController {
     /// del index y el working tree desde el último commit.
     pub fn new(
         db: &ObjectsDatabase,
-        git_path: &str,
+        _git_path: &str,
         working_dir: &str,
         logger: &mut Logger,
         commit_tree: Option<Tree>,
@@ -127,7 +127,7 @@ impl ChangesController {
     /// Recolecta información sobre los merge conflicts
     fn check_unmerged_paths(
         staging_area: &StagingArea,
-        logger: &mut Logger,
+        _logger: &mut Logger,
     ) -> Result<HashMap<String, ChangeType>, CommandError> {
         let mut changes: HashMap<String, ChangeType> = HashMap::new();
         let unmerged_files = staging_area.get_unmerged_files();

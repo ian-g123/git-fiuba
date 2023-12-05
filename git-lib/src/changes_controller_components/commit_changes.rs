@@ -127,7 +127,7 @@ fn read_content(
 
 fn read_blob_content(
     path: &str,
-    logger: &mut Logger,
+    _logger: &mut Logger,
     commit_tree: &mut Tree,
 ) -> Result<Vec<String>, CommandError> {
     let Some(mut object) = commit_tree.get_object_from_path(path) else {
@@ -143,7 +143,7 @@ fn read_blob_content(
     Ok(content_vec)
 }
 
-fn compare_content(file1: Vec<String>, file2: Vec<String>, logger: &mut Logger) -> (usize, usize) {
+fn compare_content(file1: Vec<String>, file2: Vec<String>, _logger: &mut Logger) -> (usize, usize) {
     let mut insertions: usize = 0;
     let mut deletions: usize = 0;
 

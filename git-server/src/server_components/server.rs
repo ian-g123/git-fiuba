@@ -1,12 +1,10 @@
 use std::{net::TcpListener, thread};
 
-use git_lib::{command_errors::CommandError, logger::Logger, logger_sender};
+use git_lib::{command_errors::CommandError, logger::Logger};
 
 use crate::server_components::server_worker::ServerWorker;
 
 pub struct Server {
-    address: String,
-    path: String,
     pub listener_handle: thread::JoinHandle<()>,
 }
 
@@ -36,8 +34,6 @@ impl Server {
         });
 
         Ok(Server {
-            address: address.to_string(),
-            path: path.to_string(),
             listener_handle: listener_handle,
         })
     }

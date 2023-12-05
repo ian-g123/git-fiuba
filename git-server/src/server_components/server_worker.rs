@@ -477,7 +477,7 @@ fn contains_all_elements(
                 "",
                 &mut Logger::new_dummy(),
             )?;
-            let Some(blob) = blob_object.as_mut_blob() else {
+            if blob_object.as_mut_blob().is_none() {
                 return Ok(false);
             };
             return Ok(true);
@@ -489,17 +489,4 @@ fn contains_all_elements(
     }
 
     Ok(true)
-}
-
-fn get_response(mut socket: &TcpStream) -> Result<Vec<String>, CommandError> {
-    let mut lines = Vec::<String>::new();
-    loop {
-        match String::read_pkt_format(&mut socket)? {
-            Some(line) => {
-                lines.push(line);
-            }
-            None => break,
-        }
-    }
-    Ok(lines)
 }
