@@ -3870,7 +3870,6 @@ impl<'a> GitRepository<'a> {
         }
 
         aux_list.sort();
-        let message: String;
         let extended_list = self.get_extended_ls_files_info(
             aux_list.clone(),
             staging_area_conflicts,
@@ -3878,11 +3877,11 @@ impl<'a> GitRepository<'a> {
             unmerged_modifications_list,
         )?;
 
-        if stage || unmerged {
-            message = get_extended_ls_files_output(others_list.clone(), extended_list);
+        let message = if stage || unmerged {
+            get_extended_ls_files_output(others_list.clone(), extended_list)
         } else {
-            message = get_normal_ls_files_output(others_list, extended_list);
-        }
+            get_normal_ls_files_output(others_list, extended_list)
+        };
         write!(self.output, "{}", message)
             .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
         Ok(())

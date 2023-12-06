@@ -1,0 +1,1 @@
+cargo clippy -- -A clippy::type_complexity -A clippy::too_many_arguments
