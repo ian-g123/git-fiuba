@@ -22,7 +22,6 @@ pub fn get_sha1_str(data: &[u8]) -> String {
     let hash_result = get_sha1(data);
 
     // Formatea los bytes del hash en una cadena hexadecimal
-    
 
     u8_vec_to_hex_string(&hash_result)
 }
@@ -170,6 +169,7 @@ macro_rules! join_paths {
                 match result {
                     Some(result_s) => {
                         let base_path: &std::path::Path = std::path::Path::new(&result_s);
+                        #[allow(clippy::unnecessary_to_owned)]
                         let complete_path = &base_path.join(&$x);
                         match complete_path.to_str() {
                             Some(result_res) => result = Some(result_res.to_string()),
