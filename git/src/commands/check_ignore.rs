@@ -151,7 +151,7 @@ impl CheckIgnore {
                     return Err(CommandError::EmptyPath);
                 }
                 if path != "\0" {
-                    repo.check_ignore_paths(self.verbose, self.non_matching, &[path].to_vec())?;
+                    repo.check_ignore_paths(self.verbose, self.non_matching, [path].as_ref())?;
                 }
 
                 if end {

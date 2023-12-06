@@ -40,7 +40,6 @@ pub fn get_analysis(
             &db,
             &local_hash,
             &mut commits_map,
-            false,
             &hash_to_look_for,
             true,
             logger,
@@ -63,7 +62,6 @@ pub fn rebuild_commits_tree(
     db: &ObjectsDatabase,
     hash_commit: &String,
     commits_map: &mut HashMap<String, (CommitObject, usize, usize)>, // HashMap<hash, (commit, branch)>
-    log_all: bool,
     hash_to_look_for: &HashSet<String>,
     build_tree: bool,
     logger: &mut Logger,
@@ -118,7 +116,6 @@ pub fn rebuild_commits_tree(
             db,
             parent_hash,
             commits_map,
-            log_all,
             hash_to_look_for,
             build_tree,
             logger,

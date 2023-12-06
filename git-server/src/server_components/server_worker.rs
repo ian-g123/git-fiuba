@@ -300,7 +300,6 @@ impl ServerWorker {
                 &repo.db()?,
                 &want,
                 &mut commits_map,
-                false,
                 &haves,
                 true,
                 repo.logger(),
