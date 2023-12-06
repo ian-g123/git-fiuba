@@ -252,7 +252,7 @@ impl GitObjectTrait for Blob {
         db: Option<ObjectsDatabase>,
     ) -> Result<(), CommandError> {
         let mut file = File::create(path).map_err(|error| {
-            CommandError::FileOpenError(format!("Error al crear archivo {}: {}", path, error))
+            CommandError::FileOpenError(format!("Error al abrir archivo {}: {}", path, error))
         })?;
         let content = match db {
             Some(db) => self.content(Some(&db))?,

@@ -2,7 +2,7 @@ use core::panic;
 use std::{
     fs::{self, File},
     io::{Error, Read, Write},
-    process::{Command},
+    process::Command,
 };
 
 use git_lib::{file_compressor::extract, join_paths};
@@ -30,13 +30,15 @@ fn test_clone() {
         "2a293f24ce241ead407caf5bcd23fcde82c63149",
         &format!("{}/server-files/repo/", path),
         "2a293f24ce241ead407caf5bcd23fcde82c63149",
-    );
+    )
+    .unwrap();
     compare_files(
         &format!("{}/repo/", path),
         "764df4e2bf5c8afd5ab625cda76bdc30ece1eeef",
         &format!("{}/server-files/repo/", path),
         "764df4e2bf5c8afd5ab625cda76bdc30ece1eeef",
-    );
+    )
+    .unwrap();
 
     let ref_path = path.to_owned() + "/repo/.git/refs/remotes/origin/master";
     let commit_hash = fs::read_to_string(ref_path).unwrap();
@@ -45,7 +47,8 @@ fn test_clone() {
         &commit_hash,
         &format!("{}/server-files/repo/", path),
         &commit_hash,
-    );
+    )
+    .unwrap();
 
     let joined_path =
         join_paths!(path.to_owned(), "repo/testfile").expect("No se pudo unir los paths");
@@ -437,15 +440,21 @@ fn read_file(repo_path: &str, hash_str: &str) -> Result<Vec<u8>, Error> {
         &hash_str[0..2],
         &hash_str[2..]
     );
-    let mut file = File::open(path).unwrap();
+    let mut file = File::open(path)?;
     let mut data = Vec::new();
-    file.read_to_end(&mut data).unwrap();
+    file.read_to_end(&mut data)?;
     let decompressed_data = extract(&data).unwrap();
     Ok(decompressed_data)
 }
 
-fn compare_files(repo_path_1: &str, hash_str_1: &str, repo_path_2: &str, hash_str_2: &str) {
-    let file1 = read_file(repo_path_1, hash_str_1).unwrap();
-    let file2 = read_file(repo_path_2, hash_str_2).unwrap();
+fn compare_files(
+    repo_path_1: &str,
+    hash_str_1: &str,
+    repo_path_2: &str,
+    hash_str_2: &str,
+) -> Result<(), Error> {
+    let file1 = read_file(repo_path_1, hash_str_1)?;
+    let file2 = read_file(repo_path_2, hash_str_2)?;
     assert_eq!(file1, file2);
+    Ok(())
 }

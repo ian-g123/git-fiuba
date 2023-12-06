@@ -52,7 +52,10 @@ impl ServerWorker {
     pub fn handle_connection(&mut self) {
         match self.handle_connection_priv() {
             Ok(_) => self.log("Connection handled successfully"),
-            Err(error) => eprintln!("{error}"),
+            Err(error) => {
+                self.log(&format!("❌ Error: {}", error));
+                eprintln!("{error}")
+            }
         }
     }
 
@@ -198,7 +201,6 @@ impl ServerWorker {
                 ));
                 status.insert(branch_name.to_string(), None);
                 repo.update_branch_ref(&new_ref, &branch_name)?;
-                // repo.write_to_internal_file(&branch_path, &new_ref)?;
             } else {
                 self.log(
                     "No se pudo hacer fast-forward porque no se encontraron todos los commits",
@@ -293,6 +295,7 @@ impl ServerWorker {
         self.log(&format!("wants: {:?}", wants));
         let mut commits_map = HashMap::<String, (CommitObject, usize, usize)>::new();
         for want in wants {
+            self.log(&format!("Painting commits upto: {}", want));
             rebuild_commits_tree(
                 &repo.db()?,
                 &want,
@@ -303,10 +306,16 @@ impl ServerWorker {
                 repo.logger(),
                 0,
             )?;
+            self.log(&format!("commits_map: {:?}", commits_map));
         }
+        self.log(&format!("after rebulding: {:?}", commits_map));
+
         for have in haves {
+            self.log(&format!("removing: {:?}", have));
             commits_map.remove(&have);
+            self.log(&format!("commits_map: {:?}", commits_map));
         }
+        self.log(&format!("commits_map: {:?}", commits_map));
         self.log("╔==========");
         self.log("║ Packfile summary");
         for (hash, (commit, _, _)) in &commits_map {

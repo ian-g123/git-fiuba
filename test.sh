@@ -7,6 +7,14 @@ echo "Log Integration test"
 unzip -qq git/tests/data/commands/log.zip -d git/tests/data/commands/
 RUSTFLAGS="-Awarnings" cargo test -q -p git -p git-lib -p git-server --test log_integration -- --ignored
 
+# Check if port 9418 is available
+echo "=========================="
+echo "Check if port 9418 is available"
+if lsof -Pi :9418 -sTCP:LISTEN -t >/dev/null ; then
+    echo "❌ Failed. Port 9418 is not available"
+    exit 1
+fi
+
 # Run clone_integration.rs test
 echo "=========================="
 echo "Clone Integration test"
@@ -195,6 +203,8 @@ echo "Contenido Rama" > file3
 ../../../target/debug/git add file3
 ../../../target/debug/git commit -m RamaCommit2
 ../../../target/debug/git push
+../../../target/debug/git checkout master
+../../../target/debug/git push
 
 cd -
 
@@ -204,6 +214,9 @@ sleep 1
 
 cd user2
 ../../../target/debug/git pull
+../../../target/debug/git checkout rama
+../../../target/debug/git pull
+../../../target/debug/git checkout master
 cd -
 if [ ! -f user2/.git/refs/heads/master ]; then
     echo "❌ Failed. File not found"
@@ -241,7 +254,7 @@ if [ ! -f file1 ]; then
     kill $server_process
     exit 1
 fi
-../../target/debug/git checkout rama
+../../../target/debug/git checkout rama
 if [ ! -f file2 ]; then
     echo "❌ Failed. File2 not found"
     kill $server_process
@@ -272,14 +285,14 @@ fi
 
 master_branch_user_3=$(cat user3/.git/refs/heads/master)
 if [ "$master_branch_user_1" != "$master_branch_user_3" ]; then
-    echo "❌ Failed. Branches are not equal"
+    echo "❌ Failed. Branch references for 'master' are not equal"
     kill $server_process
     exit 1
 fi
 
 rama_branch_user_3=$(cat user3/.git/refs/heads/rama)
 if [ "$rama_branch_user_1" != "$rama_branch_user_3" ]; then
-    echo "❌ Failed. Branches are not equal"
+    echo "❌ Failed. Branch references for 'rama' are not equal"
     kill $server_process
     exit 1
 fi
@@ -290,7 +303,7 @@ if [ ! -f file1 ]; then
     kill $server_process
     exit 1
 fi
-../../target/debug/git checkout rama
+../../../target/debug/git checkout rama
 if [ ! -f file2 ]; then
     echo "❌ Failed. File2 not found"
     kill $server_process
@@ -302,9 +315,8 @@ if [ ! -f file3 ]; then
     kill $server_process
     exit 1
 fi
-
+cd ../../..
 echo "✅ Clone con varias ramas"
-
 kill $server_process
 rm -rf server_client_integration_test
 echo "✅ Passed"
