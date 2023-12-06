@@ -169,7 +169,7 @@ impl ServerWorker {
 
         let ref_update_map = self.read_ref_update_map()?;
 
-        let objects = read_objects_from_packfile(&mut self.socket, &mut repo.db()?, repo.logger())?;
+        let objects = read_objects_from_packfile(&mut self.socket, &repo.db()?, repo.logger())?;
         let objects_map = repo.save_objects_from_packfile(objects)?;
         let mut status = HashMap::<String, Option<String>>::new();
 
@@ -399,15 +399,11 @@ impl ServerWorker {
 
     fn get_response_until_flushpkt(&mut self) -> Result<Vec<String>, CommandError> {
         let mut response = Vec::<String>::new();
-        loop {
-            match self.read_tpk()? {
-                Some(line) => {
-                    response.push(line);
-                }
-                None => {
-                    break;
-                }
+        while let Some(line) = self.read_tpk()? {
+            if line == "0000" {
+                break;
             }
+            response.push(line);
         }
 
         Ok(response)

@@ -138,12 +138,12 @@ impl Tag {
 
         self.name = "".to_string();
         self.object = None;
-        for arg in 0..args.len() {
-            if Self::is_flag(&args[arg]) && !options.contains(&args[arg]) {
+        for arg in args {
+            if Self::is_flag(arg) && !options.contains(arg) {
                 return Err(CommandError::TagCreateAndDelete);
             }
-            if !options.contains(&args[arg]) {
-                self.delete.push(args[arg].clone());
+            if !options.contains(arg) {
+                self.delete.push(arg.clone());
             }
         }
         Ok(args.len())

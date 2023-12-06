@@ -108,7 +108,7 @@ impl ShowRef {
             return Err(CommandError::WrongFlag);
         }
 
-        if flag.starts_with("--hash=") {
+        if let Some(_) = flag.strip_prefix("--hash=") {
             if flag.len() == 7 {
                 return Err(CommandError::FlagHashRequiresValue);
             } else {

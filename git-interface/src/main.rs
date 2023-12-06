@@ -160,8 +160,8 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
 
     interface.staged_area_ui();
     let err_activation = interface.buttons_activation();
-    if err_activation.is_err() {
-        dialog_window(err_activation.unwrap_err().to_string());
+    if let Err(err) = err_activation {
+        dialog_window(err.to_string());
         return ControlFlow::Break(());
     }
     interface.set_right_area_ui(&commits);
@@ -254,7 +254,7 @@ impl Interface {
         Some(commits)
     }
 
-    fn buttons_activation<'a>(&mut self) -> Result<(), CommandError> {
+    fn buttons_activation(&mut self) -> Result<(), CommandError> {
         let buttons = [
             ("pull", self.build_button("pull_button".to_string())),
             ("push", self.build_button("push_button".to_string())),
@@ -311,8 +311,7 @@ impl Interface {
                     let mut message_for_pull =
                         "Pull realizado con éxito.\nRealice refresh para obtener los cambios"
                             .to_string();
-                    if err.is_err() {
-                        let err = err.unwrap_err();
+                    if let Err(err) = err {
                         message_for_pull = err.to_string() + "\nPull no pudo realizarse con éxito";
                     }
                     dialog_window(message_for_pull);
@@ -320,16 +319,13 @@ impl Interface {
                 "push" => {
                     let mut binding_for_push = &output;
                     let result_for_push = push_function(&mut binding_for_push);
-                    if result_for_push.is_err() {
-                        dialog_window(result_for_push.unwrap_err().to_string());
-                    } else {
-                        dialog_window("Push realizado con éxito".to_string());
+                    if let Err(err) = result_for_push {
+                        dialog_window(err.to_string());
                     }
                 }
                 "fetch" => {
                     if let Err(err) = repo.fetch() {
                         dialog_window(err.to_string());
-                        return;
                     }
                     dialog_window("Fetch realizado con éxito".to_string());
                 }
@@ -470,8 +466,8 @@ impl Interface {
                         _ = unstaging_changes2.borrow_mut().take(&clone_file);
                         staging_changes2.borrow_mut().insert(file.clone());
                         let err = repo.add(vec_files);
-                        if err.is_err() {
-                            dialog_window(err.unwrap_err().to_string());
+                        if let Err(err) = err {
+                            dialog_window(err.to_string());
                             return;
                         }
                     }
@@ -479,8 +475,8 @@ impl Interface {
                         _ = files_merge_conflict.borrow_mut().take(&clone_file);
                         staging_changes2.borrow_mut().insert(file.clone());
                         let err = repo.add(vec_files);
-                        if err.is_err() {
-                            dialog_window(err.unwrap_err().to_string());
+                        if let Err(err) = err {
+                            dialog_window(err.to_string());
                             return;
                         }
                     }
@@ -682,8 +678,7 @@ impl Interface {
                 let response = dialog.run();
 
                 // Maneja la respuesta del cuadro de diálogo.
-                match response {
-                    gtk::ResponseType::Accept => {
+                if response == gtk::ResponseType::Accept {
                         match repo.initialize_rebase(to_branch, from_branch) {
                             Ok(_) => {
                                 if repo.staging_area().unwrap().has_conflicts(){
@@ -714,8 +709,6 @@ impl Interface {
                         interface.branch_function(false);
                         interface.staged_area_ui();
                     }
-                    _ => {}
-                }
                 // Cierra el cuadro de diálogo.
                 unsafe { dialog.destroy() };
             });
@@ -781,42 +774,38 @@ impl Interface {
                 let response = dialog.run();
 
                 // Maneja la respuesta del cuadro de diálogo.
-                match response {
-                    gtk::ResponseType::Accept => {
-                        match repo.merge(&vec![clone_clone_branch_name]) {
-                            Ok(_) => {
-                                if repo.staging_area().unwrap().has_conflicts(){
-                                    dialog_window("Resuelve los merge conflicts y luego presiona el botón 'commit'
-                                    cuando hayas finalizado".to_string())
-                                }else {
-                                    dialog_window("Merge realizado con éxito".to_string())
-                                }
-                            },
-                            Err(err) => dialog_window(err.to_string()),
-                        };
-                        let (staging_changes, unstaging_changes, files_merge_conflict) =
-                            staged_area_func().unwrap();
-                            let principal_window_clone2 = principal_window_clone.clone();
-                        let mut interface = Interface {
-                            builder: builder_clone.clone(),
-                            staging_changes: Rc::new(RefCell::new(staging_changes)),
-                            unstaging_changes: Rc::new(RefCell::new(unstaging_changes)),
-                            files_merge_conflict: Rc::new(RefCell::new(files_merge_conflict)),
-                            principal_window: principal_window_clone,
-                        };
-                        let principal_window = principal_window_clone2.borrow_mut().clone();
-                        principal_window.set_sensitive(true);
-                        let branch_window_clone4 = branch_window_clone4.clone();
-                        branch_window_clone4.hide();
-                        remove_childs(&clone_branch_list2);
-                        let builder = builder_clone.clone();
-                        remove_widgets_to_branch_window(builder, branch_window_clone4);
-                        interface.branch_function(false);
-                        interface.staged_area_ui();
-                    }
-                    _ => {}
+                if response == gtk::ResponseType::Accept {
+                    match repo.merge(&vec![clone_clone_branch_name]) {
+                        Ok(_) => {
+                            if repo.staging_area().unwrap().has_conflicts(){
+                                dialog_window("Resuelve los merge conflicts y luego presiona el botón 'commit'
+                                cuando hayas finalizado".to_string())
+                            }else {
+                                dialog_window("Merge realizado con éxito".to_string())
+                            }
+                        },
+                        Err(err) => dialog_window(err.to_string()),
+                    };
+                    let (staging_changes, unstaging_changes, files_merge_conflict) =
+                        staged_area_func().unwrap();
+                        let principal_window_clone2 = principal_window_clone.clone();
+                    let mut interface = Interface {
+                        builder: builder_clone.clone(),
+                        staging_changes: Rc::new(RefCell::new(staging_changes)),
+                        unstaging_changes: Rc::new(RefCell::new(unstaging_changes)),
+                        files_merge_conflict: Rc::new(RefCell::new(files_merge_conflict)),
+                        principal_window: principal_window_clone,
+                    };
+                    let principal_window = principal_window_clone2.borrow_mut().clone();
+                    principal_window.set_sensitive(true);
+                    let branch_window_clone4 = branch_window_clone4.clone();
+                    branch_window_clone4.hide();
+                    remove_childs(&clone_branch_list2);
+                    let builder = builder_clone.clone();
+                    remove_widgets_to_branch_window(builder, branch_window_clone4);
+                    interface.branch_function(false);
+                    interface.staged_area_ui();
                 }
-
                 // Cierra el cuadro de diálogo.
                 unsafe { dialog.destroy() };
             });

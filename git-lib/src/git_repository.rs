@@ -140,7 +140,7 @@ impl<'a> GitRepository<'a> {
         address: String,
         repository_path: &String,
     ) -> Result<GitRepository<'a>, CommandError> {
-        let mut repo = GitRepository::init(&directory, "master", false, output)?;
+        let mut repo = GitRepository::init(directory, "master", false, output)?;
         let url: String = format!("git://{}{}", address, &repository_path);
         repo.update_remote(url)?;
         repo.fetch()?;
@@ -2036,46 +2036,6 @@ impl<'a> GitRepository<'a> {
                     "Error leyendo FETCH_HEAD".to_string(),
                 ))?;
         Ok(Some(branch_hash.to_owned()))
-    }
-
-    /// Devuelve el hash del commit que apunta la rama que se hizo fetch
-    fn get_fetch_head_commits(&self) -> Result<HashMap<String, (String, bool)>, CommandError> {
-        let fetch_head_path =
-            join_paths!(&self.git_path, "FETCH_HEAD").ok_or(CommandError::JoiningPaths)?;
-
-        let mut branches = HashMap::<String, (String, bool)>::new();
-        let Ok(mut fetch_head_file) = fs::File::open(fetch_head_path) else {
-            return Ok(branches);
-        };
-        let mut fetch_head_content = String::new();
-        fetch_head_file
-            .read_to_string(&mut fetch_head_content)
-            .map_err(|error| {
-                CommandError::FileReadError(format!(
-                    "Error leyendo FETCH_HEAD: {:?}",
-                    error.to_string()
-                ))
-            })?;
-        let lines = fetch_head_content.lines();
-        for line in lines {
-            let branch_data: Vec<&str> = line.split('\t').collect();
-            let commit_hash = branch_data[0];
-            let should_merge_str = branch_data[1];
-            let branch_info = branch_data[2].to_string();
-            let (branch_name, _remote_info) =
-                branch_info
-                    .split_once("\' of")
-                    .ok_or(CommandError::FileReadError(
-                        "Error leyendo FETCH_HEAD".to_string(),
-                    ))?;
-            let should_merge = should_merge_str != "not-for-merge";
-            branches.insert(
-                branch_name.to_owned(),
-                (commit_hash.to_owned(), should_merge),
-            );
-        }
-
-        Ok(branches)
     }
 
     /// Es el merge feliz, donde no hay conflictos. Se reemplaza el working tree por el del commit

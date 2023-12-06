@@ -6,7 +6,7 @@ use crate::{
     staging_area_components::staging_area::StagingArea,
     utils::aux::get_name,
 };
-use std::{collections::HashMap, fs::File, io::Read};
+use std::collections::HashMap;
 
 use super::{
     changes_types::ChangeType, long_format::sort_hashmap_and_filter_unmodified,
