@@ -36,7 +36,7 @@ impl Tree {
 
     fn has_blob_from_hash_aux(
         objects: &mut HashMap<String, ([u8; 20], Option<GitObject>)>,
-        logger: &mut Logger,
+        _logger: &mut Logger,
         blob_hash: &str,
     ) -> Result<(bool, String), CommandError> {
         for (name, (hash, object_opt)) in objects.iter_mut() {
@@ -49,7 +49,7 @@ impl Tree {
             }
             if let Some(tree) = object.as_mut_tree() {
                 let (found, name) =
-                    Self::has_blob_from_hash_aux(&mut tree.get_objects(), logger, blob_hash)?;
+                    Self::has_blob_from_hash_aux(&mut tree.get_objects(), _logger, blob_hash)?;
                 if found {
                     return Ok((true, name));
                 }

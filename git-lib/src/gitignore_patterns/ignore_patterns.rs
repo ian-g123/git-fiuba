@@ -289,7 +289,7 @@ fn matches_pattern(
 fn look_for_gitignore_files(
     path_name: &str,
     gitignore_files: &mut Vec<String>,
-    logger: &mut Logger,
+    _logger: &mut Logger,
     base_path: &str,
 ) -> Result<(), CommandError> {
     let path = Path::new(path_name);
@@ -308,7 +308,7 @@ fn look_for_gitignore_files(
             continue;
         }
         if entry_path.is_dir() {
-            look_for_gitignore_files(&entry_name, gitignore_files, logger, base_path)?;
+            look_for_gitignore_files(&entry_name, gitignore_files, _logger, base_path)?;
         } else if entry_name.ends_with(".gitignore") {
             if let Some(path) = entry_name.strip_prefix(base_path) {
                 let path = if let Some(striped_path) = path.strip_prefix('/') {
