@@ -8,7 +8,7 @@ pub struct DataInstruction {
 }
 
 impl DeltaInstructionTrait for DataInstruction {
-    fn apply(&self, new_object: &mut dyn Write, _: &Vec<u8>) -> Result<(), CommandError> {
+    fn apply(&self, new_object: &mut dyn Write, _: &[u8]) -> Result<(), CommandError> {
         new_object.write_all(&self.data_to_append).map_err(|_| {
             crate::command_errors::CommandError::FileWriteError(
                 "Error escribiendo instruccion delta".to_string(),
@@ -29,8 +29,6 @@ impl DeltaInstructionTrait for DataInstruction {
                 "Error escribiendo instruccion delta".to_string(),
             )
         })?;
-        Ok(Box::new(DataInstruction {
-            data_to_append,
-        }))
+        Ok(Box::new(DataInstruction { data_to_append }))
     }
 }

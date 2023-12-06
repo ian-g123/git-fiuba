@@ -101,7 +101,7 @@ mod test {
         let res_expected = "git";
         match get_name(path) {
             Ok(result) => assert_eq!(res_expected, result),
-            Err(error) => assert!(false, "{}", error),
+            Err(error) => panic!("{}", error),
         }
     }
 

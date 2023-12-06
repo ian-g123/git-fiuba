@@ -4,9 +4,7 @@ use std::{
     process::Command,
 };
 
-use crate::common::aux::{
-    create_test_scene_5,
-};
+use crate::common::aux::create_test_scene_5;
 
 mod common {
     pub mod aux;
@@ -241,7 +239,7 @@ fn test_tree() {
 
     assert_eq!(expected, stdout);
 
-    _ = std::fs::remove_dir_all(path.to_string());
+    _ = std::fs::remove_dir_all(path);
 }
 
 #[test]
@@ -299,7 +297,7 @@ fn test_commit() {
 
     assert_eq!(expected, stdout);
 
-    _ = std::fs::remove_dir_all(path.to_string());
+    _ = std::fs::remove_dir_all(path);
 }
 
 #[test]
@@ -355,7 +353,7 @@ fn test_head() {
 
     assert_eq!(expected, stdout);
 
-    _ = std::fs::remove_dir_all(path.to_string());
+    _ = std::fs::remove_dir_all(path);
 }
 
 #[test]
@@ -418,7 +416,7 @@ fn test_local_branch() {
 
     assert_eq!(expected, stdout);
 
-    _ = std::fs::remove_dir_all(path.to_string());
+    _ = std::fs::remove_dir_all(path);
 }
 
 #[test]
@@ -482,7 +480,7 @@ fn test_remote_branch() {
 
     assert_eq!(expected, stdout);
 
-    _ = std::fs::remove_dir_all(path.to_string());
+    _ = std::fs::remove_dir_all(path);
 }
 
 #[test]
@@ -602,7 +600,7 @@ fn test_tag() {
     let stdout = String::from_utf8(result.stdout).unwrap();
     assert_eq!(expected, stdout);
 
-    _ = std::fs::remove_dir_all(path.to_string());
+    _ = std::fs::remove_dir_all(path);
 }
 
 #[test]
@@ -670,7 +668,7 @@ fn test_error() {
     assert_eq!(expected, stderr);
     assert_eq!("", stdout);
 
-    _ = std::fs::remove_dir_all(path.to_string());
+    _ = std::fs::remove_dir_all(path);
 }
 
 fn get_commit(path: &str) -> String {

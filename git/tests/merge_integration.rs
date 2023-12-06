@@ -121,7 +121,7 @@ fn test_merge() {
     file.read_to_string(&mut content).unwrap();
     assert_eq!(content, "Mergeado\n");
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 fn modify_file_and_commit_in_both_repos_none_overlaping_lines(path: &str, git_bin: &str) {
@@ -337,33 +337,6 @@ fn modify_file_and_commit_in_both_repos_not_overlaping_files(path: &str, git_bin
         .current_dir(path)
         .output()
         .unwrap();
-}
-
-fn modify_file_and_commit_in_server_repo(path: &str, git_bin: &str) {
-    let mut file = File::create(path.to_owned() + "/server-files/repo/testfile").unwrap();
-    file.write_all(b"Primera linea\nSeparador\nTercera linea\n")
-        .unwrap();
-
-    assert!(
-        Command::new(git_bin)
-            .arg("add")
-            .arg("testfile")
-            .current_dir(path)
-            .status()
-            .is_ok(),
-        "No se pudo agregar el archivo testfile"
-    );
-
-    assert!(
-        Command::new(git_bin)
-            .arg("commit")
-            .arg("-m")
-            .arg("hi2")
-            .current_dir(path)
-            .status()
-            .is_ok(),
-        "No se pudo hacer commit"
-    );
 }
 
 fn create_base_scene(path: &str, git_bin: &str) {

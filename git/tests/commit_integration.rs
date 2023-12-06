@@ -92,7 +92,7 @@ fn test_single_file() {
     assert_eq!(output_lines[3], "");
     assert_eq!(output_lines[4], "message");
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 /// Prueba que se puedan commitear únicamente los cambios agregados al staging area.
@@ -184,7 +184,7 @@ fn test_commit_some_changes() {
     assert_eq!(output_lines[3], "");
     assert_eq!(output_lines[4], "message");
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 /// Prueba el correcto funcionamiento del flag 'all'.
@@ -295,7 +295,7 @@ fn test_flag_all() {
         "100644 blob 9d1bdbbe7e41c96f5eb2231cc98240845610f183    testfile1.txt\n"
     );
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 /// Prueba el correcto funcionamiento del flag 'all' cuando hay archivos eliminados en el
@@ -412,7 +412,7 @@ fn test_flag_all_with_deleted_files() {
         "100644 blob 9d1bdbbe7e41c96f5eb2231cc98240845610f183    testfile1.txt\n"
     );
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 /// Prueba el correcto funcionamiento del flag 'C'.
@@ -500,7 +500,7 @@ fn test_reuse_message() {
     assert_eq!(commiter, output_lines[3]);
     assert_eq!(message, output_lines[5]);
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 /// Prueba que se puedan agregar al staging area los archivos pasados al comando Commit.
@@ -652,7 +652,7 @@ fn test_commit_paths() {
 
     assert_eq!(String::from_utf8(result.stdout).unwrap(), expected);
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 /// Prueba que no se puedan agregar al staging area los archivos pasados al comando Commit
@@ -696,7 +696,7 @@ fn test_commit_paths_fails() {
     let expected = "error: pathspec 'dir/testfile3.txt' did not match any file(s) known to git\n";
     assert_eq!(String::from_utf8(result.stderr).unwrap(), expected);
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -724,7 +724,7 @@ fn test_long_message_fails_simple() {
     let expected = "The message must end with '\n".to_string();
     assert_eq!(String::from_utf8(result.stderr).unwrap(), expected);
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -772,7 +772,7 @@ fn test_long_message() {
 
     assert_eq!(output_lines[4], "this message has many words");
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -800,7 +800,7 @@ fn test_long_message_fails_double() {
     let expected = "The message must end with \"\n".to_string();
     assert_eq!(String::from_utf8(result.stderr).unwrap(), expected);
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -855,7 +855,7 @@ fn test_dry_run() {
     let entries = fs::read_dir(path_obj.clone()).unwrap();
     let n_objects = entries.count();
     assert_eq!(3, n_objects); // testfile, info y pack
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -889,7 +889,7 @@ fn test_nothing_to_commit() {
     let entries = fs::read_dir(path_obj.clone()).unwrap();
     let n_objects = entries.count();
     assert_eq!(2, n_objects); // info y pack
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -949,7 +949,7 @@ fn test_commit_output_deletions_or_insertions() {
     .to_vec();
     assert_eq!(result[1..], expected);
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -1066,5 +1066,5 @@ fn test_commit_output_deletions_and_insertions() {
     .to_vec();
     assert_eq!(result[1..], expected);
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }

@@ -1,5 +1,3 @@
-
-
 mod common {
     pub mod aux;
 }
@@ -79,7 +77,7 @@ fn test_update_pathspec() {
 
     assert_eq!(stderr, expected);
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -293,7 +291,7 @@ fn test_ckeckout() {
         "cambio file 3 con overlapping!".to_string()
     );
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -362,7 +360,7 @@ fn test_create_and_checkout() {
     assert!(!Path::new(&testfile2_path).exists());
     assert_eq!(testfile3_content, "file 3!".to_string());
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -424,7 +422,7 @@ fn test_new_file_commited() {
     let path_3 = path.to_owned() + "/dir/testfile3.txt";
     assert!(!Path::new(&path_3).exists());
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 fn check_commit(path: &str) {

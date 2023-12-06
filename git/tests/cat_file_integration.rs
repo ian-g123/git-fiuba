@@ -15,7 +15,7 @@ fn test_cat_file_type() {
 
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "blob\n");
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -33,7 +33,7 @@ fn test_cat_file_size() {
 
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "4\n");
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -51,11 +51,11 @@ fn test_cat_file_pretty() {
 
     assert_eq!(String::from_utf8(result.stdout).unwrap(), "test\n");
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 fn create_test_scene(path: &str) {
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
     let Ok(_) = fs::create_dir_all(path.clone()) else {
         panic!("No se pudo crear el directorio")
     };

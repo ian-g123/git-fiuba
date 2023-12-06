@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     io::{Cursor, Read, Write},
     net::TcpStream,
+    str::FromStr,
 };
 
 use crate::{
@@ -774,7 +775,7 @@ fn test_read_index_with_three_objects() {
 
     fn test_read_index(
         index_file_bits: &Vec<u8>,
-        _packfile_bits: &Vec<u8>,
+        _packfile_bits: &[u8],
         hash: &str,
         expected_offset: u32,
     ) {

@@ -1,16 +1,12 @@
-
-
 mod common {
     pub mod aux;
 }
 
 use std::{
     fs::{self, File},
-    io::{Write},
+    io::Write,
     process::Command,
 };
-
-
 
 #[test]
 fn test_ckeckout() {
@@ -62,5 +58,5 @@ fn test_ckeckout() {
         "Feature not implemented: checkout to ditached HEAD state\n"
     );
 
-    fs::remove_dir_all(path_repo.to_string()).unwrap();
+    fs::remove_dir_all(path_repo).unwrap();
 }

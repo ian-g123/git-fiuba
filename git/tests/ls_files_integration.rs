@@ -154,7 +154,7 @@ fn test_general() {
     let stdout = String::from_utf8(result.stdout).unwrap();
     assert_eq!(stdout, expected);
 
-    _ = std::fs::remove_dir_all(path.to_string());
+    _ = std::fs::remove_dir_all(path);
 }
 
 #[test]
@@ -312,7 +312,7 @@ fn test_unmerged() {
     let expected = format!("100644 {testfile1_hash_common} 1\tdir/testfile1.txt\n100644 {testfile1_hash_head} 2\tdir/testfile1.txt\n100644 {testfile1_hash_remote} 3\tdir/testfile1.txt\n100644 {testfile2_hash_common} 1\tdir/testfile2.txt\n100644 {testfile2_hash_head} 2\tdir/testfile2.txt\n");
     assert_eq!(stdout, expected);
 
-    _ = std::fs::remove_dir_all(path.to_string());
+    _ = std::fs::remove_dir_all(path);
 }
 
 #[test]
@@ -446,7 +446,7 @@ fn test_modified() {
 
     assert_eq!(stdout, expected);
 
-    _ = std::fs::remove_dir_all(path.to_string());
+    _ = std::fs::remove_dir_all(path);
 }
 
 #[test]
@@ -515,7 +515,7 @@ fn test_files() {
 
     assert_eq!(stdout, expected);
 
-    _ = std::fs::remove_dir_all(path.to_string());
+    _ = std::fs::remove_dir_all(path);
 }
 
 fn get_hash(file: &str, path: &str) -> String {

@@ -45,7 +45,7 @@ fn test_merge_tag_on_tip_no_conflicts() {
         "Merge branch 'rama2' into master\n\n".to_string()
     );
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -88,7 +88,7 @@ fn test_merge_tag_behind_tip() {
         "Merge tag 'tag_1' into master\n\n".to_string()
     );
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -146,7 +146,7 @@ fn test_merge_tag_conflicts() {
         "Merge branch 'rama2' into master\n\n".to_string()
     );
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 fn branch_none_overlaping_tag_on_branch_tip(path: &str, git_bin: &str) {

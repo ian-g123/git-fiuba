@@ -343,7 +343,7 @@ fn test_show_all_refs() {
     let expected = String::new();
     assert_eq!(expected, stdout);
 
-    _ = std::fs::remove_dir_all(path.to_string());
+    _ = std::fs::remove_dir_all(path);
 }
 
 fn create_remote_files(path: &str, remote: &str) {

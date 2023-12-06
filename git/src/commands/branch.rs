@@ -109,15 +109,15 @@ impl Branch {
         check_errors_flags(i, args, &options)?;
         let mut branches: Vec<String> = Vec::new();
         let mut delete_remotes = false;
-        for arg in 0..args.len() {
-            if args[arg] == "-a" || args[arg] == "--all" {
+        for arg in args {
+            if arg == "-a" || arg == "--all" {
                 return Err(CommandError::ShowAllAndDelete);
-            } else if args[arg] == "-m" {
+            } else if arg == "-m" {
                 return Err(CommandError::RenameAndDelete);
-            } else if args[arg] == "-r" || args[arg] == "--remotes" {
+            } else if arg == "-r" || arg == "--remotes" {
                 delete_remotes = true;
-            } else if args[arg] != "-D" {
-                branches.push(args[arg].clone())
+            } else if arg != "-D" {
+                branches.push(arg.clone())
             }
             // -D admite: branch names y -r
         }
@@ -142,11 +142,11 @@ impl Branch {
         self.show_all = false;
         self.show_remotes = false;
         let mut names: Vec<String> = Vec::new();
-        for arg in 0..args.len() {
-            if args[arg] == "-D" {
+        for arg in args {
+            if arg == "-D" {
                 return Err(CommandError::RenameAndDelete);
-            } else if !Self::is_flag(&args[arg]) {
-                names.push(args[arg].clone())
+            } else if !Self::is_flag(arg) {
+                names.push(arg.clone())
             }
         }
         self.rename = names;
@@ -160,17 +160,13 @@ impl Branch {
             return Err(CommandError::WrongFlag);
         }
         let mut branches_and_commits: Vec<String> = Vec::new();
-        for arg in 0..args.len() {
-            if args[arg] == "-a"
-                || args[arg] == "--all"
-                || args[arg] == "-r"
-                || args[arg] == "--remotes"
-            {
+        for (i, arg) in args.iter().enumerate() {
+            if arg == "-a" || arg == "--all" || arg == "-r" || arg == "--remotes" {
                 return Err(CommandError::CreateAndListError);
-            } else if args[arg] == "-D" {
-                return Ok(arg);
+            } else if arg == "-D" {
+                return Ok(i);
             } else {
-                branches_and_commits.push(args[arg].clone())
+                branches_and_commits.push(arg.clone())
             }
         }
 

@@ -40,7 +40,7 @@ fn inicialize_current_directory(path: &str) -> String {
         panic!("No se pudo obtener el directorio actual")
     };
     let absolute_path = format!("{}/{}", current_dir.display(), path);
-    _ = fs::remove_dir_all(absolute_path.to_string());
+    _ = fs::remove_dir_all(&absolute_path);
     let Ok(_) = fs::create_dir_all(absolute_path.clone()) else {
         panic!("No se pudo crear el directorio")
     };
@@ -68,7 +68,7 @@ fn output_err_verification(output: Output, err_str: &str) {
 }
 
 fn finalize_current_directory(path: String) {
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -137,7 +137,7 @@ fn test_bare() {
     if !directories_exists(&absolute_path) {
         panic!("No se pudo obtener el directorio actual")
     };
-    if !files_exists(&(&absolute_path).to_string()) {
+    if !files_exists(&absolute_path.to_string()) {
         panic!("No se pudo obtener el directorio actual")
     };
 

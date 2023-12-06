@@ -11,7 +11,7 @@ pub struct CopyInstruction {
 }
 
 impl DeltaInstructionTrait for CopyInstruction {
-    fn apply(&self, new_object: &mut dyn Write, base_object: &Vec<u8>) -> Result<(), CommandError> {
+    fn apply(&self, new_object: &mut dyn Write, base_object: &[u8]) -> Result<(), CommandError> {
         new_object
             .write_all(&base_object[self.offset as usize..(self.offset + self.size) as usize])
             .map_err(|_| {

@@ -132,14 +132,14 @@ impl GitServer {
         Ok(())
     }
 
-    pub fn send_packfile(&mut self, packfile: &Vec<u8>) -> Result<(), CommandError> {
+    pub fn send_packfile(&mut self, packfile: &[u8]) -> Result<(), CommandError> {
         self.log("⏫: [PACKFILE]");
 
         self.write_to_socket(packfile)?;
         Ok(())
     }
 
-    pub fn write_to_socket(&mut self, message: &Vec<u8>) -> Result<(), CommandError> {
+    pub fn write_to_socket(&mut self, message: &[u8]) -> Result<(), CommandError> {
         self.socket
             .write_all(message)
             .map_err(|error| CommandError::SendingMessage(error.to_string()))?;

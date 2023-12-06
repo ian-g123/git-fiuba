@@ -1,12 +1,10 @@
-
-
 mod common {
     pub mod aux;
 }
 
 use std::{
     fs::{self, File},
-    io::{Write},
+    io::Write,
     path::Path,
     process::Command,
 };
@@ -192,7 +190,7 @@ fn test_create_branch() {
 
     assert!(Path::new(&branch5_path).exists());
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -359,7 +357,7 @@ fn test_rename_branch() {
     assert!(!Path::new(&branch5_path).exists());
     assert_eq!(branch4_commit, branch5_commit);
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -467,7 +465,7 @@ fn test_delete_branch() {
 
     assert_eq!(stdout, expected);
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -555,7 +553,7 @@ fn test_show_branch() {
     let expected = "  branch1\n  branch2\n* master\n  remotes/origin/dir/remote3\n  remotes/origin/remote1\n  remotes/origin/remote2\n".to_string();
     assert_eq!(stdout, expected);
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 fn create_remote_files(path: &str, remote: &str) {

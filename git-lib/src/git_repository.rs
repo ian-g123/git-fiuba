@@ -135,10 +135,10 @@ impl<'a> GitRepository<'a> {
     }
 
     pub fn clone(
-        directory: &String,
+        directory: &str,
         output: &'a mut dyn Write,
         address: String,
-        repository_path: &String,
+        repository_path: &str,
     ) -> Result<GitRepository<'a>, CommandError> {
         let mut repo = GitRepository::init(directory, "master", false, output)?;
         repo.clone_from(address, repository_path)?;
@@ -3627,8 +3627,8 @@ impl<'a> GitRepository<'a> {
         modifications: &mut Vec<String>,
         conflicts: &mut Vec<String>,
         common: &mut Tree,
-        untracked_files: &Vec<String>,
-        unstaged_files: &Vec<String>,
+        untracked_files: &[String],
+        unstaged_files: &[String],
         staged: &HashMap<String, Vec<u8>>,
     ) -> Result<bool, CommandError> {
         self.log("Checkout restoring files");
@@ -4453,7 +4453,7 @@ impl<'a> GitRepository<'a> {
             .map_err(|error| CommandError::FileReadError(error.to_string()))?;
 
         let db = self.db()?;
-        let tree = get_tree_from_tag(hash, &db, &mut self.logger, tag_name.to_string())?;
+        let tree = get_tree_from_tag(hash, &db, &mut self.logger)?;
 
         Ok(Some(tree))
     }
@@ -4669,7 +4669,6 @@ fn get_tree_from_tag(
     hash: String,
     db: &ObjectsDatabase,
     logger: &mut Logger,
-    tag_name: String,
 ) -> Result<Tree, CommandError> {
     let mut object = db.read_object(&hash, logger)?;
 
@@ -4677,7 +4676,7 @@ fn get_tree_from_tag(
         let hash = tag.get_object_hash();
         object = db.read_object(&hash, logger)?;
         if object.as_mut_tag().is_some() {
-            get_tree_from_tag(hash, db, logger, tag_name)
+            get_tree_from_tag(hash, db, logger)
         } else if let Some(tree) = object.as_mut_tree() {
             return Ok(tree.to_owned());
         } else {

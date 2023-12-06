@@ -145,10 +145,7 @@ fn test_create_tag() {
 
     println!("Tag error: {}", String::from_utf8(result.stderr).unwrap());
     let stdout = String::from_utf8(result.stdout).unwrap();
-    let expected = format!(
-        "Updated tag 'tag2' (was {})\n",
-        &tag2_previous_hash[..6]
-    );
+    let expected = format!("Updated tag 'tag2' (was {})\n", &tag2_previous_hash[..6]);
     assert_eq!(expected, stdout);
 
     check_tag_info(
@@ -160,7 +157,7 @@ fn test_create_tag() {
         "message2",
     );
 
-    _ = std::fs::remove_dir_all(path.to_string());
+    _ = std::fs::remove_dir_all(path);
 }
 
 #[test]
@@ -215,7 +212,7 @@ fn test_create_ref() {
 
     assert_eq!(master_commit, tag_object);
 
-    _ = std::fs::remove_dir_all(path.to_string());
+    _ = std::fs::remove_dir_all(path);
 }
 
 #[test]
@@ -288,7 +285,7 @@ fn test_delete_tags() {
     let expected = format!("error: tag 'no-existe' not found.\nDeleted tag tag1 (was {}).\nDeleted tag tag2 (was {}).\n", &tag1_object[..7], &tag2_object[..7]);
     assert_eq!(expected, stdout);
 
-    _ = std::fs::remove_dir_all(path.to_string());
+    _ = std::fs::remove_dir_all(path);
 }
 
 #[test]
@@ -351,7 +348,7 @@ fn test_list_tags() {
     let expected = "tag1\ntag2\n";
     assert_eq!(expected, stdout);
 
-    _ = std::fs::remove_dir_all(path.to_string());
+    _ = std::fs::remove_dir_all(path);
 }
 
 #[test]
@@ -410,7 +407,7 @@ fn test_tag_branch() {
 
     let tag_hash = fs::read_to_string(tag_path).unwrap();
     assert_eq!(tag_hash, b1_commit);
-    _ = std::fs::remove_dir_all(path.to_string());
+    _ = std::fs::remove_dir_all(path);
 }
 
 fn check_tag_info(

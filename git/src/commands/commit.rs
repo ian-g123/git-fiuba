@@ -364,7 +364,7 @@ mod tests {
         let mut stdin_mock = Cursor::new(input.as_bytes());
 
         match run_enter_message(&mut stdin_mock, get_enter_message_text().unwrap()) {
-            Err(error) => assert!(false, "{}", error),
+            Err(error) => panic!("{}", error),
             Ok(message) => assert_eq!(message, expected),
         }
     }

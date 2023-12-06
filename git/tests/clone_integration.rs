@@ -190,7 +190,7 @@ fn test_clone() {
         .output()
         .unwrap();
 
-    _ = fs::remove_dir_all(path.to_string());
+    _ = fs::remove_dir_all(path);
 }
 
 fn modify_file_and_commit_in_both_repos_none_overlaping_lines(path: &str) {

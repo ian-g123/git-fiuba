@@ -134,7 +134,7 @@ impl Tree {
         self.remove_aux(&mut parts, logger);
     }
 
-    fn remove_aux(&mut self, path: &mut Vec<&str>, logger: &mut Logger) {
+    fn remove_aux(&mut self, path: &mut Vec<&str>, _logger: &mut Logger) {
         if path.is_empty() {
             return;
         }
@@ -147,7 +147,7 @@ impl Tree {
                 };
                 if let Some(obj_tree) = object.as_mut_tree() {
                     _ = path.remove(0);
-                    obj_tree.remove_aux(path, logger);
+                    obj_tree.remove_aux(path, _logger);
                     let boxed_tree: GitObject = Box::new(obj_tree.to_owned());
                     self.objects
                         .insert(name.to_string(), (hash.to_owned(), Some(boxed_tree)));
@@ -192,7 +192,7 @@ impl Tree {
     pub fn add_blob(
         &mut self,
         _logger: &mut Logger,
-        path_name: &String,
+        path_name: &str,
         mut blob: Blob,
     ) -> Result<(), CommandError> {
         let blob_name = get_name(path_name)?;

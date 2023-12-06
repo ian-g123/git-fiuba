@@ -35,9 +35,13 @@ impl PackfileObjectType {
             PackfileObjectType::RefDelta => 7,
         }
     }
+}
 
-    pub fn from_str(name: &str) -> Result<Self, CommandError> {
-        match name {
+impl std::str::FromStr for PackfileObjectType {
+    type Err = CommandError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
             "commit" => Ok(PackfileObjectType::Commit),
             "tree" => Ok(PackfileObjectType::Tree),
             "blob" => Ok(PackfileObjectType::Blob),
