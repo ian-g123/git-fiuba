@@ -2966,7 +2966,7 @@ impl<'a> GitRepository<'a> {
             ),
         )?;
 
-        let new_branch_path = branches_path.clone() + &branch_name;
+        let new_branch_path = branches_path.clone() + branch_name;
         let path = Path::new(&new_branch_path);
         if path.exists() {
             return Err(CommandError::BranchExists(branch_name.to_string()));
@@ -5416,7 +5416,7 @@ fn update_last_commit(commit_hash: &str, git_path: &str) -> Result<(), CommandEr
 pub fn get_head_ref(git_path: &str) -> Result<String, CommandError> {
     let head_path = join_paths!(git_path, "HEAD".to_string())
         .ok_or(CommandError::FileOpenError("HEAD".to_string()))?;
-    let Ok(mut head_file) = File::open(&head_path) else {
+    let Ok(mut head_file) = File::open(head_path) else {
         return Err(CommandError::FileOpenError(".git/HEAD".to_string()));
     };
     let mut head_content = String::new();
