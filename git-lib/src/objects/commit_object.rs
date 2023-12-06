@@ -538,21 +538,6 @@ mod test {
         let mut writer_stream = Cursor::new(&mut buf);
         commit.write_to(&mut writer_stream, None).unwrap();
         let _reader_stream = Cursor::new(&mut buf);
-        // let mut fetched_commit = git_object::read_git_object_from(
-        //     &mut reader_stream,
-        //     "",
-        //     "a471637c78c8f67cca05221a942bd7efabb58caa",
-        //     &mut Logger::new_dummy(),
-        // )
-        // .unwrap();
-
-        // let mut fetched_commit_buf: Vec<u8> = Vec::new();
-        // let mut fetched_commit_writer_stream = Cursor::new(&mut fetched_commit_buf);
-        // fetched_commit
-        //     .write_to(&mut fetched_commit_writer_stream)
-        //     .unwrap();
-
-        // assert_eq!(buf, fetched_commit_buf);
     }
 
     // Write and display
@@ -708,36 +693,6 @@ fn print_merge_commit_for_log(
     Ok(())
 }
 
-// pub fn sort_commits_descending_date2(
-//     vec_commits: &mut Vec<(CommitObject, Option<String>)>,
-//     parents_hash: &mut HashMap<String, HashSet<String>>,
-// ) {
-//     vec_commits.sort_by(|a, b| {
-//         // Comparar por timestamp en orden descendente
-//         let timestamp_order = b.0.timestamp.cmp(&a.0.timestamp);
-//         if timestamp_order != Ordering::Equal {
-//             return timestamp_order;
-//         }
-
-//         // Si los timestamps son iguales, comparar por inclusión en el HashSet
-//         match (&a.1, &b.1) {
-//             (Some(parent_a), Some(parent_b)) => {
-//                 println!("parent_a: {:?}, parent_b: {:?}", parent_a, parent_b);
-//                 if parents_hash[parent_a].contains(parent_b) {
-//                     Ordering::Greater
-//                 } else if parents_hash[parent_b].contains(parent_a) {
-//                     Ordering::Less
-//                 } else {
-//                     Ordering::Equal
-//                 }
-//             }
-//             (Some(_), None) => Ordering::Less,
-//             (None, Some(_)) => Ordering::Greater,
-//             (None, None) => Ordering::Equal,
-//         }
-//     });
-// }
-
 pub fn sort_commits_descending_date(vec_commits: &mut [(CommitObject, String)]) {
     vec_commits.sort_by(|a, b| b.0.timestamp.cmp(&a.0.timestamp));
 }
@@ -753,7 +708,6 @@ pub fn sort_commits_ascending_date_and_topo(vec_commits: &mut [(CommitObject, us
 }
 
 fn timestamp_to_string(timestamp: i64) -> String {
-    // let duration = Duration::from_secs(timestamp as u64);
     let Some(datetime) = DateTime::from_timestamp(timestamp, 0) else {
         return "No tiene".to_string();
     };

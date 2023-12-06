@@ -50,17 +50,6 @@ pub trait GitObjectTrait: Debug {
         let content = self.content(db)?;
         let type_str = self.type_str();
         write_to_stream_from_content(stream, content, type_str)
-
-        //     let type_str = self.type_str();
-        //     let len = content.len();
-        //     let header = format!("{} {}\0", type_str, len);
-        //     stream
-        //         .write(header.as_bytes())
-        //         .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-        //     stream
-        //         .write(content.as_slice())
-        //         .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-        //     Ok(())
     }
 
     /// Agrega un árbol al objeto Tree si es que corresponde, o sino un Blob\

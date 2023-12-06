@@ -859,7 +859,5 @@ mod test_write_y_display {
         tree.write_to(&mut writer_stream, None).unwrap();
 
         writer_stream.seek(SeekFrom::Start(0)).unwrap();
-
-        // let _tree_res = Tree::read_from(&mut writer_stream, 0, "", &hash, &mut logger).unwrap();
     }
 }

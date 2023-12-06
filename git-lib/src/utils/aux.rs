@@ -116,30 +116,6 @@ mod test {
             Ok(_) => panic!(),
         }
     }
-
-    // Pureba que get_hash() obtenga correctamente el hash.
-    // #[test]
-    // fn get_hash_test() {
-    //     let mut logger = Logger::new("./tests/commands/hash_object/codigo1/.git/logs.log").unwrap();
-    //     let mut output_string = Vec::new();
-    //     let mut stdout_mock = Cursor::new(&mut output_string);
-    //     let path = "./src/main.rs".to_string();
-    //     let input = "";
-    //     let mut stdin_mock = Cursor::new(input.as_bytes());
-    //     let args: &[String] = &["-t".to_string(), "blob".to_string(), path.clone()];
-    //     assert!(HashObject::run_from(
-    //         "hash-object",
-    //         args,
-    //         &mut stdin_mock,
-    //         &mut stdout_mock,
-    //         &mut logger
-    //     )
-    //     .is_ok());
-    //     assert!(matches!(
-    //         get_sha1(path, "blob".to_string()),
-    //         Ok(_output_string)
-    //     ))
-    // }
 }
 
 pub fn join_paths_m(base_path_str: &str, relative_path_str: &str) -> Result<String, CommandError> {
@@ -148,14 +124,6 @@ pub fn join_paths_m(base_path_str: &str, relative_path_str: &str) -> Result<Stri
     let complete_path_str = complete_path.to_str().ok_or(CommandError::JoiningPaths)?;
     Ok(complete_path_str.to_string())
 }
-
-// pub fn join_paths_vec(paths: Vec<String>) -> Result<String, CommandError> {
-//     let mut result = String::new();
-//     for path in paths {
-//         result = join_paths_m(&result, &path)?;
-//     }
-//     Ok(result)
-// }
 
 // create a macro join_paths! that receives a variable number of arguments and returns a String
 // with the paths joined

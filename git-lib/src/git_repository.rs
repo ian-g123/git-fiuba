@@ -1808,17 +1808,6 @@ impl<'a> GitRepository<'a> {
         Ok(branches_with_their_commits)
     }
 
-    // /// Devuelve al vector de branches_with_their_commits todos los nombres de las ramas y el hash del commit al que apuntan
-    // pub fn push_all_remote_branch_hashes(&mut self) -> Result<Vec<(String, String)>, CommandError> {
-    //     let mut branches_with_their_commits: Vec<(String, String)> = Vec::new();
-    //     let branches_hashes = self.remote_branches()?;
-    //     for branch_hash in branches_hashes {
-    //         let branch_hash = (branch_hash.0, branch_hash.1.to_string());
-    //         branches_with_their_commits.push(branch_hash);
-    //     }
-    //     Ok(branches_with_their_commits)
-    // }
-
     /// Devuelve al vector de branches_with_their_commits todos los nombres de las ramas y el hash del commit al que apuntan
     pub fn push_all_branch_hashes(&mut self) -> Result<Vec<(String, String)>, CommandError> {
         let mut branches_with_their_commits: Vec<(String, String)> = Vec::new();
@@ -2389,13 +2378,9 @@ impl<'a> GitRepository<'a> {
         let branch_path = self.get_branch_path_for_rebase()?;
         self.set_branch_commit_to(branch_path, &merge_commit_hash_str)?;
 
-        // let db = self.db()?;
-        // self.restore(merge_tree, &mut staging_area, Some(db))?;
         self.delete_file("MERGE_MSG")?;
         self.delete_file("MERGE_HEAD")?;
         self.delete_file("AUTO_MERGE")?;
-
-        //ACTUALIZAR ARCHIVOSS
 
         let mut commits_todo = self.get_commits_todo()?;
         let mut commits_done = self.get_commits_done()?;
@@ -2417,7 +2402,6 @@ impl<'a> GitRepository<'a> {
             fs::remove_dir_all(rebase_merge_path).map_err(|_| {
                 CommandError::DirectoryCreationError("Error borrando directorio".to_string())
             })?;
-            //self.checkout(branch_name, false)?;
             return Ok(branch_name.to_string());
         }
 
@@ -2699,14 +2683,6 @@ impl<'a> GitRepository<'a> {
     }
 
     fn get_failed_merge_info_rebase(&mut self) -> Result<(String, String, String), CommandError> {
-        // let (Ok(message), Ok(merge_tree_hash_str)) =
-        //     (self.read_file("MERGE_MSG"), self.read_file("MERGE_HEAD"))
-        // else {
-        //     return Err(CommandError::NoMergeFound);
-        // };
-
-        // Ok((message, merge_tree_hash_str))
-
         let (Ok(message), Ok(merge_tree_hash_str), Ok(destin)) = (
             self.read_file("MERGE_MSG"),
             self.read_file("AUTO_MERGE"),

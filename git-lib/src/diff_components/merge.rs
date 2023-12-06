@@ -71,7 +71,7 @@ fn merge_diffs(
     ),
     CommandError,
 > {
-    // find intersection of common_not_changed_in_head and common_not_changed_in_destin
+    // Encontrar intersección entre common_not_changed_in_head y common_not_changed_in_destin
     let mut no_conflicts_content = HashMap::<usize, String>::new();
     let mut conflicts_content = HashMap::<usize, (Vec<String>, Vec<String>)>::new();
     let mut line_index = 0;

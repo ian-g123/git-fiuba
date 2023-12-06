@@ -46,8 +46,7 @@ impl Push {
     pub fn new_default(_output: &mut dyn Write) -> Result<Push, CommandError> {
         Ok(Push {
             all: false,
-            // remote: "origin".to_string(),
-            branch: "".to_string()
+            branch: "".to_string(),
         })
     }
 

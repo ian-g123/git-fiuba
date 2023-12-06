@@ -4,7 +4,6 @@ pub enum Pattern {
     EndsWith(String, String, bool, bool),
     RelativeToDirLevel(String, String, bool),
     NotRelativeToDirLevel(String, String, bool),
-    // si queda tiempo, agregar: a*a, ? (MatchesOne), [a-z] (MatchesRange), **
 }
 
 impl Pattern {
