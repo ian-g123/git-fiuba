@@ -141,16 +141,7 @@ impl<'a> GitRepository<'a> {
         repository_path: &String,
     ) -> Result<GitRepository<'a>, CommandError> {
         let mut repo = GitRepository::init(directory, "master", false, output)?;
-        let url: String = format!("git://{}{}", address, &repository_path);
-        repo.update_remote(url)?;
-        repo.fetch()?;
-        let fetch_head = repo.get_head_branch_name()?;
-        let remote_branches = repo.remote_branches()?;
-        for (branch_name, hash) in remote_branches {
-            repo.update_branch_ref(&hash, &branch_name)?;
-        }
-        repo.log(&format!("Checkout to fetch_head {}", fetch_head));
-        repo.checkout(&fetch_head, false)?;
+        repo.clone_from(address, repository_path)?;
         Ok(repo)
     }
 
@@ -171,13 +162,6 @@ impl<'a> GitRepository<'a> {
                 self.git_path.to_owned(),
             ));
         }
-        // let git_path = if bare {
-        //     path.to_string()
-        // } else {
-        //     join_paths!(path.to_string(), ".git").ok_or(CommandError::DirectoryCreationError(
-        //         "Error creando arc".to_string(),
-        //     ))?
-        // };
         self.create_dir(&self.git_path, "objects".to_string())?;
         self.create_dir(&self.git_path, "objects/info".to_string())?;
         self.create_dir(&self.git_path, "objects/pack".to_string())?;
@@ -3611,8 +3595,10 @@ impl<'a> GitRepository<'a> {
                 );
                 let path = join_paths!(&self.git_path, "refs/remotes/origin/", branch_name)
                     .ok_or(CommandError::FileReadError(branch_name.to_string()))?;
-                let remote_hash = fs::read_to_string(path.clone())
-                    .map_err(|_| CommandError::UntrackedError(branch_name.to_string()))?;
+                let remote_hash = fs::read_to_string(path.clone()).map_err(|_| {
+                    self.log(&CommandError::UntrackedError(branch_name.to_string()).to_string());
+                    CommandError::UntrackedError(branch_name.to_string())
+                })?;
                 self.create_branch(branch_name, &remote_hash, Some(branch_name))?;
                 remote_hash
             }
@@ -4553,6 +4539,30 @@ impl<'a> GitRepository<'a> {
                 Ok(patterns)
             }
         }
+    }
+
+    fn clone_from(&mut self, address: String, repository_path: &str) -> Result<(), CommandError> {
+        let url: String = format!("git://{}{}", address, &repository_path);
+        self.update_remote(url)?;
+        self.fetch()?;
+        let fetch_head = self.get_head_branch_name()?;
+        let remote_branches = self.remote_branches()?;
+        self.log("fetched");
+        let is_empty = remote_branches.is_empty();
+        for (branch_name, hash) in remote_branches {
+            self.log("Updating refs");
+            self.update_remote_branch_ref(&hash, &branch_name)?;
+            self.update_branch_ref(&hash, &branch_name)?;
+        }
+        if is_empty {
+            self.output
+                .write_all(b"Warning: you appear to have cloned an empty repository.\n")
+                .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+        } else {
+            self.log(&format!("Checkout to fetch_head {}", fetch_head));
+            self.checkout(&fetch_head, false)?;
+        }
+        Ok(())
     }
 }
 

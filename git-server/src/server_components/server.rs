@@ -21,10 +21,9 @@ impl Server {
             let mut worker_threads = vec![];
             for client_stream in listener.incoming() {
                 let path = path_str.clone();
-                let mut logger_sender = logger.get_logs_sender().unwrap();
+                let logger_sender = logger.get_logs_sender().unwrap();
                 let worker_thread = thread::spawn(move || {
                     println!("New connection");
-                    logger_sender.log("New connection");
                     let path = path.clone();
                     let mut worker = ServerWorker::new(path, client_stream.unwrap(), logger_sender);
                     worker.handle_connection()
@@ -33,9 +32,7 @@ impl Server {
             }
         });
 
-        Ok(Server {
-            listener_handle,
-        })
+        Ok(Server { listener_handle })
     }
 }
 

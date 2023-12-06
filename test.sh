@@ -169,7 +169,6 @@ echo "Contenido Incial" > file
 ../../../target/debug/git commit -m InitialCommit
 ../../../target/debug/git push
 cd -
-
 sleep 1
 
 master_branch_user_1=$(cat user1/.git/refs/heads/master)
@@ -317,6 +316,7 @@ if [ ! -f file3 ]; then
 fi
 cd ../../..
 echo "✅ Clone con varias ramas"
+
 kill $server_process
 rm -rf server_client_integration_test
 echo "✅ Passed"

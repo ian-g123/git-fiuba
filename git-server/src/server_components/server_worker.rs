@@ -50,6 +50,7 @@ impl ServerWorker {
     }
 
     pub fn handle_connection(&mut self) {
+        self.log("New connection");
         match self.handle_connection_priv() {
             Ok(_) => self.log("Connection handled successfully"),
             Err(error) => {
