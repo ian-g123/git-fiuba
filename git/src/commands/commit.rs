@@ -288,7 +288,7 @@ mod tests {
         let args = ["-no".to_string()];
         match Commit::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::InvalidArguments),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -303,7 +303,7 @@ mod tests {
         let args = ["-m".to_string()];
         match Commit::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::MessageNoValue),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -318,7 +318,7 @@ mod tests {
         let args = [];
         match Commit::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::CommitMessageEmptyValue),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -338,7 +338,7 @@ mod tests {
         ];
         match Commit::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::MessageAndReuseError),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -353,7 +353,7 @@ mod tests {
         let args = ["-m".to_string(), "message".to_string(), "-C".to_string()];
         match Commit::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::ReuseMessageNoValue),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 

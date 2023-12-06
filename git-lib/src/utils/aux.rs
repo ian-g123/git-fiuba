@@ -113,7 +113,7 @@ mod test {
         let res_expected = CommandError::FileNotFound(path.clone());
         match read_file_contents(&path.to_string()) {
             Err(result) => assert_eq!(res_expected, result),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 

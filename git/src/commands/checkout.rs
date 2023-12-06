@@ -127,7 +127,7 @@ mod tests {
         let args = ["".to_string()];
         match Checkout::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::Name),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -142,7 +142,7 @@ mod tests {
         let args = ["-no".to_string()];
         match Checkout::run_from("checkout", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::InvalidArguments),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -157,7 +157,7 @@ mod tests {
         let args = ["-b".to_string()];
         match Checkout::run_from("checkout", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::SwitchRequiresValue),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 }

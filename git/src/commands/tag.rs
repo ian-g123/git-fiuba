@@ -225,7 +225,7 @@ mod tests {
         let args = ["".to_string()];
         match Tag::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::Name),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -240,7 +240,7 @@ mod tests {
         let args = ["-no".to_string()];
         match Tag::run_from("tag", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::InvalidArguments),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -255,7 +255,7 @@ mod tests {
         let args = ["name".to_string(), "ref".to_string(), "third".to_string()];
         match Tag::run_from("tag", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::TagTooManyArgs),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -270,7 +270,7 @@ mod tests {
         let args = ["-a".to_string(), "name".to_string(), "-d".to_string()];
         match Tag::run_from("tag", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::TagCreateAndDelete),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 }
