@@ -20,7 +20,7 @@ use std::{
 };
 
 extern crate chrono;
-use chrono::{prelude::*, DateTime};
+use chrono::DateTime;
 
 #[derive(Clone, Debug)]
 pub struct CommitObject {
