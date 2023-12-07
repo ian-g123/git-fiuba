@@ -866,7 +866,7 @@ impl<'a> GitRepository<'a> {
     }
 
     fn is_ilegal_path(&self, path_str: &str) -> bool {
-        path_str.starts_with("./.git") || path_str.starts_with(".git")
+        path_str.starts_with("./.git") || path_str.starts_with(".git") || path_str == ".gitignore"
     }
 
     fn try_add_path(
