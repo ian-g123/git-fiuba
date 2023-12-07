@@ -17,10 +17,10 @@ echo "Run the server"
 cd integration_tests/test_http_data/server_files
 rm -rf repo_merge_conflict
 rm -rf repo_safe_merge
-unzip repo_merge_conflict.zip
-unzip repo_safe_merge.zip
+unzip -qq repo_merge_conflict.zip -d repo_merge_conflict
+unzip -qq repo_safe_merge.zip -d repo_safe_merge
 ../../../target/debug/git-server &
-daemon_process=$!
+server_process=$!
 sleep 1
 
 # Creating Pull Request
