@@ -6,8 +6,12 @@ use super::command_errors::CommandError;
 pub fn compress(data: &[u8]) -> Result<Vec<u8>, CommandError> {
     // compress data with zlib from flate2 crate
     let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
-    encoder.write_all(data).unwrap();
-    let compressed_data = encoder.finish().unwrap();
+    encoder
+        .write_all(data)
+        .map_err(|e| CommandError::Compression(e.to_string()))?;
+    let compressed_data = encoder
+        .finish()
+        .map_err(|e| CommandError::Compression(e.to_string()))?;
     Ok(compressed_data)
 }
 
@@ -15,17 +19,10 @@ pub fn compress(data: &[u8]) -> Result<Vec<u8>, CommandError> {
 pub fn extract(data: &[u8]) -> Result<Vec<u8>, CommandError> {
     let mut decoder = flate2::read::ZlibDecoder::new(data);
     let mut decompressed_data = Vec::new();
-    decoder.read_to_end(&mut decompressed_data).unwrap();
+    decoder
+        .read_to_end(&mut decompressed_data)
+        .map_err(|e| CommandError::Extraction(e.to_string()))?;
     Ok(decompressed_data)
-}
-
-/// Descomprime un vector de bytes
-pub fn extract_2(data: &mut dyn Read) -> Result<(Vec<u8>, u64), CommandError> {
-    let mut decoder = flate2::read::ZlibDecoder::new(data);
-    let mut decompressed_data = Vec::new();
-    decoder.read_to_end(&mut decompressed_data).unwrap();
-    let num = decoder.total_in();
-    Ok((decompressed_data, num))
 }
 
 #[cfg(test)]

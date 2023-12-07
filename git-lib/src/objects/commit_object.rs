@@ -447,50 +447,6 @@ impl GitObjectTrait for CommitObject {
     }
 }
 
-// impl fmt::Display for CommitObject {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         write!(
-//             f,
-//             "tree {}\nparent {:?}\nauthor {}\ncommitter {}\n\n{}",
-//             self.tree, self.parents, self.author, self.committer, self.message
-//         )
-//     }
-// }
-
-/// Crea un DateTime<Local> a partir de la información recibida.
-fn _get_date(line: &mut Vec<&str>) -> Result<DateTime<Local>, CommandError> {
-    let Some(time_zone_offset_str) = line.pop() else {
-        return Err(CommandError::InvalidCommit);
-    };
-    let Some(timestamp_str) = line.pop() else {
-        return Err(CommandError::InvalidCommit);
-    };
-    let offset_secconds = time_zone_offset_str.parse::<i32>().unwrap() * 3600;
-    let time_stamp = timestamp_str.parse::<i64>().unwrap();
-    let Some(offset) = chrono::FixedOffset::east_opt(offset_secconds) else {
-        return Err(CommandError::InvalidCommit);
-    };
-
-    let Some(utc_datetime) = NaiveDateTime::from_timestamp_opt(time_stamp, 0) else {
-        return Err(CommandError::InvalidCommit);
-    };
-    Ok(DateTime::<Local>::from_naive_utc_and_offset(
-        utc_datetime,
-        offset,
-    ))
-}
-
-/* pub fn write_commit_to_database(
-    commit: &mut GitObject,
-    tree: &mut Tree,
-    logger: &mut Logger,
-) -> Result<String, CommandError> {
-    write_tree(tree, logger)?;
-
-    let commit_hash = objects_database::write(logger, commit)?;
-    Ok(commit_hash)
-} */
-
 pub fn write_commit_tree_to_database(
     db: &mut ObjectsDatabase,
     tree: &mut Tree,

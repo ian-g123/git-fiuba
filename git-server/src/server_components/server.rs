@@ -5,7 +5,7 @@ use git_lib::{command_errors::CommandError, logger::Logger};
 use crate::server_components::server_worker::ServerWorker;
 
 pub struct Server {
-    pub listener_handle: thread::JoinHandle<()>,
+    pub listener_handle: thread::JoinHandle<Result<(), CommandError>>,
 }
 
 impl Server {
@@ -17,19 +17,45 @@ impl Server {
         })?;
         let path_str = path.to_string();
         let listener_handle = thread::spawn(move || {
-            let logger = Logger::new("server-logs.log").unwrap();
+            let logger = match Logger::new("server-logs.log") {
+                Ok(logger) => logger,
+                Err(error) => {
+                    return Err(CommandError::Io {
+                        message: "No se pudo crear el archivo de logs".to_string(),
+                        error: error.to_string(),
+                    })
+                }
+            };
             let mut worker_threads = vec![];
             for client_stream in listener.incoming() {
+                let client_stream = match client_stream {
+                    Ok(client_stream) => client_stream,
+                    Err(error) => {
+                        return Err(CommandError::Io {
+                            message: "Error obteniendo conexión".to_string(),
+                            error: error.to_string(),
+                        })
+                    }
+                };
                 let path = path_str.clone();
-                let logger_sender = logger.get_logs_sender().unwrap();
+                let logger_sender = match logger.get_logs_sender() {
+                    Ok(logger_sender) => logger_sender,
+                    Err(error) => {
+                        return Err(CommandError::Io {
+                            message: "Error obteniendo el sender del logger".to_string(),
+                            error: error.to_string(),
+                        })
+                    }
+                };
                 let worker_thread = thread::spawn(move || {
                     println!("New connection");
                     let path = path.clone();
-                    let mut worker = ServerWorker::new(path, client_stream.unwrap(), logger_sender);
+                    let mut worker = ServerWorker::new(path, client_stream, logger_sender);
                     worker.handle_connection()
                 });
                 worker_threads.push(worker_thread);
             }
+            Ok(())
         });
 
         Ok(Server { listener_handle })

@@ -261,7 +261,7 @@ impl GitObjectTrait for Blob {
         logger.log(&format!(
             "Writing in {} the following content:\n{}",
             path,
-            String::from_utf8(content.clone()).unwrap()
+            String::from_utf8_lossy(&content)
         ));
         file.write_all(&content).map_err(|error| {
             CommandError::FileWriteError(format!("Error al escribir archivo {}: {}", path, error))

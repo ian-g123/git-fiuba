@@ -239,7 +239,9 @@ impl StagingArea {
         write_header(stream, len)?;
         for key in all_keys {
             let Some(entry) = self.files.get(key) else {
-                let (common, head, destin) = self.unmerged_files.get(key).unwrap();
+                let Some((common, head, destin)) = self.unmerged_files.get(key) else {
+                    unreachable!()
+                };
                 write_conflicting_entry(stream, key, common)?;
                 write_conflicting_entry(stream, key, head)?;
                 write_conflicting_entry(stream, key, destin)?;

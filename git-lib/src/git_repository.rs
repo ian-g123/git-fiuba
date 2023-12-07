@@ -220,7 +220,9 @@ impl<'a> GitRepository<'a> {
             return Err(CommandError::FileNotFound(file_path.to_string()));
         };
 
-        let file = File::open(path).unwrap();
+        let file = File::open(path).map_err(|e| {
+            CommandError::FileOpenError(format!("{}: {:?}", file_path, e.to_string()))
+        })?;
         Ok(BufReader::new(file))
     }
 
@@ -597,8 +599,12 @@ impl<'a> GitRepository<'a> {
         let Some(path) = join_paths!(self.working_dir_path, path_file) else {
             return Err(CommandError::FileNotFound(path_file.to_string()));
         };
-        let mut file = File::create(path).unwrap();
-        file.write_all(new_content.as_bytes()).unwrap();
+        let mut file = File::create(path).map_err(|e| {
+            CommandError::FileOpenError(format!("{}: {:?}", path_file, e.to_string()))
+        })?;
+        file.write_all(new_content.as_bytes()).map_err(|e| {
+            CommandError::FileWriteError(format!("{}: {:?}", path_file, e.to_string()))
+        })?;
         Ok(())
     }
 
@@ -2823,8 +2829,7 @@ impl<'a> GitRepository<'a> {
             &mut self.logger,
             last_commit_tree,
             &index,
-        )
-        .unwrap();
+        )?;
 
         let changes_to_be_commited_vec =
             sort_hashmap_and_filter_unmodified(changes_controller.get_changes_to_be_commited());
