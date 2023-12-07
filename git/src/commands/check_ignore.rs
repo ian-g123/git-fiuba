@@ -151,7 +151,7 @@ impl CheckIgnore {
                     return Err(CommandError::EmptyPath);
                 }
                 if path != "\0" {
-                    repo.check_ignore_paths(self.verbose, self.non_matching, &[path].to_vec())?;
+                    repo.check_ignore_paths(self.verbose, self.non_matching, [path].as_ref())?;
                 }
 
                 if end {
@@ -220,13 +220,13 @@ mod tests {
     fn stdin_and_paths() {
         let args: &[String] = &["--stdin".to_string(), "path".to_string()];
         match CheckIgnore::new(args) {
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
             Err(error) => assert_eq!(error, CommandError::StdinAndPathsError),
         }
 
         let args: &[String] = &["path".to_string(), "--stdin".to_string()];
         match CheckIgnore::new(args) {
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
             Err(error) => assert_eq!(error, CommandError::StdinAndPathsError),
         }
     }
@@ -256,7 +256,7 @@ mod tests {
 
         let args: &[String] = &["-n".to_string(), "path".to_string()];
         match CheckIgnore::run_from("check-ignore", args, &mut stdin_mock, &mut stdout_mock) {
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
             Err(error) => assert_eq!(error, CommandError::NonMatchingWithoutVerbose),
         }
     }

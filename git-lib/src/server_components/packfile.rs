@@ -24,9 +24,6 @@ fn write_object_to_packfile(
     packfile: &mut Vec<u8>,
 ) -> Result<(), CommandError> {
     let mut object_content = git_object.content(None)?;
-    // let mut cursor = Cursor::new(&mut object_content);
-    // git_object.write_to(&mut cursor)?;
-
     let type_str = git_object.type_str();
 
     let object_len = object_content.len();

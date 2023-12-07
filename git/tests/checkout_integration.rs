@@ -1,5 +1,3 @@
-use common::aux::create_base_scene;
-
 mod common {
     pub mod aux;
 }
@@ -79,7 +77,7 @@ fn test_update_pathspec() {
 
     assert_eq!(stderr, expected);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -246,7 +244,7 @@ fn test_ckeckout() {
     let mut file = File::create(path.to_owned() + "/dir/testfile1.txt").unwrap();
     file.write_all(b"cambio file 1 con overlapping!").unwrap();
 
-    let result = Command::new("../../../../../../target/debug/git")
+    let _result = Command::new("../../../../../../target/debug/git")
         .arg("add")
         .arg("dir/testfile1.txt")
         .current_dir(path)
@@ -293,7 +291,7 @@ fn test_ckeckout() {
         "cambio file 3 con overlapping!".to_string()
     );
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -362,7 +360,7 @@ fn test_create_and_checkout() {
     assert!(!Path::new(&testfile2_path).exists());
     assert_eq!(testfile3_content, "file 3!".to_string());
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -424,7 +422,7 @@ fn test_new_file_commited() {
     let path_3 = path.to_owned() + "/dir/testfile3.txt";
     assert!(!Path::new(&path_3).exists());
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path);
 }
 
 fn check_commit(path: &str) {
@@ -448,7 +446,7 @@ fn check_commit(path: &str) {
     println!("Commit output: {}", output.clone());
     let output_lines: Vec<&str> = output.split('\n').collect();
 
-    let commit_tree_info: Vec<&str> = output_lines[0].split(" ").collect();
+    let commit_tree_info: Vec<&str> = output_lines[0].split(' ').collect();
     let commit_tree = commit_tree_info[1];
     let result = Command::new("../../../../../../target/debug/git")
         .arg("cat-file")
@@ -467,7 +465,7 @@ fn check_commit(path: &str) {
 
     let output_lines: Vec<&str> = stdout.split('\n').collect();
 
-    let dir_tree_info: Vec<&str> = output_lines[0].split(" ").collect();
+    let dir_tree_info: Vec<&str> = output_lines[0].split(' ').collect();
     let dir_tree = dir_tree_info[2];
 
     let result = Command::new("../../../../../../target/debug/git")

@@ -4,7 +4,7 @@ use crate::commands::command::Command;
 use git_lib::{
     command_errors::CommandError,
     git_repository::{self},
-    objects::commit_object::{print_for_log, CommitObject},
+    objects::commit_object::{print_for_log},
 };
 
 use super::command::ConfigAdderFunction;

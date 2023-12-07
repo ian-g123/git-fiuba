@@ -6,7 +6,7 @@ fn main() {
     match Server::start_server(address, "") {
         Ok(server) => {
             println!("Server started");
-            server.listener_handle.join().unwrap();
+            server.listener_handle.join().unwrap().unwrap();
         }
         Err(error) => eprintln!("{error}"),
     }

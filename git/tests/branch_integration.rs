@@ -1,12 +1,10 @@
-use common::aux::create_base_scene;
-
 mod common {
     pub mod aux;
 }
 
 use std::{
     fs::{self, File},
-    io::{Read, Write},
+    io::Write,
     path::Path,
     process::Command,
 };
@@ -28,7 +26,7 @@ fn test_create_branch() {
         .unwrap();
 
     let stderr = String::from_utf8(result.stderr).unwrap();
-    let expected = format!("fatal: Not a valid object name: 'master'.\n");
+    let expected = "fatal: Not a valid object name: 'master'.\n".to_string();
     assert_eq!(expected, stderr);
 
     // crear rama a partir de HEAD
@@ -192,7 +190,7 @@ fn test_create_branch() {
 
     assert!(Path::new(&branch5_path).exists());
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -211,7 +209,7 @@ fn test_rename_branch() {
         .unwrap();
 
     let stderr = String::from_utf8(result.stderr).unwrap();
-    let expected = format!("error: refname refs/heads/master\nfatal: Branch rename failed\n");
+    let expected = "error: refname refs/heads/master\nfatal: Branch rename failed\n".to_string();
     assert_eq!(expected, stderr);
 
     // cambiar nombre de HEAD (existe)
@@ -304,7 +302,7 @@ fn test_rename_branch() {
         .output()
         .unwrap();
 
-    let stderr = String::from_utf8(result.stderr).unwrap();
+    let _stderr = String::from_utf8(result.stderr).unwrap();
 
     let branch2_path = format!("{}/.git/refs/heads/branch2", path);
     let branch3_path = format!("{}/.git/refs/heads/branch3", path);
@@ -332,7 +330,7 @@ fn test_rename_branch() {
         .output()
         .unwrap();
 
-    let stderr = String::from_utf8(result.stderr).unwrap();
+    let _stderr = String::from_utf8(result.stderr).unwrap();
 
     let branch5_path = format!("{}/.git/refs/heads/branch5", path);
     let branch5_commit = fs::read_to_string(branch5_path.clone()).unwrap();
@@ -351,7 +349,7 @@ fn test_rename_branch() {
         .output()
         .unwrap();
 
-    let stderr = String::from_utf8(result.stderr).unwrap();
+    let _stderr = String::from_utf8(result.stderr).unwrap();
 
     let branch4_commit = fs::read_to_string(branch4_path.clone()).unwrap();
 
@@ -359,7 +357,7 @@ fn test_rename_branch() {
     assert!(!Path::new(&branch5_path).exists());
     assert_eq!(branch4_commit, branch5_commit);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -429,7 +427,7 @@ fn test_delete_branch() {
     let stderr = String::from_utf8(result.stderr).unwrap();
     println!("Stderr: {}", stderr);
     let stdout = String::from_utf8(result.stdout).unwrap();
-    let expected = format!("error: branch 'no-existe' not found.\nDeleted branch branch1 (was {}).\nDeleted branch branch2 (was {}).\n", master_commit[..7].to_string(),master_commit[..7].to_string());
+    let expected = format!("error: branch 'no-existe' not found.\nDeleted branch branch1 (was {}).\nDeleted branch branch2 (was {}).\n", &master_commit[..7],&master_commit[..7]);
 
     let branch1_path = format!("{}/.git/refs/heads/branch1", path);
     let branch2_path = format!("{}/.git/refs/heads/branch2", path);
@@ -467,7 +465,7 @@ fn test_delete_branch() {
 
     assert_eq!(stdout, expected);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path);
 }
 
 #[test]
@@ -552,10 +550,10 @@ fn test_show_branch() {
     println!("Stderr: {}", stderr);
     let stdout = String::from_utf8(result.stdout).unwrap();
 
-    let expected = format!("  branch1\n  branch2\n* master\n  remotes/origin/dir/remote3\n  remotes/origin/remote1\n  remotes/origin/remote2\n");
+    let expected = "  branch1\n  branch2\n* master\n  remotes/origin/dir/remote3\n  remotes/origin/remote1\n  remotes/origin/remote2\n".to_string();
     assert_eq!(stdout, expected);
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path);
 }
 
 fn create_remote_files(path: &str, remote: &str) {

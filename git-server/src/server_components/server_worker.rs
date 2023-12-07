@@ -50,23 +50,27 @@ impl ServerWorker {
     }
 
     pub fn handle_connection(&mut self) {
+        self.log("New connection");
         match self.handle_connection_priv() {
             Ok(_) => self.log("Connection handled successfully"),
-            Err(error) => eprintln!("{error}"),
+            Err(error) => {
+                self.log(&format!("❌ Error: {}", error));
+                eprintln!("{error}")
+            }
         }
     }
 
     fn handle_connection_priv(&mut self) -> Result<(), CommandError> {
         let Some(presentation) = self.read_tpk()? else {
-            return Err(CommandError::ErrorReadingPktVerbose(format!(
-                "handle_connection_priv leyó flush-pkt"
-            )));
+            return Err(CommandError::ErrorReadingPktVerbose(
+                "handle_connection_priv leyó flush-pkt".to_string(),
+            ));
         };
-        let presentation_components: Vec<&str> = presentation.split("\0").collect();
+        let presentation_components: Vec<&str> = presentation.split('\0').collect();
         let command_and_repo_path = presentation_components[0];
         let (command, repo_path) =
             command_and_repo_path
-                .split_once(" ")
+                .split_once(' ')
                 .ok_or(CommandError::ErrorReadingPktVerbose(format!(
                     "Error al leer command_and_repo_path: {}",
                     command_and_repo_path
@@ -97,15 +101,20 @@ impl ServerWorker {
         })?;
 
         let head_branch_name = repo.get_head_branch_name()?;
-        let local_branches = repo.local_branches()?;
-        let head_branch_hash = local_branches.get(&head_branch_name).unwrap().clone();
-        let mut sorted_branches = local_branches
+        let local_branches_refs = repo.local_branches_refs()?;
+        self.log(&format!("local_branches: {:?}", local_branches_refs));
+        self.log(&format!("head_branch_name: {:?}", head_branch_name));
+        let head_branch_ref_str = match local_branches_refs.get(&head_branch_name) {
+            Some(head_branch_hash) => head_branch_hash,
+            None => "0000000000000000000000000000000000000000",
+        };
+        let mut sorted_branches = local_branches_refs
             .clone()
             .into_iter()
             .collect::<Vec<(String, String)>>();
         sorted_branches.sort_unstable();
         self.send("version 1\n")?;
-        self.send(&format!("{} HEAD\0\n", head_branch_hash))?;
+        self.send(&format!("{} HEAD\0\n", head_branch_ref_str))?;
         for (branch_name, branch_hash) in sorted_branches {
             self.send(&format!("{} refs/heads/{}\n", branch_hash, branch_name))?;
         }
@@ -132,27 +141,36 @@ impl ServerWorker {
             }
         })?;
 
-        let mut local_branches = repo.local_branches()?;
-        let mut sorted_branches = local_branches
-            .clone()
-            .into_iter()
-            .collect::<Vec<(String, String)>>();
-        sorted_branches.sort_unstable();
-        let (first_branch_name, first_branch_hash) = sorted_branches.remove(0);
-
         self.send("version 1")?;
-        self.send(&format!(
-            "{} refs/heads/{}\0\n",
-            first_branch_hash, first_branch_name
-        ))?;
-        for (branch_name, branch_hash) in sorted_branches {
-            self.send(&format!("{} refs/heads/{}\n", branch_hash, branch_name))?;
+
+        let local_branches_refs: HashMap<String, String> = repo.local_branches_refs()?;
+        if local_branches_refs.is_empty() {
+            let head_name = repo.get_head_branch_name()?;
+            self.send(&format!(
+                "0000000000000000000000000000000000000000 refs/heads/{}\0\n",
+                head_name
+            ))?;
+        } else {
+            let mut sorted_branches = local_branches_refs
+                .clone()
+                .into_iter()
+                .collect::<Vec<(String, String)>>();
+            sorted_branches.sort_unstable();
+            let (first_branch_name, first_branch_hash) = sorted_branches.remove(0);
+
+            self.send(&format!(
+                "{} refs/heads/{}\0\n",
+                first_branch_hash, first_branch_name
+            ))?;
+            for (branch_name, branch_hash) in sorted_branches {
+                self.send(&format!("{} refs/heads/{}\n", branch_hash, branch_name))?;
+            }
         }
         self.write_string_to_socket("0000")?;
 
         let ref_update_map = self.read_ref_update_map()?;
 
-        let objects = read_objects_from_packfile(&mut self.socket, &mut repo.db()?, repo.logger())?;
+        let objects = read_objects_from_packfile(&mut self.socket, &repo.db()?, repo.logger())?;
         let objects_map = repo.save_objects_from_packfile(objects)?;
         let mut status = HashMap::<String, Option<String>>::new();
 
@@ -160,34 +178,35 @@ impl ServerWorker {
         for (branch_path, (old_ref, new_ref)) in ref_update_map {
             let branch_name = branch_path[11..].to_string();
             let local_branch_hash =
-                if let Some(local_branch_hash) = local_branches.get(&branch_name) {
+                if let Some(local_branch_hash) = local_branches_refs.get(&branch_name) {
                     local_branch_hash
                 } else {
-                    // Guardamos la nueva rama en el archivo de ramas locales
-                    repo.create_branch(&vec![branch_name.to_string()], Some(new_ref.to_string()))?;
-                    local_branches = repo.local_branches()?;
-                    local_branches
-                        .get(&branch_name)
-                        .ok_or(CommandError::BranchExists(format!(
-                            "La rama {} no existe",
-                            branch_name
-                        )))?
+                    repo.create_branch(&branch_name, &new_ref, None)?;
+                    &new_ref
                 };
 
             if local_branch_hash != &old_ref {
-                status.insert(branch_name, Some("non-fast-forward".to_string()));
+                status.insert(
+                    branch_name.to_string(),
+                    Some("non-fast-forward".to_string()),
+                );
+            } else if check_commits_between(
+                &objects_map,
+                &old_ref,
+                &new_ref,
+                &mut Logger::new_dummy(),
+            )? {
+                self.log(&format!(
+                    "Actualizando rama {} de {} a {}",
+                    branch_name, old_ref, new_ref
+                ));
+                status.insert(branch_name.to_string(), None);
+                repo.update_branch_ref(&new_ref, &branch_name)?;
             } else {
-                if check_commits_between(
-                    &objects_map,
-                    &old_ref,
-                    &new_ref,
-                    &mut Logger::new_dummy(),
-                )? {
-                    status.insert(branch_name, None);
-                    repo.write_to_internal_file(&branch_path, &new_ref)?;
-                } else {
-                    status.insert(branch_name, Some("non-fast-forward".to_string()));
-                }
+                self.log(
+                    "No se pudo hacer fast-forward porque no se encontraron todos los commits",
+                );
+                status.insert(branch_name, Some("non-fast-forward".to_string()));
             }
         }
 
@@ -277,20 +296,26 @@ impl ServerWorker {
         self.log(&format!("wants: {:?}", wants));
         let mut commits_map = HashMap::<String, (CommitObject, usize, usize)>::new();
         for want in wants {
+            self.log(&format!("Painting commits upto: {}", want));
             rebuild_commits_tree(
                 &repo.db()?,
                 &want,
                 &mut commits_map,
-                false,
                 &haves,
                 true,
                 repo.logger(),
                 0,
             )?;
+            self.log(&format!("commits_map: {:?}", commits_map));
         }
+        self.log(&format!("after rebulding: {:?}", commits_map));
+
         for have in haves {
+            self.log(&format!("removing: {:?}", have));
             commits_map.remove(&have);
+            self.log(&format!("commits_map: {:?}", commits_map));
         }
+        self.log(&format!("commits_map: {:?}", commits_map));
         self.log("╔==========");
         self.log("║ Packfile summary");
         for (hash, (commit, _, _)) in &commits_map {
@@ -374,15 +399,11 @@ impl ServerWorker {
 
     fn get_response_until_flushpkt(&mut self) -> Result<Vec<String>, CommandError> {
         let mut response = Vec::<String>::new();
-        loop {
-            match self.read_tpk()? {
-                Some(line) => {
-                    response.push(line);
-                }
-                None => {
-                    break;
-                }
+        while let Some(line) = self.read_tpk()? {
+            if line == "0000" {
+                break;
             }
+            response.push(line);
         }
 
         Ok(response)
@@ -477,7 +498,7 @@ fn contains_all_elements(
                 "",
                 &mut Logger::new_dummy(),
             )?;
-            let Some(blob) = blob_object.as_mut_blob() else {
+            if blob_object.as_mut_blob().is_none() {
                 return Ok(false);
             };
             return Ok(true);
@@ -489,17 +510,4 @@ fn contains_all_elements(
     }
 
     Ok(true)
-}
-
-fn get_response(mut socket: &TcpStream) -> Result<Vec<String>, CommandError> {
-    let mut lines = Vec::<String>::new();
-    loop {
-        match String::read_pkt_format(&mut socket)? {
-            Some(line) => {
-                lines.push(line);
-            }
-            None => break,
-        }
-    }
-    Ok(lines)
 }

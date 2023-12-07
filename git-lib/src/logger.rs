@@ -2,7 +2,6 @@ use std::{
     fs::{self, File},
     io::Write,
     path::Path,
-    process::Command,
     sync::mpsc::{channel, Sender},
     thread,
 };
@@ -29,9 +28,7 @@ impl Logger {
             .create(true)
             .append(true)
             .open(path)
-            .map_err(|error| {
-                CommandError::FileOpenError(format!("{}: {}", path_name, error.to_string()))
-            })?;
+            .map_err(|error| CommandError::FileOpenError(format!("{}: {}", path_name, error)))?;
         let (tx, rx) = channel::<String>();
 
         let handle = thread::spawn(move || {
@@ -161,7 +158,7 @@ mod tests {
         let _ = fs::create_dir_all(dir);
     }
 
-    fn assert_line(lines: &Vec<&str>, line_number: usize, expected_line: &str) {
+    fn assert_line(lines: &[&str], line_number: usize, expected_line: &str) {
         assert_eq!(
             &lines[line_number][lines[line_number].len() - expected_line.len()..],
             expected_line

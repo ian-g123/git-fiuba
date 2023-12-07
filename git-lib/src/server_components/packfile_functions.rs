@@ -1,19 +1,17 @@
 use std::{
     collections::HashMap,
-    fmt::format,
-    io::{Cursor, Read, Seek, SeekFrom, Write},
+    io::{Cursor, Read, Write},
     net::TcpStream,
+    str::FromStr,
 };
 
 use crate::{
     command_errors::CommandError,
     file_compressor::compress,
-    logger::{self, Logger},
+    logger::Logger,
     objects::{
         commit_object::CommitObject,
-        git_object::{
-            git_object_from_data, write_to_stream_from_content, GitObject, GitObjectTrait,
-        },
+        git_object::{write_to_stream_from_content, GitObject, GitObjectTrait},
         tree::Tree,
     },
     objects_database::ObjectsDatabase,
@@ -54,8 +52,6 @@ pub fn write_object_to_packfile(
     packfile: &mut Vec<u8>,
 ) -> Result<(), CommandError> {
     let object_content = git_object.content(None)?;
-    // let mut cursor = Cursor::new(&mut object_content);
-    // git_object.write_to(&mut cursor)?;
 
     let type_str = git_object.type_str();
 
@@ -239,7 +235,7 @@ fn read_undeltified_object(
     obj_type: PackfileObjectType,
     logger: &mut Logger,
 ) -> Result<(PackfileObjectType, usize, Vec<u8>), CommandError> {
-    logger.log(&format!("Reading Undeltified Object"));
+    logger.log("Reading Undeltified Object");
     let object_content = read_extract_rewind(buffed_reader, len, logger)?;
     Ok((obj_type, len, object_content))
 }
@@ -498,12 +494,11 @@ fn get_object_packfile_offset(
         "Searching object in packfile index: {}",
         u8_vec_to_hex_string(sha1)
     ));
-    // The first four bytes are always 255, 116, 79, 99
     let mut header_bytes = [0; 4];
     index_file.read_exact(&mut header_bytes).map_err(|e| {
         CommandError::ErrorExtractingPackfileVerbose(format!(
             "Error al leer header del index: {}",
-            e.to_string()
+            e
         ))
     })?;
     if header_bytes != [255, 116, 79, 99] {
@@ -513,12 +508,11 @@ fn get_object_packfile_offset(
             header_bytes
         )));
     }
-    // The next four bytes denote the version number
     let mut version_bytes = [0; 4];
     index_file.read_exact(&mut version_bytes).map_err(|e| {
         CommandError::ErrorExtractingPackfileVerbose(format!(
             "Error al leer version del index: {}",
-            e.to_string()
+            e
         ))
     })?;
     if version_bytes != [0, 0, 0, 2] {
@@ -528,16 +522,9 @@ fn get_object_packfile_offset(
             version_bytes
         )));
     }
-    // # Fanout table
-    // The first level of entries in this table is a series of 256 entries of four bytes
-    // each, 1024 bytes long in total. According to the documentation, “[the] N-th entry
-    // of this table records the number of objects in the corresponding pack, the first
-    // byte of whose object name is less than or equal to N.”
     let (prev_object_group_count, object_count, number_of_objects_in_group) =
         read_first_layer(index_file, sha1)?;
 
-    // The second layer of the fanout table contains the 20-byte object names, in order.
-    // We already know how many to expect from the first layer of the fanout table.
     let Some(index_of_object) = read_seccond_layer(
         prev_object_group_count,
         index_file,
@@ -549,14 +536,11 @@ fn get_object_packfile_offset(
         return Ok(None);
     };
 
-    // The third layer of the fanout table gives us a four-byte cyclic redundancy check value for each object.
     let mut crcs = vec![0; object_count as usize * 4];
     index_file
         .read_exact(&mut crcs)
         .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
 
-    // The fourth layer contains the information we’ve been looking for: the packfile offsets for each object.
-    // These are also four bytes per entry.
     let mut prev_offsets = vec![0; index_of_object as usize * 4];
     index_file
         .read_exact(&mut prev_offsets)
@@ -586,9 +570,6 @@ fn read_seccond_layer(
     index_file
         .read_exact(&mut prev_group_object_names)
         .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
-    // index_file
-    //     .seek(SeekFrom::Current((prev_object_group_count * 20) as i64))
-    //     .map_err(|e| CommandError::ErrorExtractingPackfileVerbose(e.to_string()))?;
     let mut number_objets_read_in_group = 0;
     let mut found = false;
     for _ in 0..number_of_objects_in_group {
@@ -794,7 +775,7 @@ fn test_read_index_with_three_objects() {
 
     fn test_read_index(
         index_file_bits: &Vec<u8>,
-        _packfile_bits: &Vec<u8>,
+        _packfile_bits: &[u8],
         hash: &str,
         expected_offset: u32,
     ) {

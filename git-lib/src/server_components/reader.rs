@@ -38,7 +38,7 @@ impl<'a> BuffedReader<'a> {
     }
 
     pub fn get_pos(&self) -> usize {
-        self.pos.clone()
+        self.pos
     }
 }
 

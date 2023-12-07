@@ -52,7 +52,7 @@ fn test_single_file() {
         Err(error) => panic!("Se pudo abrir el archivo: {:?}", error),
     }
 
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path);
 }
 
 fn create_test_scene_1(path: &str) {
@@ -70,7 +70,7 @@ fn create_test_scene_1(path: &str) {
 }
 
 fn create_base_scene(path: &str) {
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path);
     let Ok(_) = fs::create_dir_all(path.clone()) else {
         panic!("No se pudo crear el directorio")
     };

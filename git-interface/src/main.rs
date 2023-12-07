@@ -72,7 +72,7 @@ fn main() {
         chooser_window,
     );
 
-    if rc_correct_path.borrow_mut().to_owned() == false {
+    if !rc_correct_path.borrow_mut().to_owned() {
         return;
     }
 
@@ -160,8 +160,8 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
 
     interface.staged_area_ui();
     let err_activation = interface.buttons_activation();
-    if err_activation.is_err() {
-        dialog_window(err_activation.unwrap_err().to_string());
+    if let Err(err) = err_activation {
+        dialog_window(err.to_string());
         return ControlFlow::Break(());
     }
     interface.set_right_area_ui(&commits);
@@ -198,7 +198,7 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
         let merge_conflicts_label: gtk::Label =
             interface.builder.object("merge_conflicts").unwrap();
         let mut path_file = merge_conflicts_label.text().to_string();
-        path_file = path_file.split(" ").collect::<Vec<&str>>()[3..].join(" ");
+        path_file = path_file.split(' ').collect::<Vec<&str>>()[3..].join(" ");
 
         // actualizamos el contenido de new_content con los contenidos restantes de los otros
         new_content.push_str(&current_content);
@@ -219,13 +219,11 @@ fn git_interface(repo_git_path: String, builder: Rc<RefCell<gtk::Builder>>) -> C
             staging_changes: Rc::new(RefCell::new(staging_changes)),
             unstaging_changes: Rc::new(RefCell::new(unstaging_changes)),
             files_merge_conflict: Rc::new(RefCell::new(files_merge_conflict)),
-            principal_window: principal_window,
+            principal_window,
         };
         merge_window.clone().hide();
         remove_widgets_to_merge_window(&mut interface.builder.clone(), merge_window.clone());
-        if let ControlFlow::Break(_) = refresh_function(interface2) {
-            return;
-        }
+        if let ControlFlow::Break(_) = refresh_function(interface2) {}
     });
     ControlFlow::Continue(())
 }
@@ -256,7 +254,7 @@ impl Interface {
         Some(commits)
     }
 
-    fn buttons_activation<'a>(&mut self) -> Result<(), CommandError> {
+    fn buttons_activation(&mut self) -> Result<(), CommandError> {
         let buttons = [
             ("pull", self.build_button("pull_button".to_string())),
             ("push", self.build_button("push_button".to_string())),
@@ -276,7 +274,7 @@ impl Interface {
     fn build_button(&self, name: String) -> gtk::Button {
         self.builder
             .object(name.as_str())
-            .expect(format!("No se pudo obtener el botón {}", name).as_str())
+            .unwrap_or_else(|| panic!("No se pudo obtener el botón {}", name))
     }
 
     fn connect_button(
@@ -313,8 +311,7 @@ impl Interface {
                     let mut message_for_pull =
                         "Pull realizado con éxito.\nRealice refresh para obtener los cambios"
                             .to_string();
-                    if err.is_err() {
-                        let err = err.unwrap_err();
+                    if let Err(err) = err {
                         message_for_pull = err.to_string() + "\nPull no pudo realizarse con éxito";
                     }
                     dialog_window(message_for_pull);
@@ -322,17 +319,13 @@ impl Interface {
                 "push" => {
                     let mut binding_for_push = &output;
                     let result_for_push = push_function(&mut binding_for_push);
-                    if result_for_push.is_err() {
-                        dialog_window(result_for_push.unwrap_err().to_string());
-                    } else {
-                        dialog_window("Push realizado con éxito".to_string());
+                    if let Err(err) = result_for_push {
+                        dialog_window(err.to_string());
                     }
-                    return;
                 }
                 "fetch" => {
                     if let Err(err) = repo.fetch() {
                         dialog_window(err.to_string());
-                        return;
                     }
                     dialog_window("Fetch realizado con éxito".to_string());
                 }
@@ -364,9 +357,7 @@ impl Interface {
                         files_merge_conflict: Rc::clone(&files_merge_conflict),
                         principal_window: window,
                     };
-                    if let ControlFlow::Break(_) = refresh_function(interface) {
-                        return;
-                    }
+                    if let ControlFlow::Break(_) = refresh_function(interface) {}
                 }
                 _ => {
                     eprintln!("Acción no reconocida: {}", button_action);
@@ -456,7 +447,7 @@ impl Interface {
                 _ => {}
             }
 
-            let label = Label::new(Some(&format!("{}", file.clone())));
+            let label = Label::new(Some(&file.clone().to_string()));
             box_outer.pack_start(&label, true, true, 0);
             box_outer.pack_end(&button, false, false, 0);
             list_box.add(&box_outer);
@@ -475,8 +466,8 @@ impl Interface {
                         _ = unstaging_changes2.borrow_mut().take(&clone_file);
                         staging_changes2.borrow_mut().insert(file.clone());
                         let err = repo.add(vec_files);
-                        if err.is_err() {
-                            dialog_window(err.unwrap_err().to_string());
+                        if let Err(err) = err {
+                            dialog_window(err.to_string());
                             return;
                         }
                     }
@@ -484,8 +475,8 @@ impl Interface {
                         _ = files_merge_conflict.borrow_mut().take(&clone_file);
                         staging_changes2.borrow_mut().insert(file.clone());
                         let err = repo.add(vec_files);
-                        if err.is_err() {
-                            dialog_window(err.unwrap_err().to_string());
+                        if let Err(err) = err {
+                            dialog_window(err.to_string());
                             return;
                         }
                     }
@@ -534,7 +525,7 @@ impl Interface {
                 return;
             }
         };
-        let mut local_branches = match repo.local_branches() {
+        let mut local_branches = match repo.local_branches_refs() {
             Ok(local_branches) => local_branches,
             Err(err) => {
                 dialog_window(err.to_string());
@@ -660,12 +651,12 @@ impl Interface {
                 // Agrega una etiqueta al cuadro de diálogo.
                 let label = Label::new(None);
                 let dialog_message =
-                    format!("<span size=\"medium\">{}</span>", text_label.to_string());
+                    format!("<span size=\"medium\">{}</span>", text_label);
                 label.set_markup(&dialog_message);
                 content_area.add(&label);
 
                 // Agrega botones al cuadro de diálogo.
-                let accept_button: gtk::Widget = dialog.add_button("Accept", gtk::ResponseType::Accept.into());
+                let accept_button: gtk::Widget = dialog.add_button("Accept", gtk::ResponseType::Accept);
 
                 // Obtener el contexto de estilo del botón
                 let style_context = accept_button.style_context();
@@ -687,8 +678,7 @@ impl Interface {
                 let response = dialog.run();
 
                 // Maneja la respuesta del cuadro de diálogo.
-                match response {
-                    gtk::ResponseType::Accept => {
+                if response == gtk::ResponseType::Accept {
                         match repo.initialize_rebase(to_branch, from_branch) {
                             Ok(_) => {
                                 if repo.staging_area().unwrap().has_conflicts(){
@@ -719,8 +709,6 @@ impl Interface {
                         interface.branch_function(false);
                         interface.staged_area_ui();
                     }
-                    _ => {}
-                }
                 // Cierra el cuadro de diálogo.
                 unsafe { dialog.destroy() };
             });
@@ -759,12 +747,12 @@ impl Interface {
                 // Agrega una etiqueta al cuadro de diálogo.
                 let label = Label::new(None);
                 let dialog_message =
-                    format!("<span size=\"medium\">{}</span>", text_label.to_string());
+                    format!("<span size=\"medium\">{}</span>", text_label);
                 label.set_markup(&dialog_message);
                 content_area.add(&label);
 
                 // Agrega botones al cuadro de diálogo.
-                let accept_button: gtk::Widget = dialog.add_button("Accept", gtk::ResponseType::Accept.into());
+                let accept_button: gtk::Widget = dialog.add_button("Accept", gtk::ResponseType::Accept);
 
                 // Obtener el contexto de estilo del botón
                 let style_context = accept_button.style_context();
@@ -786,42 +774,38 @@ impl Interface {
                 let response = dialog.run();
 
                 // Maneja la respuesta del cuadro de diálogo.
-                match response {
-                    gtk::ResponseType::Accept => {
-                        match repo.merge(&vec![clone_clone_branch_name]) {
-                            Ok(_) => {
-                                if repo.staging_area().unwrap().has_conflicts(){
-                                    dialog_window("Resuelve los merge conflicts y luego presiona el botón 'commit'
-                                    cuando hayas finalizado".to_string())
-                                }else {
-                                    dialog_window("Merge realizado con éxito".to_string())
-                                }
-                            },
-                            Err(err) => dialog_window(err.to_string()),
-                        };
-                        let (staging_changes, unstaging_changes, files_merge_conflict) =
-                            staged_area_func().unwrap();
-                            let principal_window_clone2 = principal_window_clone.clone();
-                        let mut interface = Interface {
-                            builder: builder_clone.clone(),
-                            staging_changes: Rc::new(RefCell::new(staging_changes)),
-                            unstaging_changes: Rc::new(RefCell::new(unstaging_changes)),
-                            files_merge_conflict: Rc::new(RefCell::new(files_merge_conflict)),
-                            principal_window: principal_window_clone,
-                        };
-                        let principal_window = principal_window_clone2.borrow_mut().clone();
-                        principal_window.set_sensitive(true);
-                        let branch_window_clone4 = branch_window_clone4.clone();
-                        branch_window_clone4.hide();
-                        remove_childs(&clone_branch_list2);
-                        let builder = builder_clone.clone();
-                        remove_widgets_to_branch_window(builder, branch_window_clone4);
-                        interface.branch_function(false);
-                        interface.staged_area_ui();
-                    }
-                    _ => {}
+                if response == gtk::ResponseType::Accept {
+                    match repo.merge(&vec![clone_clone_branch_name]) {
+                        Ok(_) => {
+                            if repo.staging_area().unwrap().has_conflicts(){
+                                dialog_window("Resuelve los merge conflicts y luego presiona el botón 'commit'
+                                cuando hayas finalizado".to_string())
+                            }else {
+                                dialog_window("Merge realizado con éxito".to_string())
+                            }
+                        },
+                        Err(err) => dialog_window(err.to_string()),
+                    };
+                    let (staging_changes, unstaging_changes, files_merge_conflict) =
+                        staged_area_func().unwrap();
+                        let principal_window_clone2 = principal_window_clone.clone();
+                    let mut interface = Interface {
+                        builder: builder_clone.clone(),
+                        staging_changes: Rc::new(RefCell::new(staging_changes)),
+                        unstaging_changes: Rc::new(RefCell::new(unstaging_changes)),
+                        files_merge_conflict: Rc::new(RefCell::new(files_merge_conflict)),
+                        principal_window: principal_window_clone,
+                    };
+                    let principal_window = principal_window_clone2.borrow_mut().clone();
+                    principal_window.set_sensitive(true);
+                    let branch_window_clone4 = branch_window_clone4.clone();
+                    branch_window_clone4.hide();
+                    remove_childs(&clone_branch_list2);
+                    let builder = builder_clone.clone();
+                    remove_widgets_to_branch_window(builder, branch_window_clone4);
+                    interface.branch_function(false);
+                    interface.staged_area_ui();
                 }
-
                 // Cierra el cuadro de diálogo.
                 unsafe { dialog.destroy() };
             });
@@ -873,7 +857,7 @@ impl Interface {
                 return;
             }
             let vec_branch = vec![name_branch_text.to_string()];
-            match repo.create_branch(&vec_branch, None) {
+            match repo.create_branch_from_cmd_args(&vec_branch) {
                 Ok(_) => {
                     dialog_window("Rama creada con éxito".to_string());
                     new_name_branch.set_text("");
@@ -1079,7 +1063,7 @@ impl Interface {
                 &mut hash_branches,
                 &mut hash_sons,
                 &mut identado,
-                &commit_and_branches,
+                commit_and_branches,
                 y,
             );
             y += 21.0;
@@ -1208,10 +1192,10 @@ impl Interface {
                 let merge_conflicts_label: gtk::Label = builder.object("merge_conflicts").unwrap();
 
                 let mut binding = io::stdout();
-                let mut repo = GitRepository::open(&"".to_string(), &mut binding).unwrap();
+                let mut repo = GitRepository::open("", &mut binding).unwrap();
 
                 let mut path_file = merge_conflicts_label.text().to_string();
-                path_file = path_file.split(" ").collect::<Vec<&str>>()[3..].join(" ");
+                path_file = path_file.split(' ').collect::<Vec<&str>>()[3..].join(" ");
 
                 repo.write_file(&path_file, &mut new_content_clone.borrow().clone())
                     .unwrap();
@@ -1480,7 +1464,7 @@ fn remove_childs(list: &ListBox) {
 }
 
 fn add_row_to_list(row_information: &String, row_list: &ListBox) {
-    let label = Label::new(Some(&row_information));
+    let label = Label::new(Some(row_information));
     let row_date = ListBoxRow::new();
     row_date.add(&label);
     row_list.add(&row_date);
@@ -1494,9 +1478,9 @@ fn make_graph(
     commit: &(CommitObject, usize, usize),
     pos_y: f32,
 ) -> usize {
-    let commit_branch = commit.1.clone();
-    if !hash_branches.contains_key(&commit_branch) {
-        hash_branches.insert(commit_branch.clone(), *identado);
+    let commit_branch = commit.1;
+    if let std::collections::hash_map::Entry::Vacant(e) = hash_branches.entry(commit_branch) {
+        e.insert(*identado);
         *identado += 1;
     }
 
@@ -1520,10 +1504,10 @@ fn make_graph(
 
     for parent in &commit.0.get_parents() {
         let sons_parent = hash_sons.entry(parent.clone()).or_default();
-        sons_parent.push((x, pos_y as f64, commit_branch.clone()));
+        sons_parent.push((x, pos_y as f64, commit_branch));
     }
 
-    return *identado;
+    *identado
 }
 
 fn draw_lines_to_sons(
@@ -1536,7 +1520,7 @@ fn draw_lines_to_sons(
 ) {
     if hash_sons.contains_key(commit_hash) {
         for sons in hash_sons.get(commit_hash).unwrap() {
-            let sons_clone = sons.clone();
+            let sons_clone = *sons;
             let i = hash_branches.get(&sons.2).unwrap();
             let index_color = i % GRAPH_COLORS.len();
             let (c1, c2, c3) = GRAPH_COLORS[index_color];
@@ -1546,7 +1530,7 @@ fn draw_lines_to_sons(
                 context.set_source_rgb(c1, c2, c3);
                 context.set_line_width(2.0);
                 context.move_to(x, y);
-                context.line_to(sons_clone.0.clone(), sons_clone.1.clone());
+                context.line_to(sons_clone.0, sons_clone.1);
                 context.stroke().unwrap();
                 Inhibit(false)
             });

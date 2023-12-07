@@ -13,15 +13,14 @@ use crate::{
     },
 };
 use std::{
-    cmp::Ordering,
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fs::{self, File},
     io::{Cursor, Read, Write},
-    path::{self, Path},
+    path::Path,
 };
 
 extern crate chrono;
-use chrono::{prelude::*, DateTime};
+use chrono::DateTime;
 
 #[derive(Clone, Debug)]
 pub struct CommitObject {
@@ -80,7 +79,7 @@ impl CommitObject {
     }
 
     pub fn get_message(&self) -> String {
-        return self.message.clone();
+        self.message.clone()
     }
 
     pub fn get_author(&self) -> Author {
@@ -115,10 +114,7 @@ impl CommitObject {
             None => None,
         };
 
-        let hash_u8: Option<[u8; 20]> = match hash_commit {
-            Some(hash) => Some(hex_string_to_u8_vec(&hash)),
-            None => None,
-        };
+        let hash_u8: Option<[u8; 20]> = hash_commit.map(|hash| hex_string_to_u8_vec(&hash));
 
         Ok(Box::new(CommitObject {
             tree: option_tree,
@@ -373,25 +369,13 @@ impl GitObjectTrait for CommitObject {
         writeln!(stream, "tree {}", u8_vec_to_hex_string(&self.tree_hash))
             .map_err(|err| CommandError::FileWriteError(err.to_string()))?;
 
-        match db {
-            Some(db) => {
-                let Some(tree) = self.tree.as_mut() else {
-                    return Err(CommandError::InvalidCommit);
-                };
-                let mut tree_box: GitObject = Box::new(tree.clone());
-                db.write(&mut tree_box, true, &mut Logger::new_dummy())?;
-            }
-            None => {}
+        if let Some(db) = db {
+            let Some(tree) = self.tree.as_mut() else {
+                return Err(CommandError::InvalidCommit);
+            };
+            let mut tree_box: GitObject = Box::new(tree.clone());
+            db.write(&mut tree_box, true, &mut Logger::new_dummy())?;
         };
-
-        // if self.tree.is_some() {
-        //     writeln!(
-        //         stream,
-        //         "tree {}",
-        //         self.tree.as_mut().unwrap().get_hash_string()?
-        //     )
-        //     .map_err(|err| CommandError::FileWriteError(err.to_string()))?;
-        // }
 
         for parent in &self.parents {
             writeln!(stream, "parent {}", parent)
@@ -463,50 +447,6 @@ impl GitObjectTrait for CommitObject {
     }
 }
 
-// impl fmt::Display for CommitObject {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         write!(
-//             f,
-//             "tree {}\nparent {:?}\nauthor {}\ncommitter {}\n\n{}",
-//             self.tree, self.parents, self.author, self.committer, self.message
-//         )
-//     }
-// }
-
-/// Crea un DateTime<Local> a partir de la información recibida.
-fn _get_date(line: &mut Vec<&str>) -> Result<DateTime<Local>, CommandError> {
-    let Some(time_zone_offset_str) = line.pop() else {
-        return Err(CommandError::InvalidCommit);
-    };
-    let Some(timestamp_str) = line.pop() else {
-        return Err(CommandError::InvalidCommit);
-    };
-    let offset_secconds = time_zone_offset_str.parse::<i32>().unwrap() * 3600;
-    let time_stamp = timestamp_str.parse::<i64>().unwrap();
-    let Some(offset) = chrono::FixedOffset::east_opt(offset_secconds) else {
-        return Err(CommandError::InvalidCommit);
-    };
-
-    let Some(utc_datetime) = NaiveDateTime::from_timestamp_opt(time_stamp, 0) else {
-        return Err(CommandError::InvalidCommit);
-    };
-    Ok(DateTime::<Local>::from_naive_utc_and_offset(
-        utc_datetime,
-        offset,
-    ))
-}
-
-/* pub fn write_commit_to_database(
-    commit: &mut GitObject,
-    tree: &mut Tree,
-    logger: &mut Logger,
-) -> Result<String, CommandError> {
-    write_tree(tree, logger)?;
-
-    let commit_hash = objects_database::write(logger, commit)?;
-    Ok(commit_hash)
-} */
-
 pub fn write_commit_tree_to_database(
     db: &mut ObjectsDatabase,
     tree: &mut Tree,
@@ -515,7 +455,7 @@ pub fn write_commit_tree_to_database(
     let mut boxed_tree: Box<dyn GitObjectTrait> = Box::new(tree.clone());
 
     db.write(&mut boxed_tree, false, logger)?;
-    for (_, (child_hash, child_obj_opt)) in tree.get_objects().iter_mut() {
+    for (_, (_child_hash, child_obj_opt)) in tree.get_objects().iter_mut() {
         let Some(child) = child_obj_opt else {
             return Err(CommandError::ShallowTree);
         };
@@ -554,21 +494,6 @@ mod test {
         let mut writer_stream = Cursor::new(&mut buf);
         commit.write_to(&mut writer_stream, None).unwrap();
         let _reader_stream = Cursor::new(&mut buf);
-        // let mut fetched_commit = git_object::read_git_object_from(
-        //     &mut reader_stream,
-        //     "",
-        //     "a471637c78c8f67cca05221a942bd7efabb58caa",
-        //     &mut Logger::new_dummy(),
-        // )
-        // .unwrap();
-
-        // let mut fetched_commit_buf: Vec<u8> = Vec::new();
-        // let mut fetched_commit_writer_stream = Cursor::new(&mut fetched_commit_buf);
-        // fetched_commit
-        //     .write_to(&mut fetched_commit_writer_stream)
-        //     .unwrap();
-
-        // assert_eq!(buf, fetched_commit_buf);
     }
 
     // Write and display
@@ -685,7 +610,7 @@ fn print_normal_commit_for_log(
         _ = write!(writer_stream, " {}", branch_str);
     }
 
-    _ = write!(writer_stream, "\n");
+    _ = writeln!(writer_stream);
     _ = writeln!(writer_stream, "Author: {}", commit.author);
     _ = writeln!(writer_stream, "Date: {}", commit.get_timestamp_string());
     _ = writeln!(writer_stream, "\n    {}\n", commit.message);
@@ -715,7 +640,7 @@ fn print_merge_commit_for_log(
         let branch_str = branch_vec.join(" ");
         _ = write!(writer_stream, " {}", branch_str);
     }
-    _ = write!(writer_stream, "\n");
+    _ = writeln!(writer_stream);
     _ = writeln!(writer_stream, "{}", merges);
     _ = writeln!(writer_stream, "Author: {}", commit.author);
     _ = writeln!(writer_stream, "Date: {}", commit.get_timestamp_string());
@@ -724,52 +649,21 @@ fn print_merge_commit_for_log(
     Ok(())
 }
 
-// pub fn sort_commits_descending_date2(
-//     vec_commits: &mut Vec<(CommitObject, Option<String>)>,
-//     parents_hash: &mut HashMap<String, HashSet<String>>,
-// ) {
-//     vec_commits.sort_by(|a, b| {
-//         // Comparar por timestamp en orden descendente
-//         let timestamp_order = b.0.timestamp.cmp(&a.0.timestamp);
-//         if timestamp_order != Ordering::Equal {
-//             return timestamp_order;
-//         }
-
-//         // Si los timestamps son iguales, comparar por inclusión en el HashSet
-//         match (&a.1, &b.1) {
-//             (Some(parent_a), Some(parent_b)) => {
-//                 println!("parent_a: {:?}, parent_b: {:?}", parent_a, parent_b);
-//                 if parents_hash[parent_a].contains(parent_b) {
-//                     Ordering::Greater
-//                 } else if parents_hash[parent_b].contains(parent_a) {
-//                     Ordering::Less
-//                 } else {
-//                     Ordering::Equal
-//                 }
-//             }
-//             (Some(_), None) => Ordering::Less,
-//             (None, Some(_)) => Ordering::Greater,
-//             (None, None) => Ordering::Equal,
-//         }
-//     });
-// }
-
-pub fn sort_commits_descending_date(vec_commits: &mut Vec<(CommitObject, String)>) {
+pub fn sort_commits_descending_date(vec_commits: &mut [(CommitObject, String)]) {
     vec_commits.sort_by(|a, b| b.0.timestamp.cmp(&a.0.timestamp));
 }
 
-pub fn sort_commits_descending_date_and_topo(vec_commits: &mut Vec<(CommitObject, usize, usize)>) {
+pub fn sort_commits_descending_date_and_topo(vec_commits: &mut [(CommitObject, usize, usize)]) {
     vec_commits.sort_by(|a, b| b.2.cmp(&a.2));
     vec_commits.sort_by(|a, b| b.0.timestamp.cmp(&a.0.timestamp));
 }
 
-pub fn sort_commits_ascending_date_and_topo(vec_commits: &mut Vec<(CommitObject, usize, usize)>) {
+pub fn sort_commits_ascending_date_and_topo(vec_commits: &mut [(CommitObject, usize, usize)]) {
     vec_commits.sort_by(|a, b| a.2.cmp(&b.2));
     vec_commits.sort_by(|a, b| a.0.timestamp.cmp(&b.0.timestamp));
 }
 
 fn timestamp_to_string(timestamp: i64) -> String {
-    // let duration = Duration::from_secs(timestamp as u64);
     let Some(datetime) = DateTime::from_timestamp(timestamp, 0) else {
         return "No tiene".to_string();
     };

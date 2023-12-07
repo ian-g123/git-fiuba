@@ -9,7 +9,7 @@ use super::super_string::u8_vec_to_hex_string;
 /// Obtiene el nombre de un archivo dada su ruta. Si la ruta no existe, devuelve error.
 pub fn get_name(path_string: &str) -> Result<String, CommandError> {
     let var = path_string
-        .split("/")
+        .split('/')
         .last()
         .map(|s| s.to_string())
         .ok_or_else(|| CommandError::FileNotFound(path_string.to_owned()))?;
@@ -22,9 +22,8 @@ pub fn get_sha1_str(data: &[u8]) -> String {
     let hash_result = get_sha1(data);
 
     // Formatea los bytes del hash en una cadena hexadecimal
-    let hex_string = u8_vec_to_hex_string(&hash_result);
 
-    hex_string
+    u8_vec_to_hex_string(&hash_result)
 }
 
 pub fn get_sha1(data: &[u8]) -> [u8; 20] {
@@ -100,9 +99,9 @@ mod test {
         let path = "dir/git";
 
         let res_expected = "git";
-        match get_name(&path.to_string()) {
+        match get_name(path) {
             Ok(result) => assert_eq!(res_expected, result),
-            Err(error) => assert!(false, "{}", error),
+            Err(error) => panic!("{}", error),
         }
     }
 
@@ -114,33 +113,9 @@ mod test {
         let res_expected = CommandError::FileNotFound(path.clone());
         match read_file_contents(&path.to_string()) {
             Err(result) => assert_eq!(res_expected, result),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
-
-    // Pureba que get_hash() obtenga correctamente el hash.
-    // #[test]
-    // fn get_hash_test() {
-    //     let mut logger = Logger::new("./tests/commands/hash_object/codigo1/.git/logs.log").unwrap();
-    //     let mut output_string = Vec::new();
-    //     let mut stdout_mock = Cursor::new(&mut output_string);
-    //     let path = "./src/main.rs".to_string();
-    //     let input = "";
-    //     let mut stdin_mock = Cursor::new(input.as_bytes());
-    //     let args: &[String] = &["-t".to_string(), "blob".to_string(), path.clone()];
-    //     assert!(HashObject::run_from(
-    //         "hash-object",
-    //         args,
-    //         &mut stdin_mock,
-    //         &mut stdout_mock,
-    //         &mut logger
-    //     )
-    //     .is_ok());
-    //     assert!(matches!(
-    //         get_sha1(path, "blob".to_string()),
-    //         Ok(_output_string)
-    //     ))
-    // }
 }
 
 pub fn join_paths_m(base_path_str: &str, relative_path_str: &str) -> Result<String, CommandError> {
@@ -149,14 +124,6 @@ pub fn join_paths_m(base_path_str: &str, relative_path_str: &str) -> Result<Stri
     let complete_path_str = complete_path.to_str().ok_or(CommandError::JoiningPaths)?;
     Ok(complete_path_str.to_string())
 }
-
-// pub fn join_paths_vec(paths: Vec<String>) -> Result<String, CommandError> {
-//     let mut result = String::new();
-//     for path in paths {
-//         result = join_paths_m(&result, &path)?;
-//     }
-//     Ok(result)
-// }
 
 // create a macro join_paths! that receives a variable number of arguments and returns a String
 // with the paths joined
@@ -170,6 +137,7 @@ macro_rules! join_paths {
                 match result {
                     Some(result_s) => {
                         let base_path: &std::path::Path = std::path::Path::new(&result_s);
+                        #[allow(clippy::unnecessary_to_owned)]
                         let complete_path = &base_path.join(&$x);
                         match complete_path.to_str() {
                             Some(result_res) => result = Some(result_res.to_string()),

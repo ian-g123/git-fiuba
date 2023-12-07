@@ -227,7 +227,7 @@ fn read_from_stdin(stdin: &mut dyn Read) -> Result<String, CommandError> {
 fn check_end_message(message: &str, end: &str) -> bool {
     let split_message: Vec<String> = message.lines().map(String::from).collect();
     if let Some(last) = split_message.to_owned().last() {
-        if last.to_owned() == end.to_string() {
+        if *last == *end {
             return true;
         }
     }
@@ -238,7 +238,7 @@ fn check_end_message(message: &str, end: &str) -> bool {
 fn ignore_commented_lines(message: String) -> String {
     let split_message: Vec<&str> = message
         .lines()
-        .filter(|line| !line.trim_start().starts_with("#"))
+        .filter(|line| !line.trim_start().starts_with('#'))
         .collect();
     split_message.join("\n")
 }
@@ -250,7 +250,7 @@ pub fn read_message_completely(i: usize, args: &[String]) -> Result<(String, usi
     let end: char;
     if message.starts_with('"') {
         end = '"';
-    } else if message.starts_with("'") {
+    } else if message.starts_with('\'') {
         end = '\'';
     } else {
         return Ok((message, number_of_words));
@@ -288,7 +288,7 @@ mod tests {
         let args = ["-no".to_string()];
         match Commit::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::InvalidArguments),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -303,7 +303,7 @@ mod tests {
         let args = ["-m".to_string()];
         match Commit::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::MessageNoValue),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -318,7 +318,7 @@ mod tests {
         let args = [];
         match Commit::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::CommitMessageEmptyValue),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -338,7 +338,7 @@ mod tests {
         ];
         match Commit::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::MessageAndReuseError),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -353,7 +353,7 @@ mod tests {
         let args = ["-m".to_string(), "message".to_string(), "-C".to_string()];
         match Commit::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::ReuseMessageNoValue),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -364,7 +364,7 @@ mod tests {
         let mut stdin_mock = Cursor::new(input.as_bytes());
 
         match run_enter_message(&mut stdin_mock, get_enter_message_text().unwrap()) {
-            Err(error) => assert!(false, "{}", error),
+            Err(error) => panic!("{}", error),
             Ok(message) => assert_eq!(message, expected),
         }
     }

@@ -1,13 +1,11 @@
 use core::panic;
 use std::{
-    fs::{self, File},
-    io::{self, Error, Read},
+    fs::{self},
+    io::{self},
     path::Path,
     process::Command,
     thread::sleep,
 };
-
-use git_lib::file_compressor::extract;
 
 // Comando para iniciar daemon
 // cargo build; clear; cd ../server_files/; ../../../../../target/debug/git-server
@@ -30,7 +28,7 @@ fn test() {
         .arg("clone")
         .arg("git://127.1.0.0:9418/repo")
         .arg("repo_copy")
-        .current_dir(path.to_string())
+        .current_dir(path)
         .output()
         .unwrap();
 

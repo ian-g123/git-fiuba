@@ -25,9 +25,9 @@ impl Config {
         if file.read_to_string(&mut content).is_err() {
             return Err(CommandError::InvalidConfigFile);
         }
-        let mut lines = content.lines();
+        let lines = content.lines();
         let mut current_domain = String::new();
-        while let Some(line) = lines.next() {
+        for line in lines {
             if line.starts_with('[') {
                 current_domain = line[1..line.len() - 1].to_string();
             } else {

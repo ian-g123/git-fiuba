@@ -12,45 +12,18 @@ use super::{index_entry_type::IndexEntryType, merge_stage::MergeStage};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct IndexEntry {
-    pub ctime: (i32, i32), // ctime (seconds, nanosecond), the last time a file's metadata changed
-
-    pub mtime: (i32, i32), // mtime (seconds, nanosecond), the last time a file's data changed
-
-    pub dev: u32,                   // dev
-    pub ino: u32,                   // ino
-    pub entry_type: IndexEntryType, // 4-bit object type (1000 (regular file), 1010 (symbolic link) and 1110 (gitlink))
-    pub unix_permission: u16, // 9-bit unix permission. Only 0755 and 0644 are valid for regular files. Symbolic links and gitlinks have value 0 in this field.
-    pub uid: u32,             // uid
-    pub gid: u32,             // gid
-    pub fsize: u32, // file size This is the on-disk size from stat(2), truncated to 32-bit.
-    pub sha1: [u8; 20], // Object name for the represented object (160-bit SHA-1 Object ID)
-    // A 16-bit 'flags' field split into (high to low bits)
-    // hex: 0009
-    // bin: 00000000 00001001
-    pub assume_valid: bool, // 1-bit assume-valid flag
-    pub stage: MergeStage, // 2-bit stage (during merge) --> Reg file = 0, common = 1, head = 2, destin = 3
-                           // Entry path name (variable length) relative to top level directory (without leading slash).
-                           // '/' is used as path separator. The special
-                           //   path components ".", ".." and ".git" (without quotes) are disallowed.
-                           //   Trailing slash is also disallowed.
-                           // The exact encoding is undefined, but the '.' and '/' characters
-                           // are encoded in 7-bit ASCII and the encoding cannot contain a NUL
-                           // byte (iow, this is a UNIX pathname).
-                           // (Version 4) In version 4, the entry path name is prefix-compressed
-                           //   relative to the path name for the previous entry (the very first
-                           //   entry is encoded as if the path name for the previous entry is an
-                           //   empty string).  At the beginning of an entry, an integer N in the
-                           //   variable width encoding (the same encoding as the offset is encoded
-                           //   for OFS_DELTA pack entries; see pack-format.txt) is stored, followed
-                           //   by a NUL-terminated string S.  Removing N bytes from the end of the
-                           //   path name for the previous entry, and replacing it with the string S
-                           //   yields the path name for this entry.
-                           // 1-8 nul bytes as necessary to pad the entry to a multiple of eight bytes
-                           // while keeping the name NUL-terminated.
-                           // (Version 4) In version 4, the padding after the pathname does not
-                           // exist.
-                           // Interpretation of index entries in split index mode is completely
-                           // different. See below for details.
+    pub ctime: (i32, i32),
+    pub mtime: (i32, i32),
+    pub dev: u32,
+    pub ino: u32,
+    pub entry_type: IndexEntryType,
+    pub unix_permission: u16,
+    pub uid: u32,
+    pub gid: u32,
+    pub fsize: u32,
+    pub sha1: [u8; 20],
+    pub assume_valid: bool,
+    pub stage: MergeStage,
 }
 
 impl IndexEntry {
@@ -161,7 +134,7 @@ impl IndexEntry {
                 String::from_utf8(path_bytes).map_err(|error| {
                     CommandError::FileReadError(format!(
                         "Error convirtiendo path a string{}",
-                        error.to_string()
+                        error
                     ))
                 })?
             }
@@ -201,14 +174,14 @@ impl IndexEntry {
             .map_err(|error| {
                 CommandError::MetadataError(format!(
                     "No se pudo obtener el ctime del archivo: {}",
-                    error.to_string()
+                    error
                 ))
             })?
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|error| {
                 CommandError::MetadataError(format!(
                     "No se pudo obtener el ctime del archivo: {}",
-                    error.to_string()
+                    error
                 ))
             })?;
         let mtime = metadata
@@ -216,14 +189,14 @@ impl IndexEntry {
             .map_err(|error| {
                 CommandError::MetadataError(format!(
                     "No se pudo obtener el mtime del archivo: {}",
-                    error.to_string()
+                    error
                 ))
             })?
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|error| {
                 CommandError::MetadataError(format!(
                     "No se pudo obtener el mtime del archivo: {}",
-                    error.to_string()
+                    error
                 ))
             })?;
         let dev = metadata.dev() as u32;
@@ -269,7 +242,7 @@ impl IndexEntry {
             dev: 0,
             ino: 0,
             entry_type: IndexEntryType::RegularFile,
-            unix_permission: unix_permission,
+            unix_permission,
             uid: 0,
             gid: 0,
             fsize: 0,
@@ -356,7 +329,7 @@ impl IndexEntry {
             .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
         let padding = 8 - ((62 + path.len() + 1) % 8);
         if padding != 8 {
-            let padding_bytes = vec![0; padding as usize];
+            let padding_bytes = vec![0; padding];
             stream
                 .write_all(&padding_bytes)
                 .map_err(|error| CommandError::FileWriteError(error.to_string()))?;

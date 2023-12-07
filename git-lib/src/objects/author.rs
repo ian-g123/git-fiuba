@@ -40,8 +40,7 @@ impl Author {
     pub fn write_to(&self, stream: &mut dyn Write) -> Result<(), CommandError> {
         write!(stream, "{} <{}> ", self.name, self.email)
             .map_err(|err| CommandError::FileWriteError(err.to_string()))?;
-        // self.name.write_to(stream)?;
-        // self.email.write_to(stream)?;
+
         Ok(())
     }
 
@@ -51,8 +50,6 @@ impl Author {
         let name = name_part.trim().to_string();
         let mut email = read_string_until(stream, ' ')?.trim().to_string();
         email.pop();
-        // let name = read_string_from(stream)?;
-        // let email = read_string_from(stream)?;
         Ok(Self { name, email })
     }
 }

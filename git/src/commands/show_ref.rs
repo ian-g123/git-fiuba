@@ -104,11 +104,11 @@ impl ShowRef {
     /// Configura el flag --hash.
     fn add_hash_config(&mut self, i: usize, args: &[String]) -> Result<usize, CommandError> {
         let flag = args[i].clone();
-        if flag != "-s".to_string() && !flag.starts_with("--hash") {
+        if flag != *"-s" && !flag.starts_with("--hash") {
             return Err(CommandError::WrongFlag);
         }
 
-        if flag.starts_with("--hash=") {
+        if flag.strip_prefix("--hash=").is_some() {
             if flag.len() == 7 {
                 return Err(CommandError::FlagHashRequiresValue);
             } else {
@@ -184,7 +184,7 @@ mod tests {
         let args = ["".to_string()];
         match ShowRef::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::Name),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -199,7 +199,7 @@ mod tests {
         let args = ["-no".to_string()];
         match ShowRef::run_from("show-ref", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::InvalidArguments),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -214,7 +214,7 @@ mod tests {
         let args = ["--hash=".to_string()];
         match ShowRef::run_from("show-ref", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::FlagHashRequiresValue),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 }

@@ -6,7 +6,7 @@ use crate::{
     staging_area_components::staging_area::StagingArea,
     utils::aux::get_name,
 };
-use std::{collections::HashMap, fs::File, io::Read};
+use std::collections::HashMap;
 
 use super::{
     changes_types::ChangeType, long_format::sort_hashmap_and_filter_unmodified,
@@ -30,26 +30,26 @@ impl ChangesController {
     /// del index y el working tree desde el último commit.
     pub fn new(
         db: &ObjectsDatabase,
-        git_path: &str,
+        _git_path: &str,
         working_dir: &str,
         logger: &mut Logger,
         commit_tree: Option<Tree>,
         index: &StagingArea,
     ) -> Result<ChangesController, CommandError> {
         let working_tree = build_working_tree(working_dir)?;
-        let index_changes = Self::check_staging_area_status(db, &index, &commit_tree, logger)?;
+        let index_changes = Self::check_staging_area_status(db, index, &commit_tree, logger)?;
         let (working_tree_changes, mut untracked, mut untracked_files) =
             Self::check_working_tree_status(
                 working_dir,
                 working_tree,
-                &index,
+                index,
                 &commit_tree,
                 logger,
                 &index_changes,
             )?;
         untracked.sort();
         untracked_files.sort();
-        let unmerged_changes = Self::check_unmerged_paths(&index, logger)?;
+        let unmerged_changes = Self::check_unmerged_paths(index, logger)?;
 
         Ok(Self {
             index_changes,
@@ -127,7 +127,7 @@ impl ChangesController {
     /// Recolecta información sobre los merge conflicts
     fn check_unmerged_paths(
         staging_area: &StagingArea,
-        logger: &mut Logger,
+        _logger: &mut Logger,
     ) -> Result<HashMap<String, ChangeType>, CommandError> {
         let mut changes: HashMap<String, ChangeType> = HashMap::new();
         let unmerged_files = staging_area.get_unmerged_files();
@@ -166,8 +166,8 @@ impl ChangesController {
         let staging_files = staging_area.get_files();
         let Some(mut tree) = last_commit_tree.to_owned() else {
             let changes: HashMap<String, ChangeType> = staging_files
-                .iter()
-                .map(|(path, _)| (path.to_string(), ChangeType::Added))
+                .keys()
+                .map(|path| (path.to_string(), ChangeType::Added))
                 .collect();
             return Ok(changes);
         };
@@ -325,7 +325,7 @@ impl ChangesController {
         _: &mut Logger,
         staged_changes: &HashMap<String, ChangeType>,
     ) {
-        if untracked.len() == 0 || untracked_number == 0 {
+        if untracked.is_empty() || untracked_number == 0 {
             return;
         }
         let last_file = &untracked[untracked.len() - 1];
@@ -371,10 +371,7 @@ impl ChangesController {
         let has_hash = staging_area.has_file_from_hash(&hash);
 
         let isnt_in_last_commit = check_isnt_in_last_commit(last_commit, &path, &hash, logger)?;
-        if !has_path
-            && (!has_hash || (has_hash && content_differs(&path, object)?))
-            && isnt_in_last_commit
-        {
+        if !has_path && isnt_in_last_commit {
             untracked.push(path.clone());
             return Ok((true, path));
         } else if has_path && !has_hash {
@@ -384,22 +381,6 @@ impl ChangesController {
         }
         Ok((false, path))
     }
-}
-
-/// Devuelve true si el contenido del objeto y el path pasados difieren.
-fn content_differs(path: &str, object: &mut GitObject) -> Result<bool, CommandError> {
-    let staged_content: String = String::from_utf8(object.content(None)?)
-        .map_err(|error| CommandError::FileReadError(error.to_string()))?;
-
-    let Ok(mut current_file) = File::open(path) else {
-        return Err(CommandError::FileOpenError(path.to_string()));
-    };
-    let mut current_content = String::new();
-    current_file
-        .read_to_string(&mut current_content)
-        .map_err(|_: std::io::Error| CommandError::FileReadError(path.to_string()))?;
-
-    Ok(current_content == staged_content)
 }
 
 fn check_isnt_in_last_commit(

@@ -54,7 +54,7 @@ impl Clone {
         i: usize,
         args: &[String],
     ) -> Result<usize, CommandError> {
-        if clone.repository_url != "" {
+        if !clone.repository_url.is_empty() {
             return Err(CommandError::WrongFlag);
         }
         let url_and_repo = args[i].clone();
@@ -87,11 +87,10 @@ impl Clone {
     }
 
     fn run(&self, _stdin: &mut dyn Read, output: &mut dyn Write) -> Result<(), CommandError> {
-        let mut repo = GitRepository::init(&self.directory, "master", false, output)?;
+        let directory = &self.directory;
         let address = self.get_address();
-        let url = format!("git://{}{}", address, &self.repository_path);
-        repo.update_remote(url)?;
-        repo.pull()?;
+        let repository_path = &self.repository_path;
+        GitRepository::clone(directory, output, address, repository_path)?;
         Ok(())
     }
 
@@ -99,13 +98,13 @@ impl Clone {
         let Some(repository_port) = self.repository_port.clone() else {
             return self.repository_url.clone();
         };
-        return self.repository_url.clone() + ":" + &repository_port;
+        self.repository_url.clone() + ":" + &repository_port
     }
 
     fn get_directory(&self) -> String {
         if self.directory.is_empty() {
             return self.repository_path[1..].to_string();
         }
-        return self.directory.clone();
+        self.directory.clone()
     }
 }

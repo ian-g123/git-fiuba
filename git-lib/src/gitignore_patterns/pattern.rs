@@ -4,7 +4,6 @@ pub enum Pattern {
     EndsWith(String, String, bool, bool),
     RelativeToDirLevel(String, String, bool),
     NotRelativeToDirLevel(String, String, bool),
-    // si queda tiempo, agregar: a*a, ? (MatchesOne), [a-z] (MatchesRange), **
 }
 
 impl Pattern {
@@ -24,7 +23,7 @@ impl Pattern {
             Self::StartsWith(_, _, is_relative, _) => is_relative.to_owned(),
             Self::EndsWith(_, _, is_relative, _) => is_relative.to_owned(),
             Self::RelativeToDirLevel(_, _, _) => true,
-            Self::NotRelativeToDirLevel(__, _, _) => false,
+            Self::NotRelativeToDirLevel(_, _, _) => false,
         }
     }
 

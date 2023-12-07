@@ -15,7 +15,7 @@ impl Command for Push {
     fn run_from(
         name: &str,
         args: &[String],
-        stdin: &mut dyn Read,
+        _stdin: &mut dyn Read,
         output: &mut dyn Write,
     ) -> Result<(), CommandError> {
         if name != "push" {
@@ -43,11 +43,10 @@ impl Push {
         Ok(push)
     }
 
-    pub fn new_default(output: &mut dyn Write) -> Result<Push, CommandError> {
+    pub fn new_default(_output: &mut dyn Write) -> Result<Push, CommandError> {
         Ok(Push {
             all: false,
-            // remote: "origin".to_string(),
-            branch: "".to_string()
+            branch: "".to_string(),
         })
     }
 

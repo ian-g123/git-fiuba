@@ -2,12 +2,10 @@ use std::{
     collections::HashMap,
     fs::File,
     io::{Read, Write},
-    option,
     path::Path,
 };
 
 use crate::{
-    changes_controller_components::changes_types::ChangeType,
     command_errors::CommandError,
     git_repository::get_current_file_content,
     objects_database::ObjectsDatabase,
@@ -76,7 +74,7 @@ impl Blob {
             _mode: mode,
             path: Some(path.to_string()),
             hash: Some(hash),
-            name: Some(get_name(&path)?),
+            name: Some(get_name(path)?),
         })
     }
 
@@ -116,7 +114,7 @@ impl Blob {
 
     /// Crea un Blob a partir de su hash. Si la ruta no existe, devuelve Error.
     pub fn new_from_hash_and_path(hash: [u8; 20], path: &str) -> Result<Self, CommandError> {
-        let mode = if path != "" {
+        let mode = if !path.is_empty() {
             Mode::get_mode(path.to_string())?
         } else {
             Mode::RegularFile
@@ -126,7 +124,7 @@ impl Blob {
             _mode: mode,
             path: Some(path.to_string()),
             hash: Some(hash),
-            name: Some(get_name(&path.to_string())?),
+            name: Some(get_name(path)?),
         })
     }
 
@@ -155,7 +153,7 @@ impl Blob {
         _: &str,
         logger: &mut Logger,
     ) -> Result<GitObject, CommandError> {
-        let mut content = vec![0; len as usize];
+        let mut content = vec![0; len];
 
         stream
             .read_exact(&mut content)
@@ -172,7 +170,7 @@ impl Blob {
         output: &mut dyn Write,
         _logger: &mut Logger,
     ) -> Result<(), CommandError> {
-        let mut content = vec![0; len as usize];
+        let mut content = vec![0; len];
         stream
             .read_exact(&mut content)
             .map_err(|error| CommandError::FileReadError(error.to_string()))?;
@@ -254,27 +252,19 @@ impl GitObjectTrait for Blob {
         db: Option<ObjectsDatabase>,
     ) -> Result<(), CommandError> {
         let mut file = File::create(path).map_err(|error| {
-            CommandError::FileOpenError(format!(
-                "Error al crear archivo {}: {}",
-                path,
-                error.to_string()
-            ))
+            CommandError::FileOpenError(format!("Error al abrir archivo {}: {}", path, error))
         })?;
         let content = match db {
-            Some(mut db) => self.content(Some(&mut db))?,
+            Some(db) => self.content(Some(&db))?,
             None => self.content(None)?,
         };
         logger.log(&format!(
             "Writing in {} the following content:\n{}",
             path,
-            String::from_utf8(content.clone()).unwrap()
+            String::from_utf8_lossy(&content)
         ));
         file.write_all(&content).map_err(|error| {
-            CommandError::FileWriteError(format!(
-                "Error al escribir archivo {}: {}",
-                path,
-                error.to_string()
-            ))
+            CommandError::FileWriteError(format!("Error al escribir archivo {}: {}", path, error))
         })?;
         Ok(())
     }
@@ -287,7 +277,7 @@ impl GitObjectTrait for Blob {
         modifications: &mut Vec<String>,
         _conflicts: &mut Vec<String>,
         _common: &mut Tree,
-        unstaged_files: &Vec<String>,
+        unstaged_files: &[String],
         staged: &HashMap<String, Vec<u8>>,
         db: &ObjectsDatabase,
     ) -> Result<bool, CommandError> {
@@ -315,24 +305,16 @@ impl GitObjectTrait for Blob {
             }
         }
         let mut file = File::create(path).map_err(|error| {
-            CommandError::FileOpenError(format!(
-                "Error al crear archivo {}: {}",
-                path,
-                error.to_string()
-            ))
+            CommandError::FileOpenError(format!("Error al crear archivo {}: {}", path, error))
         })?;
 
         file.write_all(&new_content).map_err(|error| {
-            CommandError::FileWriteError(format!(
-                "Error al escribir archivo {}: {}",
-                path,
-                error.to_string()
-            ))
+            CommandError::FileWriteError(format!("Error al escribir archivo {}: {}", path, error))
         })?;
 
         if let Some(staged_content) = staged.get(path) {
             self.content = Some(staged_content.to_vec());
-            self.hash = Some(get_sha1(&staged_content));
+            self.hash = Some(get_sha1(staged_content));
         }
 
         Ok(false)

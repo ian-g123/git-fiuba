@@ -237,6 +237,10 @@ pub enum CommandError {
     // Error al intentar leer un valor en un Delta Offset
     VariableLengthEncodingOfs(String),
     UnsuportedProtocol(String),
+    // Error en la compresión
+    Compression(String),
+    // Error en la extracción
+    Extraction(String),
 }
 
 impl Error for CommandError {}
@@ -575,6 +579,8 @@ impl fmt::Display for CommandError {
             CommandError::NoRebaseInProgress => write!(f, "fatal: No rebase in progress?"),
             CommandError::VariableLengthEncodingOfs(e) => write!(f, "Error al intentar leer un valor en un Delta Offset: {}", e),
             CommandError::UnsuportedProtocol(e) => write!(f, "Unsuported protocol: {}", e),
+            CommandError::Compression(e) => write!(f, "Error en la compresión: {}", e),
+            CommandError::Extraction(e) => write!(f, "Error en la extracción: {}", e),
         }
     }
 }

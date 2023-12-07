@@ -12,8 +12,8 @@ impl Pkt for String {
     fn to_pkt_format(&self) -> String {
         let input_len = self.len() + 4;
         let input_len_hex = format!("{:04x}", input_len);
-        let output = input_len_hex + self;
-        output
+        
+        input_len_hex + self
     }
 
     /// lee una línea en formato pkt-line del stream
@@ -50,7 +50,7 @@ fn read_pkt_size(socket: &mut dyn Read) -> Result<usize, CommandError> {
 }
 
 pub fn hex_string_to_u8_vec_2(hex_string: &str) -> Result<[u8; 2], CommandError> {
-    if hex_string == "0000" || hex_string.is_empty() || hex_string == "" {
+    if hex_string == "0000" || hex_string.is_empty() || hex_string.is_empty() {
         return Ok([0; 2]);
     }
     let mut result = [0; 2];

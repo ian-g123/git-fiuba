@@ -74,7 +74,7 @@ impl Branch {
             return Err(CommandError::ShowAllAndDelete);
         }
 
-        if self.show_remotes == true {
+        if self.show_remotes {
             self.show_remotes = false;
         }
         self.show_all = true;
@@ -109,15 +109,15 @@ impl Branch {
         check_errors_flags(i, args, &options)?;
         let mut branches: Vec<String> = Vec::new();
         let mut delete_remotes = false;
-        for arg in 0..args.len() {
-            if args[arg] == "-a" || args[arg] == "--all" {
+        for arg in args {
+            if arg == "-a" || arg == "--all" {
                 return Err(CommandError::ShowAllAndDelete);
-            } else if args[arg] == "-m" {
+            } else if arg == "-m" {
                 return Err(CommandError::RenameAndDelete);
-            } else if args[arg] == "-r" || args[arg] == "--remotes" {
+            } else if arg == "-r" || arg == "--remotes" {
                 delete_remotes = true;
-            } else if args[arg] != "-D" {
-                branches.push(args[arg].clone())
+            } else if arg != "-D" {
+                branches.push(arg.clone())
             }
             // -D admite: branch names y -r
         }
@@ -142,11 +142,11 @@ impl Branch {
         self.show_all = false;
         self.show_remotes = false;
         let mut names: Vec<String> = Vec::new();
-        for arg in 0..args.len() {
-            if args[arg] == "-D" {
+        for arg in args {
+            if arg == "-D" {
                 return Err(CommandError::RenameAndDelete);
-            } else if !Self::is_flag(&args[arg]) {
-                names.push(args[arg].clone())
+            } else if !Self::is_flag(arg) {
+                names.push(arg.clone())
             }
         }
         self.rename = names;
@@ -160,17 +160,13 @@ impl Branch {
             return Err(CommandError::WrongFlag);
         }
         let mut branches_and_commits: Vec<String> = Vec::new();
-        for arg in 0..args.len() {
-            if args[arg] == "-a"
-                || args[arg] == "--all"
-                || args[arg] == "-r"
-                || args[arg] == "--remotes"
-            {
+        for (i, arg) in args.iter().enumerate() {
+            if arg == "-a" || arg == "--all" || arg == "-r" || arg == "--remotes" {
                 return Err(CommandError::CreateAndListError);
-            } else if args[arg] == "-D" {
-                return Ok(arg);
+            } else if arg == "-D" {
+                return Ok(i);
             } else {
-                branches_and_commits.push(args[arg].clone())
+                branches_and_commits.push(arg.clone())
             }
         }
 
@@ -187,7 +183,7 @@ impl Branch {
         if !self.rename.is_empty() {
             repo.rename_branch(&self.rename)?;
         } else if !self.create.is_empty() {
-            repo.create_branch(&self.create, None)?;
+            repo.create_branch_from_cmd_args(&self.create)?;
         } else if !self.delete_locals.is_empty() {
             repo.delete_branches(&self.delete_locals, false)?;
         } else if !self.delete_remotes.is_empty() {
@@ -220,7 +216,7 @@ mod tests {
         let args = ["".to_string()];
         match Branch::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::Name),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -235,7 +231,7 @@ mod tests {
         let args = ["-no".to_string()];
         match Branch::run_from("branch", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::InvalidArguments),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -250,7 +246,7 @@ mod tests {
         let args = ["--remotes".to_string(), "new_branch".to_string()];
         match Branch::run_from("branch", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::CreateAndListError),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -265,7 +261,7 @@ mod tests {
         let args = ["-D".to_string(), "-m".to_string(), "new_branch".to_string()];
         match Branch::run_from("branch", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::RenameAndDelete),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -284,7 +280,7 @@ mod tests {
         ];
         match Branch::run_from("branch", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::FatalCreateBranchOperation),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -299,7 +295,7 @@ mod tests {
         let args = ["-D".to_string()];
         match Branch::run_from("branch", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::DeleteWithNoArgs),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -314,7 +310,7 @@ mod tests {
         let args = ["-D".to_string(), "--all".to_string()];
         match Branch::run_from("branch", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::ShowAllAndDelete),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 }

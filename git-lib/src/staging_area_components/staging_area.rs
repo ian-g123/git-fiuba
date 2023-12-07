@@ -62,7 +62,7 @@ impl StagingArea {
     }
 
     pub fn is_in_staging_area(&self, path: &String) -> bool {
-        return self.files.contains_key(path);
+        self.files.contains_key(path)
     }
 
     pub fn get_unmerged_files(
@@ -72,25 +72,19 @@ impl StagingArea {
             HashMap::new();
         for (path, (common_entry, head_entry, destin_entry)) in self.unmerged_files.iter() {
             let common_hash = {
-                if let Some(common) = common_entry {
-                    Some(u8_vec_to_hex_string(&common.sha1))
-                } else {
-                    None
-                }
+                common_entry
+                    .as_ref()
+                    .map(|common| u8_vec_to_hex_string(&common.sha1))
             };
             let head_hash = {
-                if let Some(head) = head_entry {
-                    Some(u8_vec_to_hex_string(&head.sha1))
-                } else {
-                    None
-                }
+                head_entry
+                    .as_ref()
+                    .map(|head| u8_vec_to_hex_string(&head.sha1))
             };
             let destin_hash = {
-                if let Some(destin) = destin_entry {
-                    Some(u8_vec_to_hex_string(&destin.sha1))
-                } else {
-                    None
-                }
+                destin_entry
+                    .as_ref()
+                    .map(|destin| u8_vec_to_hex_string(&destin.sha1))
             };
             _ = files.insert(path.to_string(), (common_hash, head_hash, destin_hash));
         }
@@ -117,7 +111,7 @@ impl StagingArea {
         Ok(changes)
     }
 
-    pub fn remove_entry(&mut self, path: &str, logger: &mut Logger) -> Result<(), CommandError> {
+    pub fn remove_entry(&mut self, path: &str, _logger: &mut Logger) -> Result<(), CommandError> {
         if !self.is_in_staging_area(&path.to_string()) {
             return Err(CommandError::RmFromStagingAreaError(path.to_string()));
         }
@@ -147,8 +141,8 @@ impl StagingArea {
     fn check_deleted_from_commit(&self, tree: &mut Tree, deleted: &mut Vec<String>, path: String) {
         for (name, (_, object_opt)) in tree.get_objects().iter_mut() {
             let complete_path = {
-                if path == "".to_string() {
-                    format!("{}", name)
+                if path == *"" {
+                    name.to_string()
                 } else {
                     format!("{}/{}", path, name)
                 }
@@ -158,10 +152,8 @@ impl StagingArea {
             };
             if let Some(new_tree) = object.as_mut_tree() {
                 self.check_deleted_from_commit(new_tree, deleted, complete_path);
-            } else {
-                if !self.has_file_from_path(&complete_path) {
-                    _ = deleted.push(complete_path);
-                }
+            } else if !self.has_file_from_path(&complete_path) {
+                deleted.push(complete_path);
             }
         }
     }
@@ -173,8 +165,8 @@ impl StagingArea {
     /// Verifica si hay un cambio del working tree respecto del staging area
     pub fn has_file_renamed(&self, actual_path: &str, actual_hash: &str) -> bool {
         for (path, hash) in self.get_files() {
-            let mut actual_parts: Vec<&str> = actual_path.split_terminator("/").collect();
-            let mut parts: Vec<&str> = path.split_terminator("/").collect();
+            let mut actual_parts: Vec<&str> = actual_path.split_terminator('/').collect();
+            let mut parts: Vec<&str> = path.split_terminator('/').collect();
 
             _ = actual_parts.pop();
             _ = parts.pop();
@@ -205,7 +197,7 @@ impl StagingArea {
         if let Some(mut tree) = tree_commit.clone() {
             for (path, hash) in self.get_files().iter() {
                 let (is_in_last_commit, name) = tree.has_blob_from_hash(hash, logger)?;
-                if !is_in_last_commit || (name != get_name(&path)?) {
+                if !is_in_last_commit || (name != get_name(path)?) {
                     logger.log(&format!("Eliminando del staging area: {}", path));
                     files.remove(path);
                 }
@@ -247,7 +239,9 @@ impl StagingArea {
         write_header(stream, len)?;
         for key in all_keys {
             let Some(entry) = self.files.get(key) else {
-                let (common, head, destin) = self.unmerged_files.get(key).unwrap();
+                let Some((common, head, destin)) = self.unmerged_files.get(key) else {
+                    unreachable!()
+                };
                 write_conflicting_entry(stream, key, common)?;
                 write_conflicting_entry(stream, key, head)?;
                 write_conflicting_entry(stream, key, destin)?;
@@ -347,7 +341,7 @@ impl StagingArea {
 
     pub fn soft_add(
         &mut self,
-        repo_path: &str,
+        _repo_path: &str,
         file_path: &str,
         hash: &str,
     ) -> Result<(), CommandError> {
@@ -366,7 +360,7 @@ impl StagingArea {
 
     pub fn soft_add_unmerged_file(
         &mut self,
-        repo_path: &str,
+        _repo_path: &str,
         file_path: &str,
         common_hash: Option<String>,
         head_hash: Option<String>,
@@ -394,7 +388,7 @@ impl StagingArea {
         let mut working_tree = Tree::new(current_dir_display.to_string());
         let files = self.sort_files();
         for (path, hash) in files.iter() {
-            let vector_path = path.split("/").collect::<Vec<_>>();
+            let vector_path = path.split('/').collect::<Vec<_>>();
             let current_depth: usize = 0;
             let blob = Blob::new_from_hash_path_and_mode(
                 hash.to_string(),
@@ -428,7 +422,7 @@ impl StagingArea {
             };
 
             if new_files.contains(path) || is_in_last_commit {
-                let vector_path = path.split("/").collect::<Vec<_>>();
+                let vector_path = path.split('/').collect::<Vec<_>>();
                 let current_depth: usize = 0;
                 let blob = Blob::new_from_hash_path_and_mode(
                     hash.to_string(),
@@ -468,7 +462,7 @@ impl StagingArea {
         self.unmerged_files.clear();
         self.soft_files.clear();
         self.soft_unmerged_files.clear();
-        
+
         let mut boxed_working_dir: GitObject = Box::new(working_dir.to_owned());
         self.add_object(repo_path, &mut boxed_working_dir, "")?;
         Ok(())
@@ -481,7 +475,7 @@ impl StagingArea {
         obj_path: &str,
     ) -> Result<(), CommandError> {
         if let Some(blob) = object.as_mut_blob() {
-            self.add(repo_path, &obj_path, &blob.get_hash_string()?)?;
+            self.add(repo_path, obj_path, &blob.get_hash_string()?)?;
         } else if let Some(tree) = object.as_mut_tree() {
             for (name, (_, child_obj_opt)) in tree.get_objects() {
                 let Some(mut child_object) = child_obj_opt else {
@@ -513,7 +507,7 @@ impl StagingArea {
             if modiffied_object_is_head {
                 self.add_unmerged_file(
                     repo_path,
-                    &obj_path,
+                    obj_path,
                     Some(original_object_blob.get_hash_string()?),
                     Some(modiffied_object_blob.get_hash_string()?),
                     None,
@@ -521,7 +515,7 @@ impl StagingArea {
             } else {
                 self.add_unmerged_file(
                     repo_path,
-                    &obj_path,
+                    obj_path,
                     Some(original_object.get_hash_string()?),
                     None,
                     Some(modiffied_object.get_hash_string()?),
@@ -569,7 +563,7 @@ impl StagingArea {
         obj_path: &str,
     ) -> Result<(), CommandError> {
         if let Some(blob) = object.as_mut_blob() {
-            self.soft_add(repo_path, &obj_path, &blob.get_hash_string()?)?;
+            self.soft_add(repo_path, obj_path, &blob.get_hash_string()?)?;
         } else if let Some(tree) = object.as_mut_tree() {
             for (name, (_, child_obj_opt)) in tree.get_objects() {
                 let Some(mut child_object) = child_obj_opt else {
@@ -601,7 +595,7 @@ impl StagingArea {
             if modiffied_object_is_head {
                 self.soft_add_unmerged_file(
                     repo_path,
-                    &obj_path,
+                    obj_path,
                     Some(original_object_blob.get_hash_string()?),
                     Some(modiffied_object_blob.get_hash_string()?),
                     None,
@@ -609,7 +603,7 @@ impl StagingArea {
             } else {
                 self.soft_add_unmerged_file(
                     repo_path,
-                    &obj_path,
+                    obj_path,
                     Some(original_object.get_hash_string()?),
                     None,
                     Some(modiffied_object.get_hash_string()?),
@@ -679,7 +673,7 @@ impl StagingArea {
 
 fn write_header(stream: &mut dyn Write, len: usize) -> Result<(), CommandError> {
     stream
-        .write(&"DIRC".as_bytes())
+        .write("DIRC".as_bytes())
         .map_err(|error| CommandError::FailToSaveStaginArea(error.to_string()))?;
     stream
         .write(&[0, 0, 0, 2])
@@ -711,7 +705,7 @@ fn new_conflicting_entry(
     stage: MergeStage,
 ) -> Result<Option<IndexEntry>, CommandError> {
     match common_hash {
-        Some(hash) => Ok(Some(IndexEntry::new_conflicting(metadata, &hash, stage)?)),
+        Some(hash) => Ok(Some(IndexEntry::new_conflicting(metadata, hash, stage)?)),
         None => Ok(None),
     }
 }
@@ -781,8 +775,7 @@ fn read_entries(
 #[cfg(test)]
 mod tests {
     use crate::{
-        staging_area_components::{index_entry_type::IndexEntryType, staging_area},
-        utils::aux::hex_string_to_u8_vec,
+        staging_area_components::index_entry_type::IndexEntryType, utils::aux::hex_string_to_u8_vec,
     };
 
     use super::*;
@@ -821,7 +814,7 @@ mod tests {
             entry.sha1,
             hex_string_to_u8_vec("5e40c0877058c504203932e5136051cf3cd3519b")
         );
-        assert_eq!(entry.assume_valid, false);
+        assert!(!entry.assume_valid);
         assert_eq!(entry.stage, MergeStage::RegularFile);
 
         let mut file_content_2 = Vec::<u8>::new();
@@ -868,7 +861,7 @@ mod tests {
             entry_1.sha1,
             hex_string_to_u8_vec("e69de29bb2d1d6434b8b29ae775ad8c2e48c5391")
         );
-        assert_eq!(entry_1.assume_valid, false);
+        assert!(!entry_1.assume_valid);
         assert_eq!(entry_1.stage, MergeStage::RegularFile);
         let entry_2 = files.get("file2").unwrap();
         assert_eq!(entry_2.ctime, (1701283634, 254897220));
@@ -884,7 +877,7 @@ mod tests {
             entry_2.sha1,
             hex_string_to_u8_vec("e69de29bb2d1d6434b8b29ae775ad8c2e48c5391")
         );
-        assert_eq!(entry_2.assume_valid, false);
+        assert!(!entry_2.assume_valid);
         assert_eq!(entry_2.stage, MergeStage::RegularFile);
     }
 
@@ -1214,7 +1207,7 @@ mod tests {
             entry_file.sha1,
             hex_string_to_u8_vec("5e40c0877058c504203932e5136051cf3cd3519b")
         );
-        assert_eq!(entry_file.assume_valid, false);
+        assert!(!entry_file.assume_valid);
         assert_eq!(entry_file.stage, MergeStage::RegularFile);
         let entry_dir_file = files.get("dir_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_largo/dir_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_largo/dir_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_largo/dir_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_largo/dir_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_largo/dir_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_largo/dir_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_largo/dir_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_largo/dir_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_largo/dir_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_largo/dir_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_largo/dir_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_largo/dir_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_largo/dir_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_largo/dir_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_largo/dir_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_muy_largo/file").unwrap();
         assert_eq!(entry_dir_file.ctime, (1701278213, 560298112));
@@ -1230,7 +1223,7 @@ mod tests {
             entry_dir_file.sha1,
             hex_string_to_u8_vec("fb6f8094902361d88f3aa5048b7d3a361945d199")
         );
-        assert_eq!(entry_dir_file.assume_valid, false);
+        assert!(!entry_dir_file.assume_valid);
         assert_eq!(entry_dir_file.stage, MergeStage::RegularFile);
     }
 
@@ -1280,7 +1273,7 @@ mod tests {
             common.sha1,
             hex_string_to_u8_vec("8830a4fc6d44da29d41905709d0bc17358e9174e")
         );
-        assert_eq!(common.assume_valid, false);
+        assert!(!common.assume_valid);
         assert_eq!(common.stage, MergeStage::Common);
 
         assert_eq!(head.ctime, (0, 0));
@@ -1296,7 +1289,7 @@ mod tests {
             head.sha1,
             hex_string_to_u8_vec("5f3b0328f465da18d87f8baf7b0010c5f0db50f2")
         );
-        assert_eq!(head.assume_valid, false);
+        assert!(!head.assume_valid);
         assert_eq!(head.stage, MergeStage::Head);
 
         assert_eq!(destin.ctime, (0, 0));
@@ -1312,7 +1305,7 @@ mod tests {
             destin.sha1,
             hex_string_to_u8_vec("fb6f8094902361d88f3aa5048b7d3a361945d199")
         );
-        assert_eq!(destin.assume_valid, false);
+        assert!(!destin.assume_valid);
         assert_eq!(destin.stage, MergeStage::Destin);
     }
 
@@ -1356,7 +1349,7 @@ mod tests {
             entry.sha1,
             hex_string_to_u8_vec("f00b59b2b46140bca6dc7f2763fab8a9ce54fb01")
         );
-        assert_eq!(entry.assume_valid, false);
+        assert!(!entry.assume_valid);
         assert_eq!(entry.stage, MergeStage::RegularFile);
     }
 }

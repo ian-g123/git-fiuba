@@ -75,7 +75,6 @@ impl Merge {
         if self.continue_ || self.quit {
             return Err(CommandError::MergeOneOperation);
         }
-        todo!("merge --abort no está hecho");
         self.abort = true;
         Ok(i + 1)
     }
@@ -88,7 +87,6 @@ impl Merge {
         if self.abort || self.continue_ {
             return Err(CommandError::MergeOneOperation);
         }
-        todo!("merge --quit no está hecho");
         self.quit = true;
         Ok(i + 1)
     }
@@ -108,10 +106,14 @@ impl Merge {
             return repo.merge_continue();
         }
         if self.abort {
-            // return repo.merge_abort();
+            return Err(CommandError::FeatureNotImplemented(
+                "merge --abort".to_string(),
+            ));
         }
         if self.quit {
-            // return repo.merge_quit();
+            return Err(CommandError::FeatureNotImplemented(
+                "merge --quit".to_string(),
+            ));
         }
 
         repo.merge(&self.commits)?;

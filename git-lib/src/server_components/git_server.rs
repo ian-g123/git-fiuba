@@ -2,15 +2,11 @@ use crate::{
     command_errors::CommandError, logger::Logger, logger_sender::LoggerSender,
     objects_database::ObjectsDatabase,
 };
-use std::{
-    collections::HashMap,
-    io::{Read, Write},
-    net::TcpStream,
-};
+use std::{collections::HashMap, io::Write, net::TcpStream};
 
 use super::{
     packfile_functions::read_objects_from_packfile, packfile_object_type::PackfileObjectType,
-    pkt_strings::Pkt, reader::BuffedReader,
+    pkt_strings::Pkt,
 };
 
 pub struct GitServer {
@@ -38,10 +34,10 @@ impl GitServer {
     }
 
     /// envía un mensaje al servidor y devuelve la respuesta
-    fn send(&mut self, line: &str) -> Result<Vec<String>, CommandError> {
+    fn send_and_get_response(&mut self, line: &str) -> Result<Vec<String>, CommandError> {
         let line = line.to_string().to_pkt_format();
         self.write_string_to_socket(&line)?;
-        let lines = get_response_fn(&self.socket)?;
+        let lines = get_response(&self.socket)?;
         Ok(lines)
     }
 
@@ -56,7 +52,7 @@ impl GitServer {
             "git-upload-pack {}\0host={}\0\0version=1\0\n",
             repository_path, host
         );
-        let mut lines = self.send(&line)?;
+        let mut lines = self.send_and_get_response(&line)?;
         let first_line = lines.remove(0);
         if first_line != "version 1\n" {
             return Err(CommandError::ErrorReadingPktVerbose(format!(
@@ -120,14 +116,12 @@ impl GitServer {
                 lines.push(line);
             }
             None => {
-                return Err(CommandError::ErrorReadingPktVerbose(format!(
-                    "fetch_objects leyó un flush-pkt"
-                )))
+                return Err(CommandError::ErrorReadingPktVerbose(
+                    "fetch_objects leyó un flush-pkt".to_string(),
+                ))
             }
         }
-        logger.log(
-            "Reading objects"
-        );
+        logger.log("Reading objects");
         read_objects_from_packfile(&mut self.socket, db, logger)
     }
 
@@ -138,14 +132,14 @@ impl GitServer {
         Ok(())
     }
 
-    pub fn send_packfile(&mut self, packfile: &Vec<u8>) -> Result<(), CommandError> {
-        self.log(&format!("⏫: [PACKFILE]"));
+    pub fn send_packfile(&mut self, packfile: &[u8]) -> Result<(), CommandError> {
+        self.log("⏫: [PACKFILE]");
 
         self.write_to_socket(packfile)?;
         Ok(())
     }
 
-    pub fn write_to_socket(&mut self, message: &Vec<u8>) -> Result<(), CommandError> {
+    pub fn write_to_socket(&mut self, message: &[u8]) -> Result<(), CommandError> {
         self.socket
             .write_all(message)
             .map_err(|error| CommandError::SendingMessage(error.to_string()))?;
@@ -170,10 +164,10 @@ impl GitServer {
             repository_path, host
         );
 
-        let mut lines = self.send(&line)?;
+        let mut lines = self.send_and_get_response(&line)?;
 
         let mut refs_hash = HashMap::<String, String>::new();
-        
+
         let _version = lines.remove(0);
         let first_line = lines.remove(0);
 
@@ -210,46 +204,20 @@ impl GitServer {
             let line = format!("{} {} refs/heads/{}\n", new_hash, old_hash, branch);
 
             self.write_in_tpk_to_socket(&line).map_err(|_| {
-                return CommandError::SendingMessage(
-                    "Error al enviar el hash del branch".to_string(),
-                );
+                CommandError::SendingMessage("Error al enviar el hash del branch".to_string())
             })?;
         }
         self.write_string_to_socket("0000").map_err(|_| {
-            return CommandError::SendingMessage("Error al enviar 0000 al servidor".to_string());
+            CommandError::SendingMessage("Error al enviar 0000 al servidor".to_string())
         })?;
-        return Ok(());
-    }
-
-    pub fn get_response(&mut self) -> Result<Vec<String>, CommandError> {
-        let mut lines = Vec::<String>::new();
-        loop {
-            match String::read_pkt_format(&mut self.socket)? {
-                Some(line) => {
-                    println!("<=: {:?}", line);
-                    lines.push(line);
-                }
-                None => break,
-            }
-        }
-        Ok(lines)
-    }
-    pub fn just_read(&mut self) -> Result<Vec<u8>, CommandError> {
-        let mut buf = Vec::new();
-        self.socket.read(&mut buf).unwrap();
-        Ok(buf)
+        Ok(())
     }
 }
 
-fn get_response_fn(mut socket: &TcpStream) -> Result<Vec<String>, CommandError> {
+fn get_response(mut socket: &TcpStream) -> Result<Vec<String>, CommandError> {
     let mut lines = Vec::<String>::new();
-    loop {
-        match String::read_pkt_format(&mut socket)? {
-            Some(line) => {
-                lines.push(line);
-            }
-            None => break,
-        }
+    while let Some(line) = String::read_pkt_format(&mut socket)? {
+        lines.push(line);
     }
     Ok(lines)
 }

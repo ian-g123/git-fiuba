@@ -22,13 +22,7 @@ pub trait Format {
         index: &StagingArea,
         patterns: &GitignorePatterns,
     ) -> Result<(), CommandError> {
-        let initial_commit = {
-            if commit_tree.is_none() {
-                true
-            } else {
-                false
-            }
-        };
+        let initial_commit = { commit_tree.is_none() };
         let changes_controller =
             ChangesController::new(db, git_path, working_dir, logger, commit_tree, index)?;
         let changes_to_be_commited = changes_controller.get_changes_to_be_commited();
@@ -57,7 +51,7 @@ pub trait Format {
         output: &mut dyn Write,
         changes_to_be_commited: &HashMap<String, ChangeType>,
         changes_not_staged: &HashMap<String, ChangeType>,
-        untracked_files: &Vec<String>,
+        untracked_files: &[String],
         long_info: (&str, bool, bool),
         unmerged_paths: &HashMap<String, ChangeType>,
         merge: bool,
@@ -66,7 +60,7 @@ pub trait Format {
 }
 
 fn delete_ignored_files(
-    untracked: &Vec<String>,
+    untracked: &[String],
     patterns: &GitignorePatterns,
     logger: &mut Logger,
 ) -> Result<Vec<String>, CommandError> {

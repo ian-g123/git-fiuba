@@ -35,8 +35,8 @@ impl Command for Rebase {
 }
 
 impl Rebase {
-    fn new(args: &[String], output: &mut dyn Write) -> Result<Rebase, CommandError> {
-        if args.len() < 1 {
+    fn new(args: &[String], _output: &mut dyn Write) -> Result<Rebase, CommandError> {
+        if args.is_empty() {
             return Err(CommandError::RebaseError("There is no tracking information for the current branch.\nPlease specify which branch you want to rebase against.\nSee git-rebase(1) for details.\ngit rebase '<branch>'\nIf you wish to set tracking information for this branch you can do so with:\ngit branch --set-upstream-to=<remote>/<branch> rama".to_string()));
         }
         let mut rebase = Rebase::new_default()?;
@@ -95,7 +95,7 @@ impl Rebase {
             rebase.main_branch = repo.get_current_branch_name()?;
             return Ok(i + 1);
         }
-        return Err(CommandError::WrongFlag);
+        Err(CommandError::WrongFlag)
     }
 
     pub fn run(&self, output: &mut dyn Write) -> Result<(), CommandError> {

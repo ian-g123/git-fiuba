@@ -14,7 +14,7 @@ pub enum Mode {
     ExecutableFile = 100755,
     SymbolicLink = 120000,
     Submodule = 160000,
-    Tree = 040000,
+    Tree = 40000,
 }
 
 impl Mode {
@@ -46,7 +46,7 @@ impl Mode {
             Mode::ExecutableFile => 100755,
             Mode::SymbolicLink => 120000,
             Mode::Submodule => 160000,
-            Mode::Tree => 040000,
+            Mode::Tree => 40000,
         }
     }
 
@@ -77,7 +77,7 @@ impl Mode {
             .read_exact(&mut buf)
             .map_err(|_| CommandError::InvalidMode)?;
         let mode = std::str::from_utf8(&buf).map_err(|_| CommandError::InvalidMode)?;
-        Ok(Self::read_from_string(mode)?)
+        Self::read_from_string(mode)
     }
 
     /// Dada una cadena que representa el modo, devuelve la variante Modo correspondiente.

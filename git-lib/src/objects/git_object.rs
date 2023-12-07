@@ -1,6 +1,6 @@
 use crate::{
-    changes_controller_components::changes_types::ChangeType, command_errors::CommandError,
-    logger::Logger, objects_database::ObjectsDatabase, utils::super_string::u8_vec_to_hex_string,
+    command_errors::CommandError, logger::Logger, objects_database::ObjectsDatabase,
+    utils::super_string::u8_vec_to_hex_string,
 };
 
 use super::{
@@ -50,17 +50,6 @@ pub trait GitObjectTrait: Debug {
         let content = self.content(db)?;
         let type_str = self.type_str();
         write_to_stream_from_content(stream, content, type_str)
-
-        //     let type_str = self.type_str();
-        //     let len = content.len();
-        //     let header = format!("{} {}\0", type_str, len);
-        //     stream
-        //         .write(header.as_bytes())
-        //         .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-        //     stream
-        //         .write(content.as_slice())
-        //         .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
-        //     Ok(())
     }
 
     /// Agrega un árbol al objeto Tree si es que corresponde, o sino un Blob\
@@ -70,7 +59,7 @@ pub trait GitObjectTrait: Debug {
         logger: &mut Logger,
         _vector_path: Vec<&str>,
         _current_depth: usize,
-        blob: Blob,
+        _blob: Blob,
     ) -> Result<(), CommandError> {
         logger.log("ERROR: No se puede agregar un path a un objeto que no es un árbol");
         Err(CommandError::ObjectNotTree)
@@ -121,13 +110,13 @@ pub trait GitObjectTrait: Debug {
         &mut self,
         _path: &str,
         _logger: &mut Logger,
-        deletions: &mut Vec<String>,
-        modifications: &mut Vec<String>,
-        conflicts: &mut Vec<String>,
-        common: &mut Tree,
-        unstaged_files: &Vec<String>,
-        staged: &HashMap<String, Vec<u8>>,
-        db: &ObjectsDatabase,
+        _deletions: &mut Vec<String>,
+        _modifications: &mut Vec<String>,
+        _conflicts: &mut Vec<String>,
+        _common: &mut Tree,
+        _unstaged_files: &[String],
+        _staged: &HashMap<String, Vec<u8>>,
+        _db: &ObjectsDatabase,
     ) -> Result<bool, CommandError> {
         Ok(false)
     }
@@ -174,7 +163,7 @@ pub fn display_type_from_hash(
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (type_str, len, content) = db.read_object_data(hash, logger)?;
+    let (type_str, _len, _content) = db.read_object_data(hash, logger)?;
     writeln!(output, "{}", type_str)
         .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
     Ok(())
@@ -186,7 +175,7 @@ pub fn display_size_from_hash(
     hash: &str,
     logger: &mut Logger,
 ) -> Result<(), CommandError> {
-    let (type_str, len, content) = db.read_object_data(hash, logger)?;
+    let (_type_str, len, _content) = db.read_object_data(hash, logger)?;
     writeln!(output, "{}", len).map_err(|error| CommandError::FileWriteError(error.to_string()))?;
     Ok(())
 }

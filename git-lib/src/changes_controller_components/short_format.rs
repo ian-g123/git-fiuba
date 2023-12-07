@@ -13,7 +13,7 @@ impl Format for ShortFormat {
         output: &mut dyn Write,
         changes_to_be_commited: &HashMap<String, ChangeType>,
         changes_not_staged: &HashMap<String, ChangeType>,
-        untracked_files: &Vec<String>,
+        untracked_files: &[String],
         _: (&str, bool, bool),
         unmerged_paths: &HashMap<String, ChangeType>,
         merge: bool,

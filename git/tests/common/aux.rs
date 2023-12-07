@@ -5,12 +5,13 @@ use std::{
     process::Command,
 };
 
+#[allow(dead_code)]
 pub fn create_test_scene_1(path: &str) {
     create_base_scene(path);
 
     let Ok(_) = fs::copy(
         "tests/data/commands/add/testfile.txt",
-        &(path.to_owned() + "/testfile.txt"),
+        path.to_owned() + "/testfile.txt",
     ) else {
         panic!("No se pudo copiar el archivo")
     };
@@ -18,6 +19,7 @@ pub fn create_test_scene_1(path: &str) {
     assert!(Path::new(&(path.to_owned() + "/testfile.txt")).exists())
 }
 
+#[allow(dead_code)]
 pub fn create_test_scene_3(path: &str) {
     create_base_scene(path);
     let Ok(_) = fs::create_dir_all(path.to_owned() + "/dir/") else {
@@ -38,6 +40,7 @@ pub fn create_test_scene_3(path: &str) {
     assert!(Path::new(&(path.to_owned() + "/dir/testfile3.txt")).exists());
 }
 
+#[allow(dead_code)]
 pub fn create_test_scene_2(path: &str) {
     create_base_scene(path);
     let Ok(_) = fs::create_dir_all(path.to_owned() + "/dir/") else {
@@ -45,13 +48,13 @@ pub fn create_test_scene_2(path: &str) {
     };
     let Ok(_) = fs::copy(
         "tests/data/commands/add/dir/testfile1.txt",
-        &(path.to_owned() + "/dir/testfile1.txt"),
+        path.to_owned() + "/dir/testfile1.txt",
     ) else {
         panic!("No se pudo copiar el archivo")
     };
     let Ok(_) = fs::copy(
         "tests/data/commands/add/dir/testfile2.txt",
-        &(path.to_owned() + "/dir/testfile2.txt"),
+        path.to_owned() + "/dir/testfile2.txt",
     ) else {
         panic!("No se pudo copiar el archivo")
     };
@@ -60,24 +63,28 @@ pub fn create_test_scene_2(path: &str) {
     assert!(Path::new(&(path.to_owned() + "/dir/testfile2.txt")).exists())
 }
 
+#[allow(dead_code)]
 pub fn change_testfile_content(path: &str) {
     let mut file = File::create(path.to_owned() + "/testfile.txt").unwrap();
     file.write_all(b"Cambio!").unwrap();
 }
 
+#[allow(dead_code)]
 pub fn change_dir_testfile1_content(path: &str) {
     let mut file = File::create(path.to_owned() + "/dir/testfile1.txt").unwrap();
     file.write_all(b"Cambio!").unwrap();
 }
 
+#[allow(dead_code)]
 pub fn change_dir_testfile1_content_and_remove_dir_testfile2(path: &str) {
     change_dir_testfile1_content(path);
 
-    _ = fs::remove_file(path.to_string() + "/dir/testfile2.txt").unwrap();
+    fs::remove_file(path.to_string() + "/dir/testfile2.txt").unwrap();
 }
 
+#[allow(dead_code)]
 pub fn create_base_scene(path: &str) {
-    _ = fs::remove_dir_all(format!("{}", path));
+    _ = fs::remove_dir_all(path);
     let Ok(_) = fs::create_dir_all(path.clone()) else {
         panic!("No se pudo crear el directorio")
     };
@@ -95,6 +102,7 @@ pub fn create_base_scene(path: &str) {
     );
 }
 
+#[allow(dead_code)]
 pub fn create_test_scene_4(path: &str) {
     create_test_scene_2(path);
 
@@ -108,18 +116,21 @@ pub fn create_test_scene_4(path: &str) {
     file.write_all(b"testfile!").unwrap();
 }
 
+#[allow(dead_code)]
 pub fn change_test_scene_4(path: &str) {
     let mut file = File::create(path.to_owned() + "/testfile.txt").unwrap();
     file.write_all(b"Cambio!").unwrap();
-    _ = fs::remove_file(path.to_string() + "/dir/testfile3.txt").unwrap();
+    fs::remove_file(path.to_string() + "/dir/testfile3.txt").unwrap();
 }
 
+#[allow(dead_code)]
 pub fn change_test_scene_4_part_2(path: &str) {
     let mut file = File::create(path.to_owned() + "/testfile.txt").unwrap();
     file.write_all(b"Cambio2!").unwrap();
-    _ = fs::remove_file(path.to_string() + "/dir/testfile2.txt").unwrap();
+    fs::remove_file(path.to_string() + "/dir/testfile2.txt").unwrap();
 }
 
+#[allow(dead_code)]
 pub fn create_test_scene_5(path: &str) {
     create_test_scene_2(path);
     let Ok(_) = fs::create_dir_all(path.to_owned() + "/dir/dir1/") else {
@@ -145,17 +156,20 @@ pub fn create_test_scene_5(path: &str) {
     file.write_all(b"file 6!").unwrap();
 }
 
+#[allow(dead_code)]
 pub fn create_test_scene_6(path: &str) {
     create_base_scene(path);
     let mut file = File::create(path.to_owned() + "/testfile.txt").unwrap();
-    write!(file, "{}", "line1\nline2\nline3").unwrap();
+    write!(file, "line1\nline2\nline3").unwrap();
 }
 
+#[allow(dead_code)]
 pub fn change_lines_scene6(path: &str, lines: &str) {
     let mut file = File::create(path.to_owned() + "/testfile.txt").unwrap();
     write!(file, "{}", lines).unwrap();
 }
 
+#[allow(dead_code)]
 pub fn create_test_scene_checkout(path: &str) {
     create_base_scene(path);
 }

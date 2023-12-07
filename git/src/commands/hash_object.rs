@@ -134,7 +134,7 @@ impl HashObject {
                 CommandError::FileNotFound(format!(
                     "Error intentando leer {}: {}",
                     file,
-                    error.to_string()
+                    error
                 ))
             })?;
             let object = Blob::new_from_content_and_path(content, file)?;

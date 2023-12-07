@@ -8,73 +8,53 @@ use crate::{
 
 use super::changes_types::ChangeType;
 
-pub struct CommitChanges;
+pub fn get_changes_insertions_and_deletions(
+    staging_area_changes: HashMap<String, String>,
+    db: &ObjectsDatabase,
+    logger: &mut Logger,
+    commit_tree: Option<Tree>,
+    changes_to_be_commited: &HashMap<String, ChangeType>,
+) -> Result<(usize, usize, usize), CommandError> {
+    let commit_tree = &commit_tree;
+    let mut insertions = 0;
+    let mut deletions = 0;
+    let mut files_changed = 0;
+    for (path, change_type) in changes_to_be_commited.iter() {
+        logger.log(&format!("Checking for insertions/deletions: {}", path));
+        let hash = staging_area_changes.get(path);
+        match change_type {
+            ChangeType::Added | ChangeType::Renamed => {
+                logger.log(&format!("added: {}", path));
 
-impl CommitChanges {
-    pub fn new(
-        staging_area_changes: HashMap<String, String>,
-        db: &ObjectsDatabase,
-        logger: &mut Logger,
-        commit_tree: Option<Tree>,
-        changes_to_be_commited: &HashMap<String, ChangeType>,
-    ) -> Result<(usize, usize, usize), CommandError> {
-        let (files_changed, insertions, deletions) = Self::get_changes_insertions_deletions(
-            staging_area_changes,
-            db,
-            logger,
-            &commit_tree,
-            changes_to_be_commited,
-        )?;
-        Ok((files_changed, insertions, deletions))
-    }
-
-    fn get_changes_insertions_deletions(
-        staging_area_changes: HashMap<String, String>,
-        db: &ObjectsDatabase,
-        logger: &mut Logger,
-        commit_tree: &Option<Tree>,
-        changes_to_be_commited: &HashMap<String, ChangeType>,
-    ) -> Result<(usize, usize, usize), CommandError> {
-        let mut insertions = 0;
-        let mut deletions = 0;
-        let mut files_changed = 0;
-        for (path, change_type) in changes_to_be_commited.iter() {
-            logger.log(&format!("Checking for insertions/deletions: {}", path));
-            let hash = staging_area_changes.get(path);
-            match change_type {
-                ChangeType::Added | ChangeType::Renamed => {
-                    logger.log(&format!("added: {}", path));
-
-                    if let Some(hash) = hash {
-                        insertions += count_insertions(&hash, logger, db)?;
-                        files_changed += 1;
-                    }
+                if let Some(hash) = hash {
+                    insertions += count_insertions(hash, logger, db)?;
+                    files_changed += 1;
                 }
-                ChangeType::Deleted => {
-                    if let Some(mut tree) = commit_tree.to_owned() {
-                        logger.log(&format!("deleted: {}", path));
-
-                        deletions += count_deletions(path, logger, &mut tree)?;
-                        files_changed += 1;
-                    }
-                }
-                ChangeType::Modified => {
-                    logger.log(&format!("modified: {}", path));
-
-                    if let (Some(hash), Some(mut tree)) = (hash, commit_tree.to_owned()) {
-                        let (inserted, deleted) =
-                            count_modifications(path, hash, logger, &mut tree, db)?;
-                        files_changed += 1;
-                        insertions += inserted;
-                        deletions += deleted;
-                    }
-                }
-                _ => {}
             }
-        }
+            ChangeType::Deleted => {
+                if let Some(mut tree) = commit_tree.to_owned() {
+                    logger.log(&format!("deleted: {}", path));
 
-        Ok((files_changed, insertions, deletions))
+                    deletions += count_deletions(path, logger, &mut tree)?;
+                    files_changed += 1;
+                }
+            }
+            ChangeType::Modified => {
+                logger.log(&format!("modified: {}", path));
+
+                if let (Some(hash), Some(mut tree)) = (hash, commit_tree.to_owned()) {
+                    let (inserted, deleted) =
+                        count_modifications(path, hash, logger, &mut tree, db)?;
+                    files_changed += 1;
+                    insertions += inserted;
+                    deletions += deleted;
+                }
+            }
+            _ => {}
+        }
     }
+
+    Ok((files_changed, insertions, deletions))
 }
 
 fn count_insertions(
@@ -127,7 +107,7 @@ fn read_content(
 
 fn read_blob_content(
     path: &str,
-    logger: &mut Logger,
+    _logger: &mut Logger,
     commit_tree: &mut Tree,
 ) -> Result<Vec<String>, CommandError> {
     let Some(mut object) = commit_tree.get_object_from_path(path) else {
@@ -143,7 +123,7 @@ fn read_blob_content(
     Ok(content_vec)
 }
 
-fn compare_content(file1: Vec<String>, file2: Vec<String>, logger: &mut Logger) -> (usize, usize) {
+fn compare_content(file1: Vec<String>, file2: Vec<String>, _logger: &mut Logger) -> (usize, usize) {
     let mut insertions: usize = 0;
     let mut deletions: usize = 0;
 
@@ -174,9 +154,7 @@ fn compare_content(file1: Vec<String>, file2: Vec<String>, logger: &mut Logger) 
                     deletions += file1_read.len();
                     file1_read = Vec::new();
                     file2_read = Vec::new();
-                } else if line1 != line2
-                    || (line1 == line2 && (!file1_read.is_empty() || !file2_read.is_empty()))
-                {
+                } else {
                     file1_read.push(line1.to_string());
                     file2_read.push(line2.to_string());
                 }

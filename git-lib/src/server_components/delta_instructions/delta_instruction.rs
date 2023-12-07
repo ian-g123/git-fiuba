@@ -7,7 +7,7 @@ use super::{copy_instruction::CopyInstruction, data_instruction::DataInstruction
 pub type DeltaInstruction = Box<dyn DeltaInstructionTrait>;
 
 pub trait DeltaInstructionTrait: std::fmt::Debug {
-    fn apply(&self, new_object: &mut dyn Write, base_object: &Vec<u8>) -> Result<(), CommandError>;
+    fn apply(&self, new_object: &mut dyn Write, _: &[u8]) -> Result<(), CommandError>;
     fn read_from(first_byte: u8, stream: &mut dyn Read) -> Result<DeltaInstruction, CommandError>
     where
         Self: Sized;

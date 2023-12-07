@@ -101,7 +101,7 @@ impl Checkout {
         if !self.checkout_or_update.is_empty() {
             repo.update_files_or_checkout(self.checkout_or_update.clone())?;
         } else if !self.new_branch.is_empty() {
-            repo.create_branch(&self.new_branch, None)?;
+            repo.create_branch_from_cmd_args(&self.new_branch)?;
             let name = self.new_branch[0].clone();
             repo.checkout(&name, true)?;
         } else {
@@ -127,7 +127,7 @@ mod tests {
         let args = ["".to_string()];
         match Checkout::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::Name),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -142,7 +142,7 @@ mod tests {
         let args = ["-no".to_string()];
         match Checkout::run_from("checkout", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::InvalidArguments),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -157,7 +157,7 @@ mod tests {
         let args = ["-b".to_string()];
         match Checkout::run_from("checkout", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::SwitchRequiresValue),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 }

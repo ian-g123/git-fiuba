@@ -158,7 +158,7 @@ mod tests {
         let args = ["".to_string()];
         match LsTree::run_from("commit", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::Name),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 
@@ -173,7 +173,7 @@ mod tests {
         let args = ["-no".to_string()];
         match LsTree::run_from("ls-tree", &args, &mut stdin_mock, &mut stdout_mock) {
             Err(error) => assert_eq!(error, CommandError::InvalidArguments),
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
         }
     }
 }
