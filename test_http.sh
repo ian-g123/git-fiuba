@@ -19,6 +19,7 @@ echo "Run the server"
 cd integration_tests/test_http_data/server_files
 rm -rf repo_merge_conflict
 rm -rf repo_safe_merge
+rm tmp-curl-response
 unzip -qq repo_merge_conflict.zip -d repo_merge_conflict
 unzip -qq repo_safe_merge.zip -d repo_safe_merge
 ../../../target/debug/git-server &
@@ -28,12 +29,28 @@ sleep 1
 # Creating Pull Request
 echo "=========================="
 echo "Creating Pull Request"
-response=$(curl -L \
+curl -o tmp-curl-response -L \
   -X POST \
   http://127.1.0.0:8080/repos/repo_safe_merge/pulls \
-  -d '{"title":"Safe merge pull request","description":"My pull request description","sourceBranch":"rama","targetBranch":"master"}')
+  -d '{"title":"Safe merge pull request","description":"My pull request description","sourceBranch":"rama","targetBranch":"master"}'
 
-echo $response
+# Check response
+echo "=========================="
+echo "Check response"
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+response_content=$(cat tmp-curl-response)
+expected_content='{"id":1,"title":"Safe merge pull request","description":"My pull request description","sourceBranch":"rama","targetBranch":"master","status":"open"}'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
 
 # Check if the pull request was created
 echo "=========================="
@@ -61,6 +78,7 @@ echo "✅"
 
 rm -rf repo_merge_conflict
 rm -rf repo_safe_merge
+rm tmp-curl-response
 rm http-server-logs.log
 rm tcp-server-logs.log
 kill $server_process

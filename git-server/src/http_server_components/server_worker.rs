@@ -171,8 +171,13 @@ impl<'a> ServerWorker {
         self.log(&format!("Request info: {:?}", request_info));
         let mut sink = std::io::sink();
         let mut repo = self.get_repo(repo_path, &mut sink)?;
-        repo.create_pull_request(request_info)
+        let saved_pull_request = repo
+            .create_pull_request(request_info)
             .map_err(|e| HttpError::InternalServerError(e))?;
+        let response_body = serde_json::to_string(&saved_pull_request).unwrap();
+        self.send_response(&200, "OK", &HashMap::new(), &response_body)
+            .map_err(|e| HttpError::InternalServerError(e))?;
+
         Ok(())
     }
 

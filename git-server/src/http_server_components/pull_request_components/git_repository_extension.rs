@@ -12,9 +12,12 @@ pub trait GitRepositoryExtension {
     fn create_pull_request(
         &mut self,
         pull_request_info: PostPullRequest,
-    ) -> Result<u64, CommandError>;
+    ) -> Result<PostPullRequest, CommandError>;
 
-    fn save_pull_request(&self, pull_request_info: PostPullRequest) -> Result<u64, CommandError>;
+    fn save_pull_request(
+        &self,
+        pull_request_info: PostPullRequest,
+    ) -> Result<PostPullRequest, CommandError>;
     fn get_last_pull_request_id(&self) -> Result<u64, CommandError>;
     fn set_last_pull_request_id(&self, pull_request_id: u64) -> Result<(), CommandError>;
 }
@@ -23,7 +26,7 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
     fn create_pull_request(
         &mut self,
         pull_request_info: PostPullRequest,
-    ) -> Result<u64, CommandError> {
+    ) -> Result<PostPullRequest, CommandError> {
         let source_branch = &pull_request_info.source_branch;
         if !self.branch_exists(&source_branch) {
             return Err(CommandError::InvalidBranchName(source_branch.to_string()));
@@ -38,7 +41,7 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
     fn save_pull_request(
         &self,
         mut pull_request_info: PostPullRequest,
-    ) -> Result<u64, CommandError> {
+    ) -> Result<PostPullRequest, CommandError> {
         let last_pull_request_id = self.get_last_pull_request_id()?;
         let pull_request_id = last_pull_request_id + 1;
         let new_pull_request_path_str = join_paths!(
@@ -72,7 +75,7 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
             ))
         })?;
         self.set_last_pull_request_id(pull_request_id)?;
-        Ok(pull_request_id)
+        Ok(pull_request_info)
     }
 
     fn get_last_pull_request_id(&self) -> Result<u64, CommandError> {
