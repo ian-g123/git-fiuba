@@ -102,6 +102,10 @@ impl<'a> GitRepository<'a> {
         })
     }
 
+    pub fn get_git_path(&self) -> String {
+        self.git_path.clone()
+    }
+
     pub fn init(
         path: &str,
         branch_name: &str,
@@ -3313,7 +3317,7 @@ impl<'a> GitRepository<'a> {
     }
 
     /// Devuelve true si la rama pasada existe en el repositorio.
-    fn branch_exists(&mut self, branch: &str) -> bool {
+    pub fn branch_exists(&mut self, branch: &str) -> bool {
         if let Ok(locals) = self.local_branches_refs() {
             if locals.contains_key(branch) {
                 return true;

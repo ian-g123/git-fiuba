@@ -241,6 +241,9 @@ pub enum CommandError {
     Compression(String),
     // Error en la extracción
     Extraction(String),
+
+    // API
+    InvalidHTTPRequest,
 }
 
 impl Error for CommandError {}
@@ -581,6 +584,7 @@ impl fmt::Display for CommandError {
             CommandError::UnsuportedProtocol(e) => write!(f, "Unsuported protocol: {}", e),
             CommandError::Compression(e) => write!(f, "Error en la compresión: {}", e),
             CommandError::Extraction(e) => write!(f, "Error en la extracción: {}", e),
+            CommandError::InvalidHTTPRequest => write!(f, "Invalid HTPP Request"),
         }
     }
 }
