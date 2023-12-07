@@ -4,7 +4,7 @@ use super::pull_request_status::{default_status, PullRequestStatus};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PostPullRequest {
+pub struct PullRequest {
     pub id: Option<u64>,
     pub title: String,
     pub description: String,

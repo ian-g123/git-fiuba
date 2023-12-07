@@ -26,17 +26,62 @@ unzip -qq repo_safe_merge.zip -d repo_safe_merge
 server_process=$!
 sleep 1
 
+
+# Get pull requests
+echo "=========================="
+echo "Get pull requests"
+curl -s -o tmp-curl-response -L \
+  -X GET \
+  http://127.1.0.0:8080/repos/repo_safe_merge/pulls
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+response_content=$(cat tmp-curl-response)
+expected_content='[]'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+# Get pull request
+echo "=========================="
+echo "Get pull request"
+curl -s -o tmp-curl-response -L \
+  -X GET \
+  http://127.1.0.0:8080/repos/repo_safe_merge/pulls/1
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+response_content=$(cat tmp-curl-response)
+expected_content='Not Found'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+
 # Creating Pull Request
 echo "=========================="
 echo "Creating Pull Request"
-curl -o tmp-curl-response -L \
+curl -s -o tmp-curl-response -L \
   -X POST \
   http://127.1.0.0:8080/repos/repo_safe_merge/pulls \
   -d '{"title":"Safe merge pull request","description":"My pull request description","sourceBranch":"rama","targetBranch":"master"}'
 
-# Check response
-echo "=========================="
-echo "Check response"
 if [ ! -f tmp-curl-response ]; then
     echo "❌ Failed. File not found"
     kill $server_process
@@ -75,6 +120,136 @@ if [ "$pull_request_content" != "$expected_content" ]; then
     exit 1
 fi
 echo "✅"
+rm tmp-curl-response
+
+
+# Get pull requests
+echo "=========================="
+echo "Get pull requests"
+curl -s -o tmp-curl-response -L \
+  -X GET \
+  http://127.1.0.0:8080/repos/repo_safe_merge/pulls
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+response_content=$(cat tmp-curl-response)
+expected_content='[{"id":1,"title":"Safe merge pull request","description":"My pull request description","sourceBranch":"rama","targetBranch":"master","status":"open"}]'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+# Get pull request
+echo "=========================="
+echo "Get pull request"
+curl -s -o tmp-curl-response -L \
+  -X GET \
+  http://127.1.0.0:8080/repos/repo_safe_merge/pulls/1
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+response_content=$(cat tmp-curl-response)
+expected_content='{"id":1,"title":"Safe merge pull request","description":"My pull request description","sourceBranch":"rama","targetBranch":"master","status":"open"}'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+# Creating Pull Request
+echo "=========================="
+echo "Creating Pull Request"
+curl -s -o tmp-curl-response -L \
+  -X POST \
+  http://127.1.0.0:8080/repos/repo_safe_merge/pulls \
+  -d '{"title":"Inverted Safe merge pull request","description":"My second pull request description","sourceBranch":"master","targetBranch":"rama"}'
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+response_content=$(cat tmp-curl-response)
+expected_content='{"id":2,"title":"Inverted Safe merge pull request","description":"My second pull request description","sourceBranch":"master","targetBranch":"rama","status":"open"}'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+
+# Check if the pull request was created
+echo "=========================="
+echo "Check if the pull request was created"
+if [ ! -f repo_safe_merge/pull_requests/2.json ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+pull_request_content=$(cat repo_safe_merge/pull_requests/2.json)
+expected_content='{"id":2,"title":"Inverted Safe merge pull request","description":"My second pull request description","sourceBranch":"master","targetBranch":"rama","status":"open"}'
+
+# Get pull requests
+echo "=========================="
+echo "Get pull requests"
+curl -s -o tmp-curl-response -L \
+  -X GET \
+  http://127.1.0.0:8080/repos/repo_safe_merge/pulls
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+response_content=$(cat tmp-curl-response)
+expected_content='[{"id":1,"title":"Safe merge pull request","description":"My pull request description","sourceBranch":"rama","targetBranch":"master","status":"open"},{"id":2,"title":"Inverted Safe merge pull request","description":"My second pull request description","sourceBranch":"master","targetBranch":"rama","status":"open"}]'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+# Get inexistant pull request
+echo "=========================="
+echo "Get inexistant pull request"
+curl -s -o tmp-curl-response -L \
+  -X GET \
+  http://127.1.0.0:8080/repos/repo_safe_merge/pulls/3
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+response_content=$(cat tmp-curl-response)
+expected_content='Not Found'
+
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
 
 rm -rf repo_merge_conflict
 rm -rf repo_safe_merge

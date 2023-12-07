@@ -1,7 +1,7 @@
-use std::{collections::HashMap, io::Write, net::TcpStream};
+use std::{collections::HashMap, io::Write, net::TcpStream, str::FromStr};
 
 use super::{
-    http_methods::post_pull_request::PostPullRequest,
+    http_methods::post_pull_request::PullRequest,
     pull_request_components::git_repository_extension::GitRepositoryExtension,
 };
 use git_lib::{
@@ -167,7 +167,7 @@ impl<'a> ServerWorker {
         }
 
         let mut de = serde_json::Deserializer::from_reader(&mut self.socket);
-        let request_info = PostPullRequest::deserialize(&mut de).unwrap();
+        let request_info = PullRequest::deserialize(&mut de).unwrap();
         self.log(&format!("Request info: {:?}", request_info));
         let mut sink = std::io::sink();
         let mut repo = self.get_repo(repo_path, &mut sink)?;
@@ -193,8 +193,36 @@ impl<'a> ServerWorker {
         Ok(repo)
     }
 
-    fn handle_get(&self, uri: &str, headers: HashMap<String, String>) -> Result<(), HttpError> {
-        todo!()
+    fn handle_get(
+        &mut self,
+        uri: &str,
+        _headers: HashMap<String, String>,
+    ) -> Result<(), HttpError> {
+        self.log("Handling GET request");
+        let uri = uri
+            .strip_prefix("/repos/")
+            .ok_or(HttpError::BadRequest("Resources not available".to_string()))?;
+        let mut uri_rest = uri.split('/');
+        let repo_path = uri_rest
+            .next()
+            .ok_or(HttpError::BadRequest("No repo specified".to_string()))?;
+        let object_name = uri_rest
+            .next()
+            .ok_or(HttpError::BadRequest("Should end with pulls".to_string()))?;
+        let id_opt = uri_rest.next();
+        let commits_opt = uri_rest.next();
+        if object_name != "pulls" {
+            return Err(HttpError::BadRequest("Should end with pulls".to_string()));
+        }
+
+        match (id_opt, commits_opt) {
+            (None, None) => self.handle_get_pull_requests(repo_path),
+            (Some(id), None) => self.handle_get_pull_request(repo_path, u64::from_str(id).unwrap()),
+            (Some(id), Some("commits")) => {
+                self.handle_get_pull_request_commits(repo_path, u64::from_str(id).unwrap())
+            }
+            _ => Err(HttpError::BadRequest("Invalid uri".to_string())),
+        }
     }
 
     fn handle_put(&self, uri: &str, headers: HashMap<String, String>) -> Result<(), HttpError> {
@@ -215,26 +243,55 @@ impl<'a> ServerWorker {
         )?;
         Ok(())
     }
-}
 
-fn get_headers_and_body(
-    http_request: &Vec<String>,
-) -> Result<(HashMap<String, String>, String), CommandError> {
-    let mut headers = HashMap::<String, String>::new();
-    let mut peekable = http_request.iter().skip(1).peekable();
-    while let Some(line) = peekable.next() {
-        if peekable.peek().is_none() {
-            return Ok((headers, line.to_string()));
-        }
-        let (key, value) = line
-            .split_once(':')
-            .ok_or(CommandError::InvalidHTTPRequest(format!(
-                "Invalid header line: {}",
-                line
-            )))?;
-        headers.insert(key.trim().to_string(), value.trim().to_string());
+    fn handle_get_pull_requests(&mut self, repo_path: &str) -> Result<(), HttpError> {
+        let mut sink = std::io::sink();
+        let repo: GitRepository<'_> = self.get_repo(repo_path, &mut sink)?;
+        let pull_requests = repo
+            .get_pull_requests()
+            .map_err(|e| HttpError::InternalServerError(e))?;
+        let response_body = serde_json::to_string(&pull_requests).unwrap();
+        self.send_response(&200, "OK", &HashMap::new(), &response_body)
+            .map_err(|e| HttpError::InternalServerError(e))
     }
-    Err(CommandError::InvalidHTTPRequest(
-        "No body found".to_string(),
-    ))
+
+    fn handle_get_pull_request(
+        &mut self,
+        repo_path: &str,
+        pull_request_id: u64,
+    ) -> Result<(), HttpError> {
+        let mut sink = std::io::sink();
+        let repo = self.get_repo(repo_path, &mut sink)?;
+        let pull_request = repo
+            .get_pull_request(pull_request_id)
+            .map_err(|e| HttpError::InternalServerError(e))?;
+        match pull_request {
+            None => Err(HttpError::NotFound),
+            Some(pull_request) => {
+                let response_body = serde_json::to_string(&pull_request).unwrap();
+                self.send_response(&200, "OK", &HashMap::new(), &response_body)
+                    .map_err(|e| HttpError::InternalServerError(e))
+            }
+        }
+    }
+
+    fn handle_get_pull_request_commits(
+        &mut self,
+        repo_path: &str,
+        pull_request_id: u64,
+    ) -> Result<(), HttpError> {
+        let mut sink = std::io::sink();
+        let repo = self.get_repo(repo_path, &mut sink)?;
+        let pull_request = repo
+            .get_pull_request_commits(pull_request_id)
+            .map_err(|e| HttpError::InternalServerError(e))?;
+        match pull_request {
+            None => Err(HttpError::NotFound),
+            Some(pull_request) => {
+                let response_body = serde_json::to_string(&pull_request).unwrap();
+                self.send_response(&200, "OK", &HashMap::new(), &response_body)
+                    .map_err(|e| HttpError::InternalServerError(e))
+            }
+        }
+    }
 }
