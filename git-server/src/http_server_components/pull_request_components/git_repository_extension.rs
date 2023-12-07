@@ -1,11 +1,12 @@
 use std::{
-    fs::{self, File},
+    fs::{self, File, OpenOptions},
     io::{Read, Write},
+    path::Path,
 };
 
 use git_lib::{command_errors::CommandError, git_repository::GitRepository, join_paths};
 
-use super::post_pull_request::PostPullRequest;
+use crate::http_server_components::http_methods::post_pull_request::PostPullRequest;
 
 pub trait GitRepositoryExtension {
     fn create_pull_request(
@@ -34,10 +35,13 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
         self.save_pull_request(pull_request_info)
     }
 
-    fn save_pull_request(&self, pull_request_info: PostPullRequest) -> Result<u64, CommandError> {
+    fn save_pull_request(
+        &self,
+        mut pull_request_info: PostPullRequest,
+    ) -> Result<u64, CommandError> {
         let last_pull_request_id = self.get_last_pull_request_id()?;
         let pull_request_id = last_pull_request_id + 1;
-        let new_pull_request_path = join_paths!(
+        let new_pull_request_path_str = join_paths!(
             self.get_git_path(),
             "pull_requests",
             format!("{}.json", pull_request_id)
@@ -45,12 +49,22 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
         .ok_or(CommandError::FileOpenError(
             "Error creando el path del nuevo pull request".to_string(),
         ))?;
-        let new_pull_request = fs::File::create(new_pull_request_path).map_err(|error| {
+        let new_pull_request_path = Path::new(&new_pull_request_path_str);
+        if let Some(parent_dir) = new_pull_request_path.parent() {
+            fs::create_dir_all(parent_dir).map_err(|error| {
+                CommandError::FileOpenError(format!(
+                    "Error creando el directorio para el nuevo pull request: {}",
+                    error.to_string()
+                ))
+            })?;
+        }
+        let new_pull_request = fs::File::create(new_pull_request_path_str).map_err(|error| {
             CommandError::FileOpenError(format!(
                 "Error creando el archivo del nuevo pull request: {}",
                 error.to_string()
             ))
         })?;
+        pull_request_info.id = Some(pull_request_id);
         serde_json::to_writer(new_pull_request, &pull_request_info).map_err(|error| {
             CommandError::FileOpenError(format!(
                 "Error escribiendo el archivo del nuevo pull request: {}",
@@ -65,6 +79,9 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
         let path = join_paths!(self.get_git_path(), "pull_requests/LAST_PULL_REQUEST_ID").ok_or(
             CommandError::FileOpenError("Error creando el path del nuevo pull request".to_string()),
         )?;
+        if !std::path::Path::new(&path).exists() {
+            return Ok(0);
+        }
         let mut id_file = File::open(path).map_err(|error| {
             CommandError::FileOpenError(format!(
                 "Error creando el archivo del nuevo pull request: {}",
@@ -85,12 +102,16 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
         let path = join_paths!(self.get_git_path(), "pull_requests/LAST_PULL_REQUEST_ID").ok_or(
             CommandError::FileOpenError("Error creando el path del nuevo pull request".to_string()),
         )?;
-        let mut id_file = fs::File::create(path).map_err(|error| {
-            CommandError::FileOpenError(format!(
-                "Error abriendo el archivo LAST_PULL_REQUEST_ID: {}",
-                error.to_string()
-            ))
-        })?;
+        let mut id_file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open(path.clone())
+            .map_err(|error| {
+                CommandError::FileOpenError(format!(
+                    "Error creando el archivo del nuevo pull request: {}",
+                    error.to_string()
+                ))
+            })?;
         id_file
             .write_all(&pull_request_id.to_be_bytes())
             .map_err(|error| {
