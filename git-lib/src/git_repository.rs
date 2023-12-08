@@ -4691,7 +4691,7 @@ fn get_tree_from_commit(
 ) -> Result<Tree, CommandError> {
     let mut object = db.read_object(commit_hash, logger)?;
     let tree = if let Some(commit) = object.as_mut_commit() {
-        let tree_hash = commit.get_tree_hash_string()?;
+        let tree_hash = commit.get_tree_hash_string();
         let mut tree_object = db.read_object(&tree_hash, logger)?;
         if let Some(tree) = tree_object.as_mut_tree() {
             tree.to_owned()

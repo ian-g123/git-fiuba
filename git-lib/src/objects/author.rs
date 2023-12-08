@@ -52,6 +52,14 @@ impl Author {
         email.pop();
         Ok(Self { name, email })
     }
+
+    pub fn get_name(&self) -> String {
+        self.name.clone()
+    }
+
+    pub fn get_email(&self) -> String {
+        self.email.clone()
+    }
 }
 
 impl fmt::Display for Author {

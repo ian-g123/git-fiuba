@@ -438,7 +438,7 @@ fn check_commits_between(
             let commit_object = git_object_trait.as_mut_commit().ok_or(
                 CommandError::CheckingCommitsBetweenError("No se pudo leer el commit".to_string()),
             )?;
-            let tree_hash = commit_object.get_tree_hash_string()?;
+            let tree_hash = commit_object.get_tree_hash_string();
             if !contains_all_elements(objects_map, &tree_hash)? {
                 return Ok(false);
             }

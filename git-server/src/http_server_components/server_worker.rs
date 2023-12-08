@@ -1,8 +1,11 @@
 use std::{collections::HashMap, io::Write, net::TcpStream, str::FromStr};
 
 use super::{
-    http_methods::post_pull_request::PullRequest,
-    pull_request_components::git_repository_extension::GitRepositoryExtension,
+    http_methods::pull_request::PullRequest,
+    pull_request_components::{
+        git_repository_extension::GitRepositoryExtension,
+        simplified_commit_object::SimplifiedCommitObject,
+    },
 };
 use git_lib::{
     command_errors::CommandError, git_repository::GitRepository, join_paths,
@@ -281,14 +284,18 @@ impl<'a> ServerWorker {
         pull_request_id: u64,
     ) -> Result<(), HttpError> {
         let mut sink = std::io::sink();
-        let repo = self.get_repo(repo_path, &mut sink)?;
-        let pull_request = repo
+        let mut repo = self.get_repo(repo_path, &mut sink)?;
+        let commits = repo
             .get_pull_request_commits(pull_request_id)
             .map_err(|e| HttpError::InternalServerError(e))?;
-        match pull_request {
+        match commits {
             None => Err(HttpError::NotFound),
-            Some(pull_request) => {
-                let response_body = serde_json::to_string(&pull_request).unwrap();
+            Some(commits) => {
+                let commits = commits
+                    .into_iter()
+                    .map(|commit| SimplifiedCommitObject::from_commit(commit))
+                    .collect::<Vec<SimplifiedCommitObject>>();
+                let response_body = serde_json::to_string(&commits).unwrap();
                 self.send_response(&200, "OK", &HashMap::new(), &response_body)
                     .map_err(|e| HttpError::InternalServerError(e))
             }

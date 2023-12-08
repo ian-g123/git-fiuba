@@ -17,10 +17,7 @@ fn test() {
         .db()
         .unwrap()
         .to_owned()
-        .read_object(
-            &commit.get_tree_hash_string().unwrap(),
-            &mut Logger::new_dummy(),
-        )
+        .read_object(&commit.get_tree_hash_string(), &mut Logger::new_dummy())
         .unwrap()
         .as_mut_tree()
         .unwrap()
