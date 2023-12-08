@@ -2225,6 +2225,13 @@ impl<'a> GitRepository<'a> {
         if common.get_hash()? == commit_head.get_hash()? {
             return self.merge_fast_forward(destin_commit);
         }
+        if common.get_hash()? == commit_destin.get_hash()? {
+            self.log("Already up to date.");
+            self.output
+                .write(b"Already up to date.\n")
+                .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
+            return Ok(());
+        }
 
         self.true_merge(
             &mut common,
