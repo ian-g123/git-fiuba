@@ -167,7 +167,6 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
             )?),
         };
         pull_request_info.has_merge_conflicts = has_conflicts;
-        println!("Has conflicts : {:?}", has_conflicts);
         self.log(&format!("Has conflicts: {:?}", has_conflicts));
         Ok(pull_request_info.to_owned())
     }
