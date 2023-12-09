@@ -13,6 +13,7 @@ use crate::{
     },
 };
 use std::{
+    cmp::Ordering,
     collections::HashMap,
     fs::{self, File},
     io::{Cursor, Read, Write},
@@ -685,3 +686,23 @@ fn timestamp_to_string(timestamp: i64) -> String {
 
     formatted_date
 }
+
+impl PartialOrd for CommitObject {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(other.timestamp.cmp(&self.timestamp))
+    }
+}
+
+impl Ord for CommitObject {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other.timestamp.cmp(&self.timestamp)
+    }
+}
+
+impl PartialEq for CommitObject {
+    fn eq(&self, other: &Self) -> bool {
+        self.timestamp == other.timestamp
+    }
+}
+
+impl Eq for CommitObject {}
