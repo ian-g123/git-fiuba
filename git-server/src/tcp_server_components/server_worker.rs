@@ -555,7 +555,8 @@ fn update_pull_request(
         if parents.contains(&source_commit_hash) && parents.contains(&target_commit_hash) {
             pr.set_state(PullRequestState::Closed);
             pr.set_merged(true);
-            let content_type = repo.get_pull_request_format(pr.id)?;
+            let id = pr.id.ok_or(CommandError::PullRequestUnknownID)?;
+            let content_type = repo.get_pull_request_format(id)?;
             repo.save_pull_request(&mut pr, content_type)?;
         }
     }

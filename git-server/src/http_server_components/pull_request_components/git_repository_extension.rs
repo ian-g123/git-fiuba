@@ -1,8 +1,9 @@
 use std::{
     collections::HashMap,
+    ffi::OsStr,
     fs::{self, File, OpenOptions},
     io::{Read, Write},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use git_lib::{
@@ -15,7 +16,7 @@ use crate::http_server_components::http_methods::{
     pull_request_update::PullRequestUpdate,
 };
 
-use super::content_type::{self, ContentType};
+use super::content_type::ContentType;
 
 pub trait GitRepositoryExtension {
     fn create_pull_request(
@@ -71,6 +72,7 @@ pub trait GitRepositoryExtension {
     ) -> Result<(), CommandError>;
 
     fn get_pull_requests_path(&self) -> Result<String, CommandError>;
+    fn get_pull_request_path(&self, id: u64) -> Result<Option<String>, CommandError>;
     fn get_server_files_path(&self) -> Result<String, CommandError>;
     fn update_pull_request(
         &mut self,
@@ -79,7 +81,7 @@ pub trait GitRepositoryExtension {
         content_type: ContentType,
     ) -> Result<Option<PullRequest>, CommandError>;
 
-    fn get_pull_request_format(&mut self, id: Option<u64>) -> Result<ContentType, CommandError>;
+    fn get_pull_request_format(&mut self, id: u64) -> Result<ContentType, CommandError>;
 }
 
 impl<'a> GitRepositoryExtension for GitRepository<'a> {
@@ -238,14 +240,8 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
                 ))
             })?;
             let pull_request_path = pull_request_file.path();
-            let pull_request_file = File::open(pull_request_path).map_err(|error| {
-                CommandError::FileOpenError(format!(
-                    "Error leyendo el directorio de pull requests: {}",
-                    error.to_string()
-                ))
-            })?;
 
-            let mut pull_request = read_pull_request_from_file(pull_request_file)?;
+            let mut pull_request = read_pull_request_from_path(&pull_request_path)?;
             let has_conflicts =
                 self.has_merge_conflicts(&pull_request.source_branch, &pull_request.target_branch)?;
             pull_request.has_merge_conflicts = Some(has_conflicts);
@@ -278,25 +274,11 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
         &mut self,
         pull_request_id: u64,
     ) -> Result<Option<PullRequest>, CommandError> {
-        // cambiar: content_type.get_extension()
-        let pull_requests_path_str = join_paths!(
-            self.get_pull_requests_path()?,
-            format!("{}.json", pull_request_id)
-        )
-        .ok_or(CommandError::FileOpenError(
-            "Error creando el path del nuevo pull request".to_string(),
-        ))?;
-        let pull_request_path = Path::new(&pull_requests_path_str);
-        if !pull_request_path.exists() {
+        let Some(pull_request_path) = self.get_pull_request_path(pull_request_id)? else {
             return Ok(None);
-        }
-        let pull_request_file = File::open(pull_request_path).map_err(|error| {
-            CommandError::FileOpenError(format!(
-                "Error leyendo el directorio de pull requests: {}",
-                error.to_string()
-            ))
-        })?;
-        let mut pull_request = read_pull_request_from_file(pull_request_file)?;
+        };
+        let pull_request_path = PathBuf::from(pull_request_path);
+        let mut pull_request = read_pull_request_from_path(&pull_request_path)?;
         let has_conflicts = match pull_request.merged {
             Some(true) => None,
             _ => Some(
@@ -506,27 +488,62 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
         )?))
     }
 
-    fn get_pull_request_format(
-        &mut self,
-        id_opt: Option<u64>,
-    ) -> Result<ContentType, CommandError> {
-        let Some(id) = id_opt else {
-            return Err(CommandError::PullRequestUnknownID);
-        };
-        // cambiar
-        return Ok(ContentType::Json);
-        /* if self.get_pull_request(id, ContentType::Json)?.is_some() {
+    fn get_pull_request_path(&self, id: u64) -> Result<Option<String>, CommandError> {
+        let path_json = join_paths!(self.get_pull_requests_path()?, format!("{}.json", id)).ok_or(
+            CommandError::FileOpenError("Error creando el path del nuevo pull request".to_string()),
+        )?;
+        let path_plain = join_paths!(self.get_pull_requests_path()?, format!("{}.txt", id)).ok_or(
+            CommandError::FileOpenError("Error creando el path del nuevo pull request".to_string()),
+        )?;
+        if Path::new(&path_json).exists() {
+            return Ok(Some(path_json));
+        }
+        if Path::new(&path_plain).exists() {
+            return Ok(Some(path_plain));
+        }
+        Ok(None)
+    }
+
+    fn get_pull_request_format(&mut self, id: u64) -> Result<ContentType, CommandError> {
+        let path_json = join_paths!(self.get_pull_requests_path()?, format!("{}.json", id)).ok_or(
+            CommandError::FileOpenError("Error creando el path del nuevo pull request".to_string()),
+        )?;
+        let path_plain = join_paths!(self.get_pull_requests_path()?, format!("{}.txt", id)).ok_or(
+            CommandError::FileOpenError("Error creando el path del nuevo pull request".to_string()),
+        )?;
+        if Path::new(&path_json).exists() {
             return Ok(ContentType::Json);
         }
-        if self.get_pull_request(id, ContentType::Plain)?.is_some() {
+        if Path::new(&path_plain).exists() {
             return Ok(ContentType::Plain);
-        } */
-        //Err(CommandError::PullRequestUnknownID)
+        }
+        Err(CommandError::InvalidContentType)
     }
 }
 
-fn read_pull_request_from_file(mut pull_request_file: File) -> Result<PullRequest, CommandError> {
+fn read_pull_request_from_path(
+    mut pull_request_path: &PathBuf,
+) -> Result<PullRequest, CommandError> {
     let mut pull_request_content = String::new();
+    let content_type = match get_extension(pull_request_path) {
+        Some(extension) => {
+            match extension {
+                "txt" => ContentType::Plain,
+                //tirar error
+                _ => ContentType::Json, //"json" => ContentType::Json,
+            }
+        }
+        None => {
+            // tirar error
+            ContentType::Json
+        }
+    };
+    let mut pull_request_file = File::open(pull_request_path).map_err(|error| {
+        CommandError::FileOpenError(format!(
+            "Error leyendo el directorio de pull requests: {}",
+            error.to_string()
+        ))
+    })?;
     pull_request_file
         .read_to_string(&mut pull_request_content)
         .map_err(|error| {
@@ -535,9 +552,7 @@ fn read_pull_request_from_file(mut pull_request_file: File) -> Result<PullReques
                 error.to_string()
             ))
         })?;
-    // cambiar
 
-    let content_type = ContentType::Json;
     let pull_request: PullRequest = content_type.pull_request_from_string(pull_request_content)?;
     Ok(pull_request)
 }
@@ -565,4 +580,10 @@ fn remove_parents(
         read_commits.remove(&parent_hash);
         commits_to_read.remove(&parent_hash);
     }
+}
+
+fn get_extension(path: &PathBuf) -> Option<&str> {
+    let path = Path::new(path);
+
+    path.extension().and_then(|ext| ext.to_str())
 }
