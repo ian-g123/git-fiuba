@@ -409,7 +409,10 @@ cd -
 
 
 ###########################################################
-# Pull Request with merge conflict
+# Pull Request with merge conflict and resolve through API
+echo "############################################################"
+echo "# Pull Request with merge conflict and resolve through API #"
+echo "############################################################"
 echo "=========================="
 echo "Creating Pull Request with merge conflict"
 curl -s -o tmp-curl-response -L \
@@ -423,6 +426,16 @@ if [ ! -f tmp-curl-response ]; then
     exit 1
 fi
 
+response_content=$(cat tmp-curl-response)
+expected_content='{"id":1,"title":"Merge conflict 2 pull request","description":"My pull request description","sourceBranch":"rama","targetBranch":"master","state":"open","hasMergeConflicts":true,"merged":false}'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
 
 # Fail to merge pull request cause there are merge conflicts
 echo "=========================="
@@ -532,6 +545,137 @@ fi
 echo "✅"
 
 
+
+###########################################################
+# Pull Request with merge conflict and resolved through push
+echo "#############################################################"
+echo "# Pull Request with merge conflict and resolved through push #"
+echo "#############################################################"
+echo "=========================="
+echo "Creating Pull Request with merge conflict"
+curl -s -o tmp-curl-response -L \
+  -X POST \
+  http://127.1.0.0:8080/repos/repo_merge_conflict/pulls \
+  -d '{"title":"Merge conflict resolved through push","description":"My pull request description","sourceBranch":"rama","targetBranch":"master"}'
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+
+response_content=$(cat tmp-curl-response)
+expected_content='{"id":1,"title":"Merge conflict resolved through push","description":"My pull request description","sourceBranch":"rama","targetBranch":"master","state":"open","hasMergeConflicts":true,"merged":false}'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+# Fail to merge pull request cause there are merge conflicts
+echo "=========================="
+echo "Fail to merge pull request cause there are merge conflicts"
+curl -s -o tmp-curl-response -L \
+  -X PUT \
+  http://127.1.0.0:8080/repos/repo_merge_conflict/pulls/1/merge
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+response_content=$(cat tmp-curl-response)
+expected_content='Merge conflict! Error: There are conflicts in the working directory'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+# Resolve merge conflicts by the client
+cd ../client_files
+rm -rf repo_merge_conflict
+../../../target/debug/git clone git://127.1.0.0:9418/repo_merge_conflict
+cd repo_merge_conflict
+
+sleep 1
+
+echo "Linea 1
+Linea 2
+Linea 3" > file
+../../../../target/debug/git add .
+../../../../target/debug/git commit -m "ResoluciónConflictos"
+../../../../target/debug/git push
+
+sleep 1
+
+# Checking if pull request conflicts where resolved
+echo "=========================="
+echo "Checking if pull request conflicts where resolved"
+curl -s -o tmp-curl-response -L \
+  -X GET \
+  http://127.1.0.0:8080/repos/repo_merge_conflict/pulls/1
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+response_content=$(cat tmp-curl-response)
+expected_content='{"id":1,"title":"Merge conflict resolved through push","description":"My pull request description","sourceBranch":"rama","targetBranch":"master","state":"open","hasMergeConflicts":false,"merged":false}'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+../../../../target/debug/git merge rama
+../../../../target/debug/git push
+
+sleep 1
+
+# Checking if pull request was merged
+echo "=========================="
+echo "Checking if pull request was merged"
+curl -s -o tmp-curl-response -L \
+  -X GET \
+  http://127.1.0.0:8080/repos/repo_merge_conflict/pulls/1
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+response_content=$(cat tmp-curl-response)
+expected_content='{"id":1,"title":"Merge conflict resolved through push","description":"My pull request description","sourceBranch":"rama","targetBranch":"master","state":"closed","hasMergeConflicts":false,"merged":true}'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+rm tmp-curl-response
+cd ..
+rm -rf repo_merge_conflict
+cd ../server_files
 
 # Remove all the files that were created
 rm -rf repo_merge_conflict2
