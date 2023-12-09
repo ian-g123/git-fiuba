@@ -11,6 +11,7 @@ use git_lib::{
     logger::Logger,
     logger_sender::LoggerSender,
     objects::{blob::Blob, commit_object::CommitObject, git_object::GitObjectTrait, tree::Tree},
+    objects_database::ObjectsDatabase,
     server_components::{
         history_analyzer::rebuild_commits_tree,
         packfile_functions::{make_packfile, read_objects_from_packfile},
@@ -18,6 +19,11 @@ use git_lib::{
         pkt_strings::Pkt,
     },
     utils::super_string::u8_vec_to_hex_string,
+};
+
+use crate::http_server_components::{
+    http_methods::{pull_request::PullRequest, pull_request_state::PullRequestState},
+    pull_request_components::git_repository_extension::GitRepositoryExtension,
 };
 
 pub struct ServerWorker {
@@ -170,8 +176,10 @@ impl ServerWorker {
 
         let ref_update_map = self.read_ref_update_map()?;
 
-        let objects = read_objects_from_packfile(&mut self.socket, &repo.db()?, repo.logger())?;
+        let db = repo.db()?;
+        let objects = read_objects_from_packfile(&mut self.socket, &db, repo.logger())?;
         let objects_map = repo.save_objects_from_packfile(objects)?;
+        update_pull_requests(&objects_map, &db, &mut repo)?;
         let mut status = HashMap::<String, Option<String>>::new();
 
         self.send("unpack ok\n")?;
@@ -510,4 +518,45 @@ fn contains_all_elements(
     }
 
     Ok(true)
+}
+
+/// Actualiza los pull requests. Si un push tuvo merge commits, se busca si hay algún
+/// pull request que deba cerrarse y se le cambia el estado.
+fn update_pull_requests(
+    objects_map: &HashMap<String, (PackfileObjectType, usize, Vec<u8>)>,
+    db: &ObjectsDatabase,
+    repo: &mut GitRepository,
+) -> Result<(), CommandError> {
+    let mut pull_requests = repo.get_pull_requests("open")?;
+    for (hash, _) in objects_map {
+        let mut object = db.read_object(hash, repo.logger())?;
+        if let Some(commit) = object.as_mut_commit() {
+            let parents = commit.get_parents();
+            if parents.len() > 1 {
+                update_pull_request(&mut pull_requests, repo, &parents)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Si hay algún pull request cuyos commits de source_branch y target_branch coincidan
+/// con los padres de un commit de merge, se cierra.
+fn update_pull_request(
+    pull_requests: &mut Vec<PullRequest>,
+    repo: &mut GitRepository,
+    parents: &Vec<String>,
+) -> Result<(), CommandError> {
+    for mut pr in pull_requests {
+        let source_branch = pr.source_branch.clone();
+        let target_branch = pr.target_branch.clone();
+        let source_commit_hash = repo.get_last_commit_hash_branch(&source_branch)?;
+        let target_commit_hash = repo.get_last_commit_hash_branch(&target_branch)?;
+        if parents.contains(&source_commit_hash) && parents.contains(&target_commit_hash) {
+            pr.set_state(PullRequestState::Closed);
+            pr.set_merged(true);
+            repo.save_pull_request(&mut pr)?;
+        }
+    }
+    Ok(())
 }

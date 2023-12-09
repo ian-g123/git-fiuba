@@ -243,7 +243,16 @@ pub enum CommandError {
     Extraction(String),
 
     // API
+    /// HTTP Request inválida
     InvalidHTTPRequest(String),
+    /// No hay cambios para comparar
+    NothingToCompare(String),
+    /// Estado inválido de un pull request
+    InvalidPullRequestState(String),
+    PullRequestUnknownMerge,
+
+    /// Error al eliminar un archivo
+    PullRequestUnknownID
 }
 
 impl Error for CommandError {}
@@ -553,7 +562,7 @@ impl fmt::Display for CommandError {
             CommandError::ErrorDecompressingObject(msg) => {
                 write!(f, "Errror in object decompression: {}", msg)
             }
-            CommandError::NotValidLogger => {
+            CommandError::NotValidLogger => {  
                 write!(f, "No se pudo obtener el sender del logger")
             }
             CommandError::TagNameDuplicated(name) => write!(f, "fatal: tag '{name}' already exists"),
@@ -584,7 +593,11 @@ impl fmt::Display for CommandError {
             CommandError::UnsuportedProtocol(e) => write!(f, "Unsuported protocol: {}", e),
             CommandError::Compression(e) => write!(f, "Error en la compresión: {}", e),
             CommandError::Extraction(e) => write!(f, "Error en la extracción: {}", e),
-            CommandError::InvalidHTTPRequest(e) => write!(f, "Invalid HTTP Request: {}", e)
+            CommandError::InvalidHTTPRequest(e) => write!(f, "Invalid HTTP Request: {}", e),
+            CommandError::NothingToCompare(description) => write!(f, "Nothing to compare: {}", description),
+            CommandError::InvalidPullRequestState(state) => write!(f, "Invalid pull request state: {}", state),
+            CommandError::PullRequestUnknownMerge => write!(f, "Pull Request without especification of merge status"),
+            CommandError::PullRequestUnknownID => write!(f, "Pull Request without especification of ID"),
         }
     }
 }

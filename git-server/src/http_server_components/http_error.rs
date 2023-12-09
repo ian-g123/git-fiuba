@@ -4,6 +4,7 @@ pub enum HttpError {
     InternalServerError(CommandError),
     BadRequest(String),
     NotFound,
+    Forbidden(String),
 }
 
 impl HttpError {
@@ -12,6 +13,7 @@ impl HttpError {
             HttpError::InternalServerError(_) => 500,
             HttpError::BadRequest(_) => 400,
             HttpError::NotFound => 404,
+            HttpError::Forbidden(_) => 403,
         }
     }
 
@@ -20,14 +22,16 @@ impl HttpError {
             HttpError::InternalServerError(error) => format!("Internal Server Error: {}", error),
             HttpError::BadRequest(e) => format!("Bad Request: {}", e),
             HttpError::NotFound => "Not Found".to_string(),
+            HttpError::Forbidden(e) => format!("Forbidden: {}", e),
         }
     }
 
     pub fn body(&self) -> String {
         match self {
             HttpError::InternalServerError(error) => error.to_string(),
-            HttpError::BadRequest(_) => "Invalid HTTP method".to_string(),
+            HttpError::BadRequest(_) => "Bad Request".to_string(),
             HttpError::NotFound => "Not Found".to_string(),
+            HttpError::Forbidden(e) => e.to_string(),
         }
     }
 }

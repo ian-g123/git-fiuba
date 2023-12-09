@@ -1621,6 +1621,115 @@ impl<'a> GitRepository<'a> {
         }
     }
 
+    pub fn try_merge_without_conflicts(
+        &mut self,
+        source_branch: &String,
+        target_branch: &String,
+        message: String,
+    ) -> Result<(), CommandError> {
+        let source_commit = self.get_last_commit_hash_branch(source_branch)?;
+        let target_commit = self.get_last_commit_hash_branch(target_branch)?;
+
+        let (mut common, mut commit_head, commit_destin) =
+            self.get_common_ancestor(&source_commit, &target_commit)?;
+
+        let common_hash = common.get_hash_string()?;
+
+        self.log(&format!("Common: {}", common_hash));
+        if common.get_hash()? == commit_head.get_hash()? {
+            return self.update_branch_ref(&target_commit, target_branch);
+        }
+
+        let merged_tree = self
+            .get_pull_request_merged_tree(
+                &source_branch,
+                &target_branch,
+                common,
+                commit_head,
+                commit_destin,
+            )?
+            .ok_or(CommandError::MergeConflict(
+                "There are conflicts in the working directory".to_string(),
+            ))?;
+
+        self.log("Conflicts resolved!");
+        let mut boxed_tree: GitObject = Box::new(merged_tree.clone());
+        let _merge_tree_hash_str = self.db()?.write(&mut boxed_tree, true, &mut self.logger)?;
+        let merge_commit = self.create_new_commit(
+            message,
+            vec![target_commit.to_string(), source_commit.to_string()],
+            merged_tree,
+        )?;
+
+        let mut boxed_commit: GitObject = Box::new(merge_commit.clone());
+        let merge_commit_hash_str = self
+            .db()?
+            .write(&mut boxed_commit, false, &mut self.logger)?;
+
+        self.update_branch_ref(&merge_commit_hash_str, target_branch)
+    }
+
+    pub fn has_merge_conflicts(
+        &mut self,
+        source_branch: &String,
+        target_branch: &String,
+    ) -> Result<bool, CommandError> {
+        let source_commit = self.get_last_commit_hash_branch(source_branch)?;
+        let target_commit = self.get_last_commit_hash_branch(target_branch)?;
+
+        let (mut common, mut commit_head, commit_destin) =
+            self.get_common_ancestor(&source_commit, &target_commit)?;
+
+        if common.get_hash()? == commit_head.get_hash()? {
+            return Ok(false);
+        }
+
+        match self.get_pull_request_merged_tree(
+            &source_branch,
+            &target_branch,
+            common,
+            commit_head,
+            commit_destin,
+        )? {
+            Some(_) => Ok(false),
+            None => Ok(true),
+        }
+    }
+
+    fn get_pull_request_merged_tree(
+        &mut self,
+        head_name: &str,
+        destin_name: &str,
+        common: CommitObject,
+        commit_head: CommitObject,
+        commit_destin: CommitObject,
+    ) -> Result<Option<Tree>, CommandError> {
+        self.log("True merge");
+        let objects_database = self.db()?;
+
+        let mut common_tree = common.get_tree_some_or_err()?.to_owned();
+        let mut head_tree = commit_head.get_tree_some_or_err()?.to_owned();
+        let mut destin_tree = commit_destin.get_tree_some_or_err()?.to_owned();
+
+        let working_dir_path = self.working_dir_path.clone();
+        match merge_trees(
+            &mut head_tree,
+            &mut destin_tree,
+            &mut common_tree,
+            head_name,
+            destin_name,
+            &working_dir_path,
+            &mut None,
+            &mut self.logger,
+            &working_dir_path,
+            &objects_database,
+        ) {
+            Ok(merged_tree) => Ok(Some(merged_tree)),
+            Err(CommandError::MergeConflict(_)) => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
+
     fn get_hash_and_name(
         &mut self,
         pseudo_commit: &String,
@@ -2132,7 +2241,7 @@ impl<'a> GitRepository<'a> {
     ) -> Result<(), CommandError> {
         let path = Path::new(path_name);
 
-        let Ok(entries) = fs::read_dir(path.clone()) else {
+        let Ok(entries) = fs::read_dir(path) else {
             return Err(CommandError::DirNotFound(path_name.to_owned()));
         };
         for entry in entries {
@@ -2281,7 +2390,7 @@ impl<'a> GitRepository<'a> {
             "HEAD",
             &main_name,
             &working_dir_path,
-            &mut staging_area,
+            &mut Some(&mut staging_area),
             self.logger(),
             &working_dir_path,
             &objects_database,
@@ -2617,7 +2726,7 @@ impl<'a> GitRepository<'a> {
             head_name,
             destin_name,
             &working_dir_path,
-            &mut staging_area,
+            &mut Some(&mut staging_area),
             &mut self.logger,
             &working_dir_path,
             &objects_database,
@@ -3099,7 +3208,7 @@ impl<'a> GitRepository<'a> {
             }
         }
 
-        let mut file = File::create(new_path.clone())
+        let mut file = File::create(new_path)
             .map_err(|_| CommandError::FileCreationError(new_path_str.clone()))?;
         file.write_all(hash.as_bytes())
             .map_err(|error| CommandError::FileWriteError(error.to_string()))?;
@@ -3460,6 +3569,8 @@ impl<'a> GitRepository<'a> {
             &changes_not_staged,
             &changes_staged,
         )?;
+        //let has_conflicts = true;
+
         self.log("checkout_restore");
         if has_conflicts {
             return Ok(());
@@ -4111,7 +4222,7 @@ impl<'a> GitRepository<'a> {
 
         let output_message = {
             if exists {
-                let hash = fs::read_to_string(path.clone())
+                let hash = fs::read_to_string(path)
                     .map_err(|error| CommandError::FileReadError(error.to_string()))?;
                 format!("Updated tag '{}' (was {})\n", name, &hash[..6])
             } else {
@@ -4563,7 +4674,7 @@ impl<'a> GitRepository<'a> {
 fn read_dir_level_entries(path_name: &str, names: &mut Vec<String>) -> Result<(), CommandError> {
     let path = Path::new(path_name);
 
-    let Ok(entries) = fs::read_dir(path.clone()) else {
+    let Ok(entries) = fs::read_dir(path) else {
         return Err(CommandError::DirNotFound(path_name.to_owned()));
     };
     for entry in entries {
@@ -5093,7 +5204,7 @@ fn merge_trees(
     head_name: &str,
     destin_name: &str,
     parent_path: &str,
-    staging_area: &mut StagingArea,
+    staging_area_opt: &mut Option<&mut StagingArea>,
     logger: &mut Logger,
     working_dir: &str,
     db: &ObjectsDatabase,
@@ -5140,7 +5251,7 @@ fn merge_trees(
                     head_name,
                     destin_name,
                     &joint_path,
-                    staging_area,
+                    staging_area_opt,
                     logger,
                     working_dir,
                     db,
@@ -5155,7 +5266,7 @@ fn merge_trees(
                     head_name,
                     destin_name,
                     &joint_path,
-                    staging_area,
+                    staging_area_opt,
                     logger,
                     working_dir,
                     db,
@@ -5174,7 +5285,7 @@ fn is_in_common(
     head_name: &str,
     destin_name: &str,
     parent_path: &str,
-    staging_area: &mut StagingArea,
+    staging_area_opt: &mut Option<&mut StagingArea>,
     logger: &mut Logger,
     working_dir: &str,
     db: &ObjectsDatabase,
@@ -5194,7 +5305,7 @@ fn is_in_common(
                         head_name,
                         destin_name,
                         parent_path,
-                        staging_area,
+                        staging_area_opt,
                         logger,
                         working_dir,
                         db,
@@ -5221,19 +5332,27 @@ fn is_in_common(
                                 db,
                             )?;
                             if merge_conflicts {
-                                staging_area.soft_add_unmerged_file(
-                                    working_dir,
-                                    parent_path,
-                                    Some(common_blob.get_hash_string()?),
-                                    Some(head_blob.get_hash_string()?),
-                                    Some(destin_blob.get_hash_string()?),
-                                )?;
+                                if let Some(staging_area) = staging_area_opt {
+                                    staging_area.soft_add_unmerged_file(
+                                        working_dir,
+                                        parent_path,
+                                        Some(common_blob.get_hash_string()?),
+                                        Some(head_blob.get_hash_string()?),
+                                        Some(destin_blob.get_hash_string()?),
+                                    )?;
+                                } else {
+                                    return Err(CommandError::MergeConflict(
+                                        "Merge conflict".to_string(),
+                                    ));
+                                }
                             } else {
-                                staging_area.soft_add(
-                                    working_dir,
-                                    parent_path,
-                                    &head_blob.get_hash_string()?,
-                                )?;
+                                if let Some(staging_area) = staging_area_opt {
+                                    staging_area.soft_add(
+                                        working_dir,
+                                        parent_path,
+                                        &head_blob.get_hash_string()?,
+                                    )?;
+                                }
                             }
                             Ok(Some(Box::new(merged_blob.to_owned())))
                         }
@@ -5243,23 +5362,31 @@ fn is_in_common(
             }
         }
         (Some(mut head_entry), None) => {
-            staging_area.soft_add_unmerged_object(
-                working_dir,
-                &mut common_entry,
-                &mut head_entry,
-                parent_path,
-                true,
-            )?;
+            if let Some(staging_area) = staging_area_opt {
+                staging_area.soft_add_unmerged_object(
+                    working_dir,
+                    &mut common_entry,
+                    &mut head_entry,
+                    parent_path,
+                    true,
+                )?;
+            } else {
+                return Err(CommandError::MergeConflict("Merge conflict".to_string()));
+            }
             Ok(Some(head_entry.to_owned()))
         }
         (None, Some(mut destin_entry)) => {
-            staging_area.soft_add_unmerged_object(
-                working_dir,
-                &mut common_entry,
-                &mut destin_entry,
-                parent_path,
-                false,
-            )?;
+            if let Some(staging_area) = staging_area_opt {
+                staging_area.soft_add_unmerged_object(
+                    working_dir,
+                    &mut common_entry,
+                    &mut destin_entry,
+                    parent_path,
+                    false,
+                )?;
+            } else {
+                return Err(CommandError::MergeConflict("Merge conflict".to_string()));
+            }
 
             Ok(Some(destin_entry.to_owned()))
         }
@@ -5273,7 +5400,7 @@ fn is_not_in_common(
     head_name: &str,
     destin_name: &str,
     entry_path: &str,
-    staging_area: &mut StagingArea,
+    staging_area_opt: &mut Option<&mut StagingArea>,
     logger: &mut Logger,
     working_dir: &str,
     db: &ObjectsDatabase,
@@ -5290,7 +5417,7 @@ fn is_not_in_common(
                         head_name,
                         destin_name,
                         entry_path,
-                        staging_area,
+                        staging_area_opt,
                         logger,
                         working_dir,
                         db,
@@ -5314,16 +5441,24 @@ fn is_not_in_common(
                                 db,
                             )?;
                             if merge_conflicts {
-                                staging_area.soft_add_unmerged_file(
-                                    working_dir,
-                                    entry_path,
-                                    Some(common_blob.get_hash_string()?),
-                                    Some(head_blob.get_hash_string()?),
-                                    Some(destin_blob.get_hash_string()?),
-                                )?;
+                                if let Some(staging_area) = staging_area_opt {
+                                    staging_area.soft_add_unmerged_file(
+                                        working_dir,
+                                        entry_path,
+                                        Some(common_blob.get_hash_string()?),
+                                        Some(head_blob.get_hash_string()?),
+                                        Some(destin_blob.get_hash_string()?),
+                                    )?;
+                                } else {
+                                    return Err(CommandError::MergeConflict(
+                                        "Merge conflict".to_string(),
+                                    ));
+                                }
                             } else {
                                 let hash_str = merged_blob.get_hash_string()?;
-                                staging_area.soft_add(working_dir, entry_path, &hash_str)?
+                                if let Some(staging_area) = staging_area_opt {
+                                    staging_area.soft_add(working_dir, entry_path, &hash_str)?
+                                }
                             }
                             Ok(Box::new(merged_blob.to_owned()))
                         }
@@ -5333,11 +5468,15 @@ fn is_not_in_common(
             }
         }
         (Some(mut head_entry), None) => {
-            staging_area.soft_add_object(working_dir, &mut head_entry, entry_path)?;
+            if let Some(staging_area) = staging_area_opt {
+                staging_area.soft_add_object(working_dir, &mut head_entry, entry_path)?;
+            }
             Ok(head_entry.to_owned())
         }
         (None, Some(mut destin_entry)) => {
-            staging_area.soft_add_object(working_dir, &mut destin_entry, entry_path)?;
+            if let Some(staging_area) = staging_area_opt {
+                staging_area.soft_add_object(working_dir, &mut destin_entry, entry_path)?;
+            }
             Ok(destin_entry.to_owned())
         }
         (None, None) => Err(CommandError::MergeConflict("".to_string())),

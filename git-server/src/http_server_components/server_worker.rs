@@ -1,7 +1,10 @@
 use std::{collections::HashMap, io::Write, net::TcpStream, str::FromStr};
 
 use super::{
-    http_methods::pull_request::PullRequest,
+    http_methods::{
+        pull_request::PullRequest, pull_request_state::PullRequestState,
+        pull_request_update::PullRequestUpdate,
+    },
     pull_request_components::{
         git_repository_extension::GitRepositoryExtension,
         simplified_commit_object::SimplifiedCommitObject,
@@ -60,7 +63,7 @@ impl<'a> ServerWorker {
         let first_line = read_string_until(&mut self.socket, '\n')?
             .trim()
             .to_string();
-        self.log(&format!("⏬: {}", first_line));
+        self.log(&format!("⬇️: {}", first_line));
         loop {
             let line = read_string_until(&mut self.socket, '\n')?
                 .trim()
@@ -74,7 +77,7 @@ impl<'a> ServerWorker {
                     "Invalid header line: {}",
                     line
                 )))?;
-            self.log(&format!("⏬: {} {}", key, value));
+            self.log(&format!("⬇️: {} {}", key, value));
             headers.insert(key.trim().to_string(), value.trim().to_string());
         }
 
@@ -86,7 +89,7 @@ impl<'a> ServerWorker {
         };
         let Some(uri) = method_uri_version.next() else {
             self.log(&format!("Invalid HTTP request: {:?}", first_line));
-            self.send_error(&HttpError::BadRequest("Fail to parse uir".to_string()))?;
+            self.send_error(&HttpError::BadRequest("Fail to parse uri".to_string()))?;
             return Ok(());
         };
         let Some(version) = method_uri_version.next() else {
@@ -172,11 +175,20 @@ impl<'a> ServerWorker {
         let mut de = serde_json::Deserializer::from_reader(&mut self.socket);
         let request_info = PullRequest::deserialize(&mut de).unwrap();
         self.log(&format!("Request info: {:?}", request_info));
+
         let mut sink = std::io::sink();
         let mut repo = self.get_repo(repo_path, &mut sink)?;
         let saved_pull_request = repo
             .create_pull_request(request_info)
-            .map_err(|e| HttpError::InternalServerError(e))?;
+            .map_err(|e| match e {
+                CommandError::NothingToCompare(e) => {
+                    HttpError::Forbidden(CommandError::NothingToCompare(e).to_string())
+                }
+                CommandError::InvalidBranchName(e) => {
+                    HttpError::Forbidden(CommandError::InvalidBranchName(e).to_string())
+                }
+                _ => HttpError::InternalServerError(e),
+            })?;
         let response_body = serde_json::to_string(&saved_pull_request).unwrap();
         self.send_response(&200, "OK", &HashMap::new(), &response_body)
             .map_err(|e| HttpError::InternalServerError(e))?;
@@ -198,10 +210,14 @@ impl<'a> ServerWorker {
 
     fn handle_get(
         &mut self,
-        uri: &str,
+        uri_and_variables: &str,
         _headers: HashMap<String, String>,
     ) -> Result<(), HttpError> {
         self.log("Handling GET request");
+        let (uri, variables) = match uri_and_variables.split_once('?') {
+            Some((uri, variables)) => (uri, variables),
+            None => (uri_and_variables, ""),
+        };
         let uri = uri
             .strip_prefix("/repos/")
             .ok_or(HttpError::BadRequest("Resources not available".to_string()))?;
@@ -219,7 +235,7 @@ impl<'a> ServerWorker {
         }
 
         match (id_opt, commits_opt) {
-            (None, None) => self.handle_get_pull_requests(repo_path),
+            (None, None) => self.handle_get_pull_requests(repo_path, variables),
             (Some(id), None) => self.handle_get_pull_request(repo_path, u64::from_str(id).unwrap()),
             (Some(id), Some("commits")) => {
                 self.handle_get_pull_request_commits(repo_path, u64::from_str(id).unwrap())
@@ -228,12 +244,84 @@ impl<'a> ServerWorker {
         }
     }
 
-    fn handle_put(&self, uri: &str, headers: HashMap<String, String>) -> Result<(), HttpError> {
-        todo!()
+    fn handle_put(
+        &mut self,
+        uri: &str,
+        _headers: HashMap<String, String>,
+    ) -> Result<(), HttpError> {
+        self.log("Handling PUT request");
+        let uri = uri
+            .strip_prefix("/repos/")
+            .ok_or(HttpError::BadRequest("Resources not available".to_string()))?;
+        let mut uri_rest = uri.split('/');
+        let repo_path = uri_rest
+            .next()
+            .ok_or(HttpError::BadRequest("No repo specified".to_string()))?;
+        let pulls_name = uri_rest
+            .next()
+            .ok_or(HttpError::BadRequest("Should end with pulls".to_string()))?;
+        let id = uri_rest
+            .next()
+            .ok_or(HttpError::BadRequest("Should have an id".to_string()))?;
+        let merge_name = uri_rest
+            .next()
+            .ok_or(HttpError::BadRequest("Should end with 'merge'".to_string()))?;
+
+        if pulls_name != "pulls" {
+            return Err(HttpError::BadRequest("Should end with pulls".to_string()));
+        };
+
+        if merge_name != "merge" {
+            return Err(HttpError::BadRequest("Should end with merge".to_string()));
+        };
+
+        self.handle_put_pull_request(repo_path, u64::from_str(id).unwrap())?;
+        Ok(())
     }
 
-    fn handle_patch(&self, uri: &str, headers: HashMap<String, String>) -> Result<(), HttpError> {
-        todo!()
+    //PATCH /repos/{repo}/pulls/{pull_number}
+    fn handle_patch(
+        &mut self,
+        uri: &str,
+        _headers: HashMap<String, String>,
+    ) -> Result<(), HttpError> {
+        self.log("Handling PATCH request");
+        self.log(&format!("URI: {}", uri));
+        let uri = uri
+            .strip_prefix("/repos/")
+            .ok_or(HttpError::BadRequest("Resources not available".to_string()))?;
+        let mut uri_rest = uri.split('/');
+        let repo_path = uri_rest
+            .next()
+            .ok_or(HttpError::BadRequest("No repo specified".to_string()))?;
+        let pulls_name = uri_rest
+            .next()
+            .ok_or(HttpError::BadRequest("Should end with pulls".to_string()))?;
+        let id = uri_rest
+            .next()
+            .ok_or(HttpError::BadRequest("Should have an id".to_string()))?;
+
+        if pulls_name != "pulls" {
+            return Err(HttpError::BadRequest("Should end with pulls".to_string()));
+        };
+
+        let mut de = serde_json::Deserializer::from_reader(&mut self.socket);
+        let request_info = PullRequestUpdate::deserialize(&mut de).map_err(|e| {
+            HttpError::BadRequest(format!("Fail to parse request body: {}", e.to_string()))
+        })?;
+
+        self.log(&format!("Request info: {:?}", request_info));
+        let mut sink = std::io::sink();
+        let mut repo = self.get_repo(repo_path, &mut sink)?;
+        let saved_pull_request = repo
+            .update_pull_request(u64::from_str(id).unwrap(), request_info)
+            .map_err(|e| HttpError::InternalServerError(e))?
+            .ok_or(HttpError::NotFound)?;
+        let response_body = serde_json::to_string(&saved_pull_request).unwrap();
+        self.send_response(&200, "OK", &HashMap::new(), &response_body)
+            .map_err(|e| HttpError::InternalServerError(e))?;
+
+        Ok(())
     }
 
     fn send_error(&mut self, error: &HttpError) -> Result<(), CommandError> {
@@ -247,11 +335,27 @@ impl<'a> ServerWorker {
         Ok(())
     }
 
-    fn handle_get_pull_requests(&mut self, repo_path: &str) -> Result<(), HttpError> {
+    fn handle_get_pull_requests(
+        &mut self,
+        repo_path: &str,
+        variables: &str,
+    ) -> Result<(), HttpError> {
+        let mut variables_map = HashMap::<String, String>::new();
+        for variable in variables.split('&') {
+            if variable.is_empty() {
+                continue;
+            }
+            let (key, value) = variable.split_once('=').unwrap();
+            _ = variables_map.insert(key.trim().to_string(), value.trim().to_string());
+        }
+        let state = variables_map
+            .get("state")
+            .get_or_insert(&"open".to_string())
+            .to_owned();
         let mut sink = std::io::sink();
-        let repo: GitRepository<'_> = self.get_repo(repo_path, &mut sink)?;
+        let mut repo: GitRepository<'_> = self.get_repo(repo_path, &mut sink)?;
         let pull_requests = repo
-            .get_pull_requests()
+            .get_pull_requests(&state)
             .map_err(|e| HttpError::InternalServerError(e))?;
         let response_body = serde_json::to_string(&pull_requests).unwrap();
         self.send_response(&200, "OK", &HashMap::new(), &response_body)
@@ -264,7 +368,7 @@ impl<'a> ServerWorker {
         pull_request_id: u64,
     ) -> Result<(), HttpError> {
         let mut sink = std::io::sink();
-        let repo = self.get_repo(repo_path, &mut sink)?;
+        let mut repo = self.get_repo(repo_path, &mut sink)?;
         let pull_request = repo
             .get_pull_request(pull_request_id)
             .map_err(|e| HttpError::InternalServerError(e))?;
@@ -274,6 +378,54 @@ impl<'a> ServerWorker {
                 let response_body = serde_json::to_string(&pull_request).unwrap();
                 self.send_response(&200, "OK", &HashMap::new(), &response_body)
                     .map_err(|e| HttpError::InternalServerError(e))
+            }
+        }
+    }
+
+    fn handle_put_pull_request(
+        &mut self,
+        repo_path: &str,
+        pull_request_id: u64,
+    ) -> Result<(), HttpError> {
+        let mut sink = std::io::sink();
+        let mut repo = self.get_repo(repo_path, &mut sink)?;
+        let pull_request = repo
+            .get_pull_request(pull_request_id)
+            .map_err(|e| HttpError::InternalServerError(e))?;
+        match pull_request {
+            None => Err(HttpError::NotFound),
+            Some(mut pull_request) => {
+                if pull_request.is_merged()? {
+                    return Err(HttpError::Forbidden(
+                        "Pull request is already merged".to_string(),
+                    ));
+                }
+                if let PullRequestState::Closed = pull_request.get_state() {
+                    return Err(HttpError::Forbidden("Pull request is closed".to_string()));
+                }
+                let message = format!(
+                    "Merge pull request #{} from {}\n\n{}\n{}",
+                    pull_request.id.ok_or(HttpError::InternalServerError(
+                        CommandError::PullRequestUnknownID
+                    ))?,
+                    pull_request.source_branch,
+                    pull_request.title,
+                    pull_request.description
+                );
+                repo.try_merge_without_conflicts(
+                    &pull_request.source_branch,
+                    &pull_request.target_branch,
+                    message,
+                )
+                .map_err(|e| HttpError::InternalServerError(e))?;
+                pull_request.set_state(PullRequestState::Closed);
+                pull_request.set_merged(true);
+                repo.save_pull_request(&mut pull_request)
+                    .map_err(|e| HttpError::InternalServerError(e))?;
+
+                let response_body = serde_json::to_string(&pull_request).unwrap();
+                self.send_response(&200, "OK", &HashMap::new(), &response_body)
+                    .map_err(|e: CommandError| HttpError::InternalServerError(e))
             }
         }
     }
@@ -302,3 +454,23 @@ impl<'a> ServerWorker {
         }
     }
 }
+
+// struct VerboseReader<'a> {
+//     reader: &'a mut dyn std::io::Read,
+// }
+
+// impl<'a> VerboseReader<'a> {
+//     pub fn new(reader: &'a mut dyn std::io::Read) -> Self {
+//         Self { reader }
+//     }
+// }
+
+// impl<'a> std::io::Read for VerboseReader<'a> {
+//     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+//         println!("Reading ...");
+//         let read = self.reader.read(buf)?;
+//         let string = String::from_utf8_lossy(&buf[..read]);
+//         println!("⬆️: {}", string);
+//         Ok(read)
+//     }
+// }

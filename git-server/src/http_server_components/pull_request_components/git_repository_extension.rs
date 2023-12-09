@@ -1,19 +1,19 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fs::{self, File, OpenOptions},
     io::{Read, Write},
     path::Path,
 };
 
 use git_lib::{
-    command_errors::CommandError,
-    git_repository::GitRepository,
-    join_paths,
-    logger::Logger,
-    objects::{commit_object::CommitObject, git_object::GitObjectTrait},
+    command_errors::CommandError, git_repository::GitRepository, join_paths,
+    objects::commit_object::CommitObject,
 };
 
-use crate::http_server_components::http_methods::pull_request::PullRequest;
+use crate::http_server_components::http_methods::{
+    pull_request::PullRequest, pull_request_state::PullRequestState,
+    pull_request_update::PullRequestUpdate,
+};
 
 pub trait GitRepositoryExtension {
     fn create_pull_request(
@@ -22,13 +22,16 @@ pub trait GitRepositoryExtension {
     ) -> Result<PullRequest, CommandError>;
 
     fn save_pull_request(
-        &self,
-        pull_request_info: PullRequest,
+        &mut self,
+        pull_request_info: &mut PullRequest,
     ) -> Result<PullRequest, CommandError>;
     fn get_last_pull_request_id(&self) -> Result<u64, CommandError>;
     fn set_last_pull_request_id(&self, pull_request_id: u64) -> Result<(), CommandError>;
-    fn get_pull_requests(&self) -> Result<Vec<PullRequest>, CommandError>;
-    fn get_pull_request(&self, pull_request_id: u64) -> Result<Option<PullRequest>, CommandError>;
+    fn get_pull_requests(&mut self, state: &str) -> Result<Vec<PullRequest>, CommandError>;
+    fn get_pull_request(
+        &mut self,
+        pull_request_id: u64,
+    ) -> Result<Option<PullRequest>, CommandError>;
     fn get_pull_request_commits(
         &mut self,
         pull_request_id: u64,
@@ -62,33 +65,71 @@ pub trait GitRepositoryExtension {
         source_commits_to_read: &mut HashMap<String, CommitObject>,
         read_target_commits: &mut HashMap<String, CommitObject>,
     ) -> Result<(), CommandError>;
+
+    fn get_pull_requests_path(&self) -> Result<String, CommandError>;
+    fn get_server_files_path(&self) -> Result<String, CommandError>;
+    fn update_pull_request(
+        &mut self,
+        id: u64,
+        pull_request_info: PullRequestUpdate,
+    ) -> Result<Option<PullRequest>, CommandError>;
 }
 
 impl<'a> GitRepositoryExtension for GitRepository<'a> {
     fn create_pull_request(
         &mut self,
-        pull_request_info: PullRequest,
+        mut pull_request: PullRequest,
     ) -> Result<PullRequest, CommandError> {
-        let source_branch = &pull_request_info.source_branch;
+        if pull_request.id.is_some() {
+            panic!("No se puede crear un pull request con un id");
+        }
+        if pull_request.merged.is_some() {
+            panic!("No se puede crear un pull request con un merged");
+        }
+
+        let source_branch = &pull_request.source_branch;
         if !self.branch_exists(&source_branch) {
             return Err(CommandError::InvalidBranchName(source_branch.to_string()));
         };
-        let target_branch = &pull_request_info.target_branch;
+        let target_branch = &pull_request.target_branch;
         if !self.branch_exists(&target_branch) {
             return Err(CommandError::InvalidBranchName(target_branch.to_string()));
         };
-        self.save_pull_request(pull_request_info)
-    } //Falta: si no hay nada q mergear o target == source, no se crea
+        if target_branch == source_branch {
+            return Err(CommandError::NothingToCompare(format!(
+                "No se puede mergear la rama {} en {}",
+                target_branch, target_branch
+            )));
+        }
+        let commits_to_merge =
+            self.get_commits_to_merge(source_branch.to_string(), target_branch.to_string())?;
+        if commits_to_merge.is_empty() {
+            return Err(CommandError::NothingToCompare(format!(
+                "{} is up-to-date with {}",
+                source_branch, target_branch
+            )));
+        }
+        pull_request.set_merged(false);
+        self.save_pull_request(&mut pull_request)?;
+        let has_conflicts =
+            self.has_merge_conflicts(&pull_request.source_branch, &pull_request.target_branch)?;
+        pull_request.has_merge_conflicts = Some(has_conflicts);
+        Ok(pull_request)
+    }
 
     fn save_pull_request(
-        &self,
-        mut pull_request_info: PullRequest,
+        &mut self,
+        pull_request_info: &mut PullRequest,
     ) -> Result<PullRequest, CommandError> {
-        let last_pull_request_id = self.get_last_pull_request_id()?;
-        let pull_request_id = last_pull_request_id + 1;
+        let pull_request_id = match pull_request_info.id {
+            Some(id) => id,
+            None => {
+                let last_pull_request_id = self.get_last_pull_request_id()?;
+                last_pull_request_id + 1
+            }
+        };
         let new_pull_request_path_str = join_paths!(
-            self.get_git_path(),
-            "pull_requests",
+            self.get_pull_requests_path()?,
             format!("{}.json", pull_request_id)
         )
         .ok_or(CommandError::FileOpenError(
@@ -110,6 +151,7 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
             ))
         })?;
         pull_request_info.id = Some(pull_request_id);
+        pull_request_info.has_merge_conflicts = None;
         serde_json::to_writer(new_pull_request, &pull_request_info).map_err(|error| {
             CommandError::FileOpenError(format!(
                 "Error escribiendo el archivo del nuevo pull request: {}",
@@ -117,11 +159,16 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
             ))
         })?;
         self.set_last_pull_request_id(pull_request_id)?;
-        Ok(pull_request_info)
+        let has_conflicts = self.has_merge_conflicts(
+            &pull_request_info.source_branch,
+            &pull_request_info.target_branch,
+        )?;
+        pull_request_info.has_merge_conflicts = Some(has_conflicts);
+        Ok(pull_request_info.to_owned())
     }
 
     fn get_last_pull_request_id(&self) -> Result<u64, CommandError> {
-        let path = join_paths!(self.get_git_path(), "pull_requests/LAST_PULL_REQUEST_ID").ok_or(
+        let path = join_paths!(self.get_server_files_path()?, "LAST_PULL_REQUEST_ID").ok_or(
             CommandError::FileOpenError("Error creando el path del nuevo pull request".to_string()),
         )?;
         if !std::path::Path::new(&path).exists() {
@@ -144,7 +191,7 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
     }
 
     fn set_last_pull_request_id(&self, pull_request_id: u64) -> Result<(), CommandError> {
-        let path = join_paths!(self.get_git_path(), "pull_requests/LAST_PULL_REQUEST_ID").ok_or(
+        let path = join_paths!(self.get_server_files_path()?, "LAST_PULL_REQUEST_ID").ok_or(
             CommandError::FileOpenError("Error creando el path del nuevo pull request".to_string()),
         )?;
         let mut id_file = OpenOptions::new()
@@ -167,10 +214,8 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
             })
     }
 
-    fn get_pull_requests(&self) -> Result<Vec<PullRequest>, CommandError> {
-        let pull_requests_path = join_paths!(self.get_git_path(), "pull_requests").ok_or(
-            CommandError::FileOpenError("Error creando el path del nuevo pull request".to_string()),
-        )?;
+    fn get_pull_requests(&mut self, state: &str) -> Result<Vec<PullRequest>, CommandError> {
+        let pull_requests_path = self.get_pull_requests_path()?;
         let mut pull_requests = Vec::new();
         let Ok(pull_requests_dir) = fs::read_dir(pull_requests_path) else {
             return Ok(pull_requests);
@@ -184,73 +229,67 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
                 ))
             })?;
             let pull_request_path = pull_request_file.path();
-
-            if pull_request_path.file_name().unwrap() == "LAST_PULL_REQUEST_ID" {
-                continue;
-            }
-            let mut pull_request_file = File::open(pull_request_path).map_err(|error| {
+            let pull_request_file = File::open(pull_request_path).map_err(|error| {
                 CommandError::FileOpenError(format!(
                     "Error leyendo el directorio de pull requests: {}",
                     error.to_string()
                 ))
             })?;
-            let mut pull_request_content = String::new();
-            pull_request_file
-                .read_to_string(&mut pull_request_content)
-                .map_err(|error| {
-                    CommandError::FileReadError(format!(
-                        "Error leyendo el directorio de pull requests: {}",
-                        error.to_string()
-                    ))
-                })?;
-            let pull_request: PullRequest =
-                serde_json::from_str(&pull_request_content).map_err(|error| {
-                    CommandError::FileReadError(format!(
-                        "Error leyendo el directorio de pull requests: {}",
-                        error.to_string()
-                    ))
-                })?;
-            pull_requests.push(pull_request);
+
+            let mut pull_request = read_pull_request_from_file(pull_request_file)?;
+            let has_conflicts =
+                self.has_merge_conflicts(&pull_request.source_branch, &pull_request.target_branch)?;
+            pull_request.has_merge_conflicts = Some(has_conflicts);
+            match state {
+                "all" => {
+                    pull_requests.push(pull_request);
+                }
+                "open" => {
+                    if pull_request.get_state() == PullRequestState::Open
+                    //|| pull_request.get_state() == PullRequestState::MergeConflicts
+                    {
+                        pull_requests.push(pull_request);
+                    }
+                }
+                "closed" => {
+                    if pull_request.get_state() == PullRequestState::Closed {
+                        pull_requests.push(pull_request);
+                    }
+                }
+                _ => {
+                    return Err(CommandError::InvalidPullRequestState(state.to_string()));
+                }
+            }
         }
         pull_requests.sort_unstable_by(|a, b| a.id.unwrap().cmp(&b.id.unwrap()));
         Ok(pull_requests)
     }
 
-    fn get_pull_request(&self, pull_request_id: u64) -> Result<Option<PullRequest>, CommandError> {
-        let pull_request_path_str = join_paths!(
-            self.get_git_path(),
-            "pull_requests",
+    fn get_pull_request(
+        &mut self,
+        pull_request_id: u64,
+    ) -> Result<Option<PullRequest>, CommandError> {
+        let pull_requests_path_str = join_paths!(
+            self.get_pull_requests_path()?,
             format!("{}.json", pull_request_id)
         )
         .ok_or(CommandError::FileOpenError(
             "Error creando el path del nuevo pull request".to_string(),
         ))?;
-        let pull_request_path = Path::new(&pull_request_path_str);
+        let pull_request_path = Path::new(&pull_requests_path_str);
         if !pull_request_path.exists() {
             return Ok(None);
         }
-        let mut pull_request_file = File::open(pull_request_path).map_err(|error| {
+        let pull_request_file = File::open(pull_request_path).map_err(|error| {
             CommandError::FileOpenError(format!(
                 "Error leyendo el directorio de pull requests: {}",
                 error.to_string()
             ))
         })?;
-        let mut pull_request_content = String::new();
-        pull_request_file
-            .read_to_string(&mut pull_request_content)
-            .map_err(|error| {
-                CommandError::FileReadError(format!(
-                    "Error leyendo el directorio de pull requests: {}",
-                    error.to_string()
-                ))
-            })?;
-        let pull_request: PullRequest =
-            serde_json::from_str(&pull_request_content).map_err(|error| {
-                CommandError::FileReadError(format!(
-                    "Error leyendo el directorio de pull requests: {}",
-                    error.to_string()
-                ))
-            })?;
+        let mut pull_request = read_pull_request_from_file(pull_request_file)?;
+        let has_conflicts =
+            self.has_merge_conflicts(&pull_request.source_branch, &pull_request.target_branch)?;
+        pull_request.has_merge_conflicts = Some(has_conflicts);
         Ok(Some(pull_request))
     }
 
@@ -258,40 +297,9 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
         &mut self,
         pull_request_id: u64,
     ) -> Result<Option<Vec<CommitObject>>, CommandError> {
-        let pull_request_path_str = join_paths!(
-            self.get_git_path(),
-            "pull_requests",
-            format!("{}.json", pull_request_id)
-        )
-        .ok_or(CommandError::FileOpenError(
-            "Error creando el path del nuevo pull request".to_string(),
-        ))?;
-        let pull_request_path = Path::new(&pull_request_path_str);
-        if !pull_request_path.exists() {
+        let Some(pull_request) = self.get_pull_request(pull_request_id)? else {
             return Ok(None);
-        }
-        let mut pull_request_file = File::open(pull_request_path).map_err(|error| {
-            CommandError::FileOpenError(format!(
-                "Error leyendo el directorio de pull requests: {}",
-                error.to_string()
-            ))
-        })?;
-        let mut pull_request_content = String::new();
-        pull_request_file
-            .read_to_string(&mut pull_request_content)
-            .map_err(|error| {
-                CommandError::FileReadError(format!(
-                    "Error leyendo el directorio de pull requests: {}",
-                    error.to_string()
-                ))
-            })?;
-        let pull_request: PullRequest =
-            serde_json::from_str(&pull_request_content).map_err(|error| {
-                CommandError::FileReadError(format!(
-                    "Error leyendo el directorio de pull requests: {}",
-                    error.to_string()
-                ))
-            })?;
+        };
         let source_branch = pull_request.source_branch;
         let target_branch = pull_request.target_branch;
         let commits = self.get_commits_to_merge(source_branch, target_branch)?;
@@ -428,6 +436,54 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
         _ = read_target_commits.insert(target_commit_hash, target_commit);
         Ok(())
     }
+
+    fn get_pull_requests_path(&self) -> Result<String, CommandError> {
+        let pull_requests_path = join_paths!(self.get_server_files_path()?, "pull_requests")
+            .ok_or(CommandError::FileOpenError(
+                "Error creando el path del nuevo pull request".to_string(),
+            ))?;
+        Ok(pull_requests_path)
+    }
+
+    fn get_server_files_path(&self) -> Result<String, CommandError> {
+        let server_files_path = join_paths!(self.get_git_path(), "server_files").ok_or(
+            CommandError::FileOpenError("Error creando el path del nuevo pull request".to_string()),
+        )?;
+        Ok(server_files_path)
+    }
+
+    fn update_pull_request(
+        &mut self,
+        pull_request_id: u64,
+        pull_request_info: PullRequestUpdate,
+    ) -> Result<Option<PullRequest>, CommandError> {
+        let Some(mut previous_pull_request) = self.get_pull_request(pull_request_id)? else {
+            return Ok(None);
+        };
+        previous_pull_request.update(pull_request_info);
+
+        Ok(Some(self.save_pull_request(&mut previous_pull_request)?))
+    }
+}
+
+fn read_pull_request_from_file(mut pull_request_file: File) -> Result<PullRequest, CommandError> {
+    let mut pull_request_content = String::new();
+    pull_request_file
+        .read_to_string(&mut pull_request_content)
+        .map_err(|error| {
+            CommandError::FileReadError(format!(
+                "Error leyendo el directorio de pull requests: {}",
+                error.to_string()
+            ))
+        })?;
+    let pull_request: PullRequest =
+        serde_json::from_str(&pull_request_content).map_err(|error| {
+            CommandError::FileReadError(format!(
+                "Error leyendo el directorio de pull requests: {}",
+                error.to_string()
+            ))
+        })?;
+    Ok(pull_request)
 }
 
 fn get_max(commits_to_read: &HashMap<String, CommitObject>) -> Option<(String, i64)> {
