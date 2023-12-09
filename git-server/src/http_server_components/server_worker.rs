@@ -113,6 +113,8 @@ impl<'a> ServerWorker {
             return Ok(());
         }
 
+        self.log(&format!("Headers: {:?}", headers));
+
         // let (headers, body) = get_headers_and_body(&http_request)?;
         let content_type = match ContentType::new(&headers) {
             Ok(format) => format,
@@ -121,6 +123,12 @@ impl<'a> ServerWorker {
                 return Ok(());
             }
         };
+
+        if let ContentType::Json = content_type {
+            self.log(&format!("Content type: json"));
+        } else {
+            self.log(&format!("Content type: plain"));
+        }
 
         if let Err(error) = match method {
             "POST" => self.handle_post(uri, headers, content_type),
@@ -193,7 +201,7 @@ impl<'a> ServerWorker {
         let mut sink = std::io::sink();
         let mut repo = self.get_repo(repo_path, &mut sink)?;
         let saved_pull_request = repo
-            .create_pull_request(request_info)
+            .create_pull_request(request_info, content_type.clone())
             .map_err(|e| match e {
                 CommandError::NothingToCompare(e) => {
                     HttpError::Forbidden(CommandError::NothingToCompare(e).to_string())
@@ -257,9 +265,11 @@ impl<'a> ServerWorker {
             (Some(id), None) => {
                 self.handle_get_pull_request(repo_path, u64::from_str(id).unwrap(), content_type)
             }
-            (Some(id), Some("commits")) => {
-                self.handle_get_pull_request_commits(repo_path, u64::from_str(id).unwrap())
-            }
+            (Some(id), Some("commits")) => self.handle_get_pull_request_commits(
+                repo_path,
+                u64::from_str(id).unwrap(),
+                content_type,
+            ),
             _ => Err(HttpError::BadRequest("Invalid uri".to_string())),
         }
     }
@@ -267,7 +277,7 @@ impl<'a> ServerWorker {
     fn handle_put(
         &mut self,
         uri: &str,
-        headers: HashMap<String, String>,
+        _headers: HashMap<String, String>,
         content_type: ContentType,
     ) -> Result<(), HttpError> {
         self.log("Handling PUT request");
@@ -334,7 +344,11 @@ impl<'a> ServerWorker {
         let mut sink = std::io::sink();
         let mut repo = self.get_repo(repo_path, &mut sink)?;
         let saved_pull_request = repo
-            .update_pull_request(u64::from_str(id).unwrap(), request_info)
+            .update_pull_request(
+                u64::from_str(id).unwrap(),
+                request_info,
+                content_type.clone(),
+            )
             .map_err(|e| match e {
                 CommandError::PullRequestMerged => {
                     HttpError::Forbidden(CommandError::PullRequestMerged.to_string())
@@ -458,7 +472,7 @@ impl<'a> ServerWorker {
                 pull_request.set_state(PullRequestState::Closed);
                 pull_request.set_merged(true);
                 pull_request.has_merge_conflicts = None;
-                repo.save_pull_request(&mut pull_request)
+                repo.save_pull_request(&mut pull_request, content_type.clone())
                     .map_err(|e| HttpError::InternalServerError(e))?;
 
                 let response_body = content_type.pull_request_to_string(&pull_request)?;
@@ -472,6 +486,7 @@ impl<'a> ServerWorker {
         &mut self,
         repo_path: &str,
         pull_request_id: u64,
+        content_type: ContentType,
     ) -> Result<(), HttpError> {
         let mut sink = std::io::sink();
         let mut repo = self.get_repo(repo_path, &mut sink)?;

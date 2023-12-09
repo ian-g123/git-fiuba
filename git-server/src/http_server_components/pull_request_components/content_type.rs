@@ -1,4 +1,4 @@
-use std::{collections::HashMap, net::TcpStream, process::Command};
+use std::{collections::HashMap, fs::File, net::TcpStream, process::Command};
 
 use git_lib::command_errors::CommandError;
 use serde::Deserialize;
@@ -8,6 +8,7 @@ use crate::http_server_components::{
     http_methods::{pull_request::PullRequest, pull_request_update::PullRequestUpdate},
 };
 
+#[derive(Clone)]
 pub enum ContentType {
     Json,
     Plain,
@@ -21,13 +22,13 @@ impl ContentType {
             None => "text/json",
         };
         let content_type = match content_type {
-            "text/json" => ContentType::Json,
             "text/plain" => ContentType::Plain,
             _ => {
-                return Err(HttpError::BadRequest(format!(
+                ContentType::Json
+                /* return Err(HttpError::BadRequest(format!(
                     "Content-Type not supported: {}",
                     content_type
-                )))
+                ))) */
             }
         };
         Ok(content_type)
@@ -101,12 +102,65 @@ impl ContentType {
         &self,
         pull_requests: &Vec<PullRequest>,
     ) -> Result<String, HttpError> {
-        let mut string = String::new();
-        for pr in pull_requests {
-            string += &format!("{}\n", self.pull_request_to_string(pr)?);
-        }
+        let response_body = match self {
+            ContentType::Json => serde_json::to_string(&pull_requests)
+                .map_err(|_| HttpError::InternalServerError(CommandError::PullRequestToString))?,
+            ContentType::Plain => {
+                let mut string = String::new();
+                for pr in pull_requests {
+                    string += &format!("{}\n", pr.to_string_plain_format());
+                }
+                string
+            }
+        };
+        Ok(response_body)
+    }
 
-        Ok(string.trim().to_string())
+    pub fn get_extension(&self) -> String {
+        match self {
+            ContentType::Json => ".json".to_string(),
+            ContentType::Plain => ".txt".to_string(),
+        }
+    }
+
+    pub fn pull_request_to_writer(
+        &self,
+        new_pull_request_file: &mut File,
+        pull_request_info: &PullRequest,
+    ) -> Result<(), CommandError> {
+        match self {
+            ContentType::Json => {
+                serde_json::to_writer(new_pull_request_file, &pull_request_info).map_err(
+                    |error| {
+                        CommandError::FileOpenError(format!(
+                            "Error escribiendo el archivo del nuevo pull request: {}",
+                            error.to_string()
+                        ))
+                    },
+                )?;
+            }
+            ContentType::Plain => {
+                pull_request_info.write_plain(new_pull_request_file)?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn pull_request_from_string(
+        &self,
+        pull_request_content: String,
+    ) -> Result<PullRequest, CommandError> {
+        // PullRequest {
+        let pr = match self {
+            ContentType::Json => serde_json::from_str(&pull_request_content).map_err(|error| {
+                CommandError::FileReadError(format!(
+                    "Error leyendo el directorio de pull requests: {}",
+                    error.to_string()
+                ))
+            })?,
+            ContentType::Plain => PullRequest::from_string_plain_format(pull_request_content)?,
+        };
+        Ok(pr)
     }
 }
 

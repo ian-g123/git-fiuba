@@ -1,6 +1,12 @@
-use std::io::{Read, Write};
+use std::{
+    io::{Read, Write},
+    process::Command,
+    str::FromStr,
+};
 
-use git_lib::{command_errors::CommandError, utils::aux::read_string_until};
+use git_lib::{
+    command_errors::CommandError, git_repository::next_line, utils::aux::read_string_until,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::http_server_components::http_error::HttpError;
@@ -83,7 +89,7 @@ impl PullRequest {
         self.merged = Some(merged);
     }
 
-    /// Escribe la información del PullRequest en un socket, en formato de texto plano:
+    /// Seraliza la información del PullRequest, en formato de texto plano:
     ///
     /// ---
     /// id
@@ -97,8 +103,8 @@ impl PullRequest {
     /// ---
     ///
     /// Los campos 'id', 'has_merge_conflicts' y 'merged' solo son escritos si el Option asociado es Some
-    pub fn write_plain(&self, socket: &mut std::net::TcpStream) -> Result<(), CommandError> {
-        let mut buffer = Vec::new();
+    pub fn write_plain(&self, output: &mut dyn Write) -> Result<(), CommandError> {
+        /* let mut buffer = Vec::new();
         if let Some(id) = self.id {
             buffer.extend_from_slice(&id.to_be_bytes());
         }
@@ -123,8 +129,9 @@ impl PullRequest {
             None => {}
         }
         buffer.push(b'\n');
-        buffer.extend_from_slice(self.description.as_bytes());
-        socket.write_all(&buffer).map_err(|_| {
+        buffer.extend_from_slice(self.description.as_bytes()); */
+        let content = self.to_string_plain_format();
+        output.write_all(&content.as_bytes()).map_err(|_| {
             CommandError::InvalidHTTPRequest("Could not write pull request".to_string())
         })
     }
@@ -175,7 +182,7 @@ impl PullRequest {
         string += &id;
         string += &format!("{}\n", self.title);
         string += &format!("{}\n", self.source_branch);
-        string += &format!("{}\n", self.target_branch);
+        string += &format!("{}\n.", self.target_branch);
         string += &format!("{}\n", self.state.to_string());
 
         let conflicts = if let Some(has_merge_conflicts) = self.has_merge_conflicts {
@@ -192,6 +199,52 @@ impl PullRequest {
         string += &merged;
         string += &format!("{}", self.description);
         string
+    }
+
+    pub fn from_string_plain_format(content: String) -> Result<Self, CommandError> {
+        let mut lines = content.lines();
+
+        let id_read: String = read_next_line(&mut lines)?;
+        let id = if id_read.is_empty() {
+            None
+        } else {
+            Some(u64::from_str(&id_read).map_err(|e| CommandError::CastingError)?)
+        };
+        let title = read_next_line(&mut lines)?;
+        let source_branch = read_next_line(&mut lines)?;
+        let target_branch = read_next_line(&mut lines)?;
+        let state = PullRequestState::from_string(&read_next_line(&mut lines)?)?;
+        let has_merge_conflicts_read = read_next_line(&mut lines)?;
+        let has_merge_conflicts = if has_merge_conflicts_read.is_empty() {
+            None
+        } else {
+            match has_merge_conflicts_read.as_str() {
+                "true" => Some(true),
+                "false" => Some(false),
+                _ => return Err(CommandError::PullRequestFromString),
+            }
+        };
+        let merged_read = read_next_line(&mut lines)?;
+        let merged: Option<bool> = if merged_read.is_empty() {
+            None
+        } else {
+            match merged_read.as_str() {
+                "true" => Some(true),
+                "false" => Some(false),
+                _ => return Err(CommandError::PullRequestFromString),
+            }
+        };
+        let description = read_next_line(&mut lines)?;
+        Ok(Self {
+            id,
+            title,
+            description,
+            source_branch,
+            target_branch,
+            state,
+            has_merge_conflicts,
+            merged,
+        })
     }
 }
 
@@ -222,3 +275,13 @@ impl PullRequest {
         })
     }
 } */
+
+/// Devuelve la próxima línea del iterador.
+pub fn read_next_line(lines: &mut std::str::Lines<'_>) -> Result<String, CommandError> {
+    let Some(line) = lines.next() else {
+        return Err(CommandError::InvalidHTTPRequest(
+            "No se pudo leer el pull request a partir de su contenido".to_string(),
+        ));
+    };
+    Ok(line.to_string())
+}

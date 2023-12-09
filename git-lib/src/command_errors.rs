@@ -257,7 +257,9 @@ pub enum CommandError {
     //Error al modificar un pull request cer
     PullRequestClosed(String),
     PullRequestMerged,
-    PullRequestToString
+    PullRequestToString,
+    PullRequestFromString,
+
 
 }
 
@@ -607,6 +609,7 @@ impl fmt::Display for CommandError {
             CommandError::PullRequestClosed(field) => write!(f, "No puedes modificar {} de un Pull Request cerrado", field),
             CommandError::PullRequestMerged => write!(f, "No puedes modificar un Pull Request mergeado"),
             CommandError::PullRequestToString => write!(f, "Failed to convert pull request to string"),
+            CommandError::PullRequestFromString => write!(f, "Failed to get pull request from its content"),
         
         }
     }
