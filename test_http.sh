@@ -19,12 +19,14 @@ echo "Run the server"
 cd integration_tests/test_http_data/server_files
 rm -rf repo_cliente_merge_conflicts2
 rm -rf repo_merge_conflict
+rm -rf repo_safe_merge_closed_pr
 rm -rf repo_merge_conflict2
 rm -rf repo_safe_merge
 rm tmp-curl-response
 unzip -qq repo_merge_conflict.zip -d repo_merge_conflict
 unzip -qq repo_merge_conflict2.zip -d repo_merge_conflict2
 unzip -qq repo_safe_merge.zip -d repo_safe_merge
+unzip -qq repo_safe_merge.zip -d repo_safe_merge_closed_pr
 ../../../target/debug/git-server &
 server_process=$!
 sleep 1
@@ -512,6 +514,7 @@ echo "contenido foo" > foo
 ../../../../target/debug/git commit -m "Modifico_rama"
 ../../../../target/debug/git push
 
+sleep 1
 
 cd ..
 rm -rf repo_cliente_merge_conflicts2
@@ -677,7 +680,107 @@ cd ..
 rm -rf repo_merge_conflict
 cd ../server_files
 
+
+##################################################################
+# Pull Request with closed merge conflict and resolved through push
+echo "#####################################################################"
+echo "# Pull Request with closed merge conflict and resolved through push #"
+echo "#####################################################################"
+echo "=========================="
+echo "Creating Pull Request with merge conflict"
+curl -s -o tmp-curl-response -L \
+  -X POST \
+  http://127.1.0.0:8080/repos/repo_safe_merge_closed_pr/pulls \
+  -d '{"title":"Merge conflict resolved through push","description":"My pull request description","sourceBranch":"rama","targetBranch":"master"}'
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+
+response_content=$(cat tmp-curl-response)
+expected_content='{"id":1,"title":"Merge conflict resolved through push","description":"My pull request description","sourceBranch":"rama","targetBranch":"master","state":"open","hasMergeConflicts":false,"merged":false}'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+# Resolve merge conflicts by the client
+cd ../client_files
+rm -rf repo_safe_merge_closed_pr
+../../../target/debug/git clone git://127.1.0.0:9418/repo_safe_merge_closed_pr
+cd repo_safe_merge_closed_pr
+
+sleep 1
+
+# Closing pull request
+echo "=========================="
+echo "Closing pull request"
+curl -s -o tmp-curl-response -L \
+  -X PATCH \
+  http://127.1.0.0:8080/repos/repo_safe_merge_closed_pr/pulls/1 \
+  -d '{"state":"closed"}'
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+response_content=$(cat tmp-curl-response)
+expected_content='{"id":1,"title":"Merge conflict resolved through push","description":"My pull request description","sourceBranch":"rama","targetBranch":"master","state":"closed","hasMergeConflicts":false,"merged":false}'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+../../../../target/debug/git merge rama
+../../../../target/debug/git push
+
+sleep 1
+
+# Checking if pull request was merged
+echo "=========================="
+echo "Checking if pull request was merged"
+curl -s -o tmp-curl-response -L \
+  -X GET \
+  http://127.1.0.0:8080/repos/repo_safe_merge_closed_pr/pulls/1
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+response_content=$(cat tmp-curl-response)
+expected_content='{"id":1,"title":"Merge conflict resolved through push","description":"My pull request description","sourceBranch":"rama","targetBranch":"master","state":"closed","hasMergeConflicts":false,"merged":true}'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+rm tmp-curl-response
+cd ..
+rm -rf repo_safe_merge_closed_pr
+cd ../server_files
+
 # Remove all the files that were created
+rm -rf repo_safe_merge_closed_pr
 rm -rf repo_merge_conflict2
 rm -rf repo_merge_conflict
 rm -rf repo_safe_merge

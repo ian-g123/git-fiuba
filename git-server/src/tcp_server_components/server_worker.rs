@@ -527,7 +527,7 @@ fn update_pull_requests(
     db: &ObjectsDatabase,
     repo: &mut GitRepository,
 ) -> Result<(), CommandError> {
-    let mut pull_requests = repo.get_pull_requests("open")?;
+    let mut pull_requests = repo.get_pull_requests("all")?;
     for (hash, _) in objects_map {
         let mut object = db.read_object(hash, repo.logger())?;
         if let Some(commit) = object.as_mut_commit() {
