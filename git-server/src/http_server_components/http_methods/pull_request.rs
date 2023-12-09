@@ -83,6 +83,20 @@ impl PullRequest {
         self.merged = Some(merged);
     }
 
+    /// Escribe la información del PullRequest en un socket, en formato de texto plano:
+    ///
+    /// ---
+    /// id
+    /// title
+    /// source_branch
+    /// target_branch
+    /// state
+    /// has_merge_conflicts
+    /// merged
+    /// description
+    /// ---
+    ///
+    /// Los campos 'id', 'has_merge_conflicts' y 'merged' solo son escritos si el Option asociado es Some
     pub fn write_plain(&self, socket: &mut std::net::TcpStream) -> Result<(), CommandError> {
         let mut buffer = Vec::new();
         if let Some(id) = self.id {
@@ -114,10 +128,18 @@ impl PullRequest {
             CommandError::InvalidHTTPRequest("Could not write pull request".to_string())
         })
     }
-}
 
-impl<'a> FromPlain<'a> for PullRequest {
-    fn from_plain(socket: &mut std::net::TcpStream, len: usize) -> Result<Self, CommandError> {
+    /// Lee la información del PullRequest de un socket, en formato de texto plano:
+    ///
+    /// ---
+    /// title
+    /// source_branch
+    /// target_branch
+    /// description
+    /// ---
+    ///
+    /// El resto de los parámetros son seteados a los valores por defecto
+    pub fn from_plain(socket: &mut std::net::TcpStream, len: usize) -> Result<Self, CommandError> {
         let mut buffer = vec![0; len];
         socket.read_exact(&mut buffer).map_err(|_| {
             CommandError::InvalidHTTPRequest("Could not read pull request".to_string())
@@ -143,3 +165,31 @@ impl<'a> FromPlain<'a> for PullRequest {
         })
     }
 }
+
+/* impl<'a> FromPlain<'a> for PullRequest {
+    fn from_plain(socket: &mut std::net::TcpStream, len: usize) -> Result<Self, CommandError> {
+        let mut buffer = vec![0; len];
+        socket.read_exact(&mut buffer).map_err(|_| {
+            CommandError::InvalidHTTPRequest("Could not read pull request".to_string())
+        })?;
+        let mut reader = std::io::Cursor::new(buffer);
+        let title = read_string_until(&mut reader, '\n')?;
+        let source_branch = read_string_until(&mut reader, '\n')?;
+        let target_branch = read_string_until(&mut reader, '\n')?;
+        let mut description = String::new();
+        reader.read_to_string(&mut description).map_err(|_| {
+            CommandError::InvalidHTTPRequest("Could not read pull request".to_string())
+        })?;
+
+        Ok(Self {
+            id: None,
+            title,
+            description,
+            source_branch,
+            target_branch,
+            state: PullRequestState::Open,
+            has_merge_conflicts: None,
+            merged: None,
+        })
+    }
+} */

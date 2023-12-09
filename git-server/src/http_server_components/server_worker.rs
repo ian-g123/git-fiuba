@@ -12,7 +12,7 @@ use super::{
         pull_request_update::PullRequestUpdate,
     },
     pull_request_components::{
-        git_repository_extension::GitRepositoryExtension,
+        content_type::ContentType, git_repository_extension::GitRepositoryExtension,
         simplified_commit_object::SimplifiedCommitObject,
     },
 };
@@ -178,21 +178,9 @@ impl<'a> ServerWorker {
             return Err(HttpError::BadRequest("Should end with pulls".to_string()));
         }
 
-        let request_info = derealize_from_content_type(
-            headers,
-            {
-                let mut de = serde_json::Deserializer::from_reader(&mut self.socket);
-                PullRequest::deserialize(&mut de).unwrap()
-            },
-            |len| {
-                PullRequest::from_plain(&mut self.socket, len).map_err(|e| match e {
-                    CommandError::InvalidHTTPRequest(message) => HttpError::BadRequest(message),
-                    e => HttpError::BadRequest(
-                        CommandError::InvalidHTTPRequest(e.to_string()).to_string(),
-                    ),
-                })
-            },
-        )?;
+        let content_type = ContentType::new(&headers)?;
+
+        let request_info = content_type.deserialize_pull_request(&mut self.socket, &headers)?;
         self.log(&format!("Request info: {:?}", request_info));
 
         let mut sink = std::io::sink();
@@ -303,7 +291,7 @@ impl<'a> ServerWorker {
     fn handle_patch(
         &mut self,
         uri: &str,
-        _headers: HashMap<String, String>,
+        headers: HashMap<String, String>,
     ) -> Result<(), HttpError> {
         self.log("Handling PATCH request");
         self.log(&format!("URI: {}", uri));
@@ -325,10 +313,10 @@ impl<'a> ServerWorker {
             return Err(HttpError::BadRequest("Should end with pulls".to_string()));
         };
 
-        let mut de = serde_json::Deserializer::from_reader(&mut self.socket);
-        let request_info = PullRequestUpdate::deserialize(&mut de).map_err(|e| {
-            HttpError::BadRequest(format!("Fail to parse request body: {}", e.to_string()))
-        })?;
+        let content_type = ContentType::new(&headers)?;
+
+        let request_info =
+            content_type.deserialize_pull_request_update(&mut self.socket, &headers)?;
 
         self.log(&format!("Request info: {:?}", request_info));
         let mut sink = std::io::sink();
@@ -490,7 +478,7 @@ impl<'a> ServerWorker {
     }
 }
 
-fn derealize_from_content_type(
+/* fn deserialize_from_content_type(
     headers: HashMap<String, String>,
     json_block: dyn FromPlain,
     mut plain_block: impl <'a>FnMut(usize) -> Result<dyn FromPlain<'a>, HttpError>,
@@ -521,7 +509,7 @@ fn derealize_from_content_type(
         }
     };
     Ok(request_info)
-}
+} */
 
 // struct VerboseReader<'a> {
 //     reader: &'a mut dyn std::io::Read,
