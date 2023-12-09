@@ -3128,7 +3128,7 @@ impl<'a> GitRepository<'a> {
         }
         let hash = fs::read_to_string(branch_path)
             .map_err(|error| CommandError::FileReadError(error.to_string()))?;
-        Ok(Some(hash))
+        Ok(Some(hash.trim().to_string()))
     }
 
     /// Si <branch> es una rama remota, lee el commit asociado y lo devuelve.
@@ -3154,7 +3154,7 @@ impl<'a> GitRepository<'a> {
         }
         let hash = fs::read_to_string(branch_path)
             .map_err(|error| CommandError::FileReadError(error.to_string()))?;
-        Ok(Some(hash))
+        Ok(Some(hash.trim().to_string()))
     }
 
     /// Si <hash> existe en la base de datos y es un commit, lo devuelve.
@@ -3569,7 +3569,6 @@ impl<'a> GitRepository<'a> {
             &changes_not_staged,
             &changes_staged,
         )?;
-        //let has_conflicts = true;
 
         self.log("checkout_restore");
         if has_conflicts {
@@ -3690,7 +3689,7 @@ impl<'a> GitRepository<'a> {
         let hash = match fs::read_to_string(path.clone()) {
             Ok(hash) => {
                 self.log("Branch found locally");
-                hash
+                hash.trim().to_string()
             }
             Err(_) => {
                 self.log(
@@ -3702,6 +3701,7 @@ impl<'a> GitRepository<'a> {
                     self.log(&CommandError::UntrackedError(branch_name.to_string()).to_string());
                     CommandError::UntrackedError(branch_name.to_string())
                 })?;
+                let remote_hash = remote_hash.trim().to_string();
                 self.create_branch(branch_name, &remote_hash, Some(branch_name))?;
                 remote_hash
             }

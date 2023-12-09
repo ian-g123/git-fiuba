@@ -159,10 +159,15 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
             ))
         })?;
         self.set_last_pull_request_id(pull_request_id)?;
+        self.log(&format!(
+            "Branches: {} => {}",
+            &pull_request_info.source_branch, &pull_request_info.target_branch,
+        ));
         let has_conflicts = self.has_merge_conflicts(
             &pull_request_info.source_branch,
             &pull_request_info.target_branch,
         )?;
+        self.log(&format!("Has conflicts: {}", has_conflicts));
         pull_request_info.has_merge_conflicts = Some(has_conflicts);
         Ok(pull_request_info.to_owned())
     }
@@ -460,7 +465,30 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
         let Some(mut previous_pull_request) = self.get_pull_request(pull_request_id)? else {
             return Ok(None);
         };
-        previous_pull_request.update(pull_request_info);
+        let source_branch = previous_pull_request.source_branch.clone();
+        if let Some(target_branch) = pull_request_info.clone().target_branch {
+            if !self.branch_exists(&target_branch) {
+                return Err(CommandError::InvalidBranchName(target_branch.to_string()));
+            };
+
+            if target_branch == source_branch {
+                return Err(CommandError::NothingToCompare(format!(
+                    "No se puede mergear la rama {} en {}",
+                    target_branch, target_branch
+                )));
+            }
+
+            let commits_to_merge =
+                self.get_commits_to_merge(source_branch.to_string(), target_branch.to_string())?;
+            if commits_to_merge.is_empty() {
+                return Err(CommandError::NothingToCompare(format!(
+                    "{} está al día con {}",
+                    source_branch, target_branch
+                )));
+            }
+        }
+
+        previous_pull_request.update(pull_request_info)?;
 
         Ok(Some(self.save_pull_request(&mut previous_pull_request)?))
     }

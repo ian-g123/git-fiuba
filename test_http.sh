@@ -6,6 +6,14 @@ if lsof -Pi :8080 -sTCP:LISTEN -t >/dev/null ; then
     exit 1
 fi
 echo "✅"
+# Check if port 9418 is available
+echo "=========================="
+echo "Checking if port 9418 is available"
+if lsof -Pi :9418 -sTCP:LISTEN -t >/dev/null ; then
+    echo "❌ Failed. Port 9418 is not available"
+    exit 1
+fi
+echo "✅"
 
 # Build the server
 echo "=========================="
@@ -18,11 +26,13 @@ echo "=========================="
 echo "Run the server"
 cd integration_tests/test_http_data/server_files
 rm -rf repo_cliente_merge_conflicts2
+rm -rf multiple_branches
 rm -rf repo_merge_conflict
 rm -rf repo_safe_merge_closed_pr
 rm -rf repo_merge_conflict2
 rm -rf repo_safe_merge
 rm tmp-curl-response
+unzip -qq multiple_branches.zip -d multiple_branches
 unzip -qq repo_merge_conflict.zip -d repo_merge_conflict
 unzip -qq repo_merge_conflict2.zip -d repo_merge_conflict2
 unzip -qq repo_safe_merge.zip -d repo_safe_merge
@@ -779,13 +789,336 @@ cd ..
 rm -rf repo_safe_merge_closed_pr
 cd ../server_files
 
+
+####################
+# Patching branches
+echo "#####################"
+echo "# Patching branches #"
+echo "#####################"
+echo "=========================="
+echo "Creating Pull Request"
+curl -s -o tmp-curl-response -L \
+  -X POST \
+  http://127.1.0.0:8080/repos/multiple_branches/pulls \
+  -d '{"title":"Patching branches pr","description":"My pull request description","sourceBranch":"master","targetBranch":"RamaSafe"}'
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+
+response_content=$(cat tmp-curl-response)
+expected_content='{"id":1,"title":"Patching branches pr","description":"My pull request description","sourceBranch":"master","targetBranch":"RamaSafe","state":"open","hasMergeConflicts":false,"merged":false}'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+
+# Change target branch to one with conflicts
+echo "=========================="
+echo "Change target branch to one with conflicts"
+curl -s -o tmp-curl-response -L \
+  -X PATCH \
+  http://127.1.0.0:8080/repos/multiple_branches/pulls/1\
+  -d '{"title":"Modified title", "targetBranch":"RamaConflicts"}'
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+response_content=$(cat tmp-curl-response)
+expected_content='{"id":1,"title":"Modified title","description":"My pull request description","sourceBranch":"master","targetBranch":"RamaConflicts","state":"open","hasMergeConflicts":true,"merged":false}'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+# Close pr
+echo "=========================="
+echo "Close pr"
+curl -s -o tmp-curl-response -L \
+  -X PATCH \
+  http://127.1.0.0:8080/repos/multiple_branches/pulls/1\
+  -d '{"state":"closed"}'
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+response_content=$(cat tmp-curl-response)
+expected_content='{"id":1,"title":"Modified title","description":"My pull request description","sourceBranch":"master","targetBranch":"RamaConflicts","state":"closed","hasMergeConflicts":true,"merged":false}'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+# Modify title while closed
+echo "=========================="
+echo "Modify title while closed"
+curl -s -o tmp-curl-response -L \
+  -X PATCH \
+  http://127.1.0.0:8080/repos/multiple_branches/pulls/1\
+  -d '{"title":"New title closed"}'
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+response_content=$(cat tmp-curl-response)
+expected_content='{"id":1,"title":"New title closed","description":"My pull request description","sourceBranch":"master","targetBranch":"RamaConflicts","state":"closed","hasMergeConflicts":true,"merged":false}'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+# Fail to modify target branch while closed
+echo "=========================="
+echo "Fail to modify target branch while closed"
+curl -s -o tmp-curl-response -L \
+  -X PATCH \
+  http://127.1.0.0:8080/repos/multiple_branches/pulls/1\
+  -d '{"targetBranch":"RamaSafe", "state":"open"}'
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+response_content=$(cat tmp-curl-response)
+expected_content='No puedes modificar target branch de un Pull Request cerrado'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+# Open pr
+echo "=========================="
+echo "Open pr"
+curl -s -o tmp-curl-response -L \
+  -X PATCH \
+  http://127.1.0.0:8080/repos/multiple_branches/pulls/1\
+  -d '{"state":"open"}'
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+response_content=$(cat tmp-curl-response)
+expected_content='{"id":1,"title":"New title closed","description":"My pull request description","sourceBranch":"master","targetBranch":"RamaConflicts","state":"open","hasMergeConflicts":true,"merged":false}'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+# Success in modifying target branch while open
+echo "=========================="
+echo "Success in modifying target branch while open"
+curl -s -o tmp-curl-response -L \
+  -X PATCH \
+  http://127.1.0.0:8080/repos/multiple_branches/pulls/1\
+  -d '{"targetBranch":"RamaSafe"}'
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+response_content=$(cat tmp-curl-response)
+expected_content='{"id":1,"title":"New title closed","description":"My pull request description","sourceBranch":"master","targetBranch":"RamaSafe","state":"open","hasMergeConflicts":false,"merged":false}'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+
+# Fail to modify target branch to invalid branch
+echo "=========================="
+echo "Fail to modify target branch to invalid branch"
+curl -s -o tmp-curl-response -L \
+  -X PATCH \
+  http://127.1.0.0:8080/repos/multiple_branches/pulls/1\
+  -d '{"targetBranch":"RamaInexistente"}'
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+response_content=$(cat tmp-curl-response)
+expected_content='RamaInexistente no es una rama existente'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+# Fail to modify target branch to equal to source branch
+echo "=========================="
+echo "Fail to modify target branch to equal to source branch"
+curl -s -o tmp-curl-response -L \
+  -X PATCH \
+  http://127.1.0.0:8080/repos/multiple_branches/pulls/1\
+  -d '{"targetBranch":"master"}'
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+response_content=$(cat tmp-curl-response)
+expected_content='Nothing to compare: No se puede mergear la rama master en master'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+
+echo "✅"
+
+# Merging Pull Request with PUT
+echo "=========================="
+echo "Merging Pull Request with PUT"
+curl -s -o tmp-curl-response -L \
+  -X PUT \
+  http://127.1.0.0:8080/repos/multiple_branches/pulls/1/merge
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit
+fi
+
+response_content=$(cat tmp-curl-response)
+expected_content='{"id":1,"title":"New title closed","description":"My pull request description","sourceBranch":"master","targetBranch":"RamaSafe","state":"closed","hasMergeConflicts":false,"merged":true}'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content: $response_content"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+
+echo "✅"
+
+# Creating new Pull Request
+echo "=========================="
+echo "Creating new Pull Request"
+curl -s -o tmp-curl-response -L \
+  -X POST \
+  http://127.1.0.0:8080/repos/multiple_branches/pulls\
+  -d '{"title":"Second Pull Request","description":"My pull request description","sourceBranch":"master","targetBranch":"RamaConflicts"}'
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit
+fi
+
+response_content=$(cat tmp-curl-response)
+expected_content='{"id":2,"title":"Second Pull Request","description":"My pull request description","sourceBranch":"master","targetBranch":"RamaConflicts","state":"open","hasMergeConflicts":true,"merged":false}'
+
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content: $response_content"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+
+echo "✅"
+
+# Fail to change target branch to branch already merged
+echo "=========================="
+echo "Fail to change target branch to branch already merged"
+curl -s -o tmp-curl-response -L \
+  -X PATCH \
+  http://127.1.0.0:8080/repos/multiple_branches/pulls/1\
+  -d '{"targetBranch":"RamaSafe"}'
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit
+fi
+
+response_content=$(cat tmp-curl-response)
+expected_content='Nothing to compare: master está al día con RamaSafe'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content: $response_content"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+
+echo "✅"
+
 # Remove all the files that were created
+kill $server_process
+sleep 1
+
 rm -rf repo_safe_merge_closed_pr
 rm -rf repo_merge_conflict2
 rm -rf repo_merge_conflict
 rm -rf repo_safe_merge
-rm tmp-curl-response
+rm -rf multiple_branches
 rm http-server-logs.log
 rm tcp-server-logs.log
-kill $server_process
+rm -rf ../client_files/multiple_branches
+rm tmp-curl-response
 

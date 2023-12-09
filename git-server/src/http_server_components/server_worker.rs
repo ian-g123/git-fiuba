@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::Write, net::TcpStream, str::FromStr};
+use std::{collections::HashMap, fmt::format, io::Write, net::TcpStream, str::FromStr};
 
 use super::{
     http_methods::{
@@ -184,9 +184,10 @@ impl<'a> ServerWorker {
                 CommandError::NothingToCompare(e) => {
                     HttpError::Forbidden(CommandError::NothingToCompare(e).to_string())
                 }
-                CommandError::InvalidBranchName(e) => {
-                    HttpError::Forbidden(CommandError::InvalidBranchName(e).to_string())
+                CommandError::InvalidBranchName(branch) => {
+                    HttpError::Forbidden(format!("{} no es una rama existente", branch))
                 }
+
                 _ => HttpError::InternalServerError(e),
             })?;
         let response_body = serde_json::to_string(&saved_pull_request).unwrap();
@@ -315,7 +316,21 @@ impl<'a> ServerWorker {
         let mut repo = self.get_repo(repo_path, &mut sink)?;
         let saved_pull_request = repo
             .update_pull_request(u64::from_str(id).unwrap(), request_info)
-            .map_err(|e| HttpError::InternalServerError(e))?
+            .map_err(|e| match e {
+                CommandError::PullRequestMerged => {
+                    HttpError::Forbidden(CommandError::PullRequestMerged.to_string())
+                }
+                CommandError::PullRequestClosed(e_interno) => {
+                    HttpError::Forbidden(CommandError::PullRequestClosed(e_interno).to_string())
+                }
+                CommandError::InvalidBranchName(branch) => {
+                    HttpError::Forbidden(format!("{} no es una rama existente", branch))
+                }
+                CommandError::NothingToCompare(e_interno) => {
+                    HttpError::Forbidden(CommandError::NothingToCompare(e_interno).to_string())
+                }
+                e => HttpError::InternalServerError(e),
+            })?
             .ok_or(HttpError::NotFound)?;
         let response_body = serde_json::to_string(&saved_pull_request).unwrap();
         self.send_response(&200, "OK", &HashMap::new(), &response_body)

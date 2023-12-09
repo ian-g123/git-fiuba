@@ -252,7 +252,12 @@ pub enum CommandError {
     PullRequestUnknownMerge,
 
     /// Error al eliminar un archivo
-    PullRequestUnknownID
+    PullRequestUnknownID,
+
+    //Error al modificar un pull request cer
+    PullRequestClosed(String),
+    PullRequestMerged,
+
 }
 
 impl Error for CommandError {}
@@ -598,6 +603,8 @@ impl fmt::Display for CommandError {
             CommandError::InvalidPullRequestState(state) => write!(f, "Invalid pull request state: {}", state),
             CommandError::PullRequestUnknownMerge => write!(f, "Pull Request without especification of merge status"),
             CommandError::PullRequestUnknownID => write!(f, "Pull Request without especification of ID"),
+            CommandError::PullRequestClosed(field) => write!(f, "No puedes modificar {} de un Pull Request cerrado", field),
+            CommandError::PullRequestMerged => write!(f, "No puedes modificar un Pull Request mergeado"),
         }
     }
 }
