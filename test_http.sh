@@ -360,7 +360,7 @@ fi
 echo "✅"
 
 response_content=$(cat tmp-curl-response)
-expected_content='{"id":1,"title":"Safe merge pull request modified","description":"My pull request description","sourceBranch":"rama","targetBranch":"master","state":"closed","hasMergeConflicts":false,"merged":true}'
+expected_content='{"id":1,"title":"Safe merge pull request modified","description":"My pull request description","sourceBranch":"rama","targetBranch":"master","state":"closed","merged":true}'
 if [ "$response_content" != "$expected_content" ]; then
     echo "❌ Failed. Actual content is not equal to expected content:"
     echo "Actual:   $response_content"
@@ -547,7 +547,7 @@ fi
 echo "✅"
 
 response_content=$(cat tmp-curl-response)
-expected_content='{"id":1,"title":"Conflict merge pull request modified","description":"My pull request description","sourceBranch":"rama","targetBranch":"master","state":"closed","hasMergeConflicts":false,"merged":true}'
+expected_content='{"id":1,"title":"Conflict merge pull request modified","description":"My pull request description","sourceBranch":"rama","targetBranch":"master","state":"closed","merged":true}'
 if [ "$response_content" != "$expected_content" ]; then
     echo "❌ Failed. Actual content is not equal to expected content:"
     echo "Actual:   $response_content"
@@ -675,7 +675,7 @@ fi
 echo "✅"
 
 response_content=$(cat tmp-curl-response)
-expected_content='{"id":1,"title":"Merge conflict resolved through push","description":"My pull request description","sourceBranch":"rama","targetBranch":"master","state":"closed","hasMergeConflicts":false,"merged":true}'
+expected_content='{"id":1,"title":"Merge conflict resolved through push","description":"My pull request description","sourceBranch":"rama","targetBranch":"master","state":"closed","merged":true}'
 if [ "$response_content" != "$expected_content" ]; then
     echo "❌ Failed. Actual content is not equal to expected content:"
     echo "Actual:   $response_content"
@@ -774,7 +774,7 @@ fi
 echo "✅"
 
 response_content=$(cat tmp-curl-response)
-expected_content='{"id":1,"title":"Merge conflict resolved through push","description":"My pull request description","sourceBranch":"rama","targetBranch":"master","state":"closed","hasMergeConflicts":false,"merged":true}'
+expected_content='{"id":1,"title":"Merge conflict resolved through push","description":"My pull request description","sourceBranch":"rama","targetBranch":"master","state":"closed","merged":true}'
 if [ "$response_content" != "$expected_content" ]; then
     echo "❌ Failed. Actual content is not equal to expected content:"
     echo "Actual:   $response_content"
@@ -1044,7 +1044,7 @@ if [ ! -f tmp-curl-response ]; then
 fi
 
 response_content=$(cat tmp-curl-response)
-expected_content='{"id":1,"title":"New title closed","description":"My pull request description","sourceBranch":"master","targetBranch":"RamaSafe","state":"closed","hasMergeConflicts":false,"merged":true}'
+expected_content='{"id":1,"title":"New title closed","description":"My pull request description","sourceBranch":"master","targetBranch":"RamaSafe","state":"closed","merged":true}'
 if [ "$response_content" != "$expected_content" ]; then
     echo "❌ Failed. Actual content is not equal to expected content: $response_content"
     echo "Actual:   $response_content"

@@ -159,16 +159,16 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
             ))
         })?;
         self.set_last_pull_request_id(pull_request_id)?;
-        self.log(&format!(
-            "Branches: {} => {}",
-            &pull_request_info.source_branch, &pull_request_info.target_branch,
-        ));
-        let has_conflicts = self.has_merge_conflicts(
-            &pull_request_info.source_branch,
-            &pull_request_info.target_branch,
-        )?;
-        self.log(&format!("Has conflicts: {}", has_conflicts));
-        pull_request_info.has_merge_conflicts = Some(has_conflicts);
+        let has_conflicts = match pull_request_info.merged {
+            Some(true) => None,
+            _ => Some(self.has_merge_conflicts(
+                &pull_request_info.source_branch,
+                &pull_request_info.target_branch,
+            )?),
+        };
+        pull_request_info.has_merge_conflicts = has_conflicts;
+        println!("Has conflicts : {:?}", has_conflicts);
+        self.log(&format!("Has conflicts: {:?}", has_conflicts));
         Ok(pull_request_info.to_owned())
     }
 
@@ -292,9 +292,13 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
             ))
         })?;
         let mut pull_request = read_pull_request_from_file(pull_request_file)?;
-        let has_conflicts =
-            self.has_merge_conflicts(&pull_request.source_branch, &pull_request.target_branch)?;
-        pull_request.has_merge_conflicts = Some(has_conflicts);
+        let has_conflicts = match pull_request.merged {
+            Some(true) => None,
+            _ => Some(
+                self.has_merge_conflicts(&pull_request.source_branch, &pull_request.target_branch)?,
+            ),
+        };
+        pull_request.has_merge_conflicts = has_conflicts;
         Ok(Some(pull_request))
     }
 

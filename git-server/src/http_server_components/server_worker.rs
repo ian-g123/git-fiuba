@@ -435,6 +435,7 @@ impl<'a> ServerWorker {
                 .map_err(|e| HttpError::InternalServerError(e))?;
                 pull_request.set_state(PullRequestState::Closed);
                 pull_request.set_merged(true);
+                pull_request.has_merge_conflicts = None;
                 repo.save_pull_request(&mut pull_request)
                     .map_err(|e| HttpError::InternalServerError(e))?;
 
