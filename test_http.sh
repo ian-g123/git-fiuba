@@ -403,10 +403,6 @@ fi
 echo "✅"
 cd -
 
-
-# 
-
-
 rm -rf repo_merge_conflict
 rm -rf repo_safe_merge
 rm tmp-curl-response
