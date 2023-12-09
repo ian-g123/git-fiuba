@@ -119,7 +119,7 @@ impl ContentType {
     pub fn get_extension(&self) -> String {
         match self {
             ContentType::Json => ".json".to_string(),
-            ContentType::Plain => "".to_string(),
+            ContentType::Plain => ".txt".to_string(),
         }
     }
 
