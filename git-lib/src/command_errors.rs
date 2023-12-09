@@ -257,6 +257,7 @@ pub enum CommandError {
     //Error al modificar un pull request cer
     PullRequestClosed(String),
     PullRequestMerged,
+    PullRequestToString
 
 }
 
@@ -605,6 +606,8 @@ impl fmt::Display for CommandError {
             CommandError::PullRequestUnknownID => write!(f, "Pull Request without especification of ID"),
             CommandError::PullRequestClosed(field) => write!(f, "No puedes modificar {} de un Pull Request cerrado", field),
             CommandError::PullRequestMerged => write!(f, "No puedes modificar un Pull Request mergeado"),
+            CommandError::PullRequestToString => write!(f, "Failed to convert pull request to string"),
+        
         }
     }
 }

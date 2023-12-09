@@ -22,6 +22,13 @@ impl PullRequestState {
         }
     }
 
+    pub fn to_string(&self) -> String {
+        match self {
+            PullRequestState::Open => "open".to_string(),
+            PullRequestState::Closed => "closed".to_string(),
+        }
+    }
+
     pub fn from_string(state: &str) -> Result<Self, CommandError> {
         match state {
             "open" => Ok(PullRequestState::Open),

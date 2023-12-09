@@ -164,6 +164,35 @@ impl PullRequest {
             merged: None,
         })
     }
+
+    pub fn to_string_plain_format(&self) -> String {
+        let mut string = String::new();
+        let id = if let Some(id) = self.id {
+            format!("{}\n", id)
+        } else {
+            "\n".to_string()
+        };
+        string += &id;
+        string += &format!("{}\n", self.title);
+        string += &format!("{}\n", self.source_branch);
+        string += &format!("{}\n", self.target_branch);
+        string += &format!("{}\n", self.state.to_string());
+
+        let conflicts = if let Some(has_merge_conflicts) = self.has_merge_conflicts {
+            format!("{}\n", has_merge_conflicts)
+        } else {
+            "\n".to_string()
+        };
+        string += &conflicts;
+        let merged = if let Some(merged) = self.merged {
+            format!("{}\n", merged)
+        } else {
+            "\n".to_string()
+        };
+        string += &merged;
+        string += &format!("{}", self.description);
+        string
+    }
 }
 
 /* impl<'a> FromPlain<'a> for PullRequest {

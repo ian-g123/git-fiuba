@@ -87,6 +87,27 @@ impl ContentType {
             }
         }
     }
+
+    pub fn pull_request_to_string(&self, pull_request: &PullRequest) -> Result<String, HttpError> {
+        let response_body = match self {
+            ContentType::Json => serde_json::to_string(&pull_request)
+                .map_err(|_| HttpError::InternalServerError(CommandError::PullRequestToString))?,
+            ContentType::Plain => pull_request.to_string_plain_format(),
+        };
+        Ok(response_body)
+    }
+
+    pub fn pull_requests_to_string(
+        &self,
+        pull_requests: &Vec<PullRequest>,
+    ) -> Result<String, HttpError> {
+        let mut string = String::new();
+        for pr in pull_requests {
+            string += &format!("{}\n", self.pull_request_to_string(pr)?);
+        }
+
+        Ok(string.trim().to_string())
+    }
 }
 
 fn get_len(headers: &HashMap<String, String>) -> Result<usize, HttpError> {
