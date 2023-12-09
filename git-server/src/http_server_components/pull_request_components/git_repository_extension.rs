@@ -17,15 +17,19 @@ use crate::http_server_components::http_methods::{
     pull_request_update::PullRequestUpdate,
 };
 
+use super::content_type::{self, ContentType};
+
 pub trait GitRepositoryExtension {
     fn create_pull_request(
         &mut self,
         pull_request_info: PullRequest,
+        content_type: ContentType,
     ) -> Result<PullRequest, CommandError>;
 
     fn save_pull_request(
         &mut self,
         pull_request_info: &mut PullRequest,
+        content_type: ContentType,
     ) -> Result<PullRequest, CommandError>;
     fn get_last_pull_request_id(&self) -> Result<u64, CommandError>;
     fn set_last_pull_request_id(&self, pull_request_id: u64) -> Result<(), CommandError>;
@@ -72,13 +76,17 @@ pub trait GitRepositoryExtension {
         &mut self,
         id: u64,
         pull_request_info: PullRequestUpdate,
+        content_type: ContentType,
     ) -> Result<Option<PullRequest>, CommandError>;
+
+    fn get_pull_request_format(&mut self, id: Option<u64>) -> Result<ContentType, CommandError>;
 }
 
 impl<'a> GitRepositoryExtension for GitRepository<'a> {
     fn create_pull_request(
         &mut self,
         mut pull_request: PullRequest,
+        content_type: ContentType,
     ) -> Result<PullRequest, CommandError> {
         if pull_request.id.is_some() {
             panic!("No se puede crear un pull request con un id");
@@ -110,7 +118,7 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
             )));
         }
         pull_request.set_merged(false);
-        self.save_pull_request(&mut pull_request)?;
+        self.save_pull_request(&mut pull_request, content_type)?;
         let has_conflicts =
             self.has_merge_conflicts(&pull_request.source_branch, &pull_request.target_branch)?;
         pull_request.has_merge_conflicts = Some(has_conflicts);
@@ -120,6 +128,7 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
     fn save_pull_request(
         &mut self,
         pull_request_info: &mut PullRequest,
+        content_type: ContentType,
     ) -> Result<PullRequest, CommandError> {
         let pull_request_id = match pull_request_info.id {
             Some(id) => id,
@@ -130,7 +139,7 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
         };
         let new_pull_request_path_str = join_paths!(
             self.get_pull_requests_path()?,
-            format!("{}.json", pull_request_id)
+            format!("{}{}", pull_request_id, content_type.get_extension())
         )
         .ok_or(CommandError::FileOpenError(
             "Error creando el path del nuevo pull request".to_string(),
@@ -144,20 +153,16 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
                 ))
             })?;
         }
-        let new_pull_request = fs::File::create(new_pull_request_path_str).map_err(|error| {
-            CommandError::FileOpenError(format!(
-                "Error creando el archivo del nuevo pull request: {}",
-                error.to_string()
-            ))
-        })?;
+        let mut new_pull_request =
+            fs::File::create(new_pull_request_path_str).map_err(|error| {
+                CommandError::FileOpenError(format!(
+                    "Error creando el archivo del nuevo pull request: {}",
+                    error.to_string()
+                ))
+            })?;
         pull_request_info.id = Some(pull_request_id);
         pull_request_info.has_merge_conflicts = None;
-        serde_json::to_writer(new_pull_request, &pull_request_info).map_err(|error| {
-            CommandError::FileOpenError(format!(
-                "Error escribiendo el archivo del nuevo pull request: {}",
-                error.to_string()
-            ))
-        })?;
+        content_type.pull_request_to_writer(&mut new_pull_request, pull_request_info)?;
         self.set_last_pull_request_id(pull_request_id)?;
         let has_conflicts = match pull_request_info.merged {
             Some(true) => None,
@@ -167,7 +172,6 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
             )?),
         };
         pull_request_info.has_merge_conflicts = has_conflicts;
-        println!("Has conflicts : {:?}", has_conflicts);
         self.log(&format!("Has conflicts: {:?}", has_conflicts));
         Ok(pull_request_info.to_owned())
     }
@@ -274,6 +278,7 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
         &mut self,
         pull_request_id: u64,
     ) -> Result<Option<PullRequest>, CommandError> {
+        // cambiar: content_type.get_extension()
         let pull_requests_path_str = join_paths!(
             self.get_pull_requests_path()?,
             format!("{}.json", pull_request_id)
@@ -464,6 +469,7 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
         &mut self,
         pull_request_id: u64,
         pull_request_info: PullRequestUpdate,
+        content_type: ContentType,
     ) -> Result<Option<PullRequest>, CommandError> {
         let Some(mut previous_pull_request) = self.get_pull_request(pull_request_id)? else {
             return Ok(None);
@@ -493,7 +499,28 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
 
         previous_pull_request.update(pull_request_info)?;
 
-        Ok(Some(self.save_pull_request(&mut previous_pull_request)?))
+        Ok(Some(self.save_pull_request(
+            &mut previous_pull_request,
+            content_type,
+        )?))
+    }
+
+    fn get_pull_request_format(
+        &mut self,
+        id_opt: Option<u64>,
+    ) -> Result<ContentType, CommandError> {
+        let Some(id) = id_opt else {
+            return Err(CommandError::PullRequestUnknownID);
+        };
+        // cambiar
+        return Ok(ContentType::Json);
+        /* if self.get_pull_request(id, ContentType::Json)?.is_some() {
+            return Ok(ContentType::Json);
+        }
+        if self.get_pull_request(id, ContentType::Plain)?.is_some() {
+            return Ok(ContentType::Plain);
+        } */
+        //Err(CommandError::PullRequestUnknownID)
     }
 }
 
@@ -507,13 +534,10 @@ fn read_pull_request_from_file(mut pull_request_file: File) -> Result<PullReques
                 error.to_string()
             ))
         })?;
-    let pull_request: PullRequest =
-        serde_json::from_str(&pull_request_content).map_err(|error| {
-            CommandError::FileReadError(format!(
-                "Error leyendo el directorio de pull requests: {}",
-                error.to_string()
-            ))
-        })?;
+    // cambiar
+
+    let content_type = ContentType::Json;
+    let pull_request: PullRequest = content_type.pull_request_from_string(pull_request_content)?;
     Ok(pull_request)
 }
 
