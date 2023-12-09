@@ -1,8 +1,14 @@
-use std::{collections::HashMap, fmt::format, io::Write, net::TcpStream, str::FromStr};
+use std::{
+    collections::HashMap,
+    fmt::format,
+    io::Write,
+    net::{TcpStream, ToSocketAddrs},
+    str::FromStr,
+};
 
 use super::{
     http_methods::{
-        pull_request::PullRequest, pull_request_state::PullRequestState,
+        from_plain::FromPlain, pull_request::PullRequest, pull_request_state::PullRequestState,
         pull_request_update::PullRequestUpdate,
     },
     pull_request_components::{
@@ -152,7 +158,7 @@ impl<'a> ServerWorker {
     fn handle_post(
         &mut self,
         uri: &str,
-        _headers: HashMap<String, String>,
+        headers: HashMap<String, String>,
     ) -> Result<(), HttpError> {
         self.log("Handling POST request");
         let uri = uri
@@ -172,8 +178,21 @@ impl<'a> ServerWorker {
             return Err(HttpError::BadRequest("Should end with pulls".to_string()));
         }
 
-        let mut de = serde_json::Deserializer::from_reader(&mut self.socket);
-        let request_info = PullRequest::deserialize(&mut de).unwrap();
+        let request_info = derealize_from_content_type(
+            headers,
+            {
+                let mut de = serde_json::Deserializer::from_reader(&mut self.socket);
+                PullRequest::deserialize(&mut de).unwrap()
+            },
+            |len| {
+                PullRequest::from_plain(&mut self.socket, len).map_err(|e| match e {
+                    CommandError::InvalidHTTPRequest(message) => HttpError::BadRequest(message),
+                    e => HttpError::BadRequest(
+                        CommandError::InvalidHTTPRequest(e.to_string()).to_string(),
+                    ),
+                })
+            },
+        )?;
         self.log(&format!("Request info: {:?}", request_info));
 
         let mut sink = std::io::sink();
@@ -469,6 +488,39 @@ impl<'a> ServerWorker {
             }
         }
     }
+}
+
+fn derealize_from_content_type(
+    headers: HashMap<String, String>,
+    json_block: dyn FromPlain,
+    mut plain_block: impl <'a>FnMut(usize) -> Result<dyn FromPlain<'a>, HttpError>,
+) -> Result<dyn FromPlain, HttpError> {
+    let content_type = match headers.get("Content-Type") {
+        Some(content_type) => content_type,
+        None => "text/json",
+    };
+    let request_info = match content_type {
+        "text/json" => json_block,
+        "text/plain" => {
+            let len = headers
+                .get("Content-Length")
+                .ok_or(HttpError::BadRequest(
+                    "Content-Length header not found".to_string(),
+                ))?
+                .parse::<usize>()
+                .map_err(|_| {
+                    HttpError::BadRequest("Content-Length header is not a number".to_string())
+                })?;
+            plain_block(len)?
+        }
+        _ => {
+            return Err(HttpError::BadRequest(format!(
+                "Content-Type not supported: {}",
+                content_type
+            )))
+        }
+    };
+    Ok(request_info)
 }
 
 // struct VerboseReader<'a> {
