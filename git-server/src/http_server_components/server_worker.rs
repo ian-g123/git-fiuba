@@ -500,7 +500,7 @@ impl<'a> ServerWorker {
                     .into_iter()
                     .map(|commit| SimplifiedCommitObject::from_commit(commit))
                     .collect::<Vec<SimplifiedCommitObject>>();
-                let response_body = serde_json::to_string(&commits).unwrap();
+                let response_body = content_type.commits_to_string(&commits)?;
                 self.send_response(&200, "OK", &HashMap::new(), &response_body)
                     .map_err(|e| HttpError::InternalServerError(e))
             }

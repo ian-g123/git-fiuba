@@ -8,6 +8,8 @@ use crate::http_server_components::{
     http_methods::{pull_request::PullRequest, pull_request_update::PullRequestUpdate},
 };
 
+use super::simplified_commit_object::SimplifiedCommitObject;
+
 #[derive(Clone)]
 pub enum ContentType {
     Json,
@@ -109,6 +111,24 @@ impl ContentType {
                 let mut string = String::new();
                 for pr in pull_requests {
                     string += &format!("{}\n", pr.to_string_plain_format());
+                }
+                string
+            }
+        };
+        Ok(response_body)
+    }
+
+    pub fn commits_to_string(
+        &self,
+        commits: &Vec<SimplifiedCommitObject>,
+    ) -> Result<String, HttpError> {
+        let response_body = match self {
+            ContentType::Json => serde_json::to_string(&commits)
+                .map_err(|_| HttpError::InternalServerError(CommandError::PullRequestToString))?,
+            ContentType::Plain => {
+                let mut string = String::new();
+                for commit in commits {
+                    string += &format!("{}\n", commit.to_string_plain_format());
                 }
                 string
             }
