@@ -1,9 +1,8 @@
 use std::{
     collections::HashMap,
-    ffi::OsStr,
     fs::{self, File, OpenOptions},
     io::{Read, Write},
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use git_lib::{
@@ -16,9 +15,11 @@ use crate::http_server_components::http_methods::{
     pull_request_update::PullRequestUpdate,
 };
 
-use super::content_type::ContentType;
-
 pub trait GitRepositoryExtension {
+    /// Crea un Pull Request, lo guarda en server-files/pull_requests/id.json en formato json
+    /// y lo devuelve.
+    /// Si las ramas source y target no existen o son iguales, devuelve error.
+    /// Si no hay cambios para comparar entre las ramas, devuelve error.
     fn create_pull_request(
         &mut self,
         pull_request_info: PullRequest,
@@ -268,7 +269,8 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
                 }
             }
         }
-        pull_requests.sort_unstable_by(|a, b| a.id.unwrap().cmp(&b.id.unwrap()));
+
+        let pull_requests = sort_pull_requests_by_id(&pull_requests)?;
         Ok(pull_requests)
     }
 
@@ -543,4 +545,23 @@ fn remove_parents(
         read_commits.remove(&parent_hash);
         commits_to_read.remove(&parent_hash);
     }
+}
+
+fn sort_pull_requests_by_id(
+    pull_requests: &Vec<PullRequest>,
+) -> Result<Vec<PullRequest>, CommandError> {
+    let mut pull_requests_hashmap: HashMap<u64, PullRequest> = HashMap::new();
+    for pr in pull_requests {
+        let id = pr.id.ok_or(CommandError::PullRequestUnknownID)?;
+        _ = pull_requests_hashmap.insert(id, pr.to_owned());
+    }
+    let mut ids: Vec<&u64> = pull_requests_hashmap.keys().collect();
+    ids.sort();
+    let mut pull_requests_sorted = Vec::<PullRequest>::new();
+    for id in ids {
+        if let Some(pr) = pull_requests_hashmap.get(id) {
+            pull_requests_sorted.push(pr.to_owned());
+        }
+    }
+    Ok(pull_requests_sorted)
 }
