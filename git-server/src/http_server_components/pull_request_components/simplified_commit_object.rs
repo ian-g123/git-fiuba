@@ -13,6 +13,7 @@ pub struct SimplifiedCommitObject {
     parents: Vec<String>,
 }
 impl SimplifiedCommitObject {
+    /// Recibe un CommitObject y crea un SimplifiedCommitObject a partir de éste.
     pub fn from_commit(commit: CommitObject) -> Self {
         SimplifiedCommitObject {
             author: SimplfiedAuthor::from_author(commit.get_author(), commit.get_author_date()),
@@ -26,6 +27,7 @@ impl SimplifiedCommitObject {
         }
     }
 
+    /// Convierte el SimplifiedCommitObject a texto plano.
     pub fn to_string_plain_format(&self) -> String {
         let mut string = String::new();
         string += &format!("tree {}\n", self.tree);

@@ -214,7 +214,7 @@ impl<'a> ServerWorker {
                 _ => HttpError::InternalServerError(e),
             })?;
 
-        let response_body = content_type.seralize_pull_request(&saved_pull_request)?;
+        let response_body = content_type.serialize_pull_request(&saved_pull_request)?;
 
         self.send_response(&200, "OK", &HashMap::new(), &response_body)
             .map_err(|e| HttpError::InternalServerError(e))?;
@@ -380,7 +380,7 @@ impl<'a> ServerWorker {
                 e => HttpError::InternalServerError(e),
             })?
             .ok_or(HttpError::NotFound)?;
-        let response_body = content_type.seralize_pull_request(&saved_pull_request)?;
+        let response_body = content_type.serialize_pull_request(&saved_pull_request)?;
         self.send_response(&200, "OK", &HashMap::new(), &response_body)
             .map_err(|e| HttpError::InternalServerError(e))?;
 
@@ -452,7 +452,7 @@ impl<'a> ServerWorker {
         match pull_request {
             None => Err(HttpError::NotFound),
             Some(pull_request) => {
-                let response_body = content_type.seralize_pull_request(&pull_request)?;
+                let response_body = content_type.serialize_pull_request(&pull_request)?;
                 self.send_response(&200, "OK", &HashMap::new(), &response_body)
                     .map_err(|e| HttpError::InternalServerError(e))
             }
@@ -506,7 +506,7 @@ impl<'a> ServerWorker {
                 repo.save_pull_request(&mut pull_request)
                     .map_err(|e| HttpError::InternalServerError(e))?;
 
-                let response_body = content_type.seralize_pull_request(&pull_request)?;
+                let response_body = content_type.serialize_pull_request(&pull_request)?;
                 self.send_response(&200, "OK", &HashMap::new(), &response_body)
                     .map_err(|e: CommandError| HttpError::InternalServerError(e))
             }
