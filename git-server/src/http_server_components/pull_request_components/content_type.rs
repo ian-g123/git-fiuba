@@ -91,11 +91,11 @@ impl ContentType {
         }
     }
 
-    pub fn pull_request_to_string(&self, pull_request: &PullRequest) -> Result<String, HttpError> {
+    pub fn seralize_pull_request(&self, pull_request: &PullRequest) -> Result<String, HttpError> {
         let response_body = match self {
             ContentType::Json => serde_json::to_string(&pull_request)
                 .map_err(|_| HttpError::InternalServerError(CommandError::PullRequestToString))?,
-            ContentType::Plain => pull_request.to_string_plain_format(),
+            ContentType::Plain => pull_request.to_plain(),
         };
         Ok(response_body)
     }
@@ -110,7 +110,7 @@ impl ContentType {
             ContentType::Plain => {
                 let mut string = String::new();
                 for pr in pull_requests {
-                    string += &format!("{}\n", pr.to_string_plain_format());
+                    string += &format!("{}\n", pr.to_plain());
                 }
                 string
             }
@@ -166,7 +166,7 @@ impl ContentType {
         Ok(())
     }
 
-    pub fn pull_request_from_string(
+    pub fn deseralize_pull_request(
         &self,
         pull_request_content: String,
     ) -> Result<PullRequest, CommandError> {

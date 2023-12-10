@@ -130,7 +130,7 @@ impl PullRequest {
         }
         buffer.push(b'\n');
         buffer.extend_from_slice(self.description.as_bytes()); */
-        let content = self.to_string_plain_format();
+        let content = self.to_plain();
         output.write_all(&content.as_bytes()).map_err(|_| {
             CommandError::InvalidHTTPRequest("Could not write pull request".to_string())
         })
@@ -172,7 +172,7 @@ impl PullRequest {
         })
     }
 
-    pub fn to_string_plain_format(&self) -> String {
+    pub fn to_plain(&self) -> String {
         let mut string = String::new();
         let id = if let Some(id) = self.id {
             format!("{}\n", id)

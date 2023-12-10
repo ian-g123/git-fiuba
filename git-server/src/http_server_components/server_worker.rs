@@ -201,7 +201,7 @@ impl<'a> ServerWorker {
         let mut sink = std::io::sink();
         let mut repo = self.get_repo(repo_path, &mut sink)?;
         let saved_pull_request = repo
-            .create_pull_request(request_info, content_type.clone())
+            .create_pull_request(request_info)
             .map_err(|e| match e {
                 CommandError::NothingToCompare(e) => {
                     HttpError::Forbidden(CommandError::NothingToCompare(e).to_string())
@@ -213,7 +213,7 @@ impl<'a> ServerWorker {
                 _ => HttpError::InternalServerError(e),
             })?;
 
-        let response_body = content_type.pull_request_to_string(&saved_pull_request)?;
+        let response_body = content_type.seralize_pull_request(&saved_pull_request)?;
 
         self.send_response(&200, "OK", &HashMap::new(), &response_body)
             .map_err(|e| HttpError::InternalServerError(e))?;
@@ -344,11 +344,7 @@ impl<'a> ServerWorker {
         let mut sink = std::io::sink();
         let mut repo = self.get_repo(repo_path, &mut sink)?;
         let saved_pull_request = repo
-            .update_pull_request(
-                u64::from_str(id).unwrap(),
-                request_info,
-                content_type.clone(),
-            )
+            .update_pull_request(u64::from_str(id).unwrap(), request_info)
             .map_err(|e| match e {
                 CommandError::PullRequestMerged => {
                     HttpError::Forbidden(CommandError::PullRequestMerged.to_string())
@@ -365,7 +361,7 @@ impl<'a> ServerWorker {
                 e => HttpError::InternalServerError(e),
             })?
             .ok_or(HttpError::NotFound)?;
-        let response_body = content_type.pull_request_to_string(&saved_pull_request)?;
+        let response_body = content_type.seralize_pull_request(&saved_pull_request)?;
         self.send_response(&200, "OK", &HashMap::new(), &response_body)
             .map_err(|e| HttpError::InternalServerError(e))?;
 
@@ -425,7 +421,7 @@ impl<'a> ServerWorker {
         match pull_request {
             None => Err(HttpError::NotFound),
             Some(pull_request) => {
-                let response_body = content_type.pull_request_to_string(&pull_request)?;
+                let response_body = content_type.seralize_pull_request(&pull_request)?;
                 self.send_response(&200, "OK", &HashMap::new(), &response_body)
                     .map_err(|e| HttpError::InternalServerError(e))
             }
@@ -472,10 +468,10 @@ impl<'a> ServerWorker {
                 pull_request.set_state(PullRequestState::Closed);
                 pull_request.set_merged(true);
                 pull_request.has_merge_conflicts = None;
-                repo.save_pull_request(&mut pull_request, content_type.clone())
+                repo.save_pull_request(&mut pull_request)
                     .map_err(|e| HttpError::InternalServerError(e))?;
 
-                let response_body = content_type.pull_request_to_string(&pull_request)?;
+                let response_body = content_type.seralize_pull_request(&pull_request)?;
                 self.send_response(&200, "OK", &HashMap::new(), &response_body)
                     .map_err(|e: CommandError| HttpError::InternalServerError(e))
             }
