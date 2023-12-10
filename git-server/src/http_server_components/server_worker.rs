@@ -1,19 +1,9 @@
-use std::{
-    collections::HashMap,
-    fmt::format,
-    io::Write,
-    net::{TcpStream, ToSocketAddrs},
-    str::FromStr,
-};
+use std::{collections::HashMap, io::Write, net::TcpStream, str::FromStr};
 
 use super::{
-    http_methods::{
-        from_plain::FromPlain, pull_request::PullRequest, pull_request_state::PullRequestState,
-        pull_request_update::PullRequestUpdate,
-    },
+    http_methods::pull_request_state::PullRequestState,
     pull_request_components::{
-        content_type::{self, ContentType},
-        git_repository_extension::GitRepositoryExtension,
+        content_type::ContentType, git_repository_extension::GitRepositoryExtension,
         simplified_commit_object::SimplifiedCommitObject,
     },
 };
@@ -21,7 +11,6 @@ use git_lib::{
     command_errors::CommandError, git_repository::GitRepository, join_paths,
     logger_sender::LoggerSender, utils::aux::read_string_until,
 };
-use serde::Deserialize;
 
 use super::http_error::HttpError;
 
@@ -281,12 +270,12 @@ impl<'a> ServerWorker {
             (None, None) => self.handle_get_pull_requests(repo_path, variables, content_type),
             (Some(id), None) => {
                 let id = u64::from_str(id)
-                    .map_err(|e| HttpError::BadRequest(CommandError::CastingError.to_string()))?;
+                    .map_err(|_| HttpError::BadRequest(CommandError::CastingError.to_string()))?;
                 self.handle_get_pull_request(repo_path, id, content_type)
             }
             (Some(id), Some("commits")) => {
                 let id = u64::from_str(id)
-                    .map_err(|e| HttpError::BadRequest(CommandError::CastingError.to_string()))?;
+                    .map_err(|_| HttpError::BadRequest(CommandError::CastingError.to_string()))?;
                 self.handle_get_pull_request_commits(repo_path, id, content_type)
             }
             _ => Err(HttpError::BadRequest("Invalid uri".to_string())),
