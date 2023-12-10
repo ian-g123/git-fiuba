@@ -45,10 +45,10 @@ impl ContentType {
         match self {
             ContentType::Json => {
                 let mut de = serde_json::Deserializer::from_reader(socket);
-                PullRequest::deserialize(&mut de).map_err(|e| {
+                PullRequest::deserialize(&mut de).map_err(|_: serde_json::Error| {
                     HttpError::BadRequest(
                         CommandError::InvalidHTTPRequest(
-                            "could not deserialize pull request".to_string(),
+                            "failed to deserialize pull request".to_string(),
                         )
                         .to_string(),
                     )
