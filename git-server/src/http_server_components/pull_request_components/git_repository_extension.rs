@@ -82,6 +82,11 @@ pub trait GitRepositoryExtension {
     ) -> Result<Option<PullRequest>, CommandError>;
 
     fn get_pull_request_format(&mut self, id: u64) -> Result<ContentType, CommandError>;
+    fn remove_existing_pr_files(
+        &mut self,
+        content_type: &ContentType,
+        pull_request_id: u64,
+    ) -> Result<(), CommandError>;
 }
 
 impl<'a> GitRepositoryExtension for GitRepository<'a> {
@@ -155,6 +160,7 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
                 ))
             })?;
         }
+        self.remove_existing_pr_files(&content_type, pull_request_id)?;
         let mut new_pull_request =
             fs::File::create(new_pull_request_path_str).map_err(|error| {
                 CommandError::FileOpenError(format!(
@@ -518,6 +524,43 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
             return Ok(ContentType::Plain);
         }
         Err(CommandError::InvalidContentType)
+    }
+
+    fn remove_existing_pr_files(
+        &mut self,
+        content_type: &ContentType,
+        pull_request_id: u64,
+    ) -> Result<(), CommandError> {
+        if let ContentType::Plain = *content_type {
+            let json_path = join_paths!(
+                self.get_pull_requests_path()?,
+                format!("{}.json", pull_request_id)
+            )
+            .ok_or(CommandError::FileOpenError(
+                "Error creando el path del nuevo pull request".to_string(),
+            ))?;
+            if Path::new(&json_path).exists() {
+                fs::remove_file(json_path)
+                    .map_err(|error| CommandError::FileRemovingError(error.to_string()))?;
+            }
+        } else {
+            let plain_path = join_paths!(
+                self.get_pull_requests_path()?,
+                format!("{}.txt", pull_request_id)
+            )
+            .ok_or(CommandError::FileOpenError(
+                "Error creando el path del nuevo pull request".to_string(),
+            ))?;
+            if Path::new(&plain_path).exists() {
+                fs::remove_file(plain_path).map_err(|error| {
+                    CommandError::FileRemovingError(format!(
+                        "Error creando el directorio para el nuevo pull request: {}",
+                        error.to_string()
+                    ))
+                })?;
+            }
+        }
+        Ok(())
     }
 }
 
