@@ -11,7 +11,7 @@ fn test() {
     let mut output_writer = Cursor::new(output);
     let mut repo = GitRepository::open(repo_path, &mut output_writer).unwrap();
     let commits = repo.get_log(true).unwrap();
-    let (mut commit, _, _) = commits.get(0).unwrap().to_owned();
+    let (commit, _, _) = commits.get(0).unwrap().to_owned();
     assert_eq!(commit.get_message(), "initialcommit");
     let tree = repo
         .db()

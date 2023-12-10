@@ -25,32 +25,49 @@ pub trait GitRepositoryExtension {
         pull_request_info: PullRequest,
     ) -> Result<PullRequest, CommandError>;
 
+    /// Guarda un Pull Request en formato json en server-files/pull_request
     fn save_pull_request(
         &mut self,
         pull_request_info: &mut PullRequest,
     ) -> Result<PullRequest, CommandError>;
+
+    /// Devuelve el número de id del último pull request creado
     fn get_last_pull_request_id(&self) -> Result<u64, CommandError>;
+
+    /// Cambia el número de id del último pull request creado
     fn set_last_pull_request_id(&self, pull_request_id: u64) -> Result<(), CommandError>;
+
+    /// Devuelve un vector de todos los pull requests cuyos estados coincides con 'state'.
+    /// Están ordenados por id.
     fn get_pull_requests(&mut self, state: &str) -> Result<Vec<PullRequest>, CommandError>;
+
+    /// Obtiene y devuelve el Pull Request cuyo id coincide con el pasado por parámetro. Devuelve error
+    /// si no existe.
     fn get_pull_request(
         &mut self,
         pull_request_id: u64,
     ) -> Result<Option<PullRequest>, CommandError>;
+
+    /// Devuelve una lista de commits del Pull Request cuyo id coincide con el pasado por parámetro.
+    /// Si el mismo no existe, devuelve None.
     fn get_pull_request_commits(
         &mut self,
         pull_request_id: u64,
     ) -> Result<Option<Vec<CommitObject>>, CommandError>;
 
+    /// Devuelve una lista de commits de source_branch que se agregarán a target_branch cuando
+    /// se haga el merge del Pull Request.
     fn get_commits_to_merge(
         &mut self,
         source_branch: String,
         target_branch: String,
     ) -> Result<Vec<CommitObject>, CommandError>;
 
+    /// Lee el un CommitObject de la base de datos y lo inserta en 'commits_to_read'
     fn get_commit_from_db_and_insert(
         &mut self,
-        source_commit_hash: String,
-        source_commits_to_read: &mut HashMap<String, CommitObject>,
+        commit_hash: String,
+        commits_to_read: &mut HashMap<String, CommitObject>,
     ) -> Result<(), CommandError>;
 
     fn step_source(
@@ -70,8 +87,17 @@ pub trait GitRepositoryExtension {
         read_target_commits: &mut HashMap<String, CommitObject>,
     ) -> Result<(), CommandError>;
 
+    /// Devuelve el path a la carpeta que guarda los Pull Requests
     fn get_pull_requests_path(&self) -> Result<String, CommandError>;
+
+    /// Devuelve el path a la carpeta que guarda los archivos del Servidor
     fn get_server_files_path(&self) -> Result<String, CommandError>;
+
+    /// Actualiza el Pull Request cuyo id coincide con el pasado como parámetro a partir
+    /// del PullRequestUpdate.
+    /// Errores: modificar un Pull Request mergeado, cambiar target_branch o descripción de un PR cerrado,
+    /// target_branch del PullRequestUpdate no existe o es igual a source_branch, no hay cambios
+    /// para comparar.
     fn update_pull_request(
         &mut self,
         id: u64,
@@ -253,9 +279,7 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
                     pull_requests.push(pull_request);
                 }
                 "open" => {
-                    if pull_request.get_state() == PullRequestState::Open
-                    //|| pull_request.get_state() == PullRequestState::MergeConflicts
-                    {
+                    if pull_request.get_state() == PullRequestState::Open {
                         pull_requests.push(pull_request);
                     }
                 }
@@ -502,6 +526,7 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
     }
 }
 
+/// Lee un Pull Request de un archivo, el cual se encuentra en formato json.
 fn read_pull_request_from_file(mut pull_request_file: File) -> Result<PullRequest, CommandError> {
     let mut pull_request_content = String::new();
     pull_request_file
@@ -522,6 +547,7 @@ fn read_pull_request_from_file(mut pull_request_file: File) -> Result<PullReques
     Ok(pull_request)
 }
 
+/// Obtiene el hash y timestamp del CommitObject con el mayor timestamp del hashmap pasado.
 fn get_max(commits_to_read: &HashMap<String, CommitObject>) -> Option<(String, i64)> {
     let mut max = None;
     for (commit_hash, commit) in commits_to_read {
@@ -536,6 +562,7 @@ fn get_max(commits_to_read: &HashMap<String, CommitObject>) -> Option<(String, i
     max
 }
 
+/// Elimina los padres de un Commit de los dos hashmaps pasados.
 fn remove_parents(
     removed_commit: &CommitObject,
     read_commits: &mut HashMap<String, CommitObject>,
@@ -547,6 +574,7 @@ fn remove_parents(
     }
 }
 
+/// Devuelve un vector de Pull Requests ordenado por id.
 fn sort_pull_requests_by_id(
     pull_requests: &Vec<PullRequest>,
 ) -> Result<Vec<PullRequest>, CommandError> {
