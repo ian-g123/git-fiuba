@@ -1,10 +1,12 @@
-use std::{f32::consts::E, io::Read};
+use std::io::Read;
 
 use git_lib::{command_errors::CommandError, utils::aux::read_string_until};
 use serde::{Deserialize, Serialize};
 
 use super::pull_request_state::PullRequestState;
 
+/// Es un Pull Request auxiliar que guarda información de los campos del Pull Request original
+/// que se quieren modificar.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct PullRequestUpdate {
@@ -15,6 +17,8 @@ pub struct PullRequestUpdate {
 }
 
 impl PullRequestUpdate {
+    /// Devuelve el nuevo estado del Pull Request. Si es None, el campo 'state' no se desea
+    /// modificar.
     pub fn get_state(&self) -> Option<PullRequestState> {
         self.state.clone()
     }

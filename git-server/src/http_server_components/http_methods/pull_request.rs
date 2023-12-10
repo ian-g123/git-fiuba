@@ -1,18 +1,14 @@
 use std::{
     io::{Read, Write},
-    process::Command,
     str::FromStr,
 };
 
-use git_lib::{
-    command_errors::CommandError, git_repository::next_line, utils::aux::read_string_until,
-};
+use git_lib::{command_errors::CommandError, utils::aux::read_string_until};
 use serde::{Deserialize, Serialize};
 
 use crate::http_server_components::http_error::HttpError;
 
 use super::{
-    from_plain::FromPlain,
     pull_request_state::{default_state, PullRequestState},
     pull_request_update::PullRequestUpdate,
 };
