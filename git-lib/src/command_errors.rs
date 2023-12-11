@@ -259,6 +259,7 @@ pub enum CommandError {
     PullRequestMerged,
     PullRequestToString,
     PullRequestFromString,
+    InvalidContentType,
 
 
 }
@@ -610,6 +611,7 @@ impl fmt::Display for CommandError {
             CommandError::PullRequestMerged => write!(f, "No puedes modificar un Pull Request mergeado"),
             CommandError::PullRequestToString => write!(f, "Failed to convert pull request to string"),
             CommandError::PullRequestFromString => write!(f, "Failed to get pull request from its content"),
+            CommandError::InvalidContentType => write!(f, "Invalid content-type"),
         
         }
     }

@@ -1,19 +1,9 @@
-use std::{
-    collections::HashMap,
-    fmt::format,
-    io::Write,
-    net::{TcpStream, ToSocketAddrs},
-    str::FromStr,
-};
+use std::{collections::HashMap, io::Write, net::TcpStream, str::FromStr};
 
 use super::{
-    http_methods::{
-        from_plain::FromPlain, pull_request::PullRequest, pull_request_state::PullRequestState,
-        pull_request_update::PullRequestUpdate,
-    },
+    http_methods::pull_request_state::PullRequestState,
     pull_request_components::{
-        content_type::{self, ContentType},
-        git_repository_extension::GitRepositoryExtension,
+        content_type::ContentType, git_repository_extension::GitRepositoryExtension,
         simplified_commit_object::SimplifiedCommitObject,
     },
 };
@@ -21,7 +11,6 @@ use git_lib::{
     command_errors::CommandError, git_repository::GitRepository, join_paths,
     logger_sender::LoggerSender, utils::aux::read_string_until,
 };
-use serde::Deserialize;
 
 use super::http_error::HttpError;
 
@@ -34,6 +23,7 @@ pub struct ServerWorker {
 }
 
 impl<'a> ServerWorker {
+    /// Crea un nuevo ServerWorker.
     pub fn new(path: String, stream: TcpStream, logger_sender: LoggerSender) -> Self {
         let process_id = format!("{:?}", std::process::id());
         let thread_id = format!("{:?}", std::thread::current().id());
@@ -46,6 +36,7 @@ impl<'a> ServerWorker {
         }
     }
 
+    /// Envía un mensaje al Logger.
     fn log(&mut self, message: &str) {
         let time = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
         self.logger_sender.log(&format!(
@@ -54,6 +45,7 @@ impl<'a> ServerWorker {
         ));
     }
 
+    /// Maneja la conexión al servidor.
     pub fn handle_connection(&mut self) {
         self.log("New connection");
         match self.handle_connection_priv() {
@@ -65,6 +57,7 @@ impl<'a> ServerWorker {
         }
     }
 
+    /// Procesa la solicitud HTTP y envía la respuesta correspondiente.
     fn handle_connection_priv(&mut self) -> Result<(), CommandError> {
         let mut headers = HashMap::<String, String>::new();
         let first_line = read_string_until(&mut self.socket, '\n')?
@@ -115,7 +108,6 @@ impl<'a> ServerWorker {
 
         self.log(&format!("Headers: {:?}", headers));
 
-        // let (headers, body) = get_headers_and_body(&http_request)?;
         let content_type = match ContentType::new(&headers) {
             Ok(format) => format,
             Err(e) => {
@@ -151,6 +143,11 @@ impl<'a> ServerWorker {
         Ok(())
     }
 
+    /// Envía la respuesta con los parámetros pasados:
+    /// * status code
+    /// * Reason
+    /// * Headers
+    /// * Body
     fn send_response(
         &mut self,
         code: &u16,
@@ -171,6 +168,10 @@ impl<'a> ServerWorker {
         Ok(())
     }
 
+    /// Maneja una solicitud POST, utilizada para crear un Pull Request.
+    /// Procesa la solicitud recibida según el tipo de contenido indicado (json o plain text),
+    /// crea un Pull Request y lo envía como respuesta.
+    /// Si ocurrió algún error durante el procesamiento, éste se envía como respuesta.
     fn handle_post(
         &mut self,
         uri: &str,
@@ -201,7 +202,7 @@ impl<'a> ServerWorker {
         let mut sink = std::io::sink();
         let mut repo = self.get_repo(repo_path, &mut sink)?;
         let saved_pull_request = repo
-            .create_pull_request(request_info, content_type.clone())
+            .create_pull_request(request_info)
             .map_err(|e| match e {
                 CommandError::NothingToCompare(e) => {
                     HttpError::Forbidden(CommandError::NothingToCompare(e).to_string())
@@ -213,7 +214,7 @@ impl<'a> ServerWorker {
                 _ => HttpError::InternalServerError(e),
             })?;
 
-        let response_body = content_type.pull_request_to_string(&saved_pull_request)?;
+        let response_body = content_type.serialize_pull_request(&saved_pull_request)?;
 
         self.send_response(&200, "OK", &HashMap::new(), &response_body)
             .map_err(|e| HttpError::InternalServerError(e))?;
@@ -221,6 +222,7 @@ impl<'a> ServerWorker {
         Ok(())
     }
 
+    /// Abre el repositorio de git y lo devuelve.
     fn get_repo(
         &self,
         repo_path: &str,
@@ -233,10 +235,14 @@ impl<'a> ServerWorker {
         Ok(repo)
     }
 
+    /// Maneja una solicitud GET, utilizada para obtener un Pull Request, listar los abiertos y/o cerrados,
+    /// u obtener los commits del mismo.
+    /// Procesa la solicitud recibida para determinar la operación de 'get' a realizar.
+    /// Si ocurrió algún error durante el procesamiento, éste se envía como respuesta.
     fn handle_get(
         &mut self,
         uri_and_variables: &str,
-        headers: HashMap<String, String>,
+        _headers: HashMap<String, String>,
         content_type: ContentType,
     ) -> Result<(), HttpError> {
         self.log("Handling GET request");
@@ -263,17 +269,22 @@ impl<'a> ServerWorker {
         match (id_opt, commits_opt) {
             (None, None) => self.handle_get_pull_requests(repo_path, variables, content_type),
             (Some(id), None) => {
-                self.handle_get_pull_request(repo_path, u64::from_str(id).unwrap(), content_type)
+                let id = u64::from_str(id)
+                    .map_err(|_| HttpError::BadRequest(CommandError::CastingError.to_string()))?;
+                self.handle_get_pull_request(repo_path, id, content_type)
             }
-            (Some(id), Some("commits")) => self.handle_get_pull_request_commits(
-                repo_path,
-                u64::from_str(id).unwrap(),
-                content_type,
-            ),
+            (Some(id), Some("commits")) => {
+                let id = u64::from_str(id)
+                    .map_err(|_| HttpError::BadRequest(CommandError::CastingError.to_string()))?;
+                self.handle_get_pull_request_commits(repo_path, id, content_type)
+            }
             _ => Err(HttpError::BadRequest("Invalid uri".to_string())),
         }
     }
 
+    /// Maneja una solicitud PUT, utilizada para mergear un Pull Request.
+    /// Procesa la solicitud recibida.
+    /// Si ocurrió algún error durante el procesamiento, éste se envía como respuesta.
     fn handle_put(
         &mut self,
         uri: &str,
@@ -306,11 +317,17 @@ impl<'a> ServerWorker {
             return Err(HttpError::BadRequest("Should end with merge".to_string()));
         };
 
-        self.handle_put_pull_request(repo_path, u64::from_str(id).unwrap(), content_type)?;
+        let id = u64::from_str(id)
+            .map_err(|_| HttpError::BadRequest(CommandError::CastingError.to_string()))?;
+
+        self.handle_put_pull_request(repo_path, id, content_type)?;
         Ok(())
     }
 
-    //PATCH /repos/{repo}/pulls/{pull_number}
+    /// Maneja una solicitud PATCH, utilizada para modificar un Pull Request.
+    /// Procesa la solicitud recibida según el tipo de contenido indicado (json o plain text),
+    /// modifica un Pull Request y lo envía como respuesta.
+    /// Si ocurrió algún error durante el procesamiento o modificación, éste se envía como respuesta.
     fn handle_patch(
         &mut self,
         uri: &str,
@@ -343,12 +360,10 @@ impl<'a> ServerWorker {
         self.log(&format!("Request info: {:?}", request_info));
         let mut sink = std::io::sink();
         let mut repo = self.get_repo(repo_path, &mut sink)?;
+        let id = u64::from_str(id)
+            .map_err(|_| HttpError::BadRequest(CommandError::CastingError.to_string()))?;
         let saved_pull_request = repo
-            .update_pull_request(
-                u64::from_str(id).unwrap(),
-                request_info,
-                content_type.clone(),
-            )
+            .update_pull_request(id, request_info)
             .map_err(|e| match e {
                 CommandError::PullRequestMerged => {
                     HttpError::Forbidden(CommandError::PullRequestMerged.to_string())
@@ -365,13 +380,14 @@ impl<'a> ServerWorker {
                 e => HttpError::InternalServerError(e),
             })?
             .ok_or(HttpError::NotFound)?;
-        let response_body = content_type.pull_request_to_string(&saved_pull_request)?;
+        let response_body = content_type.serialize_pull_request(&saved_pull_request)?;
         self.send_response(&200, "OK", &HashMap::new(), &response_body)
             .map_err(|e| HttpError::InternalServerError(e))?;
 
         Ok(())
     }
 
+    /// Envía un Error como respuesta.
     fn send_error(&mut self, error: &HttpError) -> Result<(), CommandError> {
         self.log(&format!("Error ❌: {}", error));
         self.send_response(
@@ -383,6 +399,10 @@ impl<'a> ServerWorker {
         Ok(())
     }
 
+    /// Maneja una solicitud GET, utilizada para listar Pull Requests.
+    /// Obtiene los Pull Requests abiertos y/o cerrados del repositorio y los envía como respuesta,
+    /// según el tipo de contenido especificado (json o plain text).
+    /// Si ocurrió algún error durante el procesamiento, éste se envía como respuesta.
     fn handle_get_pull_requests(
         &mut self,
         repo_path: &str,
@@ -394,7 +414,9 @@ impl<'a> ServerWorker {
             if variable.is_empty() {
                 continue;
             }
-            let (key, value) = variable.split_once('=').unwrap();
+            let (key, value) = variable.split_once('=').ok_or(HttpError::BadRequest(
+                "Invalid Query parameters".to_string(),
+            ))?;
             _ = variables_map.insert(key.trim().to_string(), value.trim().to_string());
         }
         let state = variables_map
@@ -411,6 +433,11 @@ impl<'a> ServerWorker {
             .map_err(|e| HttpError::InternalServerError(e))
     }
 
+    /// Maneja una solicitud GET, utilizada para obtener un Pull Request.
+    /// Obtiene un Pull Request del repositorio y lo envía como respuesta, según el tipo de
+    /// contenido especificado (json o plain text).
+    /// Si ocurrió algún error durante el procesamiento o el Pull Request no existe, este error
+    /// se envía como respuesta.
     fn handle_get_pull_request(
         &mut self,
         repo_path: &str,
@@ -425,13 +452,17 @@ impl<'a> ServerWorker {
         match pull_request {
             None => Err(HttpError::NotFound),
             Some(pull_request) => {
-                let response_body = content_type.pull_request_to_string(&pull_request)?;
+                let response_body = content_type.serialize_pull_request(&pull_request)?;
                 self.send_response(&200, "OK", &HashMap::new(), &response_body)
                     .map_err(|e| HttpError::InternalServerError(e))
             }
         }
     }
 
+    /// Maneja una solicitud PULL, utilizada para crear un Pull Request.
+    /// Procesa la solicitud recibida según el tipo de contenido indicado (json o plain text),
+    /// crea un Pull Request y lo envía como respuesta.
+    /// Si ocurrió algún error durante el procesamiento, éste se envía como respuesta.
     fn handle_put_pull_request(
         &mut self,
         repo_path: &str,
@@ -472,16 +503,21 @@ impl<'a> ServerWorker {
                 pull_request.set_state(PullRequestState::Closed);
                 pull_request.set_merged(true);
                 pull_request.has_merge_conflicts = None;
-                repo.save_pull_request(&mut pull_request, content_type.clone())
+                repo.save_pull_request(&mut pull_request)
                     .map_err(|e| HttpError::InternalServerError(e))?;
 
-                let response_body = content_type.pull_request_to_string(&pull_request)?;
+                let response_body = content_type.serialize_pull_request(&pull_request)?;
                 self.send_response(&200, "OK", &HashMap::new(), &response_body)
                     .map_err(|e: CommandError| HttpError::InternalServerError(e))
             }
         }
     }
 
+    /// Maneja una solicitud GET, utilizada para obtener los commits de un Pull Request.
+    /// Obtiene los commits del Pull Request del repositorio y los envía como respuesta, según el tipo de
+    /// contenido especificado (json o plain text).
+    /// Si ocurrió algún error durante el procesamiento o el Pull Request no existe, este error
+    /// se envía como respuesta.
     fn handle_get_pull_request_commits(
         &mut self,
         repo_path: &str,
@@ -498,65 +534,15 @@ impl<'a> ServerWorker {
             Some(commits) => {
                 let commits = commits
                     .into_iter()
-                    .map(|commit| SimplifiedCommitObject::from_commit(commit))
-                    .collect::<Vec<SimplifiedCommitObject>>();
-                let response_body = serde_json::to_string(&commits).unwrap();
+                    .map(|commit| {
+                        SimplifiedCommitObject::from_commit(commit)
+                            .map_err(|e| HttpError::InternalServerError(e))
+                    })
+                    .collect::<Result<Vec<SimplifiedCommitObject>, HttpError>>()?;
+                let response_body = content_type.commits_to_string(&commits)?;
                 self.send_response(&200, "OK", &HashMap::new(), &response_body)
                     .map_err(|e| HttpError::InternalServerError(e))
             }
         }
     }
 }
-
-/* fn deserialize_from_content_type(
-    headers: HashMap<String, String>,
-    json_block: dyn FromPlain,
-    mut plain_block: impl <'a>FnMut(usize) -> Result<dyn FromPlain<'a>, HttpError>,
-) -> Result<dyn FromPlain, HttpError> {
-    let content_type = match headers.get("Content-Type") {
-        Some(content_type) => content_type,
-        None => "text/json",
-    };
-    let request_info = match content_type {
-        "text/json" => json_block,
-        "text/plain" => {
-            let len = headers
-                .get("Content-Length")
-                .ok_or(HttpError::BadRequest(
-                    "Content-Length header not found".to_string(),
-                ))?
-                .parse::<usize>()
-                .map_err(|_| {
-                    HttpError::BadRequest("Content-Length header is not a number".to_string())
-                })?;
-            plain_block(len)?
-        }
-        _ => {
-            return Err(HttpError::BadRequest(format!(
-                "Content-Type not supported: {}",
-                content_type
-            )))
-        }
-    };
-    Ok(request_info)
-} */
-
-// struct VerboseReader<'a> {
-//     reader: &'a mut dyn std::io::Read,
-// }
-
-// impl<'a> VerboseReader<'a> {
-//     pub fn new(reader: &'a mut dyn std::io::Read) -> Self {
-//         Self { reader }
-//     }
-// }
-
-// impl<'a> std::io::Read for VerboseReader<'a> {
-//     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-//         println!("Reading ...");
-//         let read = self.reader.read(buf)?;
-//         let string = String::from_utf8_lossy(&buf[..read]);
-//         println!("⬆️: {}", string);
-//         Ok(read)
-//     }
-// }

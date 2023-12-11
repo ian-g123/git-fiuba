@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs::File, net::TcpStream, process::Command};
+use std::{collections::HashMap, net::TcpStream};
 
 use git_lib::command_errors::CommandError;
 use serde::Deserialize;
@@ -8,6 +8,9 @@ use crate::http_server_components::{
     http_methods::{pull_request::PullRequest, pull_request_update::PullRequestUpdate},
 };
 
+use super::simplified_commit_object::SimplifiedCommitObject;
+
+/// Maneja la serialización y deserialización de Pull Requests.
 #[derive(Clone)]
 pub enum ContentType {
     Json,
@@ -23,18 +26,12 @@ impl ContentType {
         };
         let content_type = match content_type {
             "text/plain" => ContentType::Plain,
-            _ => {
-                ContentType::Json
-                /* return Err(HttpError::BadRequest(format!(
-                    "Content-Type not supported: {}",
-                    content_type
-                ))) */
-            }
+            _ => ContentType::Json,
         };
         Ok(content_type)
     }
 
-    /// Deserializa un pull request
+    /// Deserializa un pull request según el ContentType.
     pub fn deserialize_pull_request(
         &self,
         socket: &mut TcpStream,
@@ -43,10 +40,10 @@ impl ContentType {
         match self {
             ContentType::Json => {
                 let mut de = serde_json::Deserializer::from_reader(socket);
-                PullRequest::deserialize(&mut de).map_err(|e| {
+                PullRequest::deserialize(&mut de).map_err(|_: serde_json::Error| {
                     HttpError::BadRequest(
                         CommandError::InvalidHTTPRequest(
-                            "could not deserialize pull request".to_string(),
+                            "failed to deserialize pull request".to_string(),
                         )
                         .to_string(),
                     )
@@ -64,7 +61,7 @@ impl ContentType {
         }
     }
 
-    /// Deserializa un pull request del tipo 'update'
+    /// Deserializa un pull request del tipo 'update' según el ContentType
     pub fn deserialize_pull_request_update(
         &self,
         socket: &mut TcpStream,
@@ -89,15 +86,17 @@ impl ContentType {
         }
     }
 
-    pub fn pull_request_to_string(&self, pull_request: &PullRequest) -> Result<String, HttpError> {
+    /// Serializa un Pull Request según el ContentType
+    pub fn serialize_pull_request(&self, pull_request: &PullRequest) -> Result<String, HttpError> {
         let response_body = match self {
             ContentType::Json => serde_json::to_string(&pull_request)
                 .map_err(|_| HttpError::InternalServerError(CommandError::PullRequestToString))?,
-            ContentType::Plain => pull_request.to_string_plain_format(),
+            ContentType::Plain => pull_request.to_plain(),
         };
         Ok(response_body)
     }
 
+    /// Convierte un vector de Pull Requests a String, según el ContentType.
     pub fn pull_requests_to_string(
         &self,
         pull_requests: &Vec<PullRequest>,
@@ -108,7 +107,7 @@ impl ContentType {
             ContentType::Plain => {
                 let mut string = String::new();
                 for pr in pull_requests {
-                    string += &format!("{}\n", pr.to_string_plain_format());
+                    string += &format!("{}\n", pr.to_plain());
                 }
                 string
             }
@@ -116,54 +115,27 @@ impl ContentType {
         Ok(response_body)
     }
 
-    pub fn get_extension(&self) -> String {
-        match self {
-            ContentType::Json => ".json".to_string(),
-            ContentType::Plain => "".to_string(),
-        }
-    }
-
-    pub fn pull_request_to_writer(
+    /// Recibe un vector de SimplifiedCommitObject y lo convierte a String, según el ContentType
+    pub fn commits_to_string(
         &self,
-        new_pull_request_file: &mut File,
-        pull_request_info: &PullRequest,
-    ) -> Result<(), CommandError> {
-        match self {
-            ContentType::Json => {
-                serde_json::to_writer(new_pull_request_file, &pull_request_info).map_err(
-                    |error| {
-                        CommandError::FileOpenError(format!(
-                            "Error escribiendo el archivo del nuevo pull request: {}",
-                            error.to_string()
-                        ))
-                    },
-                )?;
-            }
+        commits: &Vec<SimplifiedCommitObject>,
+    ) -> Result<String, HttpError> {
+        let response_body = match self {
+            ContentType::Json => serde_json::to_string(&commits)
+                .map_err(|_| HttpError::InternalServerError(CommandError::PullRequestToString))?,
             ContentType::Plain => {
-                pull_request_info.write_plain(new_pull_request_file)?;
+                let mut string = String::new();
+                for commit in commits {
+                    string += &format!("{}\n", commit.to_string_plain_format());
+                }
+                string
             }
-        }
-        Ok(())
-    }
-
-    pub fn pull_request_from_string(
-        &self,
-        pull_request_content: String,
-    ) -> Result<PullRequest, CommandError> {
-        // PullRequest {
-        let pr = match self {
-            ContentType::Json => serde_json::from_str(&pull_request_content).map_err(|error| {
-                CommandError::FileReadError(format!(
-                    "Error leyendo el directorio de pull requests: {}",
-                    error.to_string()
-                ))
-            })?,
-            ContentType::Plain => PullRequest::from_string_plain_format(pull_request_content)?,
         };
-        Ok(pr)
+        Ok(response_body)
     }
 }
 
+/// Obtiene la longitud (Content-Length) del Body en el Content-Type especificado.
 fn get_len(headers: &HashMap<String, String>) -> Result<usize, HttpError> {
     let len = headers
         .get("Content-Length")

@@ -10,11 +10,17 @@ pub struct SimplfiedAuthor {
 }
 
 impl SimplfiedAuthor {
-    pub(crate) fn from_author(get_author: Author, get_author_date: String) -> Self {
+    /// Recibe un Author y una fecha, y crea un SimplfiedAuthor a partir de esta información.
+    pub fn from_author(get_author: Author, get_author_date: String) -> Self {
         SimplfiedAuthor {
             name: get_author.get_name(),
             email: get_author.get_email(),
             date: get_author_date,
         }
+    }
+
+    /// Convierte el SimplfiedAuthor en string
+    pub fn to_string(&self) -> String {
+        format!("{} <{}> {}", self.name, self.email, self.date)
     }
 }
