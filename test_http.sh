@@ -45,6 +45,7 @@ sleep 1
 echo "#####################"
 echo "# Safe merge test #"
 echo "#####################"
+
 #################
 # Get pull requests
 echo "=========================="
@@ -179,6 +180,59 @@ if [ ! -f tmp-curl-response ]; then
 fi
 response_content=$(cat tmp-curl-response)
 expected_content='{"id":1,"title":"Safe merge pull request","description":"My pull request description","sourceBranch":"rama","targetBranch":"master","state":"open","hasMergeConflicts":false,"merged":false}'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+# Get pull request commits in JSON
+echo "=========================="
+echo "Get pull request commits in JSON"
+curl -s -o tmp-curl-response -L \
+  -X GET \
+  http://127.1.0.0:8080/repos/repo_safe_merge/pulls/1/commits
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+response_content=$(cat tmp-curl-response)
+expected_content='[{"hash":"c4a54b36a59e8b9a7a2183dca046c1fecadba450","author":{"name":"Foo Bar","email":"example@email.org","date":"2023-12-07 16:50:44"},"committer":{"name":"Foo Bar","email":"example@email.org","date":"2023-12-07 16:50:44"},"message":"ModificaciónRama","tree":"e7e7b52b8a0430ea92e21f54859e4e943b12247b","parents":["32c5cf59d7e596f691bd47d1bb6ca795514b8eac"]}]'
+if [ "$response_content" != "$expected_content" ]; then
+    echo "❌ Failed. Actual content is not equal to expected content:"
+    echo "Actual:   $response_content"
+    echo "Expected: $expected_content"
+    kill $server_process
+    exit 1
+fi
+echo "✅"
+
+# Get pull request commits in plain text
+echo "=========================="
+echo "Get pull request commits in plain text"
+curl -s -o tmp-curl-response -L \
+  -X GET \
+  -H "Content-Type: text/plain" \
+  http://127.1.0.0:8080/repos/repo_safe_merge/pulls/1/commits
+
+if [ ! -f tmp-curl-response ]; then
+    echo "❌ Failed. File not found"
+    kill $server_process
+    exit 1
+fi
+response_content=$(cat tmp-curl-response)
+expected_content='c4a54b36a59e8b9a7a2183dca046c1fecadba450
+tree e7e7b52b8a0430ea92e21f54859e4e943b12247b
+parent 32c5cf59d7e596f691bd47d1bb6ca795514b8eac
+author Foo Bar <example@email.org> 2023-12-07 16:50:44
+committer Foo Bar <example@email.org> 2023-12-07 16:50:44
+
+ModificaciónRama'
 if [ "$response_content" != "$expected_content" ]; then
     echo "❌ Failed. Actual content is not equal to expected content:"
     echo "Actual:   $response_content"

@@ -534,8 +534,11 @@ impl<'a> ServerWorker {
             Some(commits) => {
                 let commits = commits
                     .into_iter()
-                    .map(|commit| SimplifiedCommitObject::from_commit(commit))
-                    .collect::<Vec<SimplifiedCommitObject>>();
+                    .map(|commit| {
+                        SimplifiedCommitObject::from_commit(commit)
+                            .map_err(|e| HttpError::InternalServerError(e))
+                    })
+                    .collect::<Result<Vec<SimplifiedCommitObject>, HttpError>>()?;
                 let response_body = content_type.commits_to_string(&commits)?;
                 self.send_response(&200, "OK", &HashMap::new(), &response_body)
                     .map_err(|e| HttpError::InternalServerError(e))

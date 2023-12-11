@@ -1,4 +1,7 @@
-use git_lib::objects::commit_object::CommitObject;
+use git_lib::{
+    command_errors::CommandError,
+    objects::{commit_object::CommitObject, git_object::GitObjectTrait},
+};
 use serde::{Deserialize, Serialize};
 
 use super::simplified_author::SimplfiedAuthor;
@@ -6,6 +9,7 @@ use super::simplified_author::SimplfiedAuthor;
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SimplifiedCommitObject {
+    hash: String,
     author: SimplfiedAuthor,
     committer: SimplfiedAuthor,
     message: String,
@@ -14,8 +18,9 @@ pub struct SimplifiedCommitObject {
 }
 impl SimplifiedCommitObject {
     /// Recibe un CommitObject y crea un SimplifiedCommitObject a partir de éste.
-    pub fn from_commit(commit: CommitObject) -> Self {
-        SimplifiedCommitObject {
+    pub fn from_commit(mut commit: CommitObject) -> Result<Self, CommandError> {
+        Ok(SimplifiedCommitObject {
+            hash: commit.get_hash_string()?,
             author: SimplfiedAuthor::from_author(commit.get_author(), commit.get_author_date()),
             committer: SimplfiedAuthor::from_author(
                 commit.get_committer(),
@@ -24,12 +29,13 @@ impl SimplifiedCommitObject {
             message: commit.get_message(),
             tree: commit.get_tree_hash_string(),
             parents: commit.get_parents(),
-        }
+        })
     }
 
     /// Convierte el SimplifiedCommitObject a texto plano.
     pub fn to_string_plain_format(&self) -> String {
         let mut string = String::new();
+        string += &format!("{}\n", self.hash);
         string += &format!("tree {}\n", self.tree);
         for parent_hash in self.parents.iter() {
             string += &format!("parent {}\n", parent_hash);
