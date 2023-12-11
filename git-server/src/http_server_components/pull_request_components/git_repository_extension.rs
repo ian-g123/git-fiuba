@@ -118,11 +118,11 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
         }
 
         let source_branch = &pull_request.source_branch;
-        if !self.branch_exists(&source_branch) {
+        if !self.branch_exists(source_branch) {
             return Err(CommandError::InvalidBranchName(source_branch.to_string()));
         };
         let target_branch = &pull_request.target_branch;
-        if !self.branch_exists(&target_branch) {
+        if !self.branch_exists(target_branch) {
             return Err(CommandError::InvalidBranchName(target_branch.to_string()));
         };
         if target_branch == source_branch {
@@ -170,14 +170,14 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
             fs::create_dir_all(parent_dir).map_err(|error| {
                 CommandError::FileOpenError(format!(
                     "Error creando el directorio para el nuevo pull request: {}",
-                    error.to_string()
+                    error
                 ))
             })?;
         }
         let new_pull_request = fs::File::create(new_pull_request_path_str).map_err(|error| {
             CommandError::FileOpenError(format!(
                 "Error creando el archivo del nuevo pull request: {}",
-                error.to_string()
+                error
             ))
         })?;
         pull_request_info.id = Some(pull_request_id);
@@ -185,7 +185,7 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
         serde_json::to_writer(new_pull_request, &pull_request_info).map_err(|error| {
             CommandError::FileOpenError(format!(
                 "Error escribiendo el archivo del nuevo pull request: {}",
-                error.to_string()
+                error
             ))
         })?;
         self.set_last_pull_request_id(pull_request_id)?;
@@ -211,7 +211,7 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
         let mut id_file = File::open(path).map_err(|error| {
             CommandError::FileOpenError(format!(
                 "Error creando el archivo del nuevo pull request: {}",
-                error.to_string()
+                error
             ))
         })?;
 
@@ -235,7 +235,7 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
             .map_err(|error| {
                 CommandError::FileOpenError(format!(
                     "Error creando el archivo del nuevo pull request: {}",
-                    error.to_string()
+                    error
                 ))
             })?;
         id_file
@@ -243,7 +243,7 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
             .map_err(|error| {
                 CommandError::FileOpenError(format!(
                     "Error escribiendo el archivo LAST_PULL_REQUEST_ID: {}",
-                    error.to_string()
+                    error
                 ))
             })
     }
@@ -259,14 +259,14 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
             let pull_request_file = pull_request_file.map_err(|error| {
                 CommandError::FileOpenError(format!(
                     "Error leyendo el directorio de pull requests: {}",
-                    error.to_string()
+                    error
                 ))
             })?;
             let pull_request_path = pull_request_file.path();
             let pull_request_file = File::open(pull_request_path).map_err(|error| {
                 CommandError::FileOpenError(format!(
                     "Error leyendo el directorio de pull requests: {}",
-                    error.to_string()
+                    error
                 ))
             })?;
 
@@ -316,7 +316,7 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
         let pull_request_file = File::open(pull_request_path).map_err(|error| {
             CommandError::FileOpenError(format!(
                 "Error leyendo el directorio de pull requests: {}",
-                error.to_string()
+                error
             ))
         })?;
         let mut pull_request = read_pull_request_from_file(pull_request_file)?;
@@ -401,7 +401,7 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
             .into_values()
             .collect::<Vec<CommitObject>>();
 
-        commits_vec.sort_unstable_by(|a, b| b.get_timestamp().cmp(&a.get_timestamp()));
+        commits_vec.sort_unstable_by_key(|a| std::cmp::Reverse(a.get_timestamp()));
 
         Ok(commits_vec)
     }
@@ -413,7 +413,7 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
     ) -> Result<(), CommandError> {
         let commit = self
             .db()?
-            .read_object(&commit_hash, &mut self.logger())?
+            .read_object(&commit_hash, self.logger())?
             .as_mut_commit()
             .ok_or(CommandError::InvalidCommit)?
             .to_owned();
@@ -457,12 +457,7 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
         };
         let target_commit_hash = target_commit.get_hash_string().unwrap();
 
-        if let Some(removed_commit) = read_source_commits.remove(&target_commit_hash) {
-            //remove_parents(&removed_commit, read_source_commits, source_commits_to_read);
-        }
-        // if let Some(removed_commit) = source_commits_to_read.remove(&target_commit_hash) {
-        //     //remove_parents(&removed_commit, read_source_commits, source_commits_to_read);
-        // }
+        _ = read_source_commits.remove(&target_commit_hash);
         for parent_hash in target_commit.get_parents() {
             self.get_commit_from_db_and_insert(parent_hash, target_commits_to_read)?;
         }
@@ -530,44 +525,17 @@ fn read_pull_request_from_file(mut pull_request_file: File) -> Result<PullReques
         .map_err(|error| {
             CommandError::FileReadError(format!(
                 "Error leyendo el directorio de pull requests: {}",
-                error.to_string()
+                error
             ))
         })?;
     let pull_request: PullRequest =
         serde_json::from_str(&pull_request_content).map_err(|error| {
             CommandError::FileReadError(format!(
                 "Error leyendo el directorio de pull requests: {}",
-                error.to_string()
+                error
             ))
         })?;
     Ok(pull_request)
-}
-
-/// Obtiene el hash y timestamp del CommitObject con el mayor timestamp del hashmap pasado.
-fn get_max(commits_to_read: &HashMap<String, CommitObject>) -> Option<(String, i64)> {
-    let mut max = None;
-    for (commit_hash, commit) in commits_to_read {
-        if let Some((_, max_timestamp)) = max {
-            if commit.get_timestamp() > max_timestamp {
-                max = Some((commit_hash.to_string(), commit.get_timestamp()));
-            }
-        } else {
-            max = Some((commit_hash.to_string(), commit.get_timestamp()));
-        }
-    }
-    max
-}
-
-/// Elimina los padres de un Commit de los dos hashmaps pasados.
-fn remove_parents(
-    removed_commit: &CommitObject,
-    read_commits: &mut HashMap<String, CommitObject>,
-    commits_to_read: &mut HashMap<String, CommitObject>,
-) {
-    for parent_hash in removed_commit.get_parents() {
-        read_commits.remove(&parent_hash);
-        commits_to_read.remove(&parent_hash);
-    }
 }
 
 /// Devuelve un vector de Pull Requests ordenado por id.

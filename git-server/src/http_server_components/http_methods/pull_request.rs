@@ -163,7 +163,7 @@ impl PullRequest {
         string += &format!("{}\n", self.title);
         string += &format!("{}\n", self.source_branch);
         string += &format!("{}\n", self.target_branch);
-        string += &format!("{}\n", self.state.to_string());
+        string += &format!("{}\n", self.state);
 
         let conflicts = if let Some(has_merge_conflicts) = self.has_merge_conflicts {
             format!("{}\n", has_merge_conflicts)
@@ -177,7 +177,7 @@ impl PullRequest {
             "\n".to_string()
         };
         string += &merged;
-        string += &format!("{}", self.description);
+        string += &self.description.to_string();
         string
     }
 }

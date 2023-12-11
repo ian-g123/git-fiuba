@@ -117,9 +117,9 @@ impl<'a> ServerWorker {
         };
 
         if let ContentType::Json = content_type {
-            self.log(&format!("Content type: json"));
+            self.log("Content type: json");
         } else {
-            self.log(&format!("Content type: plain"));
+            self.log("Content type: plain");
         }
 
         if let Err(error) = match method {
@@ -217,7 +217,7 @@ impl<'a> ServerWorker {
         let response_body = content_type.serialize_pull_request(&saved_pull_request)?;
 
         self.send_response(&200, "OK", &HashMap::new(), &response_body)
-            .map_err(|e| HttpError::InternalServerError(e))?;
+            .map_err(HttpError::InternalServerError)?;
 
         Ok(())
     }
@@ -382,7 +382,7 @@ impl<'a> ServerWorker {
             .ok_or(HttpError::NotFound)?;
         let response_body = content_type.serialize_pull_request(&saved_pull_request)?;
         self.send_response(&200, "OK", &HashMap::new(), &response_body)
-            .map_err(|e| HttpError::InternalServerError(e))?;
+            .map_err(HttpError::InternalServerError)?;
 
         Ok(())
     }
@@ -427,10 +427,10 @@ impl<'a> ServerWorker {
         let mut repo: GitRepository<'_> = self.get_repo(repo_path, &mut sink)?;
         let pull_requests = repo
             .get_pull_requests(&state)
-            .map_err(|e| HttpError::InternalServerError(e))?;
+            .map_err(HttpError::InternalServerError)?;
         let response_body = content_type.pull_requests_to_string(&pull_requests)?;
         self.send_response(&200, "OK", &HashMap::new(), &response_body)
-            .map_err(|e| HttpError::InternalServerError(e))
+            .map_err(HttpError::InternalServerError)
     }
 
     /// Maneja una solicitud GET, utilizada para obtener un Pull Request.
@@ -448,13 +448,13 @@ impl<'a> ServerWorker {
         let mut repo = self.get_repo(repo_path, &mut sink)?;
         let pull_request = repo
             .get_pull_request(pull_request_id)
-            .map_err(|e| HttpError::InternalServerError(e))?;
+            .map_err(HttpError::InternalServerError)?;
         match pull_request {
             None => Err(HttpError::NotFound),
             Some(pull_request) => {
                 let response_body = content_type.serialize_pull_request(&pull_request)?;
                 self.send_response(&200, "OK", &HashMap::new(), &response_body)
-                    .map_err(|e| HttpError::InternalServerError(e))
+                    .map_err(HttpError::InternalServerError)
             }
         }
     }
@@ -473,7 +473,7 @@ impl<'a> ServerWorker {
         let mut repo = self.get_repo(repo_path, &mut sink)?;
         let pull_request = repo
             .get_pull_request(pull_request_id)
-            .map_err(|e| HttpError::InternalServerError(e))?;
+            .map_err(HttpError::InternalServerError)?;
         match pull_request {
             None => Err(HttpError::NotFound),
             Some(mut pull_request) => {
@@ -499,16 +499,16 @@ impl<'a> ServerWorker {
                     &pull_request.target_branch,
                     message,
                 )
-                .map_err(|e| HttpError::InternalServerError(e))?;
+                .map_err(HttpError::InternalServerError)?;
                 pull_request.set_state(PullRequestState::Closed);
                 pull_request.set_merged(true);
                 pull_request.has_merge_conflicts = None;
                 repo.save_pull_request(&mut pull_request)
-                    .map_err(|e| HttpError::InternalServerError(e))?;
+                    .map_err(HttpError::InternalServerError)?;
 
                 let response_body = content_type.serialize_pull_request(&pull_request)?;
                 self.send_response(&200, "OK", &HashMap::new(), &response_body)
-                    .map_err(|e: CommandError| HttpError::InternalServerError(e))
+                    .map_err(HttpError::InternalServerError)
             }
         }
     }
@@ -528,7 +528,7 @@ impl<'a> ServerWorker {
         let mut repo = self.get_repo(repo_path, &mut sink)?;
         let commits = repo
             .get_pull_request_commits(pull_request_id)
-            .map_err(|e| HttpError::InternalServerError(e))?;
+            .map_err(HttpError::InternalServerError)?;
         match commits {
             None => Err(HttpError::NotFound),
             Some(commits) => {
@@ -536,12 +536,12 @@ impl<'a> ServerWorker {
                     .into_iter()
                     .map(|commit| {
                         SimplifiedCommitObject::from_commit(commit)
-                            .map_err(|e| HttpError::InternalServerError(e))
+                            .map_err(HttpError::InternalServerError)
                     })
                     .collect::<Result<Vec<SimplifiedCommitObject>, HttpError>>()?;
                 let response_body = content_type.commits_to_string(&commits)?;
                 self.send_response(&200, "OK", &HashMap::new(), &response_body)
-                    .map_err(|e| HttpError::InternalServerError(e))
+                    .map_err(HttpError::InternalServerError)
             }
         }
     }

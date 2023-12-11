@@ -40,8 +40,8 @@ impl SimplifiedCommitObject {
         for parent_hash in self.parents.iter() {
             string += &format!("parent {}\n", parent_hash);
         }
-        string += &format!("author {}\n", self.author.to_string());
-        string += &format!("committer {}\n", self.committer.to_string());
+        string += &format!("author {}\n", self.author);
+        string += &format!("committer {}\n", self.committer);
         string += &format!("\n{}\n", self.message);
         string
     }

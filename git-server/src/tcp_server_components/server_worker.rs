@@ -528,7 +528,7 @@ fn update_pull_requests(
     repo: &mut GitRepository,
 ) -> Result<(), CommandError> {
     let mut pull_requests = repo.get_pull_requests("all")?;
-    for (hash, _) in objects_map {
+    for hash in objects_map.keys() {
         let mut object = db.read_object(hash, repo.logger())?;
         if let Some(commit) = object.as_mut_commit() {
             let parents = commit.get_parents();
@@ -545,9 +545,9 @@ fn update_pull_requests(
 fn update_pull_request(
     pull_requests: &mut Vec<PullRequest>,
     repo: &mut GitRepository,
-    parents: &Vec<String>,
+    parents: &[String],
 ) -> Result<(), CommandError> {
-    for mut pr in pull_requests {
+    for pr in pull_requests {
         let source_branch = pr.source_branch.clone();
         let target_branch = pr.target_branch.clone();
         let source_commit_hash = repo.get_last_commit_hash_branch(&source_branch)?;
@@ -555,7 +555,7 @@ fn update_pull_request(
         if parents.contains(&source_commit_hash) && parents.contains(&target_commit_hash) {
             pr.set_state(PullRequestState::Closed);
             pr.set_merged(true);
-            repo.save_pull_request(&mut pr)?;
+            repo.save_pull_request(pr)?;
         }
     }
     Ok(())

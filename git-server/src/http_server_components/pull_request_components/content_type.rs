@@ -71,7 +71,7 @@ impl ContentType {
             ContentType::Json => {
                 let mut de = serde_json::Deserializer::from_reader(socket);
                 PullRequestUpdate::deserialize(&mut de).map_err(|e| {
-                    HttpError::BadRequest(format!("Fail to parse request body: {}", e.to_string()))
+                    HttpError::BadRequest(format!("Fail to parse request body: {}", e))
                 })
             }
             ContentType::Plain => {

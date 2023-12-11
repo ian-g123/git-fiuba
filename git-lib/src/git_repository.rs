@@ -1642,8 +1642,8 @@ impl<'a> GitRepository<'a> {
 
         let merged_tree = self
             .get_pull_request_merged_tree(
-                &source_branch,
-                &target_branch,
+                source_branch,
+                target_branch,
                 common,
                 commit_head,
                 commit_destin,
@@ -1685,8 +1685,8 @@ impl<'a> GitRepository<'a> {
         }
 
         match self.get_pull_request_merged_tree(
-            &source_branch,
-            &target_branch,
+            source_branch,
+            target_branch,
             common,
             commit_head,
             commit_destin,
@@ -5345,14 +5345,12 @@ fn is_in_common(
                                         "Merge conflict".to_string(),
                                     ));
                                 }
-                            } else {
-                                if let Some(staging_area) = staging_area_opt {
-                                    staging_area.soft_add(
-                                        working_dir,
-                                        parent_path,
-                                        &head_blob.get_hash_string()?,
-                                    )?;
-                                }
+                            } else if let Some(staging_area) = staging_area_opt {
+                                staging_area.soft_add(
+                                    working_dir,
+                                    parent_path,
+                                    &head_blob.get_hash_string()?,
+                                )?;
                             }
                             Ok(Some(Box::new(merged_blob.to_owned())))
                         }

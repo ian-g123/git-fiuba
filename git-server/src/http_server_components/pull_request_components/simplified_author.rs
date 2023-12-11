@@ -18,9 +18,10 @@ impl SimplfiedAuthor {
             date: get_author_date,
         }
     }
+}
 
-    /// Convierte el SimplfiedAuthor en string
-    pub fn to_string(&self) -> String {
-        format!("{} <{}> {}", self.name, self.email, self.date)
+impl std::fmt::Display for SimplfiedAuthor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} <{}> {}", self.name, self.email, self.date)
     }
 }

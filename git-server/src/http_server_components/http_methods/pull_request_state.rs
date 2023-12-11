@@ -22,14 +22,6 @@ impl PullRequestState {
         }
     }
 
-    /// Convierte el PullRequestState a String.
-    pub fn to_string(&self) -> String {
-        match self {
-            PullRequestState::Open => "open".to_string(),
-            PullRequestState::Closed => "closed".to_string(),
-        }
-    }
-
     /// Dada una cadena, obtiene el PullRequestState correspondiente.
     /// Devuelve error si es inválida.
     pub fn from_string(state: &str) -> Result<Self, CommandError> {
@@ -37,6 +29,15 @@ impl PullRequestState {
             "open" => Ok(PullRequestState::Open),
             "closed" => Ok(PullRequestState::Closed),
             s => Err(CommandError::InvalidPullRequestState(s.to_string())),
+        }
+    }
+}
+
+impl std::fmt::Display for PullRequestState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PullRequestState::Open => write!(f, "open"),
+            PullRequestState::Closed => write!(f, "closed"),
         }
     }
 }
