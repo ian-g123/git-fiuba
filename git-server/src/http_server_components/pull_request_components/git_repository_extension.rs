@@ -83,7 +83,6 @@ pub trait GitRepositoryExtension {
         &mut self,
         target_commits_to_read: &mut BinaryHeap<CommitObject>,
         read_source_commits: &mut HashMap<String, CommitObject>,
-        source_commits_to_read: &mut BinaryHeap<CommitObject>,
         read_target_commits: &mut HashMap<String, CommitObject>,
     ) -> Result<(), CommandError>;
 
@@ -372,23 +371,21 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
                         self.step_target(
                             &mut target_commits_to_read,
                             &mut read_source_commits,
-                            &mut source_commits_to_read,
                             &mut read_target_commits,
                         )?;
                     }
                 }
-                (Some(first_source_commit), None) => {
+                (Some(_), None) => {
                     self.step_source(
                         &mut source_commits_to_read,
                         &mut read_target_commits,
                         &mut read_source_commits,
                     )?;
                 }
-                (None, Some(first_target_commit)) => {
+                (None, Some(_)) => {
                     self.step_target(
                         &mut target_commits_to_read,
                         &mut read_source_commits,
-                        &mut source_commits_to_read,
                         &mut read_target_commits,
                     )?;
                 }
@@ -449,7 +446,6 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
         &mut self,
         target_commits_to_read: &mut BinaryHeap<CommitObject>,
         read_source_commits: &mut HashMap<String, CommitObject>,
-        source_commits_to_read: &mut BinaryHeap<CommitObject>,
         read_target_commits: &mut HashMap<String, CommitObject>,
     ) -> Result<(), CommandError> {
         let Some(mut target_commit) = target_commits_to_read.pop() else {
