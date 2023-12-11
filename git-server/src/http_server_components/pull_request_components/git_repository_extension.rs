@@ -1,13 +1,15 @@
 use std::{
-    collections::HashMap,
+    collections::{BinaryHeap, HashMap},
     fs::{self, File, OpenOptions},
     io::{Read, Write},
     path::Path,
 };
 
 use git_lib::{
-    command_errors::CommandError, git_repository::GitRepository, join_paths,
-    objects::commit_object::CommitObject,
+    command_errors::CommandError,
+    git_repository::GitRepository,
+    join_paths,
+    objects::{commit_object::CommitObject, git_object::GitObjectTrait},
 };
 
 use crate::http_server_components::http_methods::{
@@ -66,24 +68,22 @@ pub trait GitRepositoryExtension {
     /// Lee el un CommitObject de la base de datos y lo inserta en 'commits_to_read'
     fn get_commit_from_db_and_insert(
         &mut self,
-        commit_hash: String,
-        commits_to_read: &mut HashMap<String, CommitObject>,
+        source_commit_hash: String,
+        source_commits_to_read: &mut BinaryHeap<CommitObject>,
     ) -> Result<(), CommandError>;
 
     fn step_source(
         &mut self,
-        source_commit_hash: String,
-        source_commits_to_read: &mut HashMap<String, CommitObject>,
+        source_commits_to_read: &mut BinaryHeap<CommitObject>,
         read_target_commits: &mut HashMap<String, CommitObject>,
         read_source_commits: &mut HashMap<String, CommitObject>,
     ) -> Result<(), CommandError>;
 
     fn step_target(
         &mut self,
-        target_commits_to_read: &mut HashMap<String, CommitObject>,
-        target_commit_hash: String,
+        target_commits_to_read: &mut BinaryHeap<CommitObject>,
         read_source_commits: &mut HashMap<String, CommitObject>,
-        source_commits_to_read: &mut HashMap<String, CommitObject>,
+        source_commits_to_read: &mut BinaryHeap<CommitObject>,
         read_target_commits: &mut HashMap<String, CommitObject>,
     ) -> Result<(), CommandError>;
 
@@ -350,23 +350,20 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
     ) -> Result<Vec<CommitObject>, CommandError> {
         let source_commit_hash = self.get_last_commit_hash_branch(&source_branch)?;
         let target_commit_hash = self.get_last_commit_hash_branch(&target_branch)?;
-        let mut source_commits_to_read = HashMap::new();
-        let mut target_commits_to_read = HashMap::new();
+        let mut source_commits_to_read: BinaryHeap<CommitObject> = BinaryHeap::new();
+        let mut target_commits_to_read: BinaryHeap<CommitObject> = BinaryHeap::new();
         self.get_commit_from_db_and_insert(source_commit_hash, &mut source_commits_to_read)?;
         self.get_commit_from_db_and_insert(target_commit_hash, &mut target_commits_to_read)?;
         let mut read_source_commits = HashMap::new();
         let mut read_target_commits = HashMap::new();
         loop {
-            let first_source_commit = get_max(&source_commits_to_read);
-            let first_target_commit = get_max(&target_commits_to_read);
-            match (first_source_commit, first_target_commit) {
-                (
-                    Some((source_commit_hash, source_timestamp)),
-                    Some((target_commit_hash, target_timestamp)),
-                ) => {
-                    if source_timestamp > target_timestamp {
+            let first_source_commit_op = source_commits_to_read.peek();
+            let first_target_commit_op = target_commits_to_read.peek();
+
+            match (first_source_commit_op, first_target_commit_op) {
+                (Some(first_source_commit), Some(first_target_commit)) => {
+                    if first_source_commit.get_timestamp() > first_target_commit.get_timestamp() {
                         self.step_source(
-                            source_commit_hash,
                             &mut source_commits_to_read,
                             &mut read_target_commits,
                             &mut read_source_commits,
@@ -374,25 +371,22 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
                     } else {
                         self.step_target(
                             &mut target_commits_to_read,
-                            target_commit_hash,
                             &mut read_source_commits,
                             &mut source_commits_to_read,
                             &mut read_target_commits,
                         )?;
                     }
                 }
-                (Some((source_commit_hash, _)), None) => {
+                (Some(first_source_commit), None) => {
                     self.step_source(
-                        source_commit_hash,
                         &mut source_commits_to_read,
                         &mut read_target_commits,
                         &mut read_source_commits,
                     )?;
                 }
-                (None, Some((target_commit_hash, _))) => {
+                (None, Some(first_target_commit)) => {
                     self.step_target(
                         &mut target_commits_to_read,
-                        target_commit_hash,
                         &mut read_source_commits,
                         &mut source_commits_to_read,
                         &mut read_target_commits,
@@ -415,7 +409,7 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
     fn get_commit_from_db_and_insert(
         &mut self,
         commit_hash: String,
-        commits_to_read: &mut HashMap<String, CommitObject>,
+        commits_to_read: &mut BinaryHeap<CommitObject>,
     ) -> Result<(), CommandError> {
         let commit = self
             .db()?
@@ -423,20 +417,21 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
             .as_mut_commit()
             .ok_or(CommandError::InvalidCommit)?
             .to_owned();
-        commits_to_read.insert(commit_hash, commit);
+        commits_to_read.push(commit);
         Ok(())
     }
 
     fn step_source(
         &mut self,
-        source_commit_hash: String,
-        source_commits_to_read: &mut HashMap<String, CommitObject>,
+        source_commits_to_read: &mut BinaryHeap<CommitObject>,
         read_target_commits: &mut HashMap<String, CommitObject>,
         read_source_commits: &mut HashMap<String, CommitObject>,
     ) -> Result<(), CommandError> {
-        let Some(source_commit) = source_commits_to_read.remove(&source_commit_hash) else {
+        let Some(mut source_commit) = source_commits_to_read.pop() else {
             unreachable!()
         };
+
+        let source_commit_hash = source_commit.get_hash_string().unwrap();
         if read_target_commits.contains_key(&source_commit_hash) {
             return Ok(());
         }
@@ -452,21 +447,22 @@ impl<'a> GitRepositoryExtension for GitRepository<'a> {
 
     fn step_target(
         &mut self,
-        target_commits_to_read: &mut HashMap<String, CommitObject>,
-        target_commit_hash: String,
+        target_commits_to_read: &mut BinaryHeap<CommitObject>,
         read_source_commits: &mut HashMap<String, CommitObject>,
-        source_commits_to_read: &mut HashMap<String, CommitObject>,
+        source_commits_to_read: &mut BinaryHeap<CommitObject>,
         read_target_commits: &mut HashMap<String, CommitObject>,
     ) -> Result<(), CommandError> {
-        let Some(target_commit) = target_commits_to_read.remove(&target_commit_hash) else {
+        let Some(mut target_commit) = target_commits_to_read.pop() else {
             unreachable!()
         };
+        let target_commit_hash = target_commit.get_hash_string().unwrap();
+
         if let Some(removed_commit) = read_source_commits.remove(&target_commit_hash) {
-            remove_parents(&removed_commit, read_source_commits, source_commits_to_read);
+            //remove_parents(&removed_commit, read_source_commits, source_commits_to_read);
         }
-        if let Some(removed_commit) = source_commits_to_read.remove(&target_commit_hash) {
-            remove_parents(&removed_commit, read_source_commits, source_commits_to_read);
-        }
+        // if let Some(removed_commit) = source_commits_to_read.remove(&target_commit_hash) {
+        //     //remove_parents(&removed_commit, read_source_commits, source_commits_to_read);
+        // }
         for parent_hash in target_commit.get_parents() {
             self.get_commit_from_db_and_insert(parent_hash, target_commits_to_read)?;
         }
