@@ -111,30 +111,18 @@ impl ObjectsDatabase {
         logger.log(&format!("Reading data form path: {}", file_path));
 
         let mut file = File::open(&file_path).map_err(|error| {
-            CommandError::FileOpenError(format!(
-                "Error al abrir archivo {}: {}",
-                file_path,
-                error
-            ))
+            CommandError::FileOpenError(format!("Error al abrir archivo {}: {}", file_path, error))
         })?;
         let mut data = Vec::new();
         file.read_to_end(&mut data).map_err(|error| {
-            CommandError::FileReadError(format!(
-                "Error al leer archivo {}: {}",
-                file_path,
-                error
-            ))
+            CommandError::FileReadError(format!("Error al leer archivo {}: {}", file_path, error))
         })?;
         let decompressed_data = extract(&data)?;
         let mut cursor = Cursor::new(decompressed_data);
         let (type_str, len) = get_type_and_len(&mut cursor)?;
         let mut data = Vec::new();
         cursor.read_to_end(&mut data).map_err(|error| {
-            CommandError::FileReadError(format!(
-                "Error al leer archivo {}: {}",
-                file_path,
-                error
-            ))
+            CommandError::FileReadError(format!("Error al leer archivo {}: {}", file_path, error))
         })?;
         Ok((type_str, len, data))
     }
@@ -192,15 +180,13 @@ impl ObjectsDatabase {
             let mut index_file = File::open(&index_path).map_err(|error| {
                 CommandError::FileOpenError(format!(
                     "Error al abrir archivo {}: {}",
-                    index_path,
-                    error
+                    index_path, error
                 ))
             })?;
             let mut packfile = File::open(&packfile_path).map_err(|error| {
                 CommandError::FileOpenError(format!(
                     "Error al abrir archivo {}: {}",
-                    packfile_path,
-                    error
+                    packfile_path, error
                 ))
             })?;
             logger.log(&format!("Searching object in packfile: {}", packfile_path));
@@ -227,16 +213,14 @@ impl ObjectsDatabase {
         let pack_files = fs::read_dir(&packs_path).map_err(|error| {
             CommandError::FileOpenError(format!(
                 "Error al abrir directorio {}: {}",
-                packs_path,
-                error
+                packs_path, error
             ))
         })?;
         for pack_file in pack_files {
             let pack_file = pack_file.map_err(|error| {
                 CommandError::FileOpenError(format!(
                     "Error al leer archivo en directorio {}: {}",
-                    packs_path,
-                    error
+                    packs_path, error
                 ))
             })?;
             let filename = pack_file.file_name().into_string().map_err(|_| {

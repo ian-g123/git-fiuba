@@ -241,6 +241,27 @@ pub enum CommandError {
     Compression(String),
     // Error en la extracción
     Extraction(String),
+
+    // API
+    /// HTTP Request inválida
+    InvalidHTTPRequest(String),
+    /// No hay cambios para comparar
+    NothingToCompare(String),
+    /// Estado inválido de un pull request
+    InvalidPullRequestState(String),
+    PullRequestUnknownMerge,
+
+    /// Error al eliminar un archivo
+    PullRequestUnknownID,
+
+    //Error al modificar un pull request cer
+    PullRequestClosed(String),
+    PullRequestMerged,
+    PullRequestToString,
+    PullRequestFromString,
+    InvalidContentType,
+
+
 }
 
 impl Error for CommandError {}
@@ -550,7 +571,7 @@ impl fmt::Display for CommandError {
             CommandError::ErrorDecompressingObject(msg) => {
                 write!(f, "Errror in object decompression: {}", msg)
             }
-            CommandError::NotValidLogger => {
+            CommandError::NotValidLogger => {  
                 write!(f, "No se pudo obtener el sender del logger")
             }
             CommandError::TagNameDuplicated(name) => write!(f, "fatal: tag '{name}' already exists"),
@@ -581,6 +602,17 @@ impl fmt::Display for CommandError {
             CommandError::UnsuportedProtocol(e) => write!(f, "Unsuported protocol: {}", e),
             CommandError::Compression(e) => write!(f, "Error en la compresión: {}", e),
             CommandError::Extraction(e) => write!(f, "Error en la extracción: {}", e),
+            CommandError::InvalidHTTPRequest(e) => write!(f, "Invalid HTTP Request: {}", e),
+            CommandError::NothingToCompare(description) => write!(f, "Nothing to compare: {}", description),
+            CommandError::InvalidPullRequestState(state) => write!(f, "Invalid pull request state: {}", state),
+            CommandError::PullRequestUnknownMerge => write!(f, "Pull Request without especification of merge status"),
+            CommandError::PullRequestUnknownID => write!(f, "Pull Request without especification of ID"),
+            CommandError::PullRequestClosed(field) => write!(f, "No puedes modificar {} de un Pull Request cerrado", field),
+            CommandError::PullRequestMerged => write!(f, "No puedes modificar un Pull Request mergeado"),
+            CommandError::PullRequestToString => write!(f, "Failed to convert pull request to string"),
+            CommandError::PullRequestFromString => write!(f, "Failed to get pull request from its content"),
+            CommandError::InvalidContentType => write!(f, "Invalid content-type"),
+        
         }
     }
 }

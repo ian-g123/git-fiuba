@@ -119,7 +119,8 @@ fn test_push() {
 
     _ = fs::remove_dir_all(format!("{}/server_files/repo", path));
     _ = fs::remove_dir_all(format!("{}/server_files/repo_backup", path));
-    _ = fs::remove_file(format!("{}/server_files/server-logs.log", path));
+    _ = fs::remove_file(format!("{}/server_files/tcp-server-logs.log", path));
+    _ = fs::remove_file(format!("{}/server_files/http-server-logs.log", path));
     _ = fs::remove_dir_all(format!("{}/user1", path));
     _ = fs::remove_dir_all(format!("{}/user2", path));
     _ = fs::remove_dir_all(format!("{}/user3", path));

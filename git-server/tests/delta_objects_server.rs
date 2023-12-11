@@ -46,7 +46,8 @@ fn test() {
     _ = fs::remove_dir_all(format!("{}/user1_to_send_delta", path));
     _ = fs::remove_dir_all(format!("{}/server_files/repo", path));
     _ = fs::remove_dir_all(format!("{}/server_files/repo_backup", path));
-    _ = fs::remove_file(format!("{}/server_files/server-logs.log", path));
+    _ = fs::remove_file(format!("{}/server_files/http-server-logs.log", path));
+    _ = fs::remove_file(format!("{}/server_files/tcp-server-logs.log", path));
 
     _ = fs::remove_file(format!("{}/server_files/daemon.log", path));
 }

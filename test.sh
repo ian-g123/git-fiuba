@@ -7,6 +7,14 @@ echo "Log Integration test"
 unzip -qq git/tests/data/commands/log.zip -d git/tests/data/commands/
 RUSTFLAGS="-Awarnings" cargo test -q -p git -p git-lib -p git-server --test log_integration -- --ignored
 
+# Run get_commits_to_merge_test
+echo "=========================="
+echo "Get commits to merge test"
+rm -rf git-server/tests/data/get_commits_to_merge_test
+unzip -qq git-server/tests/data/get_commits_to_merge_test.zip -d git-server/tests/data/get_commits_to_merge_test
+RUSTFLAGS="-Awarnings" cargo test -q -p git -p git-lib -p git-server --test get_commits_to_merge_test -- --ignored
+rm -rf git-server/tests/data/get_commits_to_merge_test
+
 # Check if port 9418 is available
 echo "=========================="
 echo "Check if port 9418 is available"

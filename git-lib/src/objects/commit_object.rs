@@ -69,21 +69,33 @@ impl CommitObject {
         self.timestamp
     }
 
+    pub fn get_committer(&self) -> Author {
+        self.committer.clone()
+    }
+
+    pub fn get_author(&self) -> Author {
+        self.author.clone()
+    }
+
+    pub fn get_author_date(&self) -> String {
+        self.get_timestamp_string()
+    }
+
+    pub fn get_committer_date(&self) -> String {
+        self.get_timestamp_string()
+    }
+
     pub fn get_timestamp_string(&self) -> String {
         timestamp_to_string(self.timestamp)
     }
 
     /// Devuelve el hash del tree del Commit.
-    pub fn get_tree_hash_string(&mut self) -> Result<String, CommandError> {
-        Ok(u8_vec_to_hex_string(&self.tree_hash))
+    pub fn get_tree_hash_string(&self) -> String {
+        u8_vec_to_hex_string(&self.tree_hash)
     }
 
     pub fn get_message(&self) -> String {
         self.message.clone()
-    }
-
-    pub fn get_author(&self) -> Author {
-        self.author.clone()
     }
 
     /// Crea un Commit a partir de la infromación leída del stream.

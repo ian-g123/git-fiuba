@@ -11,16 +11,13 @@ fn test() {
     let mut output_writer = Cursor::new(output);
     let mut repo = GitRepository::open(repo_path, &mut output_writer).unwrap();
     let commits = repo.get_log(true).unwrap();
-    let (mut commit, _, _) = commits.get(0).unwrap().to_owned();
+    let (commit, _, _) = commits.get(0).unwrap().to_owned();
     assert_eq!(commit.get_message(), "initialcommit");
     let tree = repo
         .db()
         .unwrap()
         .to_owned()
-        .read_object(
-            &commit.get_tree_hash_string().unwrap(),
-            &mut Logger::new_dummy(),
-        )
+        .read_object(&commit.get_tree_hash_string(), &mut Logger::new_dummy())
         .unwrap()
         .as_mut_tree()
         .unwrap()

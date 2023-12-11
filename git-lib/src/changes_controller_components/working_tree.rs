@@ -20,7 +20,7 @@ fn build_working_tree_aux(path_name: &str, tree: &mut Tree) -> Result<(), Comman
         Path::new(path_name)
     };
 
-    let Ok(entries) = fs::read_dir(path.clone()) else {
+    let Ok(entries) = fs::read_dir(path) else {
         return Err(CommandError::DirNotFound(path_name.to_owned()));
     };
     for entry in entries {
